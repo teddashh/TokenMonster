@@ -1,0 +1,58 @@
+[
+  {
+    "provider": "anthropic",
+    "modelFamily": "claude-sonnet",
+    "tool": "claude-code",
+    "tokens": {
+      "input": "100",
+      "output": "40",
+      "cacheRead": "10",
+      "cacheWrite": "5",
+      "reasoning": "0",
+      "other": "0",
+      "total": "155"
+    }
+  },
+  {
+    "provider": "openai",
+    "modelFamily": "openai-codex",
+    "tool": "codex-cli",
+    "tokens": {
+      "input": "210",
+      "output": "100",
+      "cacheRead": "55",
+      "cacheWrite": "20",
+      "reasoning": "35",
+      "other": "0",
+      "total": "385"
+    }
+  },
+  {
+    "provider": "google",
+    "modelFamily": "gemini-flash",
+    "tool": "gemini-cli",
+    "tokens": {
+      "input": "300",
+      "output": "60",
+      "cacheRead": "30",
+      "cacheWrite": "0",
+      "reasoning": "0",
+      "other": "0",
+      "total": "390"
+    }
+  },
+  {
+    "provider": "xai",
+    "modelFamily": "grok",
+    "tool": "grok-build",
+    "tokens": {
+      "input": "70",
+      "output": "30",
+      "cacheRead": "0",
+      "cacheWrite": "0",
+      "reasoning": "0",
+      "other": "0",
+      "total": "100"
+    }
+  }
+]

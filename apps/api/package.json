@@ -1,0 +1,35 @@
+{
+  "name": "@tokenmonster/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "src/cloudflare-durable-objects-public.d.ts"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./cloudflare-durable-objects": {
+      "types": "./src/cloudflare-durable-objects-public.d.ts",
+      "import": "./dist/cloudflare-durable-objects.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.cloudflare.json"
+  },
+  "dependencies": {
+    "@tokenmonster/api-cloudflare": "0.1.0",
+    "@tokenmonster/api-domain": "0.1.0",
+    "@tokenmonster/cloud-d1": "0.1.0",
+    "@tokenmonster/contracts": "0.1.0",
+    "hono": "4.12.30"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260715.1"
+  }
+}

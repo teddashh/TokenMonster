@@ -1,0 +1,48 @@
+node_modules/
+dist/
+.wrangler/
+.turbo/
+.cache/
+coverage/
+playwright-report/
+test-results/
+release-evidence/
+apps/companion/out/
+
+.env
+.env.*
+!.env.example
+!.env.*.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# Local databases, compiler caches, and signing credentials are never source.
+*.db
+*.db-shm
+*.db-wal
+*.jks
+*.keystore
+*.key
+*.mobileprovision
+*.p8
+*.p12
+*.pem
+*.pfx
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+*.tsbuildinfo
+
+.DS_Store
+Thumbs.db
+*.log
+
+# Local collector state and secrets must never enter git.
+.tokenmonster/
+.tokentracker/
+
+# Generated character exports. Source/provenance stays outside this repo until
+# an approved snapshot is imported through the asset pipeline.
+assets/generated/

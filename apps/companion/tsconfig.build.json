@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist/main",
+    "declaration": false,
+    "sourceMap": false,
+    "noEmit": false,
+    "lib": [
+      "ES2024",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src/main/**/*.ts",
+    "src/preload/**/*.cts",
+    "src/shared/**/*.ts"
+  ]
+}

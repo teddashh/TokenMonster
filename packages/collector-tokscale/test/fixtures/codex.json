@@ -1,0 +1,42 @@
+{
+  "groupBy": "client,provider,model",
+  "entries": [
+    {
+      "client": "codex",
+      "model": "gpt-5-codex",
+      "provider": "openai",
+      "input": 200,
+      "output": 80,
+      "cacheRead": 50,
+      "cacheWrite": 20,
+      "reasoning": 30,
+      "messageCount": 4,
+      "cost": 1.2,
+      "performance": {
+        "totalDurationMs": 1200
+      }
+    },
+    {
+      "client": "codex",
+      "model": "codex-mini-latest",
+      "provider": "openai",
+      "input": 10,
+      "output": 20,
+      "cacheRead": 5,
+      "cacheWrite": 0,
+      "reasoning": 5,
+      "messageCount": 1,
+      "cost": 0.1,
+      "performance": {
+        "totalDurationMs": 100
+      }
+    }
+  ],
+  "totalInput": 210,
+  "totalOutput": 100,
+  "totalCacheRead": 55,
+  "totalCacheWrite": 20,
+  "totalMessages": 5,
+  "totalCost": 1.3,
+  "processingTimeMs": 3
+}

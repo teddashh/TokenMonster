@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify (Node 24)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Pin npm
+        run: |
+          npm install --global npm@11.12.1
+          test "$(node --version)" = "v24.15.0"
+          test "$(npm --version)" = "11.12.1"
+
+      - name: Install denied-egress smoke-test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends bubblewrap strace
+          bwrap --version
+          strace --version
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Verify repository policy and formatting
+        run: |
+          npm run lint
+          npm run format:check
+          npm run verify:secrets
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify dependency tree and release artifacts
+        run: |
+          npm ls --depth=0
+          npm run verify:packaging-toolchain
+          npm run verify:artifacts
+
+      - name: Package and inspect unsigned companion
+        run: npm run make:companion:internal
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Generate release evidence
+        run: |
+          mkdir -p release-evidence
+          npm sbom --sbom-format cyclonedx > release-evidence/sbom.cdx.json
+          npm pack --dry-run --json --workspaces > release-evidence/npm-pack-inventory.json
+          LC_ALL=C find apps/web/dist apps/api/dist apps/companion/out/make packages/*/dist \
+            -type f -print0 | sort -z | xargs -0 sha256sum \
+            > release-evidence/SHA256SUMS
+          sha256sum package-lock.json >> release-evidence/SHA256SUMS
+
+      - name: Upload immutable release evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tokenmonster-release-evidence-${{ github.sha }}
+          path: |
+            release-evidence/
+            apps/web/dist/
+            apps/companion/out/make/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

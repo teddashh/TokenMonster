@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmonster.app/schemas/character-asset-manifest-v1.json",
+  "title": "TokenMonster character asset manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "updatedAt", "source", "releasePolicy", "assets"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "updatedAt": { "type": "string", "format": "date" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit"],
+      "properties": {
+        "repository": { "type": "string", "format": "uri" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "releasePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredStatus", "licenseGate", "brandGate", "voiceGate"],
+      "properties": {
+        "requiredStatus": { "const": "approved" },
+        "licenseGate": { "type": "string", "minLength": 1 },
+        "brandGate": { "type": "string", "minLength": 1 },
+        "voiceGate": { "type": "string", "minLength": 1 }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "characterId",
+          "sourcePath",
+          "sha256",
+          "bytes",
+          "mediaType",
+          "dimensions",
+          "contentRating",
+          "licenseStatus",
+          "brandReview",
+          "releaseStatus"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "characterId": { "enum": ["chatgpt", "claude", "gemini", "grok"] },
+          "sourcePath": {
+            "type": "string",
+            "pattern": "^web/public/avatars/[a-z0-9-]+\\.webp$"
+          },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "bytes": { "type": "integer", "minimum": 1 },
+          "mediaType": { "const": "image/webp" },
+          "dimensions": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["width", "height"],
+            "properties": {
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "contentRating": { "type": "string", "minLength": 1 },
+          "licenseStatus": { "enum": ["pending-owner-grant", "approved", "rejected"] },
+          "brandReview": { "type": "string", "minLength": 1 },
+          "releaseStatus": { "enum": ["blocked", "approved"] }
+        }
+      }
+    }
+  }
+}

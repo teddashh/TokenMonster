@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "application": {
+    "productName": "TokenMonster",
+    "bundleId": "com.tokenmonster.companion",
+    "main": "dist/main/main/main.js",
+    "preload": "dist/main/preload/index.cjs",
+    "renderer": "dist/renderer/index.html",
+    "runtimeExternals": [
+      "electron",
+      "node:*"
+    ]
+  },
+  "asar": {
+    "enabled": true,
+    "allowUnpackedFiles": false,
+    "staticFiles": [
+      "README.md",
+      "package.json",
+      "packaging/runtime-bundle-manifest.json",
+      "packaging/TOKSCALE_LICENSE.txt"
+    ],
+    "generatedRoot": "dist"
+  },
+  "collector": {
+    "status": "ready",
+    "signedReleaseStatus": "blocked-native-resigning-audit",
+    "signedReleaseReason": "Electron's macOS signing pass can rewrite nested Mach-O bytes after the upstream checksum gate. Signed release remains blocked until a native macOS pipeline binds the post-sign collector hashes, expected Team ID/code identity, hardened runtime, notarization ticket, and mounted DMG contents.",
+    "name": "tokscale",
+    "sourceVersion": "4.5.2",
+    "versionOutput": "tokscale 4.5.2",
+    "license": "MIT",
+    "licenseFile": "packaging/TOKSCALE_LICENSE.txt",
+    "licenseSha256": "24a794f325f7625b5f124945dedb6dcec8188f88e76bf4b99557b52d6cc77be9",
+    "extraResourceTarget": "collector/tokscale",
+    "runtimeBase": "process.resourcesPath",
+    "requiredPerArchitectureEvidence": [
+      "package-lock integrity",
+      "version",
+      "sha256",
+      "executable"
+    ],
+    "targets": {
+      "darwin-x64": {
+        "runtimeEnabled": true,
+        "package": "@tokscale/cli-darwin-x64",
+        "packageVersion": "4.5.2",
+        "lockIntegrity": "sha512-jM/XqtdHf+mjWWXBDSw1HHjTsgbYNFP1nNJP3noX+ALX0bVK7ZZjgYCSUR4njo52VjZGPa/ES0LkjG8TxjKxQA==",
+        "files": [
+          {
+            "source": "bin/tokscale",
+            "target": "tokscale",
+            "sha256": "e8c7fc5df886673b60c877b2061b88a37d2595c22f7f2dce85dcc52f424f880f",
+            "mode": "0755",
+            "executable": true
+          }
+        ]
+      },
+      "darwin-arm64": {
+        "runtimeEnabled": true,
+        "package": "@tokscale/cli-darwin-arm64",
+        "packageVersion": "4.5.2",
+        "lockIntegrity": "sha512-8efTyEbmbPg/9sD4hnTzl2xOjhXGX95qbJSdPFaCzICMa8LyFyaOxahFP5PQ924ooYOWjV338U8fENuems9bCw==",
+        "files": [
+          {
+            "source": "bin/tokscale",
+            "target": "tokscale",
+            "sha256": "d641954e870f7b67afdcf12099b884be4a976e82e0e1e717ec798ae86a385998",
+            "mode": "0755",
+            "executable": true
+          },
+          {
+            "source": "bin/libFoundationModels.dylib",
+            "target": "libFoundationModels.dylib",
+            "sha256": "f820fc1e9c9716d1dc212292591dc2dfbdfc89ff9551554cdefb06ab3ab2f24d",
+            "mode": "0644",
+            "executable": false
+          }
+        ]
+      },
+      "linux-x64-gnu": {
+        "runtimeEnabled": true,
+        "package": "@tokscale/cli-linux-x64-gnu",
+        "packageVersion": "4.5.2",
+        "lockIntegrity": "sha512-xTWNgd/cN+3bTAw7Bs5RIZKOkGJl1InrK//OXMbdGDiwm9ClvXRvvY/Z/ATnfhWNouyAaCdJ/l+hGUw2xx7ATg==",
+        "files": [
+          {
+            "source": "bin/tokscale",
+            "target": "tokscale",
+            "sha256": "789d4ed26c733922a66377a64197ba25bd63faa059ee4e78164a00e9f240630a",
+            "mode": "0755",
+            "executable": true
+          }
+        ]
+      },
+      "linux-x64-musl": {
+        "runtimeEnabled": true,
+        "package": "@tokscale/cli-linux-x64-musl",
+        "packageVersion": "4.5.2",
+        "lockIntegrity": "sha512-phC061EUCYW5b1t2v2nYpibrhKzLjbLoEaJnvZUTof4dsU6JIl6tsi5LHqc1mXkYmr0NEUcuI0muCz+XA9WsmA==",
+        "files": [
+          {
+            "source": "bin/tokscale",
+            "target": "tokscale",
+            "sha256": "df432fa3eb41e63e680ea73bf9be7a5bc54dfb8e1be2cd1922ade4313bb6d0c6",
+            "mode": "0755",
+            "executable": true
+          }
+        ]
+      },
+      "linux-arm64-gnu": {
+        "runtimeEnabled": true,
+        "package": "@tokscale/cli-linux-arm64-gnu",
+        "packageVersion": "4.5.2",
+        "lockIntegrity": "sha512-pgvKOHDEhUo4g+WvWnct+0n9NtIli3g88dK2jIGn+F1maz/nenAAaG6JsysE0SKlnRNpmB+/HGFlYPZ8NlgbSA==",
+        "files": [
+          {
+            "source": "bin/tokscale",
+            "target": "tokscale",
+            "sha256": "00a5ba9724034fb746e5950879233397b0b618003b41f24ee22355aa5eba8746",
+            "mode": "0755",
+            "executable": true
+          }
+        ]
+      },
+      "linux-arm64-musl": {
+        "runtimeEnabled": true,
+        "package": "@tokscale/cli-linux-arm64-musl",
+        "packageVersion": "4.5.2",
+        "lockIntegrity": "sha512-63VDw3xOAZIaDBTEkBm/ZJyoRlzGfsD6Lp9QE+MV3rF4QPlNJHOyLwD/6fb4fo6fx3qb2mrM1rfK7kkDfybGlw==",
+        "files": [
+          {
+            "source": "bin/tokscale",
+            "target": "tokscale",
+            "sha256": "dad9df495fed8b78c0e9c6c342a6a67fb7699ce362ec75b31a80562549344633",
+            "mode": "0755",
+            "executable": true
+          }
+        ]
+      },
+      "win32-x64-msvc": {
+        "runtimeEnabled": false,
+        "package": "@tokscale/cli-win32-x64-msvc",
+        "packageVersion": "4.5.2",
+        "lockIntegrity": "sha512-cMJEgUdryo6fZo2Q21OZZOeSlQ20e+2m5+mzKls8hEFoGGeRQjPtk/FbFI576ee08zziWPhYrUXTZjj5HxRuCw==",
+        "blockedReason": "TokenMonster has not yet audited a Windows no-egress process sandbox.",
+        "files": [
+          {
+            "source": "bin/tokscale.exe",
+            "target": "tokscale.exe",
+            "sha256": "c7e39c76f666607c08042eb07a81fb05d52fd9a42d8451d36534a6743dc5e071",
+            "mode": "0755",
+            "executable": true
+          }
+        ]
+      },
+      "win32-arm64-msvc": {
+        "runtimeEnabled": false,
+        "package": "@tokscale/cli-win32-arm64-msvc",
+        "packageVersion": "4.5.2",
+        "lockIntegrity": "sha512-0bYOu55J/pUPbaY94DVJ8vq9n3MIE+Ib96PaYxJnHOwxoY884dz0D+HWQoSv0h/pIMTUG70ssm/uHZJ21x8avA==",
+        "blockedReason": "TokenMonster has not yet audited a Windows no-egress process sandbox.",
+        "files": [
+          {
+            "source": "bin/tokscale.exe",
+            "target": "tokscale.exe",
+            "sha256": "63194c4a7587be2d265acbfb094bb384aa72e9b0a6841ba0b142d3d4971aba56",
+            "mode": "0755",
+            "executable": true
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "$schema": "./asset-manifest.schema.json",
+  "schemaVersion": 1,
+  "updatedAt": "2026-07-15",
+  "source": {
+    "repository": "https://github.com/teddashh/Multi-Ai-Chatapp.git",
+    "commit": "02c65ae57113fc29c64ab0a8835adc2e300b764f"
+  },
+  "releasePolicy": {
+    "requiredStatus": "approved",
+    "licenseGate": "Explicit owner grant must cover redistribution, modification, and public product use.",
+    "brandGate": "Provider names and embedded logo-like marks require review; TokenMonster must state that it is independent and unaffiliated.",
+    "voiceGate": "No voice reference or cloned voice may ship without separate, documented consent and rights."
+  },
+  "assets": [
+    {
+      "id": "ai-sister-chatgpt-portrait-v1",
+      "characterId": "chatgpt",
+      "sourcePath": "web/public/avatars/chatgpt.webp",
+      "sha256": "2e1ea4158e0494e561ffb0c20c25a351474a26186c2378c72946f4e2dc4c0cb6",
+      "bytes": 16996,
+      "mediaType": "image/webp",
+      "dimensions": { "width": 208, "height": 204 },
+      "contentRating": "sfw-chibi-portrait",
+      "licenseStatus": "pending-owner-grant",
+      "brandReview": "required-embedded-openai-mark",
+      "releaseStatus": "blocked"
+    },
+    {
+      "id": "ai-sister-claude-portrait-v1",
+      "characterId": "claude",
+      "sourcePath": "web/public/avatars/claude.webp",
+      "sha256": "bf8a2ea26c6b29d06d66ce46b015a2c34b61766d08946f7db2c95a95400b1016",
+      "bytes": 18104,
+      "mediaType": "image/webp",
+      "dimensions": { "width": 208, "height": 195 },
+      "contentRating": "sfw-chibi-portrait",
+      "licenseStatus": "pending-owner-grant",
+      "brandReview": "required-provider-inspired-design",
+      "releaseStatus": "blocked"
+    },
+    {
+      "id": "ai-sister-gemini-portrait-v1",
+      "characterId": "gemini",
+      "sourcePath": "web/public/avatars/gemini.webp",
+      "sha256": "bba66ae20323e5c8ca1c84ed8b8dfc1550c3aee62e291802d59358079f14bbe3",
+      "bytes": 18302,
+      "mediaType": "image/webp",
+      "dimensions": { "width": 208, "height": 194 },
+      "contentRating": "sfw-chibi-portrait",
+      "licenseStatus": "pending-owner-grant",
+      "brandReview": "required-embedded-google-mark",
+      "releaseStatus": "blocked"
+    },
+    {
+      "id": "ai-sister-grok-portrait-v1",
+      "characterId": "grok",
+      "sourcePath": "web/public/avatars/grok.webp",
+      "sha256": "0606cef8dfa194271dbd0f110129e968e5f0860cf83ce009b7707f73e835412a",
+      "bytes": 14316,
+      "mediaType": "image/webp",
+      "dimensions": { "width": 208, "height": 208 },
+      "contentRating": "sfw-chibi-portrait",
+      "licenseStatus": "pending-owner-grant",
+      "brandReview": "required-embedded-x-mark",
+      "releaseStatus": "blocked"
+    }
+  ]
+}

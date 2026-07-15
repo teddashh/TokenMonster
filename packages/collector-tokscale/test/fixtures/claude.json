@@ -1,0 +1,30 @@
+{
+  "groupBy": "client,provider,model",
+  "entries": [
+    {
+      "client": "claude",
+      "mergedClients": null,
+      "model": "claude-3-5-sonnet-20241022",
+      "provider": "anthropic",
+      "input": 100,
+      "output": 40,
+      "cacheRead": 10,
+      "cacheWrite": 5,
+      "reasoning": 0,
+      "messageCount": 3,
+      "cost": 0.25,
+      "performance": {
+        "totalDurationMs": 900
+      }
+    }
+  ],
+  "totalInput": 100,
+  "totalOutput": 40,
+  "totalCacheRead": 10,
+  "totalCacheWrite": 5,
+  "totalMessages": 3,
+  "totalCost": 0.25,
+  "processingTimeMs": 2,
+  "warnings": [],
+  "diagnostics": []
+}

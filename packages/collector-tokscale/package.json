@@ -1,0 +1,25 @@
+{
+  "name": "@tokenmonster/collector-tokscale",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tokenmonster/contracts": "0.1.0",
+    "tokscale": "4.5.2",
+    "zod": "4.4.3"
+  }
+}
