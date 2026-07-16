@@ -24,6 +24,10 @@ import {
   type TokenTrackerAggregateRange
 } from "@tokenmonster/token-tracker-adapter";
 
+import {
+  createCharacterService,
+  normalizeCharacterOptions
+} from "./character-service.js";
 import { CompanionGatewayError } from "./errors.js";
 import type {
   CompanionApiErrorCode,
@@ -37,6 +41,7 @@ import type {
   CompanionGatewayAddress,
   CompanionGatewayClock,
   CompanionGatewayOptions,
+  CompanionCharacterFetch,
   CompanionUiAssets
 } from "./types.js";
 
@@ -44,6 +49,10 @@ const LOOPBACK_HOST = "127.0.0.1" as const;
 const COMPANION_API_PATH = "/api/companion";
 const COLLECTOR_STATUS_PATH = "/api/companion/status";
 const COLLECTOR_REFRESH_PATH = "/api/companion/refresh";
+const CHARACTERS_API_PATH = "/api/characters";
+const CHARACTER_SELECT_PATH = "/api/characters/select";
+const CHARACTER_WARDROBE_PATH = "/api/characters/wardrobe";
+const CHARACTER_ASSET_PREFIX = "/assets/characters/objects/";
 const STYLESHEET_PATH = "/assets/companion.css";
 const JAVASCRIPT_PATH = "/assets/companion.js";
 const BOOTSTRAP_PREFIX = "/__tokenmonster/bootstrap/";
@@ -62,6 +71,7 @@ const OPTION_KEYS = new Set<PropertyKey>([
   "collector",
   "assets",
   "assetDirectory",
+  "characters",
   "clock",
   "apiTimeoutMs"
 ]);
@@ -91,6 +101,7 @@ interface NormalizedAssets {
 interface NormalizedOptions {
   readonly adapter: TokenTrackerAdapter;
   readonly collector: CompanionCollectorController;
+  readonly characters: ReturnType<typeof normalizeCharacterOptions>;
   readonly assets: NormalizedAssets;
   readonly clock: CompanionGatewayClock;
   readonly apiTimeoutMs: number;
@@ -234,11 +245,13 @@ function normalizeOptions(options: CompanionGatewayOptions): NormalizedOptions {
   let collector: unknown;
   let assets: unknown;
   let assetDirectory: unknown;
+  let characters: unknown;
   try {
     adapter = ownDataValue(options, "adapter");
     collector = ownDataValue(options, "collector");
     assets = optionalOwnDataValue(options, "assets");
     assetDirectory = optionalOwnDataValue(options, "assetDirectory");
+    characters = ownDataValue(options, "characters");
   } catch {
     throw new CompanionGatewayError("invalid-configuration");
   }
@@ -248,6 +261,7 @@ function normalizeOptions(options: CompanionGatewayOptions): NormalizedOptions {
     !isPlainRecord(adapter) ||
     typeof adapter["getDaily"] !== "function" ||
     typeof adapter["getProviderTotals"] !== "function" ||
+    typeof adapter["getProgressionFamilyTotals"] !== "function" ||
     typeof adapter["getSummary"] !== "function" ||
     typeof adapter["probe"] !== "function" ||
     !isPlainRecord(collector) ||
@@ -264,9 +278,26 @@ function normalizeOptions(options: CompanionGatewayOptions): NormalizedOptions {
     throw new CompanionGatewayError("invalid-configuration");
   }
 
+  const nativeCharacterFetch: CompanionCharacterFetch = async (url, init) =>
+    fetch(url, {
+      method: init.method,
+      redirect: init.redirect,
+      signal: init.signal
+    });
+  let normalizedCharacters: ReturnType<typeof normalizeCharacterOptions>;
+  try {
+    normalizedCharacters = normalizeCharacterOptions(
+      characters,
+      nativeCharacterFetch
+    );
+  } catch {
+    throw new CompanionGatewayError("invalid-configuration");
+  }
+
   return Object.freeze({
     adapter: adapter as unknown as TokenTrackerAdapter,
     collector: collector as unknown as CompanionCollectorController,
+    characters: normalizedCharacters,
     assets:
       assets === undefined
         ? normalizeAssetDirectory(assetDirectory)
@@ -337,7 +368,8 @@ function rawHeaderValues(
 
 function hasAcceptedRequestHeaders(
   request: IncomingMessage,
-  origin: string
+  origin: string,
+  acceptsJsonBody: boolean
 ): boolean {
   const hostValues = rawHeaderValues(request, "host");
   if (
@@ -366,6 +398,14 @@ function hasAcceptedRequestHeaders(
   }
 
   const contentLengthValues = rawHeaderValues(request, "content-length");
+  if (acceptsJsonBody) {
+    return (
+      request.method === "POST" &&
+      contentLengthValues.length === 1 &&
+      /^\d+$/u.test(contentLengthValues[0]!) &&
+      rawHeaderValues(request, "transfer-encoding").length === 0
+    );
+  }
   return (
     (contentLengthValues.length === 0 ||
       (request.method === "POST" &&
@@ -373,6 +413,49 @@ function hasAcceptedRequestHeaders(
         contentLengthValues[0] === "0")) &&
     rawHeaderValues(request, "transfer-encoding").length === 0
   );
+}
+
+async function readCharacterJsonBody(
+  request: IncomingMessage,
+  expectedKeys: readonly string[]
+): Promise<Record<string, unknown> | null> {
+  const contentTypes = rawHeaderValues(request, "content-type");
+  const contentLengths = rawHeaderValues(request, "content-length");
+  if (
+    contentTypes.length !== 1 ||
+    contentTypes[0]!.trim().toLowerCase() !== "application/json" ||
+    contentLengths.length !== 1 ||
+    !/^\d+$/u.test(contentLengths[0]!) ||
+    Number(contentLengths[0]) > 512
+  ) {
+    return null;
+  }
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for await (const chunk of request) {
+    const bodyChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    bytes += bodyChunk.byteLength;
+    if (bytes > 512) return null;
+    chunks.push(bodyChunk);
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.concat(chunks, bytes).toString("utf8")) as unknown;
+  } catch {
+    return null;
+  }
+  if (
+    !isPlainRecord(parsed) ||
+    Reflect.ownKeys(parsed).length !== expectedKeys.length ||
+    expectedKeys.some((key) => !Reflect.ownKeys(parsed).includes(key))
+  ) {
+    return null;
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function sendInvalidCharacterRequest(response: ServerResponse): void {
+  sendJson(response, 400, { status: "error", error: "invalid-request" });
 }
 
 function hasAcceptedMutationHeaders(
@@ -673,6 +756,11 @@ export function createCompanionGateway(
   options: CompanionGatewayOptions
 ): CompanionGateway {
   const normalized = normalizeOptions(options);
+  const characterService = createCharacterService({
+    adapter: normalized.adapter,
+    characters: normalized.characters,
+    clock: normalized.clock
+  });
   const bootstrapToken = randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
   const sessionToken = randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
   const bootstrapPath = `${BOOTSTRAP_PREFIX}${bootstrapToken}`;
@@ -715,13 +803,16 @@ export function createCompanionGateway(
           sendRequestRejected(response, 405);
           return;
         }
-        if (!hasAcceptedRequestHeaders(request, activeOrigin)) {
-          sendRequestRejected(response, 403);
-          return;
-        }
         const path = parseFixedPath(request, activeOrigin);
         if (path === null) {
           sendRequestRejected(response, 404);
+          return;
+        }
+        const acceptsJsonBody =
+          request.method === "POST" &&
+          (path === CHARACTER_SELECT_PATH || path === CHARACTER_WARDROBE_PATH);
+        if (!hasAcceptedRequestHeaders(request, activeOrigin, acceptsJsonBody)) {
+          sendRequestRejected(response, 403);
           return;
         }
 
@@ -786,6 +877,80 @@ export function createCompanionGateway(
           );
           return;
         }
+        if (path === CHARACTERS_API_PATH) {
+          if (request.method !== "GET") {
+            response.setHeader("Allow", "GET");
+            sendRequestRejected(response, 405);
+            return;
+          }
+          sendJson(response, 200, await characterService.getCharactersDto());
+          return;
+        }
+        if (path === CHARACTER_SELECT_PATH) {
+          if (request.method !== "POST") {
+            response.setHeader("Allow", "POST");
+            sendRequestRejected(response, 405);
+            return;
+          }
+          if (!hasAcceptedMutationHeaders(request, activeOrigin)) {
+            sendRequestRejected(response, 403);
+            return;
+          }
+          const body = await readCharacterJsonBody(request, ["characterId"]);
+          if (body === null) {
+            sendInvalidCharacterRequest(response);
+            return;
+          }
+          const result = await characterService.selectCharacter(body["characterId"]);
+          sendJson(response, result.status, result.body);
+          return;
+        }
+        if (path === CHARACTER_WARDROBE_PATH) {
+          if (request.method !== "POST") {
+            response.setHeader("Allow", "POST");
+            sendRequestRejected(response, 405);
+            return;
+          }
+          if (!hasAcceptedMutationHeaders(request, activeOrigin)) {
+            sendRequestRejected(response, 403);
+            return;
+          }
+          const body = await readCharacterJsonBody(request, [
+            "characterId",
+            "themeId"
+          ]);
+          if (body === null) {
+            sendInvalidCharacterRequest(response);
+            return;
+          }
+          const result = await characterService.selectWardrobe(
+            body["characterId"],
+            body["themeId"]
+          );
+          sendJson(response, result.status, result.body);
+          return;
+        }
+        if (path.startsWith(CHARACTER_ASSET_PREFIX)) {
+          if (request.method !== "GET") {
+            response.setHeader("Allow", "GET");
+            sendRequestRejected(response, 405);
+            return;
+          }
+          const fileName = path.slice(CHARACTER_ASSET_PREFIX.length);
+          const asset = await characterService.getAsset(fileName);
+          if (
+            asset.status !== 200 ||
+            asset.body === undefined ||
+            asset.contentType === undefined
+          ) {
+            sendRequestRejected(response, asset.status);
+            return;
+          }
+          sendBuffer(response, 200, asset.contentType, asset.body, {
+            "Cache-Control": "public, max-age=31536000, immutable"
+          });
+          return;
+        }
         if (path === COLLECTOR_STATUS_PATH) {
           if (request.method !== "GET") {
             response.setHeader("Allow", "GET");
@@ -838,7 +1003,13 @@ export function createCompanionGateway(
             }
             activeApiRequests += 1;
             try {
-              sendJson(response, 200, await requestCollectorRefresh());
+              const status = await requestCollectorRefresh();
+              if (status.phase === "ready" || status.phase === "ready-no-data") {
+                await characterService.syncAfterCompanionFetch(now).catch(
+                  () => undefined
+                );
+              }
+              sendJson(response, 200, status);
             } finally {
               activeApiRequests -= 1;
             }
@@ -879,15 +1050,19 @@ export function createCompanionGateway(
               normalized.apiTimeoutMs
             ).catch(() => null)
           ]);
+          const projected = projectCompanionResponse(
+            upstream,
+            providerTotals,
+            range,
+            instant.toISOString()
+          );
+          await characterService.syncAfterCompanionFetch(instant).catch(
+            () => undefined
+          );
           sendJson(
             response,
             200,
-            projectCompanionResponse(
-              upstream,
-              providerTotals,
-              range,
-              instant.toISOString()
-            )
+            projected
           );
         } catch (error) {
           sendApiError(response, classifyApiError(error));

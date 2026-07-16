@@ -21,6 +21,7 @@ import {
 } from "@tokenmonster/token-tracker-runtime";
 
 import {
+  DEFAULT_CHARACTER_CDN_BASE_URL,
   TOKENMONSTER_CLI_VERSION,
   openTokenMonsterBrowser,
   runTokenMonster,
@@ -56,6 +57,9 @@ function fakeAdapter(): TokenTrackerAdapter {
       throw new Error("unused");
     }),
     getProviderTotals: vi.fn(async () => {
+      throw new Error("unused");
+    }),
+    getProgressionFamilyTotals: vi.fn(async () => {
       throw new Error("unused");
     })
   });
@@ -150,6 +154,7 @@ describe("CLI surface", () => {
       runTokenMonster({ argv: ["--help"], stdout, stderr, dependencies: { startRuntime } })
     ).resolves.toBe(0);
     expect(stdout.value).toContain("tokenmonster --no-open");
+    expect(stdout.value).toContain("--no-character-downloads");
     expect(startRuntime).not.toHaveBeenCalled();
 
     stdout.value = "";
@@ -172,6 +177,7 @@ describe("CLI surface", () => {
 
     const result = await runTokenMonster({
       argv: [],
+      homeDirectory: "/home/tester",
       stdout,
       stderr,
       dependencies
@@ -183,7 +189,18 @@ describe("CLI surface", () => {
     expect(captured.gatewayOptions).toEqual({
       adapter,
       collector: runtime,
-      assetDirectory: "/package/companion-ui/dist/public"
+      assetDirectory: "/package/companion-ui/dist/public",
+      characters: {
+        manifest: {
+          schemaVersion: "1",
+          generatedAt: "2026-07-16T00:00:00.000Z",
+          characters: [],
+          voice: []
+        },
+        cacheDirectory: "/home/tester/.tokenmonster/asset-cache",
+        cdnBaseUrl: DEFAULT_CHARACTER_CDN_BASE_URL,
+        progressionStorePath: "/home/tester/.tokenmonster/progression-v1.json"
+      }
     });
     expect(gateway.start).toHaveBeenCalledWith();
     expect(dependencies.openBrowser).toHaveBeenCalledWith(BOOTSTRAP_URL);
@@ -245,6 +262,41 @@ describe("CLI surface", () => {
     expect(stdout.value).toContain(
       "ssh -L 34567:127.0.0.1:34567 <user>@<host>"
     );
+  });
+
+  it("wires the character CDN override and cache-only flag", async () => {
+    const stdout = new CapturedOutput();
+    const first = compositionDependencies();
+    await expect(
+      runTokenMonster({
+        argv: ["--no-open"],
+        homeDirectory: "/home/tester",
+        environment: {
+          TOKENMONSTER_CHARACTER_CDN: "https://assets.example.test/characters"
+        },
+        stdout,
+        dependencies: first.dependencies
+      })
+    ).resolves.toBe(0);
+    expect(first.captured.gatewayOptions?.characters).toMatchObject({
+      cacheDirectory: "/home/tester/.tokenmonster/asset-cache",
+      cdnBaseUrl: "https://assets.example.test/characters",
+      progressionStorePath: "/home/tester/.tokenmonster/progression-v1.json"
+    });
+
+    const second = compositionDependencies();
+    await expect(
+      runTokenMonster({
+        argv: ["--no-open", "--no-character-downloads"],
+        homeDirectory: "/home/tester",
+        environment: {
+          TOKENMONSTER_CHARACTER_CDN: "https://must-not-be-used.example.test"
+        },
+        stdout,
+        dependencies: second.dependencies
+      })
+    ).resolves.toBe(0);
+    expect(second.captured.gatewayOptions?.characters.cdnBaseUrl).toBeNull();
   });
 
   it("sanitizes runtime startup failures and never starts the gateway", async () => {

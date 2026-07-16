@@ -1,4 +1,10 @@
-import { createCompanionGateway } from "@tokenmonster/companion-gateway";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+import {
+  createCompanionGateway,
+  getApprovedAssetManifest
+} from "@tokenmonster/companion-gateway";
 import { getCompanionUiAssetDirectory } from "@tokenmonster/companion-ui";
 import {
   SUPPORTED_TOKEN_TRACKER_VERSION,
@@ -21,12 +27,16 @@ import type {
 } from "./types.js";
 
 export const TOKENMONSTER_CLI_VERSION = "0.1.0" as const;
+export const DEFAULT_CHARACTER_CDN_BASE_URL =
+  "https://cdn.ted-h.com/tokenmonster/characters/v1" as const;
 
 const HELP = `TokenMonster
 
 Usage:
   tokenmonster             啟動本機 companion
   tokenmonster --no-open   啟動但不自動開啟瀏覽器（SSH／遠端機器）
+  tokenmonster --no-character-downloads
+                           停用角色圖像與語音下載（只使用本機快取）
   tokenmonster --version   顯示版本
   tokenmonster --help      顯示說明
 `;
@@ -57,6 +67,7 @@ const defaultDependencies: TokenMonsterCliDependencies = Object.freeze({
 interface ParsedArguments {
   readonly action: "run" | "help" | "version";
   readonly openBrowser: boolean;
+  readonly characterDownloads: boolean;
 }
 
 function parseArguments(argv: readonly string[]): ParsedArguments {
@@ -64,19 +75,41 @@ function parseArguments(argv: readonly string[]): ParsedArguments {
     throw new TokenMonsterCliError("invalid-arguments");
   }
   if (argv.length === 0) {
-    return Object.freeze({ action: "run", openBrowser: true });
+    return Object.freeze({
+      action: "run",
+      openBrowser: true,
+      characterDownloads: true
+    });
   }
   if (argv.length === 1 && (argv[0] === "--help" || argv[0] === "-h")) {
-    return Object.freeze({ action: "help", openBrowser: false });
+    return Object.freeze({
+      action: "help",
+      openBrowser: false,
+      characterDownloads: true
+    });
   }
   if (
     argv.length === 1 &&
     (argv[0] === "--version" || argv[0] === "-v")
   ) {
-    return Object.freeze({ action: "version", openBrowser: false });
+    return Object.freeze({
+      action: "version",
+      openBrowser: false,
+      characterDownloads: true
+    });
   }
-  if (argv.length === 1 && argv[0] === "--no-open") {
-    return Object.freeze({ action: "run", openBrowser: false });
+  const flags = new Set(argv);
+  if (
+    flags.size === argv.length &&
+    [...flags].every(
+      (flag) => flag === "--no-open" || flag === "--no-character-downloads"
+    )
+  ) {
+    return Object.freeze({
+      action: "run",
+      openBrowser: !flags.has("--no-open"),
+      characterDownloads: !flags.has("--no-character-downloads")
+    });
   }
   throw new TokenMonsterCliError("invalid-arguments");
 }
@@ -179,6 +212,8 @@ export async function runTokenMonster(
     write(stderr, `${new TokenMonsterCliError("sidecar-start-failed").message}\n`);
     return 1;
   }
+  const environment = options.environment ?? process.env;
+  const homeDirectory = options.homeDirectory ?? environment["HOME"] ?? homedir();
 
   let runtime: Awaited<ReturnType<TokenMonsterCliDependencies["startRuntime"]>> | null = null;
   let gateway: ReturnType<TokenMonsterCliDependencies["createGateway"]> | null = null;
@@ -222,7 +257,24 @@ export async function runTokenMonster(
         gateway = dependencies.createGateway({
           adapter,
           collector: runtime,
-          assetDirectory: dependencies.getAssetDirectory()
+          assetDirectory: dependencies.getAssetDirectory(),
+          characters: {
+            manifest: getApprovedAssetManifest(),
+            cacheDirectory: join(
+              homeDirectory,
+              ".tokenmonster",
+              "asset-cache"
+            ),
+            cdnBaseUrl: parsed.characterDownloads
+              ? (environment["TOKENMONSTER_CHARACTER_CDN"] ??
+                DEFAULT_CHARACTER_CDN_BASE_URL)
+              : null,
+            progressionStorePath: join(
+              homeDirectory,
+              ".tokenmonster",
+              "progression-v1.json"
+            )
+          }
         });
         const address = await gateway.start();
         writeRunningMessage(stdout, address.bootstrapUrl);

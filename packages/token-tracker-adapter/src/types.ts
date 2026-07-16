@@ -89,6 +89,21 @@ export interface TokenMonsterProviderTotals {
   readonly xai: number;
 }
 
+export interface TokenMonsterProgressionFamilyTotals {
+  readonly openai: number;
+  readonly anthropic: number;
+  readonly google: number;
+  readonly xai: number;
+  readonly deepseek: number;
+  readonly qwen: number;
+  readonly mistral: number;
+  readonly venice: number;
+  readonly sakana: number;
+  readonly perplexity: number;
+  readonly glm: number;
+  readonly other: number;
+}
+
 export interface TokenTrackerAdapter {
   probe(): Promise<TokenTrackerProbe>;
   getSummary(
@@ -100,4 +115,7 @@ export interface TokenTrackerAdapter {
   getProviderTotals(
     range: TokenTrackerAggregateRange
   ): Promise<TokenMonsterProviderTotals>;
+  getProgressionFamilyTotals(
+    range: TokenTrackerAggregateRange
+  ): Promise<TokenMonsterProgressionFamilyTotals>;
 }

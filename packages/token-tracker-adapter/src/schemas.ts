@@ -2,11 +2,13 @@ import { z } from "zod";
 
 import {
   MAX_TOKEN_TRACKER_RANGE_DAYS,
+  TOKEN_TRACKER_PROGRESSION_SOURCE_MAP,
   TOKEN_TRACKER_PROVIDER_SOURCE_MAP
 } from "./constants.js";
 import { TokenTrackerAdapterError } from "./errors.js";
 import type {
   TokenMonsterDailyAggregateResponse,
+  TokenMonsterProgressionFamilyTotals,
   TokenMonsterProviderTotals,
   TokenMonsterTokenLedger
 } from "./types.js";
@@ -227,6 +229,50 @@ export function projectProviderTotals(
     const sourceId = source.source as keyof typeof TOKEN_TRACKER_PROVIDER_SOURCE_MAP;
     const providerFamily = TOKEN_TRACKER_PROVIDER_SOURCE_MAP[sourceId];
     totals[providerFamily] = source.totals.total_tokens;
+  }
+
+  return Object.freeze(totals);
+}
+
+export function projectProgressionFamilyTotals(
+  response: UpstreamModelBreakdownResponse
+): TokenMonsterProgressionFamilyTotals {
+  const totals: Record<keyof TokenMonsterProgressionFamilyTotals, number> = {
+    openai: 0,
+    anthropic: 0,
+    google: 0,
+    xai: 0,
+    deepseek: 0,
+    qwen: 0,
+    mistral: 0,
+    venice: 0,
+    sakana: 0,
+    perplexity: 0,
+    glm: 0,
+    other: 0
+  };
+  const seenSources = new Set<string>();
+
+  for (const source of response.sources) {
+    if (seenSources.has(source.source)) {
+      throw new TokenTrackerAdapterError("incompatible-schema");
+    }
+    seenSources.add(source.source);
+
+    let providerFamily: keyof TokenMonsterProgressionFamilyTotals = "other";
+    if (Object.hasOwn(TOKEN_TRACKER_PROGRESSION_SOURCE_MAP, source.source)) {
+      if (source.source_scope !== "local") {
+        throw new TokenTrackerAdapterError("incompatible-schema");
+      }
+      const sourceId =
+        source.source as keyof typeof TOKEN_TRACKER_PROGRESSION_SOURCE_MAP;
+      providerFamily = TOKEN_TRACKER_PROGRESSION_SOURCE_MAP[sourceId];
+    }
+    const nextTotal = totals[providerFamily] + source.totals.total_tokens;
+    if (!Number.isSafeInteger(nextTotal)) {
+      throw new TokenTrackerAdapterError("incompatible-schema");
+    }
+    totals[providerFamily] = nextTotal;
   }
 
   return Object.freeze(totals);
