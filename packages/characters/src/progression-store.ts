@@ -9,6 +9,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { z } from "zod";
 
@@ -33,6 +34,7 @@ import {
   type ProviderTotals,
 } from "./progression.js";
 import {
+  STARTER_CHARACTER_BY_PROVIDER_FAMILY,
   StarterProviderTotals28DaysSchema,
   selectStarterCharacter,
   type StarterProviderTotals28Days,
@@ -41,9 +43,35 @@ import {
 export const LOCAL_PROGRESSION_STORE_SCHEMA_VERSION = "1" as const;
 export const LOCAL_PROGRESSION_DIRECTORY_NAME = ".tokenmonster" as const;
 export const LOCAL_PROGRESSION_FILE_NAME = "progression-v1.json" as const;
+export const LOCAL_PROGRESSION_STORE_ERROR_CODES = ["store-busy"] as const;
+
+export type LocalProgressionStoreErrorCode =
+  (typeof LOCAL_PROGRESSION_STORE_ERROR_CODES)[number];
+
+export class LocalProgressionStoreError extends Error {
+  public readonly code: LocalProgressionStoreErrorCode;
+
+  public constructor(code: LocalProgressionStoreErrorCode) {
+    super("本機 progression store 正忙碌，請稍後再試。");
+    this.name = "LocalProgressionStoreError";
+    this.code = code;
+  }
+}
+
+const STORE_LOCK_RETRY_COUNT = 10;
+const STORE_LOCK_RETRY_DELAY_MS = 50;
+const STORE_LOCK_STALE_AFTER_MS = 10_000;
+const DAILY_BUCKET_RETENTION_MS = 366 * 86_400_000;
 
 const StoredLifetimeSchema = z
   .object({
+    baseline: ProviderTotalsSchema.optional(),
+    baselineActiveDays: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER)
+      .optional(),
     dailyProviderBuckets: z.array(DailyProviderBucketSchema),
     providerTotals: ProviderTotalsSchema,
     lifetimeTotal: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
@@ -73,10 +101,16 @@ export const LocalProgressionStoreSchema = z
       return;
     }
 
-    const counters = deriveLifetimeCounters(store.lifetime.dailyProviderBuckets);
+    const counters = deriveLifetimeCounters(store.lifetime.dailyProviderBuckets, {
+      baseline: store.lifetime.baseline,
+      baselineActiveDays: store.lifetime.baselineActiveDays,
+    });
     if (
-      JSON.stringify(counters.providerTotals) !==
-        JSON.stringify(store.lifetime.providerTotals) ||
+      PROGRESSION_PROVIDER_IDS.some(
+        (providerId) =>
+          counters.providerTotals[providerId] !==
+          store.lifetime.providerTotals[providerId],
+      ) ||
       counters.lifetimeTotal !== store.lifetime.lifetimeTotal ||
       counters.activeDays !== store.lifetime.activeDays
     ) {
@@ -91,6 +125,8 @@ export const LocalProgressionStoreSchema = z
 export type LocalProgressionStore = Readonly<{
   schemaVersion: typeof LOCAL_PROGRESSION_STORE_SCHEMA_VERSION;
   lifetime: Readonly<{
+    baseline?: ProviderTotals | undefined;
+    baselineActiveDays?: number | undefined;
     dailyProviderBuckets: readonly DailyProviderBucket[];
     providerTotals: ProviderTotals;
     lifetimeTotal: number;
@@ -124,6 +160,9 @@ function freezeStore(store: z.infer<typeof LocalProgressionStoreSchema>): LocalP
     Object.freeze(bucket);
   }
   Object.freeze(store.lifetime.providerTotals);
+  if (store.lifetime.baseline !== undefined) {
+    Object.freeze(store.lifetime.baseline);
+  }
   Object.freeze(store.lifetime);
   Object.freeze(store.unlockedAt);
   Object.freeze(store.selection);
@@ -169,6 +208,68 @@ function mergeProviderMaximums(
   }
 }
 
+function utcTimestamp(utcDate: string): number {
+  return Date.parse(`${utcDate}T00:00:00.000Z`);
+}
+
+function oldestRetainedTimestamp(newestUtcDate: string): number {
+  return utcTimestamp(newestUtcDate) - DAILY_BUCKET_RETENTION_MS;
+}
+
+function compactDailyProviderBuckets(
+  storeInput: LocalProgressionStore,
+): LocalProgressionStore {
+  const store = LocalProgressionStoreSchema.parse(storeInput);
+  const newestBucket = store.lifetime.dailyProviderBuckets.at(-1);
+  if (newestBucket === undefined) return freezeStore(store);
+
+  const cutoffTimestamp = oldestRetainedTimestamp(newestBucket.utcDate);
+  const retainedBuckets: DailyProviderBucket[] = [];
+  const prunedBuckets: DailyProviderBucket[] = [];
+  for (const bucket of store.lifetime.dailyProviderBuckets) {
+    (utcTimestamp(bucket.utcDate) < cutoffTimestamp
+      ? prunedBuckets
+      : retainedBuckets
+    ).push(bucket);
+  }
+  if (prunedBuckets.length === 0) return freezeStore(store);
+
+  const baseline = { ...(store.lifetime.baseline ?? emptyProviderTotals()) };
+  let baselineActiveDays = store.lifetime.baselineActiveDays ?? 0;
+  for (const bucket of prunedBuckets) {
+    if (Object.values(bucket.providerTotals).some((total) => total > 0)) {
+      baselineActiveDays = Math.min(
+        Number.MAX_SAFE_INTEGER,
+        baselineActiveDays + 1,
+      );
+    }
+    for (const providerId of PROGRESSION_PROVIDER_IDS) {
+      baseline[providerId] = Math.min(
+        Number.MAX_SAFE_INTEGER,
+        baseline[providerId] + (bucket.providerTotals[providerId] ?? 0),
+      );
+    }
+  }
+  const parsedBaseline = ProviderTotalsSchema.parse(baseline);
+  const counters = deriveLifetimeCounters(retainedBuckets, {
+    baseline: parsedBaseline,
+    baselineActiveDays,
+  });
+  return freezeStore(
+    LocalProgressionStoreSchema.parse({
+      ...store,
+      lifetime: {
+        baseline: parsedBaseline,
+        baselineActiveDays,
+        dailyProviderBuckets: retainedBuckets,
+        providerTotals: counters.providerTotals,
+        lifetimeTotal: counters.lifetimeTotal,
+        activeDays: counters.activeDays,
+      },
+    }),
+  );
+}
+
 /**
  * Merge repeated UTC provider reports by maximum. Rescans and replay therefore
  * cannot increase lifetime counters unless a day/provider report itself grows.
@@ -197,7 +298,20 @@ export function mergeDailyProviderBuckets(
     mergeProviderMaximums(providerTotals, bucket.providerTotals);
     bucketsByDate.set(bucket.utcDate, providerTotals);
   }
+  const newestUtcDate = [...store.lifetime.dailyProviderBuckets, ...incoming]
+    .map(({ utcDate }) => utcDate)
+    .sort((left, right) => right.localeCompare(left))[0];
+  const cutoffTimestamp =
+    newestUtcDate === undefined ? null : oldestRetainedTimestamp(newestUtcDate);
   for (const bucket of incoming) {
+    if (
+      store.lifetime.baseline !== undefined &&
+      cutoffTimestamp !== null &&
+      utcTimestamp(bucket.utcDate) < cutoffTimestamp &&
+      !bucketsByDate.has(bucket.utcDate)
+    ) {
+      continue;
+    }
     const providerTotals = bucketsByDate.get(bucket.utcDate) ?? {};
     mergeProviderMaximums(providerTotals, bucket.providerTotals);
     bucketsByDate.set(bucket.utcDate, providerTotals);
@@ -206,12 +320,21 @@ export function mergeDailyProviderBuckets(
   const dailyProviderBuckets = [...bucketsByDate.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([utcDate, providerTotals]) => ({ utcDate, providerTotals }));
-  const counters = deriveLifetimeCounters(dailyProviderBuckets);
+  const counters = deriveLifetimeCounters(dailyProviderBuckets, {
+    baseline: store.lifetime.baseline,
+    baselineActiveDays: store.lifetime.baselineActiveDays,
+  });
 
   return freezeStore(
     LocalProgressionStoreSchema.parse({
       ...store,
       lifetime: {
+        ...(store.lifetime.baseline === undefined
+          ? {}
+          : { baseline: store.lifetime.baseline }),
+        ...(store.lifetime.baselineActiveDays === undefined
+          ? {}
+          : { baselineActiveDays: store.lifetime.baselineActiveDays }),
         dailyProviderBuckets,
         providerTotals: counters.providerTotals,
         lifetimeTotal: counters.lifetimeTotal,
@@ -238,10 +361,7 @@ export function withManualSisterSelection(
 ): LocalProgressionStore {
   const store = LocalProgressionStoreSchema.parse(storeInput);
   const parsedCharacterId = z
-    .union([
-      z.enum(["chatgpt", "claude", "gemini", "grok"]),
-      z.null(),
-    ])
+    .union([z.enum(STARTER_CHARACTER_BY_PROVIDER_FAMILY), z.null()])
     .parse(characterId);
   const parsedSelectedAt = UtcTimestampSchema.parse(selectedAt);
   return freezeStore(
@@ -399,6 +519,131 @@ function isMissingFile(error: unknown): boolean {
   );
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === code
+  );
+}
+
+function sanitizeUnlockedAtEntries(parsedJson: unknown): unknown {
+  if (
+    typeof parsedJson !== "object" ||
+    parsedJson === null ||
+    Array.isArray(parsedJson) ||
+    !("unlockedAt" in parsedJson)
+  ) {
+    return parsedJson;
+  }
+  const unlockedAt = parsedJson.unlockedAt;
+  if (
+    typeof unlockedAt !== "object" ||
+    unlockedAt === null ||
+    Array.isArray(unlockedAt)
+  ) {
+    return parsedJson;
+  }
+  const sanitizedUnlockedAt = Object.fromEntries(
+    Object.entries(unlockedAt).filter(
+      ([, value]) =>
+        typeof value === "string" && UtcTimestampSchema.safeParse(value).success,
+    ),
+  );
+  return { ...parsedJson, unlockedAt: sanitizedUnlockedAt };
+}
+
+type StoreLock = Readonly<{
+  release: () => Promise<void>;
+}>;
+
+async function tryRemoveStaleLock(lockPath: string): Promise<boolean> {
+  let serialized: string;
+  try {
+    serialized = await readFile(lockPath, "utf8");
+  } catch (error) {
+    return isMissingFile(error);
+  }
+  try {
+    const lock = z
+      .object({
+        pid: z.number().int().positive(),
+        createdAt: UtcTimestampSchema,
+      })
+      .passthrough()
+      .parse(JSON.parse(serialized));
+    if (Date.now() - Date.parse(lock.createdAt) <= STORE_LOCK_STALE_AFTER_MS) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  try {
+    if ((await readFile(lockPath, "utf8")) !== serialized) return false;
+    await rm(lockPath);
+    return true;
+  } catch (error) {
+    return isMissingFile(error);
+  }
+}
+
+async function acquireStoreLock(path: string): Promise<StoreLock> {
+  const directory = dirname(path);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await chmod(directory, 0o700);
+  const lockPath = `${path}.lock`;
+
+  for (let attempt = 0; attempt <= STORE_LOCK_RETRY_COUNT; attempt += 1) {
+    const owner = `${JSON.stringify({
+      pid: process.pid,
+      createdAt: new Date().toISOString(),
+      ownerId: randomUUID(),
+    })}\n`;
+    let handle: Awaited<ReturnType<typeof open>> | null = null;
+    let created = false;
+    try {
+      handle = await open(lockPath, "wx", 0o600);
+      created = true;
+      await handle.writeFile(owner, "utf8");
+      await handle.sync();
+      await handle.close();
+      handle = null;
+      return Object.freeze({
+        release: async () => {
+          try {
+            if ((await readFile(lockPath, "utf8")) === owner) {
+              await rm(lockPath);
+            }
+          } catch (error) {
+            if (!isMissingFile(error)) throw error;
+          }
+        },
+      });
+    } catch (error) {
+      if (handle !== null) await handle.close().catch(() => undefined);
+      if (created) await rm(lockPath, { force: true }).catch(() => undefined);
+      if (!hasErrorCode(error, "EEXIST")) throw error;
+      if (await tryRemoveStaleLock(lockPath)) continue;
+      if (attempt === STORE_LOCK_RETRY_COUNT) {
+        throw new LocalProgressionStoreError("store-busy");
+      }
+      await delay(STORE_LOCK_RETRY_DELAY_MS);
+    }
+  }
+  throw new LocalProgressionStoreError("store-busy");
+}
+
+async function withStoreLock<T>(path: string, work: () => Promise<T>): Promise<T> {
+  const lock = await acquireStoreLock(path);
+  try {
+    return await work();
+  } finally {
+    await lock.release();
+  }
+}
+
 async function writeAtomically(
   path: string,
   store: LocalProgressionStore,
@@ -419,6 +664,16 @@ async function writeAtomically(
     handle = null;
     await rename(temporaryPath, path);
     await chmod(path, 0o600);
+    try {
+      const directoryHandle = await open(directory, "r");
+      try {
+        await directoryHandle.sync();
+      } finally {
+        await directoryHandle.close();
+      }
+    } catch {
+      // Some platforms do not permit opening or syncing directories.
+    }
   } finally {
     if (handle !== null) await handle.close().catch(() => undefined);
     await rm(temporaryPath, { force: true }).catch(() => undefined);
@@ -437,8 +692,36 @@ export async function saveLocalProgressionStore(
   storeInput: unknown,
   options: LocalProgressionStoreOptions = {},
 ): Promise<void> {
-  const store = freezeStore(LocalProgressionStoreSchema.parse(storeInput));
-  await writeAtomically(resolveLocalProgressionStorePath(options), store);
+  const path = resolveLocalProgressionStorePath(options);
+  const store = compactDailyProviderBuckets(
+    freezeStore(LocalProgressionStoreSchema.parse(storeInput)),
+  );
+  await withStoreLock(path, () => writeAtomically(path, store));
+}
+
+async function loadLocalProgressionStoreUnlocked(
+  path: string,
+): Promise<LocalProgressionStoreLoadResult> {
+  let serialized: string;
+  try {
+    serialized = await readFile(path, "utf8");
+  } catch (error) {
+    if (!isMissingFile(error)) throw error;
+    return Object.freeze({
+      store: createEmptyLocalProgressionStore(),
+      corruptionRecovered: false,
+    });
+  }
+
+  try {
+    const parsedJson = sanitizeUnlockedAtEntries(JSON.parse(serialized));
+    const store = freezeStore(LocalProgressionStoreSchema.parse(parsedJson));
+    return Object.freeze({ store, corruptionRecovered: false });
+  } catch {
+    const store = createEmptyLocalProgressionStore();
+    await writeAtomically(path, store);
+    return Object.freeze({ store, corruptionRecovered: true });
+  }
 }
 
 export async function loadLocalProgressionStore(
@@ -457,12 +740,11 @@ export async function loadLocalProgressionStore(
   }
 
   try {
-    const store = freezeStore(LocalProgressionStoreSchema.parse(JSON.parse(serialized)));
+    const parsedJson = sanitizeUnlockedAtEntries(JSON.parse(serialized));
+    const store = freezeStore(LocalProgressionStoreSchema.parse(parsedJson));
     return Object.freeze({ store, corruptionRecovered: false });
   } catch {
-    const store = createEmptyLocalProgressionStore();
-    await writeAtomically(path, store);
-    return Object.freeze({ store, corruptionRecovered: true });
+    return withStoreLock(path, () => loadLocalProgressionStoreUnlocked(path));
   }
 }
 
@@ -478,12 +760,17 @@ export async function mergeAndSaveDailyProviderBuckets(
   incoming: unknown,
   options: LocalProgressionStoreOptions = {},
 ): Promise<LocalProgressionStoreLoadResult> {
-  const loaded = await loadLocalProgressionStore(options);
-  const store = mergeDailyProviderBuckets(loaded.store, incoming);
-  await saveLocalProgressionStore(store, options);
-  return Object.freeze({
-    store,
-    corruptionRecovered: loaded.corruptionRecovered,
+  const path = resolveLocalProgressionStorePath(options);
+  return withStoreLock(path, async () => {
+    const loaded = await loadLocalProgressionStoreUnlocked(path);
+    const store = compactDailyProviderBuckets(
+      mergeDailyProviderBuckets(loaded.store, incoming),
+    );
+    await writeAtomically(path, store);
+    return Object.freeze({
+      store,
+      corruptionRecovered: loaded.corruptionRecovered,
+    });
   });
 }
 
