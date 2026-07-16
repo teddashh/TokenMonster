@@ -196,8 +196,106 @@ html[data-connection="error"] .status-dot {
   height: 100%;
   object-fit: contain;
   transform-origin: 50% 90%;
+}
+
+.character-doll-incoming {
+  z-index: 3;
+}
+
+/* Character liveliness: idle, entrance, pose crossfade, switching, celebration. */
+.motion-enabled .character-idle {
   animation: character-idle 4.8s ease-in-out infinite alternate;
 }
+
+.motion-enabled .character-letter-idle {
+  transform-origin: 50% 85%;
+  animation: character-idle 5.4s ease-in-out infinite alternate;
+}
+
+.motion-enabled .character-entering {
+  animation: character-entrance 340ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.motion-enabled .character-crossfade-in {
+  animation: character-crossfade-in 320ms ease-out both;
+}
+
+.motion-enabled .character-crossfade-out {
+  animation: character-crossfade-out 320ms ease-in both;
+}
+
+.companion-visual.is-switching .character-doll:not(.character-doll-incoming),
+.companion-visual.is-switching .letter-layer {
+  filter: saturate(0.72);
+  opacity: 0.86;
+  transition: filter 180ms ease, opacity 180ms ease;
+}
+
+.character-switching {
+  position: absolute;
+  z-index: 6;
+  top: 0.4rem;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.35rem 0.62rem;
+  border: 1px solid rgb(29 84 72 / 15%);
+  border-radius: 999px;
+  color: #173f35;
+  background: rgb(255 253 248 / 92%);
+  box-shadow: 0 0.35rem 1rem rgb(29 84 72 / 12%);
+  font-size: 0.72rem;
+  font-weight: 850;
+  transform: translateX(-50%);
+}
+
+.character-switching > span {
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 0.12rem solid rgb(29 84 72 / 25%);
+  border-top-color: #1d5448;
+  border-radius: 50%;
+  animation: character-spinner 700ms linear infinite;
+}
+
+.character-effects {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  pointer-events: none;
+}
+
+.character-sparkle {
+  position: absolute;
+  top: 48%;
+  left: 50%;
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 50%;
+  background: #f2bc68;
+  opacity: 0;
+}
+
+.character-sparkle:nth-child(3n) { background: #63ad92; }
+.character-sparkle:nth-child(3n + 1) { background: #ef8b7b; }
+
+.motion-enabled .character-effects.is-active .character-sparkle {
+  animation: character-sparkle 780ms ease-out both;
+}
+
+.character-sparkle:nth-child(1) { --spark-x: -7rem; --spark-y: -6rem; }
+.character-sparkle:nth-child(2) { --spark-x: -3.5rem; --spark-y: -7.5rem; animation-delay: 40ms !important; }
+.character-sparkle:nth-child(3) { --spark-x: 1rem; --spark-y: -7rem; animation-delay: 80ms !important; }
+.character-sparkle:nth-child(4) { --spark-x: 5.5rem; --spark-y: -5.5rem; animation-delay: 120ms !important; }
+.character-sparkle:nth-child(5) { --spark-x: 7.2rem; --spark-y: -1rem; animation-delay: 30ms !important; }
+.character-sparkle:nth-child(6) { --spark-x: 6rem; --spark-y: 4rem; animation-delay: 90ms !important; }
+.character-sparkle:nth-child(7) { --spark-x: 2.5rem; --spark-y: 6.5rem; animation-delay: 140ms !important; }
+.character-sparkle:nth-child(8) { --spark-x: -1.5rem; --spark-y: 7rem; animation-delay: 60ms !important; }
+.character-sparkle:nth-child(9) { --spark-x: -5.5rem; --spark-y: 5rem; animation-delay: 110ms !important; }
+.character-sparkle:nth-child(10) { --spark-x: -7rem; --spark-y: 1.5rem; animation-delay: 20ms !important; }
+.character-sparkle:nth-child(11) { --spark-x: 3.8rem; --spark-y: -3.8rem; animation-delay: 160ms !important; }
+.character-sparkle:nth-child(12) { --spark-x: -3.6rem; --spark-y: 3.7rem; animation-delay: 130ms !important; }
 
 .companion-face {
   position: absolute;
@@ -279,6 +377,49 @@ html[data-connection="error"] .status-dot {
 
   to {
     transform: translateY(-1%) rotate(0.35deg) scale(1.01);
+  }
+}
+
+@keyframes character-entrance {
+  from {
+    opacity: 0;
+    transform: translateY(0.7rem) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes character-crossfade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes character-crossfade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes character-spinner {
+  to { transform: rotate(1turn); }
+}
+
+@keyframes character-sparkle {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+
+  20% { opacity: 1; }
+
+  100% {
+    opacity: 0;
+    transform: translate(
+      calc(-50% + var(--spark-x)),
+      calc(-50% + var(--spark-y))
+    ) scale(1.1) rotate(160deg);
   }
 }
 
@@ -984,5 +1125,14 @@ html[data-character="grok"] .character-options button[aria-pressed="true"] span 
 
   .character-doll {
     animation: none;
+  }
+
+  .character-switching > span,
+  .character-effects.is-active .character-sparkle,
+  .character-entering,
+  .character-crossfade-in,
+  .character-crossfade-out,
+  .character-letter-idle {
+    animation: none !important;
   }
 }

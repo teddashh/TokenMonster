@@ -11,7 +11,7 @@
     <meta name="theme-color" content="#f6f2e8">
     <title>TokenMonster</title>
     <link rel="stylesheet" href="/assets/companion.css">
-    <script type="module" src="/assets/companion.js"></script>
+    <script type="module" src="/assets/main.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">跳到主要內容</a>
@@ -80,6 +80,21 @@
               </span>
             </span>
             <img class="character-doll" data-character-doll alt="" hidden>
+            <img
+              class="character-doll character-doll-incoming"
+              data-character-doll-incoming
+              alt=""
+              hidden
+            >
+            <span
+              class="character-switching"
+              data-character-switching
+              role="status"
+              hidden
+            >
+              <span aria-hidden="true"></span>正在換夥伴
+            </span>
+            <span class="character-effects" data-character-effects hidden></span>
             <span class="companion-shadow" aria-hidden="true"></span>
           </div>
           <div class="companion-copy">
