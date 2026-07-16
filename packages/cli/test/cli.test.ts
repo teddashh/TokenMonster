@@ -65,10 +65,18 @@ function fakeRuntime(): ManagedTokenTracker & {
   stop: ReturnType<typeof vi.fn<() => Promise<void>>>;
 } {
   const stop = vi.fn(async (): Promise<void> => undefined);
+  const status = Object.freeze({
+    phase: "ready" as const,
+    lastSuccessAt: "2026-01-01T00:00:00.000Z",
+    consecutiveFailures: 0,
+    canRetry: true
+  });
   return Object.freeze({
     baseUrl: "http://127.0.0.1:7681",
     version: PINNED_TOKEN_TRACKER_VERSION,
     closed: new Promise<ManagedTokenTrackerExit>(() => undefined),
+    getStatus: vi.fn(() => status),
+    requestRefresh: vi.fn(async () => status),
     refreshLocalUsage: vi.fn(async () => undefined),
     stop
   });
@@ -174,6 +182,7 @@ describe("CLI surface", () => {
     expect(adapter.probe).toHaveBeenCalledTimes(1);
     expect(captured.gatewayOptions).toEqual({
       adapter,
+      collector: runtime,
       assetDirectory: "/package/companion-ui/dist/public"
     });
     expect(gateway.start).toHaveBeenCalledWith();
@@ -183,6 +192,41 @@ describe("CLI surface", () => {
     expect(runtime.stop).toHaveBeenCalledTimes(1);
     expect(stdout.value).toContain(BOOTSTRAP_URL);
     expect(stderr.value).toBe("");
+  });
+
+  it("probes data availability through the adapter trailing-year summary", async () => {
+    const stdout = new CapturedOutput();
+    const stderr = new CapturedOutput();
+    const { dependencies, adapter, captured } = compositionDependencies();
+
+    await expect(
+      runTokenMonster({ argv: ["--no-open"], stdout, stderr, dependencies })
+    ).resolves.toBe(0);
+
+    const probe = captured.runtimeOptions?.dataAvailabilityProbe;
+    expect(typeof probe).toBe("function");
+    const summary = (totalTokens: number) =>
+      Object.freeze({
+        fromUtcDate: "2025-07-17",
+        toUtcDate: "2026-07-16",
+        activeDays: totalTokens > 0 ? 1 : 0,
+        tokens: Object.freeze({
+          inputTokens: totalTokens,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          reasoningOutputTokens: 0,
+          totalTokens
+        })
+      });
+    vi.mocked(adapter.getSummary).mockResolvedValueOnce(summary(123));
+    await expect(probe?.("http://127.0.0.1:7681")).resolves.toBe(true);
+    vi.mocked(adapter.getSummary).mockResolvedValueOnce(summary(0));
+    await expect(probe?.("http://127.0.0.1:7681")).resolves.toBe(false);
+    const range = vi.mocked(adapter.getSummary).mock.calls[0]?.[0];
+    expect(range?.fromUtcDate).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+    expect(range?.toUtcDate).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+    expect(range && range.fromUtcDate < range.toUtcDate).toBe(true);
   });
 
   it("supports a headless remote flow without trying to open a browser", async () => {
