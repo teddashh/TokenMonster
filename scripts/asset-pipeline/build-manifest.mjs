@@ -2,17 +2,25 @@
 
 import { createHash } from "node:crypto";
 import {
-  access,
-  copyFile,
+  lstat,
   mkdir,
   readFile,
+  realpath,
   rename,
   rm,
   stat,
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join, relative, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
@@ -63,6 +71,8 @@ Options:
   --personas <a,b>      Comma-separated persona IDs
   --themes <a,b>        Comma-separated theme IDs
   --sample              Select the first three requested themes per persona
+  --allow-png-passthrough
+                        Allow PNG output when libwebp encoding is unavailable
   --help                Show this help
 
 Environment:
@@ -91,6 +101,7 @@ function parseArguments(argv) {
   let personas = [...PERSONAS];
   let themes = [...THEMES];
   let sample = false;
+  let allowPngPassthrough = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -100,6 +111,10 @@ function parseArguments(argv) {
     }
     if (argument === "--sample") {
       sample = true;
+      continue;
+    }
+    if (argument === "--allow-png-passthrough") {
+      allowPngPassthrough = true;
       continue;
     }
     if (
@@ -129,6 +144,7 @@ function parseArguments(argv) {
     personas,
     themes: sample ? themes.slice(0, 3) : themes,
     sample,
+    allowPngPassthrough,
   };
 }
 
@@ -152,7 +168,7 @@ function buildCharactersPackage() {
   }
 }
 
-function probeEncoder() {
+function probeEncoder(allowPngPassthrough) {
   const encoders = run("ffmpeg", ["-hide_banner", "-encoders"]);
   const output = `${encoders.stdout ?? ""}\n${encoders.stderr ?? ""}`;
   if (encoders.status === 0 && /\blibwebp\b/u.test(output)) {
@@ -162,6 +178,11 @@ function probeEncoder() {
       ffmpegVersion: (version.stdout ?? "").split("\n", 1)[0] || "ffmpeg-unknown",
       warning: null,
     };
+  }
+  if (!allowPngPassthrough) {
+    throw new Error(
+      "ffmpeg with the libwebp encoder is required; install libwebp-enabled ffmpeg or use --allow-png-passthrough for development only",
+    );
   }
   return {
     encoder: "png-passthrough",
@@ -245,29 +266,45 @@ function targetDimensions(dimensions, kind, encoder) {
     return dimensions;
   }
   const maxDimension = kind === "avatar" ? 256 : 840;
-  const measuredDimension = kind === "avatar" ? Math.max(dimensions.width, dimensions.height) : dimensions.height;
-  const scale = kind === "avatar" ? maxDimension / measuredDimension : Math.min(1, maxDimension / measuredDimension);
+  const measuredDimension =
+    kind === "avatar"
+      ? Math.max(dimensions.width, dimensions.height)
+      : dimensions.height;
+  const scale = Math.min(1, maxDimension / measuredDimension);
   return {
     width: Math.max(1, Math.round(dimensions.width * scale)),
     height: Math.max(1, Math.round(dimensions.height * scale)),
   };
 }
 
-async function exists(path) {
+async function objectMatches(path, expectedSha256, expectedBytes) {
   try {
-    await access(path);
-    return true;
+    const objectStats = await lstat(path);
+    if (!objectStats.isFile() || objectStats.isSymbolicLink()) {
+      return false;
+    }
+    const bytes = await readFile(path);
+    return bytes.length === expectedBytes && sha256(bytes) === expectedSha256;
   } catch {
     return false;
   }
 }
 
-async function objectMatches(path, expectedSha256, expectedBytes) {
-  if (!(await exists(path))) {
-    return false;
+let atomicWriteCounter = 0;
+
+async function atomicWriteFile(path, contents) {
+  atomicWriteCounter += 1;
+  const temporaryPath = join(
+    dirname(path),
+    `.${basename(path)}.${process.pid}-${atomicWriteCounter}.tmp`,
+  );
+  try {
+    await writeFile(temporaryPath, contents, { flag: "wx" });
+    await rename(temporaryPath, path);
+  } catch (error) {
+    await rm(temporaryPath, { force: true });
+    throw error;
   }
-  const bytes = await readFile(path);
-  return bytes.length === expectedBytes && sha256(bytes) === expectedSha256;
 }
 
 async function readCache(cachePath) {
@@ -290,15 +327,46 @@ async function writeCache(cachePath, entries) {
   const sortedEntries = Object.fromEntries(
     Object.entries(entries).sort(([left], [right]) => left.localeCompare(right)),
   );
-  await writeFile(
+  await atomicWriteFile(
     cachePath,
     `${JSON.stringify({ schemaVersion: CACHE_VERSION, entries: sortedEntries }, null, 2)}\n`,
   );
 }
 
+function isInside(rootPath, candidatePath) {
+  const path = relative(rootPath, candidatePath);
+  return (
+    path === "" ||
+    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path))
+  );
+}
+
+async function resolvePotentialPath(path) {
+  let existingAncestor = resolve(path);
+  const missingSegments = [];
+  while (true) {
+    try {
+      return join(await realpath(existingAncestor), ...missingSegments);
+    } catch (error) {
+      if (!(error instanceof Error) || !Object.hasOwn(error, "code")) {
+        throw error;
+      }
+      if (error.code !== "ENOENT") {
+        throw error;
+      }
+      const parent = dirname(existingAncestor);
+      if (parent === existingAncestor) {
+        throw error;
+      }
+      missingSegments.unshift(basename(existingAncestor));
+      existingAncestor = parent;
+    }
+  }
+}
+
 function sourceRelativePath(assetBankDir, sourcePath) {
   const path = relative(assetBankDir, sourcePath);
-  if (path.startsWith("..")) {
+  if (path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)) {
     throw new Error(`Source escaped the asset bank: ${sourcePath}`);
   }
   return path;
@@ -316,7 +384,7 @@ function generatedAtFromSources(latestSourceMtimeMs) {
     }
     return date.toISOString();
   }
-  return new Date(latestSourceMtimeMs).toISOString();
+  return new Date(Math.floor(latestSourceMtimeMs / 1_000) * 1_000).toISOString();
 }
 
 async function main() {
@@ -325,10 +393,55 @@ async function main() {
   if (assetBankValue === undefined || assetBankValue.trim() === "") {
     throw new Error("ASSET_BANK_DIR must point to the read-only tachie bank");
   }
-  const assetBankDir = resolve(assetBankValue);
+  const assetBankDir = await realpath(resolve(assetBankValue));
   const bankStats = await stat(assetBankDir);
   if (!bankStats.isDirectory()) {
     throw new Error(`ASSET_BANK_DIR is not a directory: ${assetBankDir}`);
+  }
+  const outDir = await resolvePotentialPath(options.outDir);
+  if (isInside(assetBankDir, outDir)) {
+    throw new Error("--out must not be equal to or inside ASSET_BANK_DIR");
+  }
+
+  async function assertInsideBank(sourcePath) {
+    const sourceStats = await lstat(sourcePath);
+    if (sourceStats.isSymbolicLink()) {
+      throw new Error(
+        `Source symlinks are not allowed: ${sourceRelativePath(assetBankDir, sourcePath)}`,
+      );
+    }
+    if (!sourceStats.isFile()) {
+      throw new Error(
+        `Source is not a regular file: ${sourceRelativePath(assetBankDir, sourcePath)}`,
+      );
+    }
+    const resolvedSourcePath = await realpath(sourcePath);
+    if (!isInside(assetBankDir, resolvedSourcePath)) {
+      throw new Error(`Source escaped the asset bank: ${sourcePath}`);
+    }
+    return { path: resolvedSourcePath, stats: sourceStats };
+  }
+
+  async function findSource(sourcePath) {
+    try {
+      return await assertInsideBank(sourcePath);
+    } catch (error) {
+      if (
+        error !== null &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  const encoderProbe = probeEncoder(options.allowPngPassthrough);
+  const warnings = encoderProbe.warning === null ? [] : [encoderProbe.warning];
+  if (encoderProbe.warning !== null) {
+    console.warn(`WARNING: ${encoderProbe.warning}`);
   }
 
   buildCharactersPackage();
@@ -343,17 +456,9 @@ async function main() {
   );
   const { parseAssetManifest } = await import(charactersModuleUrl.href);
 
-  const encoderProbe = probeEncoder();
-  const warnings = encoderProbe.warning === null ? [] : [encoderProbe.warning];
-  if (encoderProbe.warning !== null) {
-    console.warn(`WARNING: ${encoderProbe.warning}`);
-  }
-
-  const objectsDir = join(options.outDir, "objects");
-  const temporaryDir = join(options.outDir, ".tmp");
-  const cachePath = join(options.outDir, ".asset-pipeline-cache.json");
+  const objectsDir = join(outDir, "objects");
+  const cachePath = join(outDir, ".asset-pipeline-cache.json");
   await mkdir(objectsDir, { recursive: true });
-  await mkdir(temporaryDir, { recursive: true });
   const cacheEntries = await readCache(cachePath);
   let temporaryCounter = 0;
   let latestSourceMtimeMs = 0;
@@ -364,7 +469,14 @@ async function main() {
   const perPersona = Object.fromEntries(
     options.personas.map((characterId) => [
       characterId,
-      { bytes: 0, avatars: 0, outfits: 0, poses: 0, missing: 0 },
+      {
+        bytes: 0,
+        avatars: 0,
+        outfits: 0,
+        poses: 0,
+        missing: 0,
+        avatarSource: null,
+      },
     ]),
   );
 
@@ -378,11 +490,10 @@ async function main() {
     });
   }
 
-  async function processImage(characterId, kind, sourcePath) {
-    const sourceBytes = await readFile(sourcePath);
-    const sourceStats = await stat(sourcePath);
-    latestSourceMtimeMs = Math.max(latestSourceMtimeMs, sourceStats.mtimeMs);
-    const image = imageMetadata(sourceBytes, sourcePath);
+  async function processImage(characterId, kind, source) {
+    const sourceBytes = await readFile(source.path);
+    latestSourceMtimeMs = Math.max(latestSourceMtimeMs, source.stats.mtimeMs);
+    const image = imageMetadata(sourceBytes, source.path);
     const originalDimensions = { width: image.width, height: image.height };
     const dimensions = targetDimensions(
       originalDimensions,
@@ -430,8 +541,8 @@ async function main() {
     if (encoderProbe.encoder === "webp") {
       temporaryCounter += 1;
       const temporaryPath = join(
-        temporaryDir,
-        `${process.pid}-${temporaryCounter}-${basename(sourcePath, ".png")}.webp`,
+        objectsDir,
+        `.encode-${process.pid}-${temporaryCounter}-${basename(source.path, ".png")}.webp`,
       );
       const ffmpeg = run("ffmpeg", [
         "-hide_banner",
@@ -439,7 +550,7 @@ async function main() {
         "error",
         "-y",
         "-i",
-        sourcePath,
+        source.path,
         "-vf",
         `scale=${dimensions.width}:${dimensions.height}:flags=lanczos`,
         "-frames:v",
@@ -459,7 +570,7 @@ async function main() {
       if (ffmpeg.status !== 0) {
         await rm(temporaryPath, { force: true });
         throw new Error(
-          `ffmpeg failed for ${sourceRelativePath(assetBankDir, sourcePath)}: ${(ffmpeg.stderr ?? "").trim()}`,
+          `ffmpeg failed for ${sourceRelativePath(assetBankDir, source.path)}: ${(ffmpeg.stderr ?? "").trim()}`,
         );
       }
       encodedBytes = await readFile(temporaryPath);
@@ -482,7 +593,7 @@ async function main() {
             encodedBytes.length,
           ))
         ) {
-          await copyFile(sourcePath, targetPath);
+          await atomicWriteFile(targetPath, encodedBytes);
         }
       } else {
         const normalizationWarning =
@@ -493,8 +604,8 @@ async function main() {
         }
         temporaryCounter += 1;
         const temporaryPath = join(
-          temporaryDir,
-          `${process.pid}-${temporaryCounter}-${basename(sourcePath, ".png")}.png`,
+          objectsDir,
+          `.normalize-${process.pid}-${temporaryCounter}-${basename(source.path, ".png")}.png`,
         );
         const ffmpeg = run("ffmpeg", [
           "-hide_banner",
@@ -502,7 +613,7 @@ async function main() {
           "error",
           "-y",
           "-i",
-          sourcePath,
+          source.path,
           "-frames:v",
           "1",
           "-c:v",
@@ -514,7 +625,7 @@ async function main() {
         if (ffmpeg.status !== 0) {
           await rm(temporaryPath, { force: true });
           throw new Error(
-            `ffmpeg PNG normalization failed for ${sourceRelativePath(assetBankDir, sourcePath)}: ${(ffmpeg.stderr ?? "").trim()}`,
+            `ffmpeg PNG normalization failed for ${sourceRelativePath(assetBankDir, source.path)}: ${(ffmpeg.stderr ?? "").trim()}`,
           );
         }
         encodedBytes = await readFile(temporaryPath);
@@ -555,11 +666,25 @@ async function main() {
   const characters = [];
   for (const characterId of options.personas) {
     const avatarPath = join(assetBankDir, `${characterId}.png`);
-    if (!(await exists(avatarPath))) {
-      await recordMissing(characterId, "avatar", avatarPath);
-      continue;
+    let avatarSource = await findSource(avatarPath);
+    if (avatarSource === null) {
+      const fallbackPath = join(
+        assetBankDir,
+        "outfits_v2_norm",
+        `doll_${characterId}__${options.themes[0]}.png`,
+      );
+      avatarSource = await findSource(fallbackPath);
+      if (avatarSource === null) {
+        await recordMissing(characterId, "avatar", avatarPath, {
+          fallbackSource: sourceRelativePath(assetBankDir, fallbackPath),
+        });
+        continue;
+      }
+      perPersona[characterId].avatarSource = "outfit-fallback";
+    } else {
+      perPersona[characterId].avatarSource = "root";
     }
-    const avatar = await processImage(characterId, "avatar", avatarPath);
+    const avatar = await processImage(characterId, "avatar", avatarSource);
     const themes = [];
     for (const themeId of options.themes) {
       const outfitPath = join(
@@ -567,11 +692,12 @@ async function main() {
         "outfits_v2_norm",
         `doll_${characterId}__${themeId}.png`,
       );
-      if (!(await exists(outfitPath))) {
+      const outfitSource = await findSource(outfitPath);
+      if (outfitSource === null) {
         await recordMissing(characterId, "outfit", outfitPath, { themeId });
         continue;
       }
-      const outfit = await processImage(characterId, "outfit", outfitPath);
+      const outfit = await processImage(characterId, "outfit", outfitSource);
       const poses = {};
       for (const state of POSE_STATES) {
         const posePath = join(
@@ -580,11 +706,12 @@ async function main() {
           "react",
           `doll_${characterId}__${themeId}__${state}.png`,
         );
-        if (!(await exists(posePath))) {
+        const poseSource = await findSource(posePath);
+        if (poseSource === null) {
           await recordMissing(characterId, "pose", posePath, { themeId, state });
           continue;
         }
-        poses[state] = await processImage(characterId, "pose", posePath);
+        poses[state] = await processImage(characterId, "pose", poseSource);
       }
       themes.push({ themeId, outfit, poses });
     }
@@ -650,19 +777,27 @@ async function main() {
         perPersona[characterId].bytes,
       ]),
     ),
+    perPersona: Object.fromEntries(
+      options.personas.map((characterId) => [
+        characterId,
+        {
+          bytes: perPersona[characterId].bytes,
+          avatarSource: perPersona[characterId].avatarSource,
+        },
+      ]),
+    ),
     missingAssets,
   };
 
-  await writeFile(
-    join(options.outDir, "manifest.json"),
+  await atomicWriteFile(
+    join(outDir, "manifest.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,
   );
-  await writeFile(
-    join(options.outDir, "report.json"),
+  await atomicWriteFile(
+    join(outDir, "report.json"),
     `${JSON.stringify(report, null, 2)}\n`,
   );
   await writeCache(cachePath, cacheEntries);
-  await rm(temporaryDir, { recursive: true, force: true });
 
   const tableRows = options.personas.map((characterId) => ({
     persona: characterId,
@@ -682,8 +817,8 @@ async function main() {
   });
   console.log(`\nAsset manifest build (${encoderProbe.encoder})`);
   console.table(tableRows);
-  console.log(`Manifest: ${join(options.outDir, "manifest.json")}`);
-  console.log(`Report:   ${join(options.outDir, "report.json")}`);
+  console.log(`Manifest: ${join(outDir, "manifest.json")}`);
+  console.log(`Report:   ${join(outDir, "report.json")}`);
 }
 
 main().catch((error) => {
