@@ -383,7 +383,9 @@ function packageRootForAsar(asarPath) {
 }
 
 async function verifyPackagePermissionTree(directory, depth = 0, counter = { value: 0 }) {
-  if (depth > 16 || counter.value > 512) {
+  // Runaway guard, not a tight count: macOS .app bundles carry an order of
+  // magnitude more entries than the Linux/Windows layouts.
+  if (depth > 16 || counter.value > 4096) {
     throw new Error("Packaged permission inventory exceeded its bound.");
   }
   counter.value += 1;
@@ -397,7 +399,9 @@ async function verifyPackagePermissionTree(directory, depth = 0, counter = { val
   if (!metadata.isDirectory() && !metadata.isFile()) {
     throw new Error("Packaged application contains a non-regular entry.");
   }
-  if ((metadata.mode & 0o7022) !== 0) {
+  // POSIX mode bits are synthetic on Windows (node reports 0o666; ACLs are
+  // the real permission model there), so the bit check only runs on unix.
+  if (process.platform !== "win32" && (metadata.mode & 0o7022) !== 0) {
     throw new Error("Packaged application contains an unsafe file mode.");
   }
   if (metadata.isDirectory()) {
@@ -426,8 +430,9 @@ async function verifyPackagePathsAndSnapshots(asarPath) {
     }
   }
 
-  const sharedSnapshots = files.filter(
-    (path) => basename(path) === "v8_context_snapshot.bin"
+  const sharedSnapshots = files.filter((path) =>
+    // macOS names the shared snapshot per-arch (v8_context_snapshot.arm64.bin).
+    /^v8_context_snapshot(?:\.(?:arm64|x86_64))?\.bin$/u.test(basename(path))
   );
   const browserSnapshots = files.filter(
     (path) => basename(path) === "browser_v8_context_snapshot.bin"
@@ -724,6 +729,28 @@ function safeZipEntryName(input) {
   );
 }
 
+// The darwin/win32 zip toolchains cannot round-trip POSIX modes (PowerShell
+// zips carry DOS attributes; .app zips carry framework symlinks), so foreign
+// platforms verify entry safety and sizes without unix type/mode assertions.
+function lenientZipEntryKind(entry) {
+  if (!safeZipEntryName(entry.fileName)) {
+    throw new Error("Maker ZIP contains an unsafe entry path.");
+  }
+  if ((entry.generalPurposeBitFlag & 0x1) !== 0) {
+    throw new Error("Encrypted maker ZIP entries are forbidden.");
+  }
+  const isDirectory = entry.fileName.endsWith("/");
+  if (
+    !isDirectory &&
+    (!Number.isSafeInteger(entry.uncompressedSize) ||
+      entry.uncompressedSize < 0 ||
+      entry.uncompressedSize > 256 * 1024 * 1024)
+  ) {
+    throw new Error("Maker ZIP file size is outside the release bound.");
+  }
+  return { kind: isDirectory ? "directory" : "file", mode: null };
+}
+
 function zipEntryKindAndMode(entry) {
   if (!safeZipEntryName(entry.fileName)) {
     throw new Error("Maker ZIP contains an unsafe entry path.");
@@ -792,7 +819,10 @@ function hashZipEntry(zip, entry) {
   });
 }
 
-async function zipInventory(path) {
+async function zipInventory(path, options = {}) {
+  const lenientModes = options.lenientModes === true;
+  const entryBound = lenientModes ? 8192 : 512;
+  const byteBound = (lenientModes ? 2 : 1) * 1_024 * 1_024 * 1_024;
   const zip = await openZip(path);
   try {
     return await new Promise((resolvePromise, reject) => {
@@ -817,8 +847,10 @@ async function zipInventory(path) {
       zip.on("entry", (entry) => {
         void (async () => {
           entries += 1;
-          if (entries > 512) {
-            throw new Error("Maker ZIP exceeds the 512-entry release bound.");
+          if (entries > entryBound) {
+            throw new Error(
+              `Maker ZIP exceeds the ${entryBound}-entry release bound.`
+            );
           }
           const folded = entry.fileName.toLocaleLowerCase("en-US");
           if (names.has(entry.fileName) || caseFoldedNames.has(folded)) {
@@ -826,13 +858,15 @@ async function zipInventory(path) {
           }
           names.add(entry.fileName);
           caseFoldedNames.add(folded);
-          const metadata = zipEntryKindAndMode(entry);
+          const metadata = lenientModes
+            ? lenientZipEntryKind(entry)
+            : zipEntryKindAndMode(entry);
           if (metadata.kind === "directory") {
             directories.set(entry.fileName.slice(0, -1), metadata.mode);
           } else {
             totalBytes += entry.uncompressedSize;
-            if (totalBytes > 1_024 * 1_024 * 1_024) {
-              throw new Error("Maker ZIP exceeds the 1 GiB uncompressed bound.");
+            if (totalBytes > byteBound) {
+              throw new Error("Maker ZIP exceeds the uncompressed byte bound.");
             }
             files.set(entry.fileName, {
               ...(await hashZipEntry(zip, entry)),
@@ -892,7 +926,34 @@ function sameInventory(left, right) {
   );
 }
 
+// Foreign-platform zips cannot support the linux byte/mode inventory diff
+// (PowerShell zips drop unix modes; .app staging trees contain framework
+// symlinks), so they get bounded structural checks plus proof that the
+// packaged executable is present.
+async function verifyForeignPlatformZip(path) {
+  const zip = await zipInventory(path, { lenientModes: true });
+  const executableSuffix =
+    process.platform === "win32"
+      ? "TokenMonster.exe"
+      : "Contents/MacOS/TokenMonster";
+  const containsExecutable = [...zip.files.keys()].some((name) =>
+    name.endsWith(executableSuffix)
+  );
+  if (!containsExecutable) {
+    throw new Error("Maker ZIP does not contain the packaged executable.");
+  }
+  return {
+    verification: "entry-safety-and-executable-presence",
+    fileCount: zip.files.size,
+    entryCount: zip.entries,
+    uncompressedBytes: zip.totalBytes
+  };
+}
+
 async function verifyZipMakerArtifact(path, asarPath) {
+  if (process.platform !== "linux") {
+    return verifyForeignPlatformZip(path);
+  }
   const staged = await stagedPackageInventory(asarPath);
   const zip = await zipInventory(path);
   const prefixes = ["", `${basename(staged.packageRoot)}/`];
