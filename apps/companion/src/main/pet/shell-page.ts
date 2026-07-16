@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+
 export type PetShellStatus =
   | Readonly<{ kind: "loading" }>
   | Readonly<{ kind: "ready" }>
@@ -31,14 +33,16 @@ export function petShellPage(
           </main>`
         : "";
 
+  const nonce = randomBytes(16).toString("base64url");
+
   return `<!doctype html>
 <html lang="zh-Hant-TW">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; img-src 'none'; object-src 'none'; script-src 'nonce-tokenmonster-pet'; style-src 'nonce-tokenmonster-pet'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; img-src 'none'; object-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'">
     <title>TokenMonster</title>
-    <style nonce="tokenmonster-pet">
+    <style nonce="${nonce}">
       :root { color-scheme: light; font-family: Inter, ui-rounded, system-ui, sans-serif; }
       * { box-sizing: border-box; }
       html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
@@ -76,7 +80,7 @@ export function petShellPage(
       <button class="control" id="hide" type="button" title="隱藏到系統匣" aria-label="隱藏到系統匣">−</button>
     </header>
     ${content}
-    <script nonce="tokenmonster-pet">
+    <script nonce="${nonce}">
       const pin = document.getElementById("pin");
       pin.addEventListener("click", async () => {
         const pinned = await window.tokenMonsterPet.togglePin();
