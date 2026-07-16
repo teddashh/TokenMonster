@@ -21,8 +21,17 @@ export const ASSET_STATE_TRIGGERS = [
   "victory",
 ] as const;
 
+export const ASSET_VOICE_TRIGGERS = [
+  "greeting",
+  "unlock",
+  "quiet",
+  "active",
+  "error",
+] as const;
+
 export const AssetCharacterIdSchema = z.enum(ASSET_CHARACTER_IDS);
 export const AssetStateTriggerSchema = z.enum(ASSET_STATE_TRIGGERS);
+export const AssetVoiceTriggerSchema = z.enum(ASSET_VOICE_TRIGGERS);
 
 const Sha256Schema = z.string().regex(/^[0-9a-f]{64}$/u);
 
@@ -93,7 +102,7 @@ const CharacterAssetsSchema = z
 const VoiceLineSchema = z
   .object({
     id: z.string().regex(/^[a-z0-9]+(?:[/-][a-z0-9]+)*$/u),
-    stateTrigger: AssetStateTriggerSchema,
+    trigger: AssetVoiceTriggerSchema,
     object: ObjectRefSchema,
     durationMs: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   })
@@ -148,6 +157,7 @@ export const AssetManifestSchema = z
 
 export type AssetCharacterId = z.infer<typeof AssetCharacterIdSchema>;
 export type AssetStateTrigger = z.infer<typeof AssetStateTriggerSchema>;
+export type AssetVoiceTrigger = z.infer<typeof AssetVoiceTriggerSchema>;
 export type ObjectRef = Readonly<z.infer<typeof ObjectRefSchema>>;
 export type AssetManifest = Readonly<z.infer<typeof AssetManifestSchema>>;
 
