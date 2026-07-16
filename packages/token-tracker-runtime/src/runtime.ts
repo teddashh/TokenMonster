@@ -313,10 +313,10 @@ function isContainedPath(parent: string, child: string): boolean {
   );
 }
 
-export async function resolveTokenTrackerExecutable(): Promise<TokenTrackerExecutable> {
+export async function resolveTokenTrackerEntry(
+  manifestPath: string
+): Promise<string> {
   try {
-    const require = createRequire(import.meta.url);
-    const manifestPath = require.resolve("tokentracker-cli/package.json");
     const manifestRoot = dirname(manifestPath);
     const rawManifest = JSON.parse(await readFile(manifestPath, "utf8")) as unknown;
     if (!isPlainRecord(rawManifest)) {
@@ -347,9 +347,21 @@ export async function resolveTokenTrackerExecutable(): Promise<TokenTrackerExecu
     if (!isContainedPath(realRoot, realBin) || !(await stat(realBin)).isFile()) {
       throw new TokenTrackerRuntimeError("runtime-not-found");
     }
+    return realBin;
+  } catch (error) {
+    if (error instanceof TokenTrackerRuntimeError) throw error;
+    throw new TokenTrackerRuntimeError("runtime-not-found");
+  }
+}
+
+export async function resolveTokenTrackerExecutable(): Promise<TokenTrackerExecutable> {
+  try {
+    const require = createRequire(import.meta.url);
+    const manifestPath = require.resolve("tokentracker-cli/package.json");
+    const entry = await resolveTokenTrackerEntry(manifestPath);
     return Object.freeze({
       command: process.execPath,
-      argumentPrefix: Object.freeze([realBin])
+      argumentPrefix: Object.freeze([entry])
     });
   } catch (error) {
     if (error instanceof TokenTrackerRuntimeError) throw error;

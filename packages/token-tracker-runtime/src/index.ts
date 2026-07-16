@@ -16,6 +16,7 @@ export {
 } from "./errors.js";
 export {
   buildTokenTrackerEnvironment,
+  resolveTokenTrackerEntry,
   resolveTokenTrackerExecutable,
   startManagedTokenTracker
 } from "./runtime.js";
