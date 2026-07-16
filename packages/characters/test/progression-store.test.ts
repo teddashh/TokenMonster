@@ -15,8 +15,10 @@ import {
   LOCAL_PROGRESSION_DIRECTORY_NAME,
   LOCAL_PROGRESSION_FILE_NAME,
   LOCAL_PROGRESSION_PRIVACY_POLICY,
+  LocalProgressionStoreError,
   LocalProgressionStoreSchema,
   createEmptyLocalProgressionStore,
+  evaluateProgression,
   loadLocalProgressionStore,
   mergeAndSaveDailyProviderBuckets,
   mergeDailyProviderBuckets,
@@ -137,6 +139,56 @@ describe("local progression lifetime store", () => {
     );
   });
 
+  it("loads lifetime provider totals regardless of serialized key order", async () => {
+    const path = await temporaryPath();
+    const store = mergeDailyProviderBuckets(createEmptyLocalProgressionStore(), [
+      { utcDate: "2026-07-16", providerTotals: { openai: 9, google: 2 } },
+    ]);
+    const serialized = JSON.parse(JSON.stringify(store)) as {
+      lifetime: { providerTotals: Record<string, number> };
+    };
+    serialized.lifetime.providerTotals = Object.fromEntries(
+      Object.entries(serialized.lifetime.providerTotals).reverse(),
+    );
+    await mkdir(join(path, ".."), { recursive: true });
+    await writeFile(path, JSON.stringify(serialized), "utf8");
+
+    const loaded = await loadLocalProgressionStore({ path });
+    expect(loaded.corruptionRecovered).toBe(false);
+    expect(loaded.store).toEqual(store);
+  });
+
+  it("preserves unknown unlock keys and drops only malformed timestamps", async () => {
+    const path = await temporaryPath();
+    const store = mergeDailyProviderBuckets(createEmptyLocalProgressionStore(), [
+      { utcDate: "2026-07-16", providerTotals: { anthropic: 12 } },
+    ]);
+    const serialized = {
+      ...store,
+      unlockedAt: {
+        "character:claude": "2026-07-16T12:00:00.000Z",
+        "future-kind:new-character:new-item": "2026-07-16T12:01:00.000Z",
+        "character:chatgpt": "not-a-timestamp",
+      },
+    };
+    await mkdir(join(path, ".."), { recursive: true });
+    await writeFile(path, JSON.stringify(serialized), "utf8");
+
+    const loaded = await loadLocalProgressionStore({ path });
+    expect(loaded.corruptionRecovered).toBe(false);
+    expect(loaded.store.lifetime).toEqual(store.lifetime);
+    expect(loaded.store.unlockedAt).toEqual({
+      "character:claude": "2026-07-16T12:00:00.000Z",
+      "future-kind:new-character:new-item": "2026-07-16T12:01:00.000Z",
+    });
+
+    await saveLocalProgressionStore(loaded.store, { path });
+    const roundTripped = JSON.parse(await readFile(path, "utf8")) as {
+      unlockedAt: Record<string, string>;
+    };
+    expect(roundTripped.unlockedAt).toEqual(loaded.store.unlockedAt);
+  });
+
   it("recovers corrupted JSON to an empty safe state and reports the flag", async () => {
     const path = await temporaryPath();
     await mkdir(join(path, ".."), { recursive: true });
@@ -161,6 +213,108 @@ describe("local progression lifetime store", () => {
     );
     expect(merged.corruptionRecovered).toBe(true);
     expect(merged.store.lifetime.providerTotals.xai).toBe(2);
+  });
+
+  it("retries a held lock and reports a typed store-busy error", async () => {
+    const path = await temporaryPath();
+    await mkdir(join(path, ".."), { recursive: true });
+    await writeFile(
+      `${path}.lock`,
+      `${JSON.stringify({
+        pid: process.pid,
+        createdAt: new Date().toISOString(),
+      })}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+
+    const error = await mergeAndSaveDailyProviderBuckets(
+      [{ utcDate: "2026-07-16", providerTotals: { openai: 1 } }],
+      { path },
+    ).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(LocalProgressionStoreError);
+    expect(error).toMatchObject({
+      name: "LocalProgressionStoreError",
+      code: "store-busy",
+    });
+  });
+
+  it("steals a stale lock before merging and releases its replacement", async () => {
+    const path = await temporaryPath();
+    await mkdir(join(path, ".."), { recursive: true });
+    await writeFile(
+      `${path}.lock`,
+      `${JSON.stringify({
+        pid: process.pid,
+        createdAt: "2000-01-01T00:00:00.000Z",
+      })}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+
+    const merged = await mergeAndSaveDailyProviderBuckets(
+      [{ utcDate: "2026-07-16", providerTotals: { google: 3 } }],
+      { path },
+    );
+    expect(merged.store.lifetime.providerTotals.google).toBe(3);
+    await expect(readFile(`${path}.lock`, "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("folds buckets older than 366 days into an optional baseline", async () => {
+    const path = await temporaryPath();
+    const merged = await mergeAndSaveDailyProviderBuckets(
+      [
+        { utcDate: "2025-07-14", providerTotals: { openai: 7, qwen: 2 } },
+        { utcDate: "2026-07-16", providerTotals: { openai: 5 } },
+      ],
+      { path },
+    );
+
+    expect(merged.store.lifetime.dailyProviderBuckets).toEqual([
+      { utcDate: "2026-07-16", providerTotals: { openai: 5 } },
+    ]);
+    expect(merged.store.lifetime.baseline).toMatchObject({ openai: 7, qwen: 2 });
+    expect(merged.store.lifetime.providerTotals).toMatchObject({
+      openai: 12,
+      qwen: 2,
+    });
+    expect(merged.store.lifetime.lifetimeTotal).toBe(14);
+    expect(merged.store.lifetime.activeDays).toBe(2);
+
+    const evaluated = evaluateProgression({
+      schemaVersion: "1",
+      evaluatedAt: "2026-07-16T12:00:00.000Z",
+      evaluationUtcDate: "2026-07-16",
+      baseline: merged.store.lifetime.baseline,
+      baselineActiveDays: merged.store.lifetime.baselineActiveDays,
+      dailyProviderBuckets: merged.store.lifetime.dailyProviderBuckets,
+      traitIds: [],
+      persistedUnlockedAt: {},
+      selection: merged.store.selection,
+    });
+    expect(evaluated.counters.providerTotals.openai).toBe(12);
+    expect(evaluated.counters.lifetimeTotal).toBe(14);
+    expect(evaluated.counters.activeDays).toBe(2);
+
+    const replayed = await mergeAndSaveDailyProviderBuckets(
+      [{ utcDate: "2025-07-14", providerTotals: { openai: 7, qwen: 2 } }],
+      { path },
+    );
+    expect(replayed.store.lifetime).toEqual(merged.store.lifetime);
+  });
+
+  it("continues to load schema-version-one files without a baseline", async () => {
+    const path = await temporaryPath();
+    const store = mergeDailyProviderBuckets(createEmptyLocalProgressionStore(), [
+      { utcDate: "2026-07-16", providerTotals: { xai: 4 } },
+    ]);
+    await mkdir(join(path, ".."), { recursive: true });
+    await writeFile(path, JSON.stringify(store), "utf8");
+
+    const loaded = await loadLocalProgressionStore({ path });
+    expect(loaded.corruptionRecovered).toBe(false);
+    expect(loaded.store.lifetime.baseline).toBeUndefined();
+    expect(loaded.store).toEqual(store);
   });
 });
 
