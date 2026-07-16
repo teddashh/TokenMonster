@@ -1,4 +1,13 @@
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile
+} from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +24,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CompanionGatewayError,
   createCompanionGateway,
+  type CompanionCharacterFetch,
+  type CompanionCharacterOptions,
   type CompanionCollectorController,
   type CompanionCollectorStatus,
   type CompanionGateway,
@@ -72,11 +83,89 @@ function responseFor(
   });
 }
 
+function sha256(body: Uint8Array): string {
+  return createHash("sha256").update(body).digest("hex");
+}
+
+function objectRef(body: Uint8Array, extension: "webp" | "png" | "wav") {
+  const hash = sha256(body);
+  return {
+    path: `objects/${hash}.${extension}`,
+    bytes: body.byteLength,
+    sha256: hash,
+    ...(extension === "wav" ? {} : { width: 1, height: 1 })
+  };
+}
+
+function characterManifest(
+  avatarBody: Uint8Array,
+  themes: ReadonlyArray<
+    Readonly<{
+      themeId: string;
+      outfitBody: Uint8Array;
+      supportedBody?: Uint8Array;
+    }>
+  > = [{ themeId: "tech", outfitBody: avatarBody }]
+) {
+  return {
+    schemaVersion: "1" as const,
+    generatedAt: "2026-07-16T00:00:00.000Z",
+    characters: [
+      {
+        characterId: "chatgpt" as const,
+        avatar: objectRef(avatarBody, "webp"),
+        themes: themes.map((theme) => ({
+          themeId: theme.themeId,
+          outfit: objectRef(theme.outfitBody, "webp"),
+          poses:
+            theme.supportedBody === undefined
+              ? {}
+              : { supported: objectRef(theme.supportedBody, "webp") }
+        }))
+      }
+    ],
+    voice: []
+  };
+}
+
+function progressionTotals(openai: number) {
+  return Object.freeze({
+    openai,
+    anthropic: 0,
+    google: 0,
+    xai: 0,
+    deepseek: 0,
+    qwen: 0,
+    mistral: 0,
+    venice: 0,
+    sakana: 0,
+    perplexity: 0,
+    glm: 0,
+    other: 0
+  });
+}
+
 function fakeAdapter(
   getDaily: TokenTrackerAdapter["getDaily"] = async (range) =>
     responseFor(range),
   getProviderTotals: TokenTrackerAdapter["getProviderTotals"] = async () =>
-    Object.freeze({ openai: 0, anthropic: 0, google: 0, xai: 0 })
+    Object.freeze({ openai: 0, anthropic: 0, google: 0, xai: 0 }),
+  getProgressionFamilyTotals: TokenTrackerAdapter["getProgressionFamilyTotals"] =
+    async () =>
+      Object.freeze({
+        openai: 0,
+        anthropic: 0,
+        google: 0,
+        xai: 0,
+        deepseek: 0,
+        qwen: 0,
+        mistral: 0,
+        venice: 0,
+        sakana: 0,
+        perplexity: 0,
+        glm: 0,
+        other: 0
+      })
 ): TokenTrackerAdapter {
   return Object.freeze({
     probe: vi.fn(async () => ({
@@ -88,9 +177,30 @@ function fakeAdapter(
       throw new Error("Unused in companion gateway tests.");
     }),
     getDaily: vi.fn(getDaily),
-    getProviderTotals: vi.fn(getProviderTotals)
+    getProviderTotals: vi.fn(getProviderTotals),
+    getProgressionFamilyTotals: vi.fn(getProgressionFamilyTotals)
   });
 }
+
+function adapterWithOpenAiProgression(total: number): TokenTrackerAdapter {
+  return fakeAdapter(
+    async (range) => responseFor(range),
+    async () => Object.freeze({ openai: total, anthropic: 0, google: 0, xai: 0 }),
+    async () => progressionTotals(total)
+  );
+}
+
+const EMPTY_CHARACTER_OPTIONS = Object.freeze({
+  manifest: {
+    schemaVersion: "1" as const,
+    generatedAt: "2026-07-16T00:00:00.000Z",
+    characters: [],
+    voice: []
+  },
+  cacheDirectory: "/tmp/tokenmonster-gateway-unused-assets",
+  cdnBaseUrl: null,
+  progressionStorePath: "/tmp/tokenmonster-gateway-unused-progression.json"
+});
 
 const READY_COLLECTOR_STATUS: CompanionCollectorStatus = Object.freeze({
   phase: "ready",
@@ -114,15 +224,26 @@ function fakeCollector(
 async function startGateway(
   adapter: TokenTrackerAdapter = fakeAdapter(),
   apiTimeoutMs?: number,
-  collector: CompanionCollectorController = fakeCollector()
+  collector: CompanionCollectorController = fakeCollector(),
+  characterOverrides: Partial<CompanionCharacterOptions> = {}
 ): Promise<Readonly<{
   gateway: CompanionGateway;
   address: CompanionGatewayAddress;
 }>> {
+  const characterDirectory = await mkdtemp(
+    join(tmpdir(), "tokenmonster-gateway-characters-")
+  );
+  temporaryDirectories.push(characterDirectory);
   const gateway = createCompanionGateway({
     adapter,
     collector,
     assets: UI_ASSETS,
+    characters: {
+      ...EMPTY_CHARACTER_OPTIONS,
+      cacheDirectory: join(characterDirectory, "asset-cache"),
+      progressionStorePath: join(characterDirectory, "progression-v1.json"),
+      ...characterOverrides
+    },
     clock: () => new Date("2026-07-15T12:34:56.789Z"),
     ...(apiTimeoutMs === undefined ? {} : { apiTimeoutMs })
   });
@@ -160,6 +281,33 @@ async function apiRequest(
   });
 }
 
+async function characterRequest(
+  address: CompanionGatewayAddress,
+  cookie: string
+): Promise<Response> {
+  return fetch(`${address.origin}/api/characters`, {
+    headers: { Cookie: cookie, Origin: address.origin }
+  });
+}
+
+async function characterPost(
+  address: CompanionGatewayAddress,
+  cookie: string,
+  path: "select" | "wardrobe",
+  body: string,
+  contentType = "application/json"
+): Promise<Response> {
+  return fetch(`${address.origin}/api/characters/${path}`, {
+    method: "POST",
+    headers: {
+      Cookie: cookie,
+      Origin: address.origin,
+      "Content-Type": contentType
+    },
+    body
+  });
+}
+
 async function collectorStatusRequest(
   address: CompanionGatewayAddress,
   cookie: string
@@ -193,6 +341,7 @@ function rawRequest(
     path: string;
     method?: string;
     headers?: Readonly<Record<string, string>>;
+    body?: string;
   }>
 ): Promise<Readonly<{
   status: number;
@@ -223,7 +372,7 @@ function rawRequest(
       }
     );
     request.on("error", reject);
-    request.end();
+    request.end(input.body);
   });
 }
 
@@ -620,6 +769,323 @@ describe("companion gateway", () => {
     });
   });
 
+  it("session-gates character routes and returns the exact letter-mode roster DTO", async () => {
+    const { address } = await startGateway();
+    expect((await fetch(`${address.origin}/api/characters`)).status).toBe(404);
+
+    const cookie = await bootstrap(address);
+    const response = await characterRequest(address, cookie);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    const dto = (await response.json()) as Record<string, unknown>;
+    expect(Object.keys(dto)).toEqual([
+      "status",
+      "generatedAt",
+      "selection",
+      "voiceEnabled",
+      "characters"
+    ]);
+    expect(dto).toMatchObject({
+      status: "ok",
+      generatedAt: "2026-07-15T12:34:56.789Z",
+      selection: { characterId: null, selectedBy: null },
+      voiceEnabled: true
+    });
+    const characters = dto["characters"] as Array<Record<string, unknown>>;
+    expect(characters).toHaveLength(11);
+    expect(characters.map((character) => character["characterId"])).toEqual([
+      "chatgpt", "claude", "gemini", "grok", "deepseek", "qwen",
+      "mistral", "venice", "sakana", "perplexity", "glm"
+    ]);
+    expect(
+      characters.every(
+        (character) =>
+          (character["visual"] as { mode?: string }).mode === "letter"
+      )
+    ).toBe(true);
+    expect(Object.keys(characters[0]!)).toEqual([
+      "characterId",
+      "displayName",
+      "kind",
+      "unlocked",
+      "unlockedAt",
+      "isStarter",
+      "activeThemeId",
+      "visual",
+      "progress",
+      "voiceLines"
+    ]);
+    expect(Object.keys(characters[0]!["visual"] as object)).toEqual([
+      "mode",
+      "glyph",
+      "background",
+      "foreground",
+      "accent"
+    ]);
+    expect(JSON.stringify(dto)).not.toContain("providerId");
+  });
+
+  it("strictly validates character POST bodies and lock-gates interactions", async () => {
+    const { address } = await startGateway();
+    const cookie = await bootstrap(address);
+
+    const lockedSelection = await characterPost(
+      address,
+      cookie,
+      "select",
+      JSON.stringify({ characterId: "chatgpt" })
+    );
+    expect(lockedSelection.status).toBe(409);
+    expect(await lockedSelection.json()).toEqual({ status: "error", error: "locked" });
+
+    const lockedWardrobe = await characterPost(
+      address,
+      cookie,
+      "wardrobe",
+      JSON.stringify({ characterId: "chatgpt", themeId: "tech" })
+    );
+    expect(lockedWardrobe.status).toBe(409);
+    expect(await lockedWardrobe.json()).toEqual({ status: "error", error: "locked" });
+
+    expect((await characterPost(
+      address,
+      cookie,
+      "select",
+      JSON.stringify({ characterId: "chatgpt", extra: true })
+    )).status).toBe(400);
+    expect((await characterPost(
+      address,
+      cookie,
+      "select",
+      JSON.stringify({ characterId: "chatgpt" }),
+      "text/plain"
+    )).status).toBe(400);
+    expect((await characterPost(
+      address,
+      cookie,
+      "select",
+      JSON.stringify({ characterId: "x".repeat(600) })
+    )).status).toBe(400);
+  });
+
+  it("backfills progression once and persists unlocked selection and wardrobe", async () => {
+    const adapter = adapterWithOpenAiProgression(5_000);
+    const { address } = await startGateway(adapter);
+    const cookie = await bootstrap(address);
+
+    expect((await apiRequest(address, cookie)).status).toBe(200);
+    expect(adapter.getProgressionFamilyTotals).toHaveBeenCalledTimes(28);
+    expect((await apiRequest(address, cookie)).status).toBe(200);
+    expect(adapter.getProgressionFamilyTotals).toHaveBeenCalledTimes(28);
+
+    const selected = await characterPost(
+      address,
+      cookie,
+      "select",
+      JSON.stringify({ characterId: "chatgpt" })
+    );
+    expect(selected.status).toBe(200);
+    expect(await selected.json()).toEqual({
+      status: "ok",
+      selection: { characterId: "chatgpt", selectedBy: "manual" }
+    });
+    const wardrobe = await characterPost(
+      address,
+      cookie,
+      "wardrobe",
+      JSON.stringify({ characterId: "chatgpt", themeId: "finance" })
+    );
+    expect(wardrobe.status).toBe(200);
+    expect(await wardrobe.json()).toEqual({
+      status: "ok",
+      characterId: "chatgpt",
+      activeThemeId: "finance"
+    });
+    const dto = (await (await characterRequest(address, cookie)).json()) as {
+      selection: unknown;
+      characters: Array<Record<string, unknown>>;
+    };
+    expect(dto.selection).toEqual({ characterId: "chatgpt", selectedBy: "manual" });
+    expect(dto.characters[0]).toMatchObject({
+      characterId: "chatgpt",
+      unlocked: true,
+      activeThemeId: "finance"
+    });
+  });
+
+  it("serves verified cache hits and CDN misses with immutable object headers", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "tokenmonster-assets-"));
+    temporaryDirectories.push(directory);
+    const cacheDirectory = join(directory, "cache");
+    const cachedBody = Buffer.from("cached-approved-object");
+    const downloadedBody = Buffer.from("downloaded-approved-object");
+    const manifest = characterManifest(downloadedBody, [
+      { themeId: "tech", outfitBody: cachedBody }
+    ]);
+    const fetchImpl = vi.fn<CompanionCharacterFetch>(async () =>
+      new Response(downloadedBody, { status: 200 })
+    );
+    const { address } = await startGateway(
+      adapterWithOpenAiProgression(1),
+      undefined,
+      fakeCollector(),
+      {
+        manifest,
+        cacheDirectory,
+        cdnBaseUrl: "https://cdn.example.test/v1",
+        fetch: fetchImpl
+      }
+    );
+    const cookie = await bootstrap(address);
+    await apiRequest(address, cookie);
+    await mkdir(cacheDirectory, { recursive: true });
+    await writeFile(join(cacheDirectory, `${sha256(cachedBody)}.webp`), cachedBody);
+
+    const cached = await fetch(
+      `${address.origin}/assets/characters/objects/${sha256(cachedBody)}.webp`,
+      { headers: { Cookie: cookie } }
+    );
+    expect(cached.status).toBe(200);
+    expect(Buffer.from(await cached.arrayBuffer())).toEqual(cachedBody);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(cached.headers.get("cache-control")).toBe(
+      "public, max-age=31536000, immutable"
+    );
+    expect(cached.headers.get("content-type")).toBe("image/webp");
+
+    const downloaded = await fetch(
+      `${address.origin}/assets/characters/objects/${sha256(downloadedBody)}.webp`,
+      { headers: { Cookie: cookie } }
+    );
+    expect(downloaded.status).toBe(200);
+    expect(Buffer.from(await downloaded.arrayBuffer())).toEqual(downloadedBody);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `https://cdn.example.test/v1/objects/${sha256(downloadedBody)}.webp`,
+      expect.objectContaining({ method: "GET", redirect: "error" })
+    );
+    expect(
+      await readFile(join(cacheDirectory, `${sha256(downloadedBody)}.webp`))
+    ).toEqual(downloadedBody);
+  });
+
+  it("fails closed for locked, malformed, cache-only, and mismatched assets", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "tokenmonster-assets-"));
+    temporaryDirectories.push(directory);
+    const approvedBody = Buffer.from("approved-object");
+    const manifest = characterManifest(approvedBody);
+    const fetchImpl = vi.fn<CompanionCharacterFetch>(async () =>
+      new Response("wrong-object", { status: 200 })
+    );
+    const locked = await startGateway(fakeAdapter(), undefined, fakeCollector(), {
+      manifest,
+      cacheDirectory: join(directory, "locked-cache"),
+      cdnBaseUrl: "https://cdn.example.test/v1",
+      fetch: fetchImpl
+    });
+    const lockedCookie = await bootstrap(locked.address);
+    const objectPath = `${sha256(approvedBody)}.webp`;
+    expect((await fetch(
+      `${locked.address.origin}/assets/characters/objects/${objectPath}`,
+      { headers: { Cookie: lockedCookie } }
+    )).status).toBe(404);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect((await fetch(
+      `${locked.address.origin}/assets/characters/objects/NOT-A-HASH.webp`,
+      { headers: { Cookie: lockedCookie } }
+    )).status).toBe(404);
+
+    const mismatchCache = join(directory, "mismatch-cache");
+    const mismatch = await startGateway(
+      adapterWithOpenAiProgression(1),
+      undefined,
+      fakeCollector(),
+      {
+        manifest,
+        cacheDirectory: mismatchCache,
+        cdnBaseUrl: "https://cdn.example.test/v1",
+        fetch: fetchImpl
+      }
+    );
+    const mismatchCookie = await bootstrap(mismatch.address);
+    await apiRequest(mismatch.address, mismatchCookie);
+    expect((await fetch(
+      `${mismatch.address.origin}/assets/characters/objects/${objectPath}`,
+      { headers: { Cookie: mismatchCookie } }
+    )).status).toBe(503);
+    await expect(access(join(mismatchCache, objectPath))).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+
+    const cacheOnly = await startGateway(
+      adapterWithOpenAiProgression(1),
+      undefined,
+      fakeCollector(),
+      {
+        manifest,
+        cacheDirectory: join(directory, "cache-only"),
+        cdnBaseUrl: null
+      }
+    );
+    const cacheOnlyCookie = await bootstrap(cacheOnly.address);
+    await apiRequest(cacheOnly.address, cacheOnlyCookie);
+    expect((await fetch(
+      `${cacheOnly.address.origin}/assets/characters/objects/${objectPath}`,
+      { headers: { Cookie: cacheOnlyCookie } }
+    )).status).toBe(404);
+  });
+
+  it("queues asset downloads at a maximum of three concurrent requests", async () => {
+    const bodies = ["avatar", "tech", "supported", "finance"].map((value) =>
+      Buffer.from(`asset-${value}`)
+    );
+    const manifest = characterManifest(bodies[0]!, [
+      {
+        themeId: "tech",
+        outfitBody: bodies[1]!,
+        supportedBody: bodies[2]!
+      },
+      { themeId: "finance", outfitBody: bodies[3]! }
+    ]);
+    const bodyByFile = new Map<string, Buffer>(
+      bodies.map((body) => [`${sha256(body)}.webp`, body] as const)
+    );
+    let active = 0;
+    let maximumActive = 0;
+    const fetchImpl: CompanionCharacterFetch = async (url) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise<void>((resolve) => setTimeout(resolve, 20));
+      active -= 1;
+      return new Response(bodyByFile.get(url.split("/").at(-1)!)!, {
+        status: 200
+      });
+    };
+    const { address } = await startGateway(
+      adapterWithOpenAiProgression(5_000),
+      undefined,
+      fakeCollector(),
+      {
+        manifest,
+        cdnBaseUrl: "https://cdn.example.test/v1",
+        fetch: fetchImpl
+      }
+    );
+    const cookie = await bootstrap(address);
+    await apiRequest(address, cookie);
+    const responses = await Promise.all(
+      bodies.map((body) =>
+        fetch(
+          `${address.origin}/assets/characters/objects/${sha256(body)}.webp`,
+          { headers: { Cookie: cookie } }
+        )
+      )
+    );
+    expect(responses.map((response) => response.status)).toEqual([
+      200, 200, 200, 200
+    ]);
+    expect(maximumActive).toBe(3);
+  });
+
   it("reads only the three allowlisted files from an injected static directory", async () => {
     const directory = await mkdtemp(join(tmpdir(), "tokenmonster-gateway-"));
     temporaryDirectories.push(directory);
@@ -632,7 +1098,8 @@ describe("companion gateway", () => {
     const gateway = createCompanionGateway({
       adapter: fakeAdapter(),
       collector: fakeCollector(),
-      assetDirectory: directory
+      assetDirectory: directory,
+      characters: EMPTY_CHARACTER_OPTIONS
     });
     gateways.push(gateway);
     const address = await gateway.start();
@@ -664,7 +1131,8 @@ describe("companion gateway", () => {
       createCompanionGateway({
         adapter: fakeAdapter(),
         collector: fakeCollector(),
-        assetDirectory: directory
+        assetDirectory: directory,
+        characters: EMPTY_CHARACTER_OPTIONS
       })
     ).toThrowError(CompanionGatewayError);
   });
