@@ -7,6 +7,14 @@ const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const numberFormatter = new Intl.NumberFormat("zh-TW", {
   maximumFractionDigits: 0
 });
+const compactNumberFormatter = new Intl.NumberFormat("zh-TW", {
+  notation: "compact",
+  maximumFractionDigits: 1
+});
+
+export function formatCompactTokenCount(value: number): string {
+  return compactNumberFormatter.format(value);
+}
 
 export interface UsagePanelElements {
   readonly trend: HTMLElement;
@@ -136,5 +144,4 @@ export function createUsagePanel(elements: UsagePanelElements): UsagePanel {
 
     return Object.freeze({ clearTrend, renderTrend });
 }
-
 

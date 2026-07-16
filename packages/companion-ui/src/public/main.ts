@@ -26,8 +26,10 @@ import {
   applyCharacterWardrobe,
   readCharacterJson,
   requestCharacterSelection,
-  requestCharacterWardrobe
+  requestCharacterWardrobe,
+  requestUsageAnalytics
 } from "./api.js";
+import { createAnalyticsPanel } from "./analytics-panel.js";
 import {
   createCharacterImageFallbackTracker,
   createCharacterUnlockQueue,
@@ -147,6 +149,7 @@ export function startCompanionUi(): void {
   const trendAccessibleElement = requiredElement<HTMLOListElement>(
     "[data-trend-accessible]"
   );
+  const analyticsElement = requiredElement<HTMLElement>("[data-analytics]");
   const metricElements = {
     today: requiredElement<HTMLElement>("[data-metric='today']"),
     last7Days: requiredElement<HTMLElement>("[data-metric='last7Days']"),
@@ -172,6 +175,11 @@ export function startCompanionUi(): void {
   let renderedLetterCharacterId: CharacterId | undefined;
   const reducedMotion = userPrefersReducedMotion();
   document.documentElement.classList.toggle("motion-enabled", !reducedMotion);
+  const analyticsPanel = createAnalyticsPanel({
+    root: analyticsElement,
+    reducedMotion,
+    load: (window, signal) => requestUsageAnalytics(window, signal)
+  });
   const imageFallback = createCharacterImageFallbackTracker();
   const unlockQueue = createCharacterUnlockQueue();
   const voiceGate = createVoicePlaybackGate({
@@ -925,6 +933,7 @@ export function startCompanionUi(): void {
       snapshot.totals.last28Days
     );
     renderTrend(snapshot);
+    void analyticsPanel.refreshInBackground();
   }
 
   function showSettled(
