@@ -3,7 +3,8 @@ import { getCompanionUiAssetDirectory } from "@tokenmonster/companion-ui";
 import {
   SUPPORTED_TOKEN_TRACKER_VERSION,
   createTokenTrackerAdapter,
-  type TokenTrackerAdapter
+  type TokenTrackerAdapter,
+  type TokenTrackerAggregateRange
 } from "@tokenmonster/token-tracker-adapter";
 import {
   PINNED_TOKEN_TRACKER_VERSION,
@@ -29,6 +30,20 @@ Usage:
   tokenmonster --version   顯示版本
   tokenmonster --help      顯示說明
 `;
+
+const DATA_PROBE_TRAILING_DAYS = 365;
+
+function trailingUtcRange(): TokenTrackerAggregateRange {
+  const now = new Date();
+  return Object.freeze({
+    fromUtcDate: new Date(
+      now.getTime() - DATA_PROBE_TRAILING_DAYS * 86_400_000
+    )
+      .toISOString()
+      .slice(0, 10),
+    toUtcDate: now.toISOString().slice(0, 10)
+  });
+}
 
 const defaultDependencies: TokenMonsterCliDependencies = Object.freeze({
   startRuntime: startManagedTokenTracker,
@@ -179,6 +194,12 @@ export async function runTokenMonster(
           await candidate.probe();
           if (signal.aborted) throw new Error("aborted");
           adapter = candidate;
+        },
+        dataAvailabilityProbe: async (baseUrl): Promise<boolean> => {
+          const candidate =
+            adapter ?? dependencies.createAdapter({ baseUrl });
+          const summary = await candidate.getSummary(trailingUtcRange());
+          return summary.tokens.totalTokens > 0;
         }
       });
     } catch {
@@ -200,6 +221,7 @@ export async function runTokenMonster(
       try {
         gateway = dependencies.createGateway({
           adapter,
+          collector: runtime,
           assetDirectory: dependencies.getAssetDirectory()
         });
         const address = await gateway.start();
