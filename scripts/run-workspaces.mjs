@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const target = process.argv[2];
+const requestedNames = process.argv.slice(3);
 const allowedTargets = new Set(["build", "test", "typecheck"]);
 const requiredWorkspaceScripts = ["build", "test", "typecheck"];
 const dependencySections = [
@@ -16,7 +17,9 @@ const dependencySections = [
 ];
 
 if (!allowedTargets.has(target)) {
-  throw new Error("Usage: node scripts/run-workspaces.mjs build|test|typecheck");
+  throw new Error(
+    "Usage: node scripts/run-workspaces.mjs build|test|typecheck [package...]"
+  );
 }
 
 async function readJson(path) {
@@ -183,12 +186,32 @@ for (const workspace of workspaces) {
 }
 const { dependencies, order } = topologicalOrder(workspaces);
 
+// With explicit package names, scope the run to those workspaces plus their
+// transitive local dependencies; without them, cover the whole monorepo.
+let included = new Set(order.map((workspace) => workspace.name));
+if (requestedNames.length > 0) {
+  for (const name of requestedNames) {
+    if (!included.has(name)) {
+      throw new Error(`Unknown workspace package: ${name}`);
+    }
+  }
+  included = new Set();
+  const queue = [...requestedNames];
+  while (queue.length > 0) {
+    const name = queue.pop();
+    if (included.has(name)) continue;
+    included.add(name);
+    queue.push(...dependencies.get(name));
+  }
+}
+
 if (target !== "build") {
   const dependencyNames = new Set(
     [...dependencies.values()].flatMap((names) => [...names])
   );
   for (const workspace of order) {
     if (
+      included.has(workspace.name) &&
       dependencyNames.has(workspace.name) &&
       typeof workspace.manifest.scripts?.build === "string"
     ) {
@@ -198,7 +221,10 @@ if (target !== "build") {
 }
 
 for (const workspace of order) {
-  if (typeof workspace.manifest.scripts?.[target] === "string") {
+  if (
+    included.has(workspace.name) &&
+    typeof workspace.manifest.scripts?.[target] === "string"
+  ) {
     await runWorkspaceScript(workspace, target);
   }
 }
