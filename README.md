@@ -150,10 +150,12 @@ repository 直接跑同一個 CLI composition：
 git clone https://github.com/teddashh/TokenMonster.git tokenmonster
 cd tokenmonster
 npm ci
-npm run build --workspace @tokenmonster/companion-ui
+npm run build --workspace @tokenmonster/monster-engine
+npm run build --workspace @tokenmonster/characters
 npm run build --workspace @tokenmonster/token-tracker-adapter
 npm run build --workspace @tokenmonster/token-tracker-runtime
 npm run build --workspace @tokenmonster/companion-gateway
+npm run build --workspace @tokenmonster/companion-ui
 npm run build --workspace tokenmonster
 npm exec -- tokenmonster --no-open
 ```

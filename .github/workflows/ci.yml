@@ -45,6 +45,8 @@ jobs:
       # Build dependency-first so workspace package exports exist in a fresh checkout.
       - name: Build sidecar path
         run: |
+          npm run build --workspace @tokenmonster/monster-engine
+          npm run build --workspace @tokenmonster/characters
           npm run build --workspace @tokenmonster/token-tracker-adapter
           npm run build --workspace @tokenmonster/token-tracker-runtime
           npm run build --workspace @tokenmonster/companion-gateway
@@ -53,6 +55,8 @@ jobs:
 
       - name: Type-check sidecar path
         run: |
+          npm run typecheck --workspace @tokenmonster/monster-engine
+          npm run typecheck --workspace @tokenmonster/characters
           npm run typecheck --workspace @tokenmonster/token-tracker-adapter
           npm run typecheck --workspace @tokenmonster/token-tracker-runtime
           npm run typecheck --workspace @tokenmonster/companion-gateway
@@ -61,6 +65,8 @@ jobs:
 
       - name: Test sidecar path without collection
         run: |
+          npm test --workspace @tokenmonster/monster-engine
+          npm test --workspace @tokenmonster/characters
           npm test --workspace @tokenmonster/token-tracker-adapter
           npm test --workspace @tokenmonster/token-tracker-runtime
           npm test --workspace @tokenmonster/companion-gateway
