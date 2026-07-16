@@ -228,7 +228,10 @@ async function main() {
   await rm(tarballPath, { force: true });
   // "package/" is the root directory npm expects inside the tarball; staging
   // already uses that name so plain tar works on both GNU tar and bsdtar.
-  run("tar", ["-czf", tarballPath, "-C", stagingParent, "package"]);
+  // Relative paths only: GNU tar reads "D:\..." as a remote host:file target.
+  run("tar", ["-czf", tarballName, "-C", "staging", "package"], {
+    cwd: options.outDir,
+  });
 
   const tarballBytes = await readFile(tarballPath);
   const digest = createHash("sha256").update(tarballBytes).digest("hex");
