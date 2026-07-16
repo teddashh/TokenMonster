@@ -1,0 +1,3 @@
+# The packaged-app verifier byte-compares ASAR contents against the working
+# tree, so checkouts must be line-ending-stable on every platform.
+* text=auto eol=lf
