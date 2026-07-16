@@ -63,6 +63,12 @@ function fakeAdapter(): TokenTrackerAdapter {
     }),
     getProgressionFamilyTotals: vi.fn(async () => {
       throw new Error("unused");
+    }),
+    getDailyFamilySeries: vi.fn(async () => {
+      throw new Error("unused");
+    }),
+    getModelUsage: vi.fn(async () => {
+      throw new Error("unused");
     })
   });
 }
