@@ -1049,12 +1049,18 @@ describe("companion gateway", () => {
     const bodyByFile = new Map<string, Buffer>(
       bodies.map((body) => [`${sha256(body)}.webp`, body] as const)
     );
+    let releaseDownloads!: () => void;
+    const downloadGate = new Promise<void>((resolve) => {
+      releaseDownloads = resolve;
+    });
+    let started = 0;
     let active = 0;
     let maximumActive = 0;
     const fetchImpl: CompanionCharacterFetch = async (url) => {
+      started += 1;
       active += 1;
       maximumActive = Math.max(maximumActive, active);
-      await new Promise<void>((resolve) => setTimeout(resolve, 20));
+      await downloadGate;
       active -= 1;
       return new Response(bodyByFile.get(url.split("/").at(-1)!)!, {
         status: 200
@@ -1072,7 +1078,7 @@ describe("companion gateway", () => {
     );
     const cookie = await bootstrap(address);
     await apiRequest(address, cookie);
-    const responses = await Promise.all(
+    const pendingResponses = Promise.all(
       bodies.map((body) =>
         fetch(
           `${address.origin}/assets/characters/objects/${sha256(body)}.webp`,
@@ -1080,9 +1086,21 @@ describe("companion gateway", () => {
         )
       )
     );
+    await vi.waitFor(
+      () => {
+        expect(started).toBe(3);
+      },
+      { timeout: 10_000, interval: 10 }
+    );
+    // The fourth download must stay queued while three are held open.
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    expect(started).toBe(3);
+    releaseDownloads();
+    const responses = await pendingResponses;
     expect(responses.map((response) => response.status)).toEqual([
       200, 200, 200, 200
     ]);
+    expect(started).toBe(4);
     expect(maximumActive).toBe(3);
   });
 

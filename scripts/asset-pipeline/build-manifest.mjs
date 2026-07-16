@@ -158,10 +158,12 @@ function run(command, args, options = {}) {
 }
 
 function buildCharactersPackage() {
+  // Spawn tsc through the current Node binary instead of the npm shim:
+  // .cmd shims cannot be spawned without a shell on Windows.
   const result = run(
-    "npm",
-    ["run", "build", "--workspace", "@tokenmonster/characters"],
-    { stdio: "inherit" },
+    process.execPath,
+    [join(SCRIPT_ROOT, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.build.json"],
+    { cwd: join(SCRIPT_ROOT, "packages", "characters"), stdio: "inherit" },
   );
   if (result.status !== 0) {
     throw new Error("Could not build @tokenmonster/characters before validation");
