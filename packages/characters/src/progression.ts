@@ -820,7 +820,7 @@ function monotonicProgress(
   if (unlockedAt === null || currentProgress.value === 1) return currentProgress;
   return {
     value: 1,
-    explanation: `${label} remains unlocked because local unlocks never re-lock.`,
+    explanation: `${label} 已解鎖；本機解鎖不會倒退。`,
   };
 }
 
@@ -837,8 +837,8 @@ function characterRuleProgress(
         value: ratio(value, rule.threshold),
         explanation:
           remaining === 0
-            ? `Met ${displayName} with ${formatCount(value)} local provider tokens.`
-            : `Used ${formatCount(value)} local ${rule.providerId} tokens — ${formatCount(remaining)} more to meet ${displayName}.`,
+            ? `已累積 ${formatCount(value)} 個本機 provider token，解鎖 ${displayName}。`
+            : `已累積 ${formatCount(value)} 個本機 ${rule.providerId} token，再 ${formatCount(remaining)} 個即可解鎖 ${displayName}。`,
       };
     }
     case "distinct-active-provider-breadth": {
@@ -848,8 +848,8 @@ function characterRuleProgress(
         value: ratio(value, rule.threshold),
         explanation:
           remaining === 0
-            ? `Used ${formatCount(value)} different providers — met ${displayName}.`
-            : `Used ${formatCount(value)} different providers — ${formatCount(remaining)} more to meet ${displayName}.`,
+            ? `已使用 ${formatCount(value)} 個不同的 provider，解鎖 ${displayName}。`
+            : `已使用 ${formatCount(value)} 個不同的 provider，再使用 ${formatCount(remaining)} 個即可解鎖 ${displayName}。`,
       };
     }
     case "active-day-streak": {
@@ -859,8 +859,8 @@ function characterRuleProgress(
         value: ratio(value, rule.threshold),
         explanation:
           remaining === 0
-            ? `Reached a ${formatCount(value)}-day active streak — met ${displayName}.`
-            : `${formatCount(value)}-day active streak — ${formatCount(remaining)} more consecutive days to meet ${displayName}.`,
+            ? `已連續使用 ${formatCount(value)} 天，解鎖 ${displayName}。`
+            : `已連續使用 ${formatCount(value)} 天，再連續 ${formatCount(remaining)} 天即可解鎖 ${displayName}。`,
       };
     }
     case "lifetime-total": {
@@ -870,8 +870,8 @@ function characterRuleProgress(
         value: ratio(value, rule.threshold),
         explanation:
           remaining === 0
-            ? `Reached ${formatCount(value)} lifetime local tokens — met ${displayName}.`
-            : `Used ${formatCount(value)} lifetime local tokens — ${formatCount(remaining)} more to meet ${displayName}.`,
+            ? `本機累積用量已達 ${formatCount(value)} tokens，解鎖 ${displayName}。`
+            : `本機累積用量已達 ${formatCount(value)} tokens，再 ${formatCount(remaining)} tokens 即可解鎖 ${displayName}。`,
       };
     }
   }
@@ -950,7 +950,7 @@ export function evaluateProgression(input: unknown): ProgressionState {
     const currentCharacterProgress = starterUnlock
       ? {
           value: 1,
-          explanation: `${character.displayName} is your selected starter.`,
+          explanation: `${character.displayName} 是你選擇的起始角色。`,
         }
       : progress;
     const characterProgress = monotonicProgress(
@@ -987,15 +987,15 @@ export function evaluateProgression(input: unknown): ProgressionState {
       const currentThemeProgress: UnlockProgress = {
         value: unlocked ? ratio(providerTotal, threshold) : 0,
         explanation: !unlocked
-          ? `Meet ${character.displayName} before unlocking wardrobe themes.`
+          ? `先解鎖 ${character.displayName}，才能解鎖服裝主題。`
           : remaining === 0
-            ? `Reached local ${character.providerId} tier ${effectiveIndex + 1} for ${theme.themeId}.`
-            : `Used ${formatCount(providerTotal)} local ${character.providerId} tokens — ${formatCount(remaining)} more for ${character.displayName}'s ${theme.themeId} theme.`,
+            ? `本機 ${character.providerId} 已達第 ${effectiveIndex + 1} 階，解鎖 ${theme.themeId} 主題。`
+            : `已累積 ${formatCount(providerTotal)} 個本機 ${character.providerId} token，再 ${formatCount(remaining)} 個即可解鎖 ${character.displayName} 的 ${theme.themeId} 主題。`,
       };
       const themeProgress = monotonicProgress(
         themeUnlockedAt,
         currentThemeProgress,
-        `${character.displayName}'s ${theme.themeId} theme`,
+        `${character.displayName} 的 ${theme.themeId} 主題`,
       );
       if (themeUnlockedAt === null) {
         lockedCandidates.push({
@@ -1036,17 +1036,17 @@ export function evaluateProgression(input: unknown): ProgressionState {
             : ratio(counters.activeDayStreak, threshold)
           : 0,
         explanation: !unlocked
-          ? `Meet ${character.displayName} before unlocking pose sets.`
+          ? `先解鎖 ${character.displayName}，才能解鎖姿勢組合。`
           : threshold === 0
-            ? `${poseSetId} poses are available from character unlock.`
+            ? `解鎖角色時已開放 ${poseSetId} 姿勢。`
             : remaining === 0
-              ? `Reached the ${formatCount(threshold)}-day streak for victory poses.`
-              : `${formatCount(counters.activeDayStreak)}-day active streak — ${formatCount(remaining)} more consecutive days for victory poses.`,
+              ? `已連續使用 ${formatCount(threshold)} 天，解鎖 victory 姿勢。`
+              : `已連續使用 ${formatCount(counters.activeDayStreak)} 天，再連續 ${formatCount(remaining)} 天即可解鎖 victory 姿勢。`,
       };
       const poseProgress = monotonicProgress(
         poseUnlockedAt,
         currentPoseProgress,
-        `${character.displayName}'s ${poseSetId} poses`,
+        `${character.displayName} 的 ${poseSetId} 姿勢`,
       );
       if (poseUnlockedAt === null) {
         lockedCandidates.push({
@@ -1083,17 +1083,17 @@ export function evaluateProgression(input: unknown): ProgressionState {
             : ratio(counters.activeDayStreak, threshold)
           : 0,
         explanation: !unlocked
-          ? `Meet ${character.displayName} before unlocking actions.`
+          ? `先解鎖 ${character.displayName}，才能解鎖動作。`
           : threshold === 0
-            ? `${action.actionId} is available from character unlock.`
+            ? `解鎖角色時已開放 ${action.actionId} 動作。`
             : remaining === 0
-              ? `Reached the ${formatCount(threshold)}-day streak for ${action.actionId}.`
-              : `${formatCount(counters.activeDayStreak)}-day active streak — ${formatCount(remaining)} more consecutive days for ${action.actionId}.`,
+              ? `已連續使用 ${formatCount(threshold)} 天，解鎖 ${action.actionId} 動作。`
+              : `已連續使用 ${formatCount(counters.activeDayStreak)} 天，再連續 ${formatCount(remaining)} 天即可解鎖 ${action.actionId} 動作。`,
       };
       const actionProgress = monotonicProgress(
         actionUnlockedAt,
         currentActionProgress,
-        `${character.displayName}'s ${action.actionId} action`,
+        `${character.displayName} 的 ${action.actionId} 動作`,
       );
       if (actionUnlockedAt === null) {
         lockedCandidates.push({
