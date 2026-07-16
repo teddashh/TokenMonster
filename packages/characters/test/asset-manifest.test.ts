@@ -50,8 +50,8 @@ function validManifest(): unknown {
         characterId: "chatgpt",
         lines: [
           {
-            id: "chatgpt/supported/hello",
-            stateTrigger: "supported",
+            id: "chatgpt/greeting/hello",
+            trigger: "greeting",
             object: {
               path: `objects/${WAV_SHA256}.wav`,
               bytes: 8_192,
