@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import {
   createServer,
   type IncomingMessage,
@@ -66,7 +66,10 @@ const CHARACTER_SELECT_PATH = "/api/characters/select";
 const CHARACTER_WARDROBE_PATH = "/api/characters/wardrobe";
 const CHARACTER_ASSET_PREFIX = "/assets/characters/objects/";
 const STYLESHEET_PATH = "/assets/companion.css";
-const JAVASCRIPT_PATH = "/assets/companion.js";
+const UI_SCRIPT_PATH_PREFIX = "/assets/";
+const UI_SCRIPT_ENTRY = "main.js";
+const UI_SCRIPT_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*\.js$/u;
+const MAX_UI_SCRIPT_FILES = 64;
 const BOOTSTRAP_PREFIX = "/__tokenmonster/bootstrap/";
 const SESSION_COOKIE_NAME = "tokenmonster_session";
 const SESSION_TOKEN_BYTES = 32;
@@ -87,7 +90,7 @@ const OPTION_KEYS = new Set<PropertyKey>([
   "clock",
   "apiTimeoutMs"
 ]);
-const ASSET_KEYS = new Set<PropertyKey>(["html", "css", "javascript"]);
+const ASSET_KEYS = new Set<PropertyKey>(["html", "css", "scripts"]);
 const SECURITY_HEADERS = Object.freeze({
   "Cache-Control": "no-store",
   "Content-Security-Policy":
@@ -107,7 +110,7 @@ const API_TIMEOUT = Symbol("companion-gateway-api-timeout");
 interface NormalizedAssets {
   readonly html: Buffer;
   readonly css: Buffer;
-  readonly javascript: Buffer;
+  readonly scripts: ReadonlyMap<string, Buffer>;
 }
 
 interface NormalizedOptions {
@@ -170,6 +173,30 @@ function normalizeAsset(value: unknown): Buffer {
   return body;
 }
 
+function isSafeScriptName(name: string): boolean {
+  return name.length <= 64 && UI_SCRIPT_NAME_PATTERN.test(name);
+}
+
+function assertScriptMap(scripts: ReadonlyMap<string, Buffer>): void {
+  if (
+    scripts.size < 1 ||
+    scripts.size > MAX_UI_SCRIPT_FILES ||
+    !scripts.has(UI_SCRIPT_ENTRY)
+  ) {
+    throw new CompanionGatewayError("invalid-configuration");
+  }
+}
+
+function assertTotalAssetBytes(normalized: NormalizedAssets): void {
+  let totalBytes = normalized.html.byteLength + normalized.css.byteLength;
+  for (const script of normalized.scripts.values()) {
+    totalBytes += script.byteLength;
+  }
+  if (totalBytes > MAX_TOTAL_ASSET_BYTES) {
+    throw new CompanionGatewayError("invalid-configuration");
+  }
+}
+
 function normalizeAssets(value: unknown): NormalizedAssets {
   if (
     !isPlainRecord(value) ||
@@ -180,27 +207,37 @@ function normalizeAssets(value: unknown): NormalizedAssets {
   }
   let html: unknown;
   let css: unknown;
-  let javascript: unknown;
+  let scriptsInput: unknown;
   try {
     html = ownDataValue(value, "html");
     css = ownDataValue(value, "css");
-    javascript = ownDataValue(value, "javascript");
+    scriptsInput = ownDataValue(value, "scripts");
   } catch {
     throw new CompanionGatewayError("invalid-configuration");
   }
+  if (!isPlainRecord(scriptsInput)) {
+    throw new CompanionGatewayError("invalid-configuration");
+  }
+  const scripts = new Map<string, Buffer>();
+  for (const key of Reflect.ownKeys(scriptsInput)) {
+    if (typeof key !== "string" || !isSafeScriptName(key)) {
+      throw new CompanionGatewayError("invalid-configuration");
+    }
+    let script: unknown;
+    try {
+      script = ownDataValue(scriptsInput, key);
+    } catch {
+      throw new CompanionGatewayError("invalid-configuration");
+    }
+    scripts.set(key, normalizeAsset(script));
+  }
+  assertScriptMap(scripts);
   const normalized = Object.freeze({
     html: normalizeAsset(html),
     css: normalizeAsset(css),
-    javascript: normalizeAsset(javascript)
+    scripts
   });
-  if (
-    normalized.html.byteLength +
-      normalized.css.byteLength +
-      normalized.javascript.byteLength >
-    MAX_TOTAL_ASSET_BYTES
-  ) {
-    throw new CompanionGatewayError("invalid-configuration");
-  }
+  assertTotalAssetBytes(normalized);
   return normalized;
 }
 
@@ -235,19 +272,23 @@ function normalizeAssetDirectory(value: unknown): NormalizedAssets {
     if (error instanceof CompanionGatewayError) throw error;
     throw new CompanionGatewayError("invalid-configuration");
   }
+  let scriptNames: readonly string[];
+  try {
+    scriptNames = readdirSync(directory).filter(isSafeScriptName).sort();
+  } catch {
+    throw new CompanionGatewayError("invalid-configuration");
+  }
+  const scripts = new Map<string, Buffer>();
+  for (const name of scriptNames) {
+    scripts.set(name, readAssetFile(directory, name));
+  }
+  assertScriptMap(scripts);
   const normalized = Object.freeze({
     html: readAssetFile(directory, "index.html"),
     css: readAssetFile(directory, "styles.css"),
-    javascript: readAssetFile(directory, "app.js")
+    scripts
   });
-  if (
-    normalized.html.byteLength +
-      normalized.css.byteLength +
-      normalized.javascript.byteLength >
-    MAX_TOTAL_ASSET_BYTES
-  ) {
-    throw new CompanionGatewayError("invalid-configuration");
-  }
+  assertTotalAssetBytes(normalized);
   return normalized;
 }
 
@@ -1028,11 +1069,7 @@ export function createCompanionGateway(
           sendRequestRejected(response, 404);
           return;
         }
-        if (
-          path === "/" ||
-          path === STYLESHEET_PATH ||
-          path === JAVASCRIPT_PATH
-        ) {
+        if (path === "/" || path === STYLESHEET_PATH) {
           if (request.method !== "GET") {
             response.setHeader("Allow", "GET");
             sendRequestRejected(response, 405);
@@ -1057,14 +1094,24 @@ export function createCompanionGateway(
           );
           return;
         }
-        if (path === JAVASCRIPT_PATH) {
-          sendBuffer(
-            response,
-            200,
-            "text/javascript; charset=utf-8",
-            normalized.assets.javascript
+        if (path.startsWith(UI_SCRIPT_PATH_PREFIX)) {
+          const script = normalized.assets.scripts.get(
+            path.slice(UI_SCRIPT_PATH_PREFIX.length)
           );
-          return;
+          if (script !== undefined) {
+            if (request.method !== "GET") {
+              response.setHeader("Allow", "GET");
+              sendRequestRejected(response, 405);
+              return;
+            }
+            sendBuffer(
+              response,
+              200,
+              "text/javascript; charset=utf-8",
+              script
+            );
+            return;
+          }
         }
         if (path === CHARACTERS_API_PATH) {
           if (request.method !== "GET") {

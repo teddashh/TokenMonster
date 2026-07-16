@@ -13,7 +13,7 @@ export type CompanionGatewayClock = () => Date;
 export interface CompanionUiAssets {
   readonly html: string | Uint8Array;
   readonly css: string | Uint8Array;
-  readonly javascript: string | Uint8Array;
+  readonly scripts: Readonly<Record<string, string | Uint8Array>>;
 }
 
 export interface CompanionCharacterFetchInit {
