@@ -15,6 +15,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CompanionGatewayError,
   createCompanionGateway,
+  type CompanionCollectorController,
+  type CompanionCollectorStatus,
   type CompanionGateway,
   type CompanionGatewayAddress
 } from "../src/index.js";
@@ -90,15 +92,36 @@ function fakeAdapter(
   });
 }
 
+const READY_COLLECTOR_STATUS: CompanionCollectorStatus = Object.freeze({
+  phase: "ready",
+  lastSuccessAt: "2026-07-15T12:00:00.000Z",
+  consecutiveFailures: 0,
+  canRetry: true
+});
+
+function fakeCollector(
+  getStatus: CompanionCollectorController["getStatus"] = () =>
+    READY_COLLECTOR_STATUS,
+  requestRefresh: CompanionCollectorController["requestRefresh"] = async () =>
+    getStatus()
+): CompanionCollectorController {
+  return Object.freeze({
+    getStatus: vi.fn(getStatus),
+    requestRefresh: vi.fn(requestRefresh)
+  });
+}
+
 async function startGateway(
   adapter: TokenTrackerAdapter = fakeAdapter(),
-  apiTimeoutMs?: number
+  apiTimeoutMs?: number,
+  collector: CompanionCollectorController = fakeCollector()
 ): Promise<Readonly<{
   gateway: CompanionGateway;
   address: CompanionGatewayAddress;
 }>> {
   const gateway = createCompanionGateway({
     adapter,
+    collector,
     assets: UI_ASSETS,
     clock: () => new Date("2026-07-15T12:34:56.789Z"),
     ...(apiTimeoutMs === undefined ? {} : { apiTimeoutMs })
@@ -129,6 +152,33 @@ async function apiRequest(
   cookie: string
 ): Promise<Response> {
   return fetch(`${address.origin}/api/companion`, {
+    headers: {
+      Accept: "application/json",
+      Cookie: cookie,
+      Origin: address.origin
+    }
+  });
+}
+
+async function collectorStatusRequest(
+  address: CompanionGatewayAddress,
+  cookie: string
+): Promise<Response> {
+  return fetch(`${address.origin}/api/companion/status`, {
+    headers: {
+      Accept: "application/json",
+      Cookie: cookie,
+      Origin: address.origin
+    }
+  });
+}
+
+async function collectorRefreshRequest(
+  address: CompanionGatewayAddress,
+  cookie: string
+): Promise<Response> {
+  return fetch(`${address.origin}/api/companion/refresh`, {
+    method: "POST",
     headers: {
       Accept: "application/json",
       Cookie: cookie,
@@ -280,6 +330,132 @@ describe("companion gateway", () => {
     expect(getProviderTotals).toHaveBeenCalledWith({
       fromUtcDate: "2026-06-18",
       toUtcDate: "2026-07-15"
+    });
+  });
+
+  it("exposes syncing before the first refresh without reading zero aggregates", async () => {
+    const adapter = fakeAdapter();
+    const collector = fakeCollector(() =>
+      Object.freeze({
+        phase: "syncing",
+        lastSuccessAt: null,
+        consecutiveFailures: 0,
+        canRetry: false
+      })
+    );
+    const { address } = await startGateway(adapter, undefined, collector);
+    const cookie = await bootstrap(address);
+
+    const response = await collectorStatusRequest(address, cookie);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      phase: "syncing",
+      lastSuccessAt: null,
+      consecutiveFailures: 0,
+      canRetry: false
+    });
+    expect(adapter.getDaily).not.toHaveBeenCalled();
+    expect(adapter.getProviderTotals).not.toHaveBeenCalled();
+  });
+
+  it("keeps last-good metrics available while the collector is stale", async () => {
+    const collector = fakeCollector(() =>
+      Object.freeze({
+        phase: "stale",
+        lastSuccessAt: "2026-07-15T12:00:00.000Z",
+        consecutiveFailures: 2,
+        canRetry: true
+      })
+    );
+    const adapter = fakeAdapter(async (range) =>
+      responseFor(range, [[range.toUtcDate, 42]])
+    );
+    const { address } = await startGateway(adapter, undefined, collector);
+    const cookie = await bootstrap(address);
+
+    await expect(
+      (await collectorStatusRequest(address, cookie)).json()
+    ).resolves.toMatchObject({ phase: "stale", consecutiveFailures: 2 });
+    const metrics = await apiRequest(address, cookie);
+    expect(metrics.status).toBe(200);
+    expect(await metrics.json()).toMatchObject({
+      status: "healthy",
+      totals: { today: 42, last7Days: 42, last28Days: 42 }
+    });
+  });
+
+  it("deduplicates concurrent refreshes and rate-limits a completed retrigger", async () => {
+    let resolveRefresh!: (status: CompanionCollectorStatus) => void;
+    const pending = new Promise<CompanionCollectorStatus>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    const requestRefresh = vi.fn(async () => pending);
+    const collector = fakeCollector(
+      () => READY_COLLECTOR_STATUS,
+      requestRefresh
+    );
+    const { address } = await startGateway(
+      fakeAdapter(),
+      undefined,
+      collector
+    );
+    const cookie = await bootstrap(address);
+
+    const first = collectorRefreshRequest(address, cookie);
+    const duplicate = collectorRefreshRequest(address, cookie);
+    await vi.waitFor(() => expect(requestRefresh).toHaveBeenCalledTimes(1));
+    resolveRefresh(READY_COLLECTOR_STATUS);
+    const [firstResponse, duplicateResponse] = await Promise.all([
+      first,
+      duplicate
+    ]);
+    expect(firstResponse.status).toBe(200);
+    expect(duplicateResponse.status).toBe(200);
+    expect(await firstResponse.json()).toEqual(READY_COLLECTOR_STATUS);
+    expect(await duplicateResponse.json()).toEqual(READY_COLLECTOR_STATUS);
+
+    const limited = await collectorRefreshRequest(address, cookie);
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("5");
+    expect(await limited.json()).toEqual(READY_COLLECTOR_STATUS);
+    expect(requestRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("sanitizes invalid collector snapshots and refresh error internals", async () => {
+    const canary = "/private/path/refresh-canary";
+    const collector = fakeCollector(
+      () =>
+        ({
+          ...READY_COLLECTOR_STATUS,
+          detail: canary
+        }) as CompanionCollectorStatus,
+      async () => {
+        throw new Error(canary);
+      }
+    );
+    const { address } = await startGateway(
+      fakeAdapter(),
+      undefined,
+      collector
+    );
+    const cookie = await bootstrap(address);
+
+    const statusResponse = await collectorStatusRequest(address, cookie);
+    expect(statusResponse.status).toBe(503);
+    const statusBody = await statusResponse.text();
+    expect(statusBody).not.toContain(canary);
+    expect(JSON.parse(statusBody)).toEqual({
+      status: "error",
+      error: "sidecar-unavailable"
+    });
+
+    const refreshResponse = await collectorRefreshRequest(address, cookie);
+    expect(refreshResponse.status).toBe(503);
+    const refreshBody = await refreshResponse.text();
+    expect(refreshBody).not.toContain(canary);
+    expect(JSON.parse(refreshBody)).toEqual({
+      status: "error",
+      error: "sidecar-unavailable"
     });
   });
 
@@ -455,6 +631,7 @@ describe("companion gateway", () => {
     ]);
     const gateway = createCompanionGateway({
       adapter: fakeAdapter(),
+      collector: fakeCollector(),
       assetDirectory: directory
     });
     gateways.push(gateway);
@@ -486,6 +663,7 @@ describe("companion gateway", () => {
     expect(() =>
       createCompanionGateway({
         adapter: fakeAdapter(),
+        collector: fakeCollector(),
         assetDirectory: directory
       })
     ).toThrowError(CompanionGatewayError);

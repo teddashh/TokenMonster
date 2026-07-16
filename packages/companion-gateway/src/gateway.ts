@@ -29,6 +29,9 @@ import type {
   CompanionApiErrorCode,
   CompanionApiErrorResponse,
   CompanionApiHealthyResponse,
+  CompanionCollectorController,
+  CompanionCollectorPhase,
+  CompanionCollectorStatus,
   CompanionDailyTotal,
   CompanionGateway,
   CompanionGatewayAddress,
@@ -39,6 +42,8 @@ import type {
 
 const LOOPBACK_HOST = "127.0.0.1" as const;
 const COMPANION_API_PATH = "/api/companion";
+const COLLECTOR_STATUS_PATH = "/api/companion/status";
+const COLLECTOR_REFRESH_PATH = "/api/companion/refresh";
 const STYLESHEET_PATH = "/assets/companion.css";
 const JAVASCRIPT_PATH = "/assets/companion.js";
 const BOOTSTRAP_PREFIX = "/__tokenmonster/bootstrap/";
@@ -51,8 +56,10 @@ const MAX_API_TIMEOUT_MS = 10_000;
 const MAX_ASSET_BYTES = 2 * 1_024 * 1_024;
 const MAX_TOTAL_ASSET_BYTES = 6 * 1_024 * 1_024;
 const MAX_CONCURRENT_API_REQUESTS = 8;
+const MIN_REFRESH_REQUEST_INTERVAL_MS = 5_000;
 const OPTION_KEYS = new Set<PropertyKey>([
   "adapter",
+  "collector",
   "assets",
   "assetDirectory",
   "clock",
@@ -83,6 +90,7 @@ interface NormalizedAssets {
 
 interface NormalizedOptions {
   readonly adapter: TokenTrackerAdapter;
+  readonly collector: CompanionCollectorController;
   readonly assets: NormalizedAssets;
   readonly clock: CompanionGatewayClock;
   readonly apiTimeoutMs: number;
@@ -223,10 +231,12 @@ function normalizeOptions(options: CompanionGatewayOptions): NormalizedOptions {
     throw new CompanionGatewayError("invalid-configuration");
   }
   let adapter: unknown;
+  let collector: unknown;
   let assets: unknown;
   let assetDirectory: unknown;
   try {
     adapter = ownDataValue(options, "adapter");
+    collector = ownDataValue(options, "collector");
     assets = optionalOwnDataValue(options, "assets");
     assetDirectory = optionalOwnDataValue(options, "assetDirectory");
   } catch {
@@ -240,6 +250,9 @@ function normalizeOptions(options: CompanionGatewayOptions): NormalizedOptions {
     typeof adapter["getProviderTotals"] !== "function" ||
     typeof adapter["getSummary"] !== "function" ||
     typeof adapter["probe"] !== "function" ||
+    !isPlainRecord(collector) ||
+    typeof collector["getStatus"] !== "function" ||
+    typeof collector["requestRefresh"] !== "function" ||
     (assets === undefined) === (assetDirectory === undefined) ||
     (clock !== undefined && typeof clock !== "function") ||
     (apiTimeoutMs !== undefined &&
@@ -253,6 +266,7 @@ function normalizeOptions(options: CompanionGatewayOptions): NormalizedOptions {
 
   return Object.freeze({
     adapter: adapter as unknown as TokenTrackerAdapter,
+    collector: collector as unknown as CompanionCollectorController,
     assets:
       assets === undefined
         ? normalizeAssetDirectory(assetDirectory)
@@ -287,12 +301,18 @@ function sendBuffer(
   response.end(body);
 }
 
-function sendJson(response: ServerResponse, status: number, value: unknown): void {
+function sendJson(
+  response: ServerResponse,
+  status: number,
+  value: unknown,
+  additionalHeaders: Readonly<Record<string, string>> = {}
+): void {
   sendBuffer(
     response,
     status,
     "application/json; charset=utf-8",
-    Buffer.from(JSON.stringify(value), "utf8")
+    Buffer.from(JSON.stringify(value), "utf8"),
+    additionalHeaders
   );
 }
 
@@ -345,10 +365,22 @@ function hasAcceptedRequestHeaders(
     return false;
   }
 
+  const contentLengthValues = rawHeaderValues(request, "content-length");
   return (
-    rawHeaderValues(request, "content-length").length === 0 &&
+    (contentLengthValues.length === 0 ||
+      (request.method === "POST" &&
+        contentLengthValues.length === 1 &&
+        contentLengthValues[0] === "0")) &&
     rawHeaderValues(request, "transfer-encoding").length === 0
   );
+}
+
+function hasAcceptedMutationHeaders(
+  request: IncomingMessage,
+  origin: string
+): boolean {
+  const originValues = rawHeaderValues(request, "origin");
+  return originValues.length === 1 && originValues[0] === origin;
 }
 
 function parseFixedPath(request: IncomingMessage, origin: string): string | null {
@@ -562,6 +594,64 @@ function classifyApiError(error: unknown): CompanionApiErrorCode {
   return "sidecar-unavailable";
 }
 
+const COLLECTOR_PHASES = Object.freeze([
+  "starting",
+  "syncing",
+  "ready",
+  "ready-no-data",
+  "refresh-failed",
+  "stale"
+] as const satisfies readonly CompanionCollectorPhase[]);
+
+function isCollectorPhase(value: unknown): value is CompanionCollectorPhase {
+  return COLLECTOR_PHASES.some((phase) => phase === value);
+}
+
+function isIsoInstant(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const parsed = new Date(value);
+  return (
+    Number.isFinite(parsed.getTime()) && parsed.toISOString() === value
+  );
+}
+
+function projectCollectorStatus(value: unknown): CompanionCollectorStatus {
+  if (
+    !isPlainRecord(value) ||
+    Reflect.ownKeys(value).length !== 4 ||
+    !Reflect.ownKeys(value).includes("phase") ||
+    !Reflect.ownKeys(value).includes("lastSuccessAt") ||
+    !Reflect.ownKeys(value).includes("consecutiveFailures") ||
+    !Reflect.ownKeys(value).includes("canRetry")
+  ) {
+    throw PROJECTION_ERROR;
+  }
+  const phase = ownDataValue(value, "phase");
+  const lastSuccessAt = ownDataValue(value, "lastSuccessAt");
+  const consecutiveFailures = ownDataValue(value, "consecutiveFailures");
+  const canRetry = ownDataValue(value, "canRetry");
+  if (
+    !isCollectorPhase(phase) ||
+    (lastSuccessAt !== null && !isIsoInstant(lastSuccessAt)) ||
+    !isSafeCount(consecutiveFailures) ||
+    typeof canRetry !== "boolean" ||
+    ((phase === "ready" || phase === "ready-no-data") &&
+      (lastSuccessAt === null || consecutiveFailures !== 0)) ||
+    (phase === "refresh-failed" &&
+      (lastSuccessAt !== null || consecutiveFailures < 1)) ||
+    (phase === "stale" &&
+      (lastSuccessAt === null || consecutiveFailures < 1))
+  ) {
+    throw PROJECTION_ERROR;
+  }
+  return Object.freeze({
+    phase,
+    lastSuccessAt,
+    consecutiveFailures,
+    canRetry
+  });
+}
+
 function sendApiError(
   response: ServerResponse,
   code: CompanionApiErrorCode
@@ -590,6 +680,26 @@ export function createCompanionGateway(
   let origin: string | null = null;
   let activeApiRequests = 0;
   let bootstrapAvailable = true;
+  let refreshRequestInFlight: Promise<CompanionCollectorStatus> | null = null;
+  let lastRefreshRequestAtMs: number | null = null;
+
+  const readCollectorStatus = (): CompanionCollectorStatus =>
+    projectCollectorStatus(normalized.collector.getStatus());
+
+  const requestCollectorRefresh = (): Promise<CompanionCollectorStatus> => {
+    if (refreshRequestInFlight !== null) return refreshRequestInFlight;
+    const operation = Promise.resolve()
+      .then(() => normalized.collector.requestRefresh())
+      .then(projectCollectorStatus)
+      .catch(() => readCollectorStatus());
+    const wrappedOperation = operation.finally(() => {
+      if (refreshRequestInFlight === wrappedOperation) {
+        refreshRequestInFlight = null;
+      }
+    });
+    refreshRequestInFlight = wrappedOperation;
+    return wrappedOperation;
+  };
 
   const server: Server = createServer(
     { maxHeaderSize: 16 * 1_024 },
@@ -600,8 +710,8 @@ export function createCompanionGateway(
           sendRequestRejected(response, 503);
           return;
         }
-        if (request.method !== "GET") {
-          response.setHeader("Allow", "GET");
+        if (request.method !== "GET" && request.method !== "POST") {
+          response.setHeader("Allow", "GET, POST");
           sendRequestRejected(response, 405);
           return;
         }
@@ -615,7 +725,11 @@ export function createCompanionGateway(
           return;
         }
 
-        if (path === bootstrapPath && bootstrapAvailable) {
+        if (
+          request.method === "GET" &&
+          path === bootstrapPath &&
+          bootstrapAvailable
+        ) {
           bootstrapAvailable = false;
           sendBuffer(
             response,
@@ -633,6 +747,17 @@ export function createCompanionGateway(
         if (!sessionCookieIsValid(request, sessionToken)) {
           sendRequestRejected(response, 404);
           return;
+        }
+        if (
+          path === "/" ||
+          path === STYLESHEET_PATH ||
+          path === JAVASCRIPT_PATH
+        ) {
+          if (request.method !== "GET") {
+            response.setHeader("Allow", "GET");
+            sendRequestRejected(response, 405);
+            return;
+          }
         }
         if (path === "/") {
           sendBuffer(
@@ -661,8 +786,74 @@ export function createCompanionGateway(
           );
           return;
         }
+        if (path === COLLECTOR_STATUS_PATH) {
+          if (request.method !== "GET") {
+            response.setHeader("Allow", "GET");
+            sendRequestRejected(response, 405);
+            return;
+          }
+          try {
+            sendJson(response, 200, readCollectorStatus());
+          } catch {
+            sendApiError(response, "sidecar-unavailable");
+          }
+          return;
+        }
+        if (path === COLLECTOR_REFRESH_PATH) {
+          if (request.method !== "POST") {
+            response.setHeader("Allow", "POST");
+            sendRequestRejected(response, 405);
+            return;
+          }
+          if (!hasAcceptedMutationHeaders(request, activeOrigin)) {
+            sendRequestRejected(response, 403);
+            return;
+          }
+          if (activeApiRequests >= MAX_CONCURRENT_API_REQUESTS) {
+            sendApiError(response, "sidecar-unavailable");
+            return;
+          }
+          try {
+            const now = normalized.clock();
+            utcDateFromInstant(now);
+            if (
+              refreshRequestInFlight === null &&
+              lastRefreshRequestAtMs !== null &&
+              now.getTime() - lastRefreshRequestAtMs <
+                MIN_REFRESH_REQUEST_INTERVAL_MS
+            ) {
+              sendJson(response, 429, readCollectorStatus(), {
+                "Retry-After": String(
+                  Math.ceil(
+                    (MIN_REFRESH_REQUEST_INTERVAL_MS -
+                      Math.max(0, now.getTime() - lastRefreshRequestAtMs)) /
+                      1_000
+                  )
+                )
+              });
+              return;
+            }
+            if (refreshRequestInFlight === null) {
+              lastRefreshRequestAtMs = now.getTime();
+            }
+            activeApiRequests += 1;
+            try {
+              sendJson(response, 200, await requestCollectorRefresh());
+            } finally {
+              activeApiRequests -= 1;
+            }
+          } catch {
+            sendApiError(response, "sidecar-unavailable");
+          }
+          return;
+        }
         if (path !== COMPANION_API_PATH) {
           sendRequestRejected(response, 404);
+          return;
+        }
+        if (request.method !== "GET") {
+          response.setHeader("Allow", "GET");
+          sendRequestRejected(response, 405);
           return;
         }
         if (activeApiRequests >= MAX_CONCURRENT_API_REQUESTS) {

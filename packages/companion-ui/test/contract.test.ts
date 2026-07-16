@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createUnavailableRetryBackoff,
+  parseCompanionCollectorStatus,
   parseCompanionSnapshot,
   shouldAutomaticallyRetry,
   type CompanionHealthySnapshot
@@ -79,6 +80,55 @@ describe("companion gateway response contract", () => {
   it("automatically retries only transient unavailability", () => {
     expect(shouldAutomaticallyRetry("sidecar-unavailable")).toBe(true);
     expect(shouldAutomaticallyRetry("sidecar-incompatible")).toBe(false);
+  });
+
+  it.each([
+    ["starting", null, 0, false],
+    ["syncing", null, 0, false],
+    ["ready", "2026-07-15T12:00:00.000Z", 0, true],
+    ["ready-no-data", "2026-07-15T12:00:00.000Z", 0, true],
+    ["refresh-failed", null, 1, true],
+    ["stale", "2026-07-15T12:00:00.000Z", 2, true]
+  ] as const)("accepts the content-blind %s collector phase", (
+    phase,
+    lastSuccessAt,
+    consecutiveFailures,
+    canRetry
+  ) => {
+    expect(
+      parseCompanionCollectorStatus({
+        phase,
+        lastSuccessAt,
+        consecutiveFailures,
+        canRetry
+      })
+    ).toEqual({ phase, lastSuccessAt, consecutiveFailures, canRetry });
+  });
+
+  it.each([
+    {
+      phase: "ready",
+      lastSuccessAt: null,
+      consecutiveFailures: 0,
+      canRetry: true
+    },
+    {
+      phase: "refresh-failed",
+      lastSuccessAt: null,
+      consecutiveFailures: 0,
+      canRetry: true
+    },
+    {
+      phase: "stale",
+      lastSuccessAt: "2026-07-15T12:00:00.000Z",
+      consecutiveFailures: 1,
+      canRetry: true,
+      detail: "/private/path"
+    }
+  ])("rejects invalid or expanded collector snapshots", (value) => {
+    expect(() => parseCompanionCollectorStatus(value)).toThrow(
+      "Invalid collector response"
+    );
   });
 
   it.each([

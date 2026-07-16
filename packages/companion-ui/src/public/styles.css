@@ -111,6 +111,23 @@ html[data-connection="healthy"] .status-dot {
   box-shadow: 0 0 0 0.18rem rgb(49 135 110 / 18%);
 }
 
+html[data-connection="starting"] .status-dot,
+html[data-connection="syncing"] .status-dot {
+  background: #d39a37;
+  box-shadow: 0 0 0 0.18rem rgb(211 154 55 / 18%);
+  animation: status-pulse 1.4s ease-in-out infinite;
+}
+
+html[data-connection="no-data"] .status-dot {
+  background: #6b7790;
+  box-shadow: 0 0 0 0.18rem rgb(107 119 144 / 18%);
+}
+
+html[data-connection="stale"] .status-dot {
+  background: #bd762f;
+  box-shadow: 0 0 0 0.18rem rgb(189 118 47 / 18%);
+}
+
 html[data-connection="error"] .status-dot {
   background: #b2534b;
   box-shadow: 0 0 0 0.18rem rgb(178 83 75 / 16%);
@@ -270,6 +287,17 @@ h2 {
   font-size: 0.8rem;
 }
 
+.stale-badge {
+  width: fit-content;
+  margin: 0.55rem auto 0;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  color: #754717;
+  background: #ffebc9;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
 .retry-button {
   margin-top: 0.85rem;
   padding: 0.65rem 1rem;
@@ -283,6 +311,29 @@ h2 {
 
 .retry-button:hover {
   background: #123f36;
+}
+
+.retry-button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.retry-button:disabled:hover {
+  background: #1d5448;
+}
+
+@keyframes status-pulse {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-connection="starting"] .status-dot,
+  html[data-connection="syncing"] .status-dot {
+    animation: none;
+  }
 }
 
 .retry-button:focus-visible,
