@@ -40,10 +40,10 @@ export const ObjectRefSchema = z
     path: z
       .string()
       .regex(/^objects\/[0-9a-f]{64}\.(?:webp|png|wav)$/u),
-    bytes: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    bytes: z.number().int().positive().max(4_194_304),
     sha256: Sha256Schema,
-    width: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
-    height: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+    width: z.number().int().min(1).max(4_096).optional(),
+    height: z.number().int().min(1).max(4_096).optional(),
   })
   .strict()
   .superRefine((object, context) => {
@@ -58,24 +58,45 @@ export const ObjectRefSchema = z
       });
     }
 
-    if ((object.width === undefined) !== (object.height === undefined)) {
-      context.addIssue({
-        code: "custom",
-        path: object.width === undefined ? ["width"] : ["height"],
-        message: "width and height must be declared together",
-      });
+    const extension = object.path.slice(object.path.lastIndexOf(".") + 1);
+    const isImage = extension !== "wav";
+    if (isImage) {
+      for (const dimension of ["width", "height"] as const) {
+        if (object[dimension] === undefined) {
+          context.addIssue({
+            code: "custom",
+            path: [dimension],
+            message: `${dimension} is required for image objects`,
+          });
+        }
+      }
+    } else {
+      for (const dimension of ["width", "height"] as const) {
+        if (object[dimension] !== undefined) {
+          context.addIssue({
+            code: "custom",
+            path: [dimension],
+            message: `${dimension} is not allowed for WAV objects`,
+          });
+        }
+      }
     }
   });
+
+const ImageObjectRefSchema = ObjectRefSchema.refine(
+  (object) => !object.path.endsWith("wav"),
+  { path: ["path"], message: "image assets must use WebP or PNG objects" },
+);
 
 const ThemeSchema = z
   .object({
     themeId: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u),
-    outfit: ObjectRefSchema,
+    outfit: ImageObjectRefSchema,
     poses: z
       .object({
-        supported: ObjectRefSchema.optional(),
-        challenged: ObjectRefSchema.optional(),
-        victory: ObjectRefSchema.optional(),
+        supported: ImageObjectRefSchema.optional(),
+        challenged: ImageObjectRefSchema.optional(),
+        victory: ImageObjectRefSchema.optional(),
       })
       .strict(),
   })
@@ -84,8 +105,8 @@ const ThemeSchema = z
 const CharacterAssetsSchema = z
   .object({
     characterId: AssetCharacterIdSchema,
-    avatar: ObjectRefSchema,
-    themes: z.array(ThemeSchema),
+    avatar: ImageObjectRefSchema,
+    themes: z.array(ThemeSchema).max(32),
   })
   .strict()
   .superRefine((character, context) => {
@@ -104,14 +125,23 @@ const VoiceLineSchema = z
     id: z.string().regex(/^[a-z0-9]+(?:[/-][a-z0-9]+)*$/u),
     trigger: AssetVoiceTriggerSchema,
     object: ObjectRefSchema,
-    durationMs: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    durationMs: z.number().int().min(1).max(30_000),
   })
-  .strict();
+  .strict()
+  .superRefine((line, context) => {
+    if (!line.object.path.endsWith("wav")) {
+      context.addIssue({
+        code: "custom",
+        path: ["object", "path"],
+        message: "voice lines must use .wav objects",
+      });
+    }
+  });
 
 const CharacterVoiceSchema = z
   .object({
     characterId: AssetCharacterIdSchema,
-    lines: z.array(VoiceLineSchema),
+    lines: z.array(VoiceLineSchema).max(8),
   })
   .strict()
   .superRefine((voice, context) => {
@@ -130,7 +160,7 @@ export const AssetManifestSchema = z
     schemaVersion: z.literal(ASSET_MANIFEST_SCHEMA_VERSION),
     generatedAt: z.iso.datetime({ offset: true }),
     characters: z.array(CharacterAssetsSchema),
-    voice: z.array(CharacterVoiceSchema),
+    voice: z.array(CharacterVoiceSchema).max(128),
   })
   .strict()
   .superRefine((manifest, context) => {
