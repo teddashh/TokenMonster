@@ -152,6 +152,26 @@ jobs:
         shell: bash
         run: node scripts/package-companion.mjs make internal
 
+      # Boot the packaged binary (not the dev tree) and require the sidecar
+      # and gateway to come up — the class of bug a byte-level verifier
+      # cannot see. Ubuntu 24.04 restricts unprivileged user namespaces via
+      # AppArmor, which breaks Chromium's sandbox, so re-enable them first.
+      - name: Smoke packaged app
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        env:
+          TOKENMONSTER_SMOKE: "1"
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          timeout 180 xvfb-run --auto-servernum \
+            apps/companion/out/TokenMonster-linux-x64/TokenMonster \
+            > smoke-packaged.log 2>&1 || true
+          if ! grep -q "TOKENMONSTER_SMOKE_OK" smoke-packaged.log; then
+            echo "Packaged app smoke failed" >&2
+            tail -n 80 smoke-packaged.log >&2
+            exit 1
+          fi
+
       - name: Upload desktop installers
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

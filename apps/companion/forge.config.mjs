@@ -533,9 +533,10 @@ async function prepareRuntimeResources(
 
 async function removeGroupWorldWrite(path, depth = 0, counter = { value: 0 }) {
   // macOS .app bundles carry an order of magnitude more entries than the
-  // Linux/Windows layouts (framework lproj dirs, helper apps), so the bound
+  // Linux/Windows layouts (framework lproj dirs, helper apps), and the
+  // sidecar extraResource adds ~850 files on every platform, so the bound
   // is a runaway guard, not a tight inventory expectation.
-  if (depth > 16 || counter.value > 4096) {
+  if (depth > 16 || counter.value > 8192) {
     throw new Error("Packaged permission hardening exceeded its inventory bound.");
   }
   counter.value += 1;

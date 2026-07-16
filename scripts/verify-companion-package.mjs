@@ -590,8 +590,9 @@ function packageRootForAsar(asarPath) {
 
 async function verifyPackagePermissionTree(directory, depth = 0, counter = { value: 0 }) {
   // Runaway guard, not a tight count: macOS .app bundles carry an order of
-  // magnitude more entries than the Linux/Windows layouts.
-  if (depth > 16 || counter.value > 4096) {
+  // magnitude more entries than the Linux/Windows layouts, and the sidecar
+  // extraResource adds ~850 files on every platform.
+  if (depth > 16 || counter.value > 8192) {
     throw new Error("Packaged permission inventory exceeded its bound.");
   }
   counter.value += 1;
@@ -1051,7 +1052,8 @@ function hashZipEntry(zip, entry) {
 
 async function zipInventory(path, options = {}) {
   const lenientModes = options.lenientModes === true;
-  const entryBound = lenientModes ? 8192 : 512;
+  // The sidecar extraResource adds ~850 entries to every maker zip.
+  const entryBound = 8192;
   const byteBound = (lenientModes ? 2 : 1) * 1_024 * 1_024 * 1_024;
   const zip = await openZip(path, { allowBackslashSeparators: lenientModes });
   try {
@@ -1118,7 +1120,9 @@ async function stagedPackageInventory(asarPath) {
   const inventory = new Map();
   const directories = new Map();
   async function visit(path, depth = 0) {
-    if (depth > 16 || inventory.size + directories.size > 512) {
+    // The sidecar extraResource adds ~850 files; depth 32 covers its
+    // nested node_modules trees.
+    if (depth > 32 || inventory.size + directories.size > 8192) {
       throw new Error("Staged maker inventory exceeded its bound.");
     }
     const metadata = await lstat(path);

@@ -32,6 +32,17 @@ import { petShellDataUrl, type PetShellStatus } from "./shell-page.js";
 const PET_DRAG_BAR_HEIGHT = 32;
 const PET_SESSION_PARTITION = "persist:tokenmonster-pet";
 const PET_STATE_FILE = "pet-window-state.json";
+// CI smoke mode: report the boot outcome on stdout and exit, so the packaged
+// app (not just the dev tree) proves the sidecar and gateway actually start.
+const SMOKE_MODE = process.env["TOKENMONSTER_SMOKE"] === "1";
+
+function reportSmokeOutcome(outcome: "ok" | "gateway" | "sidecar"): void {
+  if (!SMOKE_MODE) return;
+  process.stdout.write(
+    outcome === "ok" ? "TOKENMONSTER_SMOKE_OK\n" : `TOKENMONSTER_SMOKE_FAIL:${outcome}\n`
+  );
+  app.exit(outcome === "ok" ? 0 : 1);
+}
 const PET_SHELL_CHANNELS = Object.freeze({
   hideWindow: "tokenmonster:pet:hide-window",
   openDashboard: "tokenmonster:pet:open-dashboard",
@@ -262,6 +273,7 @@ export async function startPetCompanion(): Promise<void> {
   };
 
   const showFailure = async (kind: "gateway" | "sidecar"): Promise<void> => {
+    reportSmokeOutcome(kind);
     await stopActiveServices();
     shellStatus = Object.freeze({
       kind: "error",
@@ -302,6 +314,7 @@ export async function startPetCompanion(): Promise<void> {
         if (services !== started) return;
         shellStatus = Object.freeze({ kind: "ready" });
         await loadShell();
+        reportSmokeOutcome("ok");
 
         void started.runtime.closed.then((exit) => {
           if (services === started && !exit.expected) {
