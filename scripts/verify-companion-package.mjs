@@ -11,7 +11,15 @@ import {
   writeFile
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, extname, join, relative, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  extname,
+  join,
+  relative,
+  resolve,
+  sep
+} from "node:path";
 
 import { extractAll, getRawHeader } from "@electron/asar";
 import yauzl from "yauzl";
@@ -281,6 +289,201 @@ async function verifyCollectorExtraResource(asarPath) {
   };
 }
 
+async function walkSidecarTree(
+  path,
+  budget,
+  files = [],
+  depth = 0
+) {
+  if (depth > 32) {
+    throw new Error("Packaged sidecar exceeded its directory depth bound.");
+  }
+  const metadata = await lstat(path);
+  if (metadata.isSymbolicLink()) {
+    throw new Error(`Packaged sidecar contains a symbolic link: ${path}.`);
+  }
+  if (process.platform !== "win32" && (metadata.mode & 0o7022) !== 0) {
+    throw new Error(`Packaged sidecar contains an unsafe file mode: ${path}.`);
+  }
+  if (metadata.isDirectory()) {
+    for (const entry of (await readdir(path)).sort((left, right) =>
+      left.localeCompare(right)
+    )) {
+      await walkSidecarTree(join(path, entry), budget, files, depth + 1);
+    }
+    return files;
+  }
+  if (!metadata.isFile()) {
+    throw new Error(`Packaged sidecar contains a non-regular entry: ${path}.`);
+  }
+  budget.fileCount += 1;
+  budget.totalBytes += metadata.size;
+  if (budget.fileCount > 8192 || budget.totalBytes > 256 * 1024 * 1024) {
+    throw new Error("Packaged sidecar exceeded its file or byte bound.");
+  }
+  files.push(path);
+  return files;
+}
+
+async function packageFilesWithoutDependencies(directory, depth = 0) {
+  if (depth > 16) {
+    throw new Error("Sidecar package inventory exceeded its depth bound.");
+  }
+  const files = [];
+  for (const entry of (await readdir(directory, { withFileTypes: true })).sort(
+    (left, right) => left.name.localeCompare(right.name)
+  )) {
+    const path = join(directory, entry.name);
+    const metadata = await lstat(path);
+    if (metadata.isSymbolicLink()) {
+      throw new Error(`Sidecar package contains a symbolic link: ${path}.`);
+    }
+    if (metadata.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name === ".bin") continue;
+      files.push(...(await packageFilesWithoutDependencies(path, depth + 1)));
+    } else if (metadata.isFile()) {
+      files.push(path);
+    } else {
+      throw new Error(`Sidecar package contains a non-regular entry: ${path}.`);
+    }
+  }
+  return files;
+}
+
+async function verifySidecarExtraResource(asarPath) {
+  if (
+    manifest.sidecar?.package !== "tokentracker-cli" ||
+    manifest.sidecar?.version !== "0.80.0" ||
+    manifest.sidecar?.extraResourceTarget !== "sidecar"
+  ) {
+    throw new Error("Sidecar runtime manifest does not match release policy.");
+  }
+  const targetDirectory = resolve(
+    dirname(asarPath),
+    ...manifest.sidecar.extraResourceTarget.split("/")
+  );
+  let rootMetadata;
+  try {
+    rootMetadata = await lstat(targetDirectory);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      throw new Error("Required packaged sidecar extraResource is missing.");
+    }
+    throw error;
+  }
+  if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink()) {
+    throw new Error("Sidecar extraResource root is not a regular directory.");
+  }
+
+  const budget = { fileCount: 0, totalBytes: 0 };
+  const files = await walkSidecarTree(targetDirectory, budget);
+  for (const stagedPath of files) {
+    const stagedRelativePath = relative(targetDirectory, stagedPath);
+    const sourcePath = resolve(rootDirectory, stagedRelativePath);
+    if (!sourcePath.startsWith(`${rootDirectory}${sep}`)) {
+      throw new Error("Sidecar workspace counterpart escaped the repository.");
+    }
+    let sourceMetadata;
+    try {
+      sourceMetadata = await lstat(sourcePath);
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        throw new Error(
+          `Packaged sidecar file has no workspace counterpart: ${portablePath(stagedRelativePath)}.`
+        );
+      }
+      throw error;
+    }
+    if (!sourceMetadata.isFile() || sourceMetadata.isSymbolicLink()) {
+      throw new Error(
+        `Sidecar workspace counterpart is not a regular file: ${portablePath(stagedRelativePath)}.`
+      );
+    }
+    if ((await hashFile(stagedPath)) !== (await hashFile(sourcePath))) {
+      throw new Error(
+        `Packaged sidecar file differs from its workspace counterpart: ${portablePath(stagedRelativePath)}.`
+      );
+    }
+  }
+
+  const rootPackageDirectory = join(
+    targetDirectory,
+    "node_modules",
+    "tokentracker-cli"
+  );
+  const workspaceRootPackageDirectory = join(
+    rootDirectory,
+    "node_modules",
+    "tokentracker-cli"
+  );
+  const stagedRootFiles = await packageFilesWithoutDependencies(
+    rootPackageDirectory
+  );
+  const workspaceRootFiles = await packageFilesWithoutDependencies(
+    workspaceRootPackageDirectory
+  );
+  if (stagedRootFiles.length !== workspaceRootFiles.length) {
+    throw new Error(
+      `Sidecar root package file count differs from the workspace: staged=${stagedRootFiles.length}, workspace=${workspaceRootFiles.length}.`
+    );
+  }
+
+  const packageManifest = JSON.parse(
+    await readFile(join(rootPackageDirectory, "package.json"), "utf8")
+  );
+  if (
+    packageManifest.name !== manifest.sidecar.package ||
+    packageManifest.version !== manifest.sidecar.version
+  ) {
+    throw new Error("Staged sidecar package identity is invalid.");
+  }
+  const entryDeclaration = packageManifest.bin?.["tokentracker-cli"];
+  if (typeof entryDeclaration !== "string") {
+    throw new Error("Staged sidecar package has no tokentracker-cli bin entry.");
+  }
+  const entryBinPath = resolve(rootPackageDirectory, entryDeclaration);
+  if (!entryBinPath.startsWith(`${rootPackageDirectory}${sep}`)) {
+    throw new Error("Staged sidecar bin entry escaped its package directory.");
+  }
+  const entryMetadata = await lstat(entryBinPath);
+  if (!entryMetadata.isFile() || entryMetadata.isSymbolicLink()) {
+    throw new Error("Staged sidecar bin entry is not a regular file.");
+  }
+
+  const workspaceZstdDirectory = join(
+    rootDirectory,
+    "node_modules",
+    "@mongodb-js",
+    "zstd"
+  );
+  const nativeBindings = (await walkFiles(workspaceZstdDirectory, {
+    rejectLinks: true
+  })).filter((path) => extname(path) === ".node");
+  if (nativeBindings.length === 0) {
+    throw new Error(
+      "The workspace @mongodb-js/zstd package has no native .node binding; the sidecar cannot run."
+    );
+  }
+  for (const workspaceBinding of nativeBindings) {
+    const bindingRelativePath = relative(rootDirectory, workspaceBinding);
+    const stagedBinding = resolve(targetDirectory, bindingRelativePath);
+    const stagedMetadata = await lstat(stagedBinding);
+    if (!stagedMetadata.isFile() || stagedMetadata.isSymbolicLink()) {
+      throw new Error("A staged @mongodb-js/zstd native binding is missing.");
+    }
+    if ((await hashFile(stagedBinding)) !== (await hashFile(workspaceBinding))) {
+      throw new Error("A staged @mongodb-js/zstd native binding differs from source.");
+    }
+  }
+
+  return {
+    sidecarVersion: manifest.sidecar.version,
+    fileCount: budget.fileCount,
+    totalBytes: budget.totalBytes,
+    entryBin: portablePath(relative(targetDirectory, entryBinPath))
+  };
+}
+
 function isAllowedBareImport(specifier) {
   return specifier === "electron" || specifier.startsWith("node:");
 }
@@ -329,6 +532,9 @@ function assertManifestPolicy() {
     manifest.application?.renderer !== "dist/renderer/index.html" ||
     manifest.asar?.enabled !== true ||
     manifest.asar?.allowUnpackedFiles !== false ||
+    manifest.sidecar?.package !== "tokentracker-cli" ||
+    manifest.sidecar?.version !== "0.80.0" ||
+    manifest.sidecar?.extraResourceTarget !== "sidecar" ||
     manifest.collector?.status !== "ready" ||
     typeof manifest.collector?.signedReleaseStatus !== "string" ||
     manifest.collector?.name !== "tokscale" ||
@@ -413,9 +619,14 @@ async function verifyPackagePermissionTree(directory, depth = 0, counter = { val
 
 async function verifyPackagePathsAndSnapshots(asarPath) {
   const packageRoot = packageRootForAsar(asarPath);
+  const sidecarDirectory = resolve(
+    dirname(asarPath),
+    ...manifest.sidecar.extraResourceTarget.split("/")
+  );
   await verifyPackagePermissionTree(packageRoot);
   const files = await walkFiles(packageRoot);
   for (const path of files) {
+    if (path.startsWith(`${sidecarDirectory}${sep}`)) continue;
     const relativePath = portablePath(relative(packageRoot, path));
     const lowerPath = relativePath.toLowerCase();
     const extension = extname(lowerPath);
@@ -1100,6 +1311,7 @@ if (appAsars.length !== 1) {
 const asarPath = appAsars[0];
 const runtimeSnapshots = await verifyPackagePathsAndSnapshots(asarPath);
 const collectorEvidence = await verifyCollectorExtraResource(asarPath);
+const sidecarEvidence = await verifySidecarExtraResource(asarPath);
 
 const extractionDirectory = await mkdtemp(
   join(tmpdir(), "tokenmonster-package-verification-")
@@ -1132,7 +1344,8 @@ const evidence = {
   fuseWires,
   runtimeSnapshots,
   makerArtifacts,
-  collector: collectorEvidence
+  collector: collectorEvidence,
+  sidecar: sidecarEvidence
 };
 await writeFile(
   join(evidenceDirectory, "companion-package.json"),
@@ -1145,4 +1358,7 @@ process.stdout.write(
 );
 process.stdout.write(
   `Verified ${collectorEvidence.target} collector ${collectorEvidence.packageVersion} with ${collectorEvidence.files.length} file(s) without executing it.\n`
+);
+process.stdout.write(
+  `Verified sidecar ${sidecarEvidence.sidecarVersion} with ${sidecarEvidence.fileCount} file(s) and ${sidecarEvidence.totalBytes} byte(s).\n`
 );
