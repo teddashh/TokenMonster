@@ -14,23 +14,57 @@ export const SOLID_COLOR_PNG = Buffer.from(
   "base64",
 );
 
+export function createPcm16Wav({
+  sampleRate = 22_050,
+  channels = 1,
+  frameCount = 441,
+}: {
+  sampleRate?: number;
+  channels?: number;
+  frameCount?: number;
+} = {}): Buffer {
+  const bytesPerSample = 2;
+  const blockAlign = channels * bytesPerSample;
+  const dataBytes = frameCount * blockAlign;
+  const wav = Buffer.alloc(44 + dataBytes);
+  wav.write("RIFF", 0, "ascii");
+  wav.writeUInt32LE(wav.length - 8, 4);
+  wav.write("WAVE", 8, "ascii");
+  wav.write("fmt ", 12, "ascii");
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(channels, 22);
+  wav.writeUInt32LE(sampleRate, 24);
+  wav.writeUInt32LE(sampleRate * blockAlign, 28);
+  wav.writeUInt16LE(blockAlign, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36, "ascii");
+  wav.writeUInt32LE(dataBytes, 40);
+  return wav;
+}
+
 export async function runPipeline(
   bank: string,
   out: string,
   persona: string,
+  options: { voiceDir?: string } = {},
 ) {
+  const arguments_ = [
+    PIPELINE_PATH,
+    "--allow-png-passthrough",
+    "--out",
+    out,
+    "--personas",
+    persona,
+    "--themes",
+    "tech",
+  ];
+  if (options.voiceDir !== undefined) {
+    arguments_.push("--voice-dir", options.voiceDir);
+  }
   const child = spawn(
     process.execPath,
-    [
-      PIPELINE_PATH,
-      "--allow-png-passthrough",
-      "--out",
-      out,
-      "--personas",
-      persona,
-      "--themes",
-      "tech",
-    ],
+    arguments_,
     {
       cwd: REPOSITORY_ROOT,
       env: {
