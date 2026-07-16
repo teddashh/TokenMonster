@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync, realpathSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -125,15 +126,36 @@ function topologicalOrder(workspaces) {
   return { dependencies, order };
 }
 
+// Windows cannot spawn the npm .cmd shim without a shell (Node >= 20 EINVAL),
+// so run npm's JS entry point with the current node binary. The two candidate
+// layouts cover Windows (npm beside node.exe) and unix (bin/node + lib/...).
+function resolveNpmCli() {
+  const nodeDir = dirname(realpathSync(process.execPath));
+  const candidates = [
+    join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js"),
+    join(nodeDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js")
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+const npmCli = resolveNpmCli();
+
 function runWorkspaceScript(workspace, script) {
   return new Promise((resolvePromise, reject) => {
     process.stdout.write(`\n> ${workspace.name} ${script}\n`);
-    const executable = process.platform === "win32" ? "npm.cmd" : "npm";
-    const child = spawn(
-      executable,
-      ["run", script, "--workspace", workspace.name, "--if-present"],
-      { cwd: rootDir, shell: false, stdio: "inherit" }
-    );
+    const npmArguments = ["run", script, "--workspace", workspace.name, "--if-present"];
+    const child =
+      npmCli === null
+        ? spawn(process.platform === "win32" ? "npm.cmd" : "npm", npmArguments, {
+            cwd: rootDir,
+            shell: false,
+            stdio: "inherit"
+          })
+        : spawn(process.execPath, [npmCli, ...npmArguments], {
+            cwd: rootDir,
+            shell: false,
+            stdio: "inherit"
+          });
     child.on("error", reject);
     child.on("exit", (code, signal) => {
       if (code === 0) {
