@@ -47,6 +47,12 @@ These internal builds are unsigned. Windows SmartScreen may require choosing
 「其他資訊→仍要執行」. On macOS, the unnotarized app may require right-clicking it
 and choosing Open. Signing and notarization remain separate release gates.
 
+Windows packages ship without the tokscale collector binary: its runtime
+manifest target is explicitly disabled until a Windows no-egress process
+sandbox is audited, and the runtime already refuses to spawn it there. The
+app shows the same collector-unavailable status as Windows development
+builds; sidecar usage accounting is unaffected.
+
 To build the same internal maker output locally, run `npm run make:internal`
 inside `apps/companion`. This invokes Electron Forge and requires a development
 machine with a display and network access; the packaging command is not part of

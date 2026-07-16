@@ -283,6 +283,22 @@ async function prepareVerifiedCollectorExtraResource(
     throw new Error("Collector runtime manifest is not release-ready.");
   }
   const targetKey = collectorTargetKey(platform, arch);
+  const manifestTarget = runtimeManifest.collector?.targets?.[targetKey];
+  if (
+    manifestTarget !== null &&
+    typeof manifestTarget === "object" &&
+    manifestTarget.runtimeEnabled === false &&
+    typeof manifestTarget.blockedReason === "string"
+  ) {
+    // The runtime refuses this platform (no audited no-egress sandbox), so
+    // the package ships without the collector instead of shipping a binary
+    // the runtime will never execute. The app degrades to the
+    // collector-unavailable status it already shows in development here.
+    console.warn(
+      `Skipping collector bundle for ${targetKey}: ${manifestTarget.blockedReason}`
+    );
+    return;
+  }
   const target = safeManifestTarget(targetKey);
   assertLockedCollectorPackage(target);
 
@@ -357,7 +373,10 @@ async function prepareRuntimeResources(
 }
 
 async function removeGroupWorldWrite(path, depth = 0, counter = { value: 0 }) {
-  if (depth > 16 || counter.value > 512) {
+  // macOS .app bundles carry an order of magnitude more entries than the
+  // Linux/Windows layouts (framework lproj dirs, helper apps), so the bound
+  // is a runaway guard, not a tight inventory expectation.
+  if (depth > 16 || counter.value > 4096) {
     throw new Error("Packaged permission hardening exceeded its inventory bound.");
   }
   counter.value += 1;

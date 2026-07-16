@@ -162,6 +162,46 @@ function selectedCollectorTarget() {
 }
 
 async function verifyCollectorExtraResource(asarPath) {
+  const disabledKey = collectorTargetKey();
+  const disabledTarget = manifest.collector?.targets?.[disabledKey];
+  if (
+    disabledTarget !== null &&
+    typeof disabledTarget === "object" &&
+    disabledTarget.runtimeEnabled === false &&
+    typeof disabledTarget.blockedReason === "string"
+  ) {
+    // The packager skips bundling on explicitly-disabled targets (no audited
+    // no-egress sandbox); the package must then contain no collector at all.
+    const absentDirectory = join(
+      dirname(asarPath),
+      ...manifest.collector.extraResourceTarget.split("/")
+    );
+    let extraResourcePresent = true;
+    try {
+      await lstat(absentDirectory);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      extraResourcePresent = false;
+    }
+    if (extraResourcePresent) {
+      throw new Error(
+        `Collector target ${disabledKey} is disabled but the extraResource was packaged.`
+      );
+    }
+    return {
+      status: manifest.collector.status,
+      target: disabledKey,
+      package: null,
+      packageVersion: null,
+      packageLockIntegrity: null,
+      expectedVersionOutput: null,
+      versionEvidence: "explicitly-disabled-target",
+      binaryExecutedDuringVerification: false,
+      extraResourcePresent: false,
+      files: [],
+      releaseBlocker: disabledTarget.blockedReason
+    };
+  }
   const { key, target } = selectedCollectorTarget();
   const targetDirectory = join(
     dirname(asarPath),
