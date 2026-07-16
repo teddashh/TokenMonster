@@ -1,5 +1,10 @@
 # TokenMonster 部署與回復 Runbook
 
+> Architecture update (2026-07-15): Electron/Tokscale packaging steps are
+> legacy migration procedures. The supported target is the exact-pinned
+> sidecar CLI/loopback path in
+> [ADR 0005](adr/0005-permanent-tokentracker-sidecar-adapter.md).
+
 > 狀態：**尚未具備 production 部署條件**。Public Web/API、local Companion、
 > contribution source slice、D1 mutation/deletion、`day-all-v1` k=20 compaction、
 > preserving retention/projection與Durable Object quota/suppression已完成本機測試；

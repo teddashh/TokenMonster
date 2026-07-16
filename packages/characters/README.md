@@ -20,6 +20,18 @@ endorsement, billing authority, or access to hidden user content.
 Consumers that need only catalog data can import the tree-shakable,
 asset-independent `@tokenmonster/characters/catalog` subpath.
 
+## Starter selection
+
+`selectStarterCharacter` maps the four audited local provider families to the
+four stable character IDs. An explicit user choice always wins. Otherwise it
+selects only a unique highest positive 28-day provider total; a tie, all-zero
+history, or unavailable provider data returns `user-choice-required` so the UI
+can show all four choices.
+
+The result is presentation only. Provider totals do not become XP, power,
+levels, rank, wardrobe access, or character capability, and the selector does
+not return the input totals.
+
 ## Runtime use
 
 ```ts
@@ -89,6 +101,15 @@ copied into this package. The manifest and its schema are repository-only audit
 records and are excluded from the package's release files. A real portrait
 requires a future schema v2 (or later), complete rights fields, and a separate
 reviewed runtime allowlist change; source availability alone is not approval.
+
+The broader AI-Sister roster, 20 wardrobe themes, pose vocabulary, layered
+candidate inventory, semantic action map, and planned delivery boundary are
+recorded in [`ai-sister-source-map.json`](ai-sister-source-map.json). That map
+and its schema are also repository-only and never compile into this package.
+After approval, pre-rendered versioned assets remain on AI-Sister's existing
+Cloudflare R2/CDN under `tokenmonster/characters/v1`; TokenMonster downloads
+only the selected files on demand, verifies their hashes, and caches them
+locally. Raw layered parts are not copied or downloaded.
 
 ## Monster-engine integration
 

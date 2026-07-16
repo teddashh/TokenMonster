@@ -8,8 +8,9 @@ before any public release. It is not a license for TokenMonster itself.
 - Source: <https://github.com/junhoyeo/tokscale>
 - Pinned foundation: npm package `tokscale@4.5.2` (exact, never a caret range)
 - License: MIT
-- Intended use: default local collector executable behind a TokenMonster-owned
-  adapter. Raw session and project fields are discarded before persistence.
+- Intended use: legacy migration-only collector for the current source slice.
+  It is not part of the accepted sidecar runtime and receives no new product
+  work while the TokenTracker cutover is being verified.
 - Required action: preserve the upstream MIT notice in redistributed builds and
   gate every upgrade with golden contract/privacy fixtures.
 - Packaged notice: the exact `v4.5.2` license text is vendored at
@@ -19,15 +20,17 @@ before any public release. It is not a license for TokenMonster itself.
 ## TokenTracker
 
 - Source: <https://github.com/mm7894215/TokenTracker>
-- Pinned foundation: commit `82d0c345cee5aaf486a97d9801d8212b489da775`,
-  npm package `tokentracker-cli@0.79.8`
+- Pinned foundation: commit `b9e881ae274e10534d05c80f653118848618e083`,
+  npm package `tokentracker-cli@0.80.0`
 - License: MIT
-- Intended use: optional, mutually exclusive process/loopback bridge for users
-  already running TokenTracker. The dedicated fork is
-  <https://github.com/teddashh/tokenmonster-collector>.
+- Intended use: permanent, exact-pinned local collection sidecar behind the
+  TokenMonster-owned process/loopback adapter. TokenMonster does not fork,
+  vendor, deep-import, or read TokenTracker's private storage.
 - Required action: preserve the upstream MIT copyright and permission notice
-  in any redistributed collector build. The bridge must set
-  `TOKENTRACKER_NO_TELEMETRY=1` and must not enable upstream cloud sync.
+  in redistributed builds. The managed child sets
+  `TOKENTRACKER_NO_TELEMETRY=1`; TokenMonster must not invoke upstream account
+  or cloud-sync controls. Every upgrade requires reviewed contract, privacy,
+  lifecycle, and cross-platform smoke tests before changing the exact pin.
 
 ## token-monitor
 
@@ -63,6 +66,13 @@ before any public release. It is not a license for TokenMonster itself.
 - Provenance gate: candidate source paths, immutable commit, dimensions and
   SHA-256 values are recorded in
   [`packages/characters/asset-manifest.json`](packages/characters/asset-manifest.json).
+- A broader roster, wardrobe, pose, and layered-parts audit is separately pinned
+  to source commit `0325b0489130116b9ddc597accc7e521434b6c2e` in
+  [`packages/characters/ai-sister-source-map.json`](packages/characters/ai-sister-source-map.json).
+  It is a repository-only planning record, not a ship allowlist. If assets pass
+  the release gate, rendered bundles and their integrity manifest are published
+  from AI-Sister's existing Cloudflare R2/CDN; raw candidate parts remain in the
+  AI-Sister production workspace and are not copied into TokenMonster.
 
 ## Project license
 

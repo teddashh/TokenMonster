@@ -1,5 +1,10 @@
 # TokenMonster 實作與正式上線計畫
 
+> Architecture update (2026-07-15): phases that build a collector fork,
+> Tokscale authority, or Electron-owned collection are superseded. Continue
+> from the permanent sidecar migration sequence in
+> [ADR 0005](adr/0005-permanent-tokentracker-sidecar-adapter.md).
+
 > 狀態：跨 Phase 0–4 的 source vertical slice 已完成；尚未 production deploy
 >
 > 適用範圍：新 monorepo、獨立的最小 collector fork、公開 Web/API、local companion

@@ -12,6 +12,16 @@ TokenMonster 是一個 local-first 的 AI 使用量夥伴：它在本機整理 t
 > Cloudflare account、D1 UUID、domain、routes 或 secrets。此 repository
 > 不應被描述成 production service、公開 Alpha 或已簽署的發行版。
 
+> **已接受的產品架構：永久採用 TokenTracker sidecar adapter。** TokenMonster
+> 維持自己的 repository、品牌與 companion；exact-pinned
+> `tokentracker-cli@0.80.0` 子程序負責 hooks、parsers、去重與跨平台收集，TokenMonster
+> 只透過 loopback aggregate API 取用資料。目標使用方式是單一指令
+> `npx tokenmonster`，不需要 clone repository、另裝 Electron 或手動啟動 collector。
+> Sidecar source path 已可在隔離 HOME 完成真實 Linux smoke；npm registry 發布、
+> Windows／macOS CI smoke 與 legacy cutover 尚未完成。目前的 Tokscale／Electron
+> 收集鏈是待移除的 legacy source slice，詳見
+> [ADR 0005](docs/adr/0005-permanent-tokentracker-sidecar-adapter.md)。
+
 ## 核心承諾
 
 TokenMonster 的隱私邊界是產品需求，不是日後才補上的設定。
@@ -37,9 +47,10 @@ TokenMonster 的隱私邊界是產品需求，不是日後才補上的設定。
 
 | 區域 | 目前 source slice | 上線前狀態 |
 | --- | --- | --- |
-| Local companion | Electron UI、本機 SQLite、7／28 日內容不可知趨勢、角色 traits／固定台詞、share card、export／reset | 已實作及本機測試；仍需各平台原生與 packaged smoke |
-| Collector | exact-pinned `tokscale@4.5.2`、固定 argv、輸出限額、strict parser、Linux／macOS denied-egress sandbox | 已實作；Windows 收集維持停用，直到 no-egress sandbox 通過稽核 |
-| Characters | 四個 TokenMonster-owned 字母 placeholder、可解釋 traits、繁中／英文固定台詞、BYOK persona context | placeholder 可用；AI-Sister raster 仍因 redistribution rights 與 brand review 被阻擋 |
+| Local companion（sidecar path） | 輕量 localhost UI、啟動即顯示角色、真實 UTC 今日／7／28 日 totals 與每日趨勢 | Source CLI 與隔離 Linux smoke 已完成；角色 workflow traits 仍需安全 aggregate contract，registry 發布與跨平台 smoke 待完成 |
+| Collector | exact-pinned `tokentracker-cli@0.80.0` child、local-only refresh、strict loopback adapter／gateway；legacy slice 仍含 `tokscale@4.5.2` | Sidecar source slice 與隔離 Linux smoke 已完成；registry publish、Windows／macOS CI smoke 與 cutover 待完成 |
+| Legacy Electron companion | 本機 SQLite、舊 7／28 日趨勢、traits／固定台詞、share card、export／reset | Migration-only；不再作為支援的安裝或 collection 路徑，sidecar cutover 後移除或降為 thin shell |
+| Characters | Sidecar UI 的四個可切換字母姊妹；依本機近 28 日安全 provider 分項建議起始角色 | Strict provider 投影、平手／無資料手選與 session override 已接通；token 不作為升級或解鎖，AI-Sister rich assets 仍待核准與 R2 downloader |
 | BYOK | Companion main process 直接呼叫 OpenAI Responses API；`store: false`、`background: false`，不使用 tools／files／conversation IDs | 已實作；仍需安全 release host 與真實 key 的人工 network smoke |
 | 匿名貢獻 | 預設關閉、精確 payload preview、accountless enrollment、背景 sync／冪等 retry、stop、delete／status | 已實作及本機測試；尚未做 staging／cloud-off packet-capture E2E |
 | Web／API | zh-TW-first React/Vite SPA、Hono Worker API、公開 totals、enrollment／ingest／delete／status | 已實作、build 及 fail-closed dry-run；未配置遠端環境 |
@@ -48,21 +59,23 @@ TokenMonster 的隱私邊界是產品需求，不是日後才補上的設定。
 | Scheduled maintenance | deletion → compaction → retention → projection；retention 保留 compaction-owned input，避免部分日期被先刪除 | 已實作及本機測試；尚未在真實 Cron Trigger／D1 驗證 |
 | 安裝包 | 可產生並驗證 internal unsigned Linux／macOS ASAR／ZIP，含固定 Tokscale MIT notice | 不是公開 installer；signing、notarization、DMG／updater 與原生 smoke 仍為 STOP |
 
-## 系統架構
+## 已接受的目標架構
 
 ```mermaid
 flowchart LR
   subgraph Local[使用者裝置：預設且完整可離線]
     Logs[支援工具的本機用量資料]
-    Tokscale[Tokscale 4.5.2\n固定命令 + denied egress]
-    Store[(本機 SQLite)]
+    Tracker[exact-pinned TokenTracker child\nhooks、parsers、去重、本機 store]
+    Adapter[TokenMonster sidecar adapter\nloopback aggregate API]
+    State[(TokenMonster derived state\n與 opt-in outbox)]
     UI[Companion\n圖表、traits、字母角色]
     Preview[明確貢獻預覽\n背景 sync + 手動 retry]
     Vault[OS-backed secret store]
     BYOK[本機 BYOK client]
-    Logs --> Tokscale --> Store
-    Store --> UI
-    Store --> Preview
+    Logs --> Tracker --> Adapter
+    Adapter --> State
+    State --> UI
+    State --> Preview
     Vault --> BYOK
   end
 
@@ -77,21 +90,27 @@ flowchart LR
   BYOK -->|prompt 暫存；直接送出| Provider[所選 AI provider]
 ```
 
-Cloud path 只接收版本化合約中的 coarse daily aggregates。Companion 與 cloud
-共用 strict contracts，但 cloud 從未取得本機 SQLite、provider key 或對話內容。
+TokenTracker 是 collection／dedupe 的唯一 authority；TokenMonster 不讀它的 raw
+queue、database 或私有程式碼。Cloud path 只接收版本化合約中的 coarse daily
+aggregates，且 cloud 從未取得 upstream store、provider key 或對話內容。
 
 ## Repository 結構
 
 ```text
 apps/
-  companion/        Electron 本機 UI、secure IPC、收集編排與 BYOK／貢獻流程
+  companion/        待退出的 legacy Electron UI、Tokscale orchestration、BYOK／貢獻流程
   web/              React/Vite 公開介面與 Cloudflare Worker entry
   api/              可攜式 HTTP composition 與 fail-closed Cloudflare composition
 packages/
+  cli/              `tokenmonster` 單一啟動入口與 lifecycle composition
+  companion-ui/     輕量 localhost companion（角色、真實 totals、每日趨勢）
+  companion-gateway/ loopback session、固定 asset/API routes 與 DTO projection
+  token-tracker-runtime/ exact-pinned TokenTracker child 與 local-only refresh
+  token-tracker-adapter/ 唯一 upstream aggregate API 邊界
   contracts/        本機與 cloud 共用的 versioned strict schemas
   usage-domain/     內容不可知的使用量正規化與領域規則
-  collector-core/   single-authority 排程、spool、retry 與 complete-scan evidence
-  collector-tokscale/ exact-pinned Tokscale adapter 與 denied-egress runner
+  collector-core/   legacy migration-only 排程、spool 與 scan evidence
+  collector-tokscale/ legacy migration-only Tokscale adapter
   local-store/      本機 SQLite、revision、outbox 與 reset/export 邊界
   monster-engine/   deterministic、explainable trait derivation
   characters/       角色 catalog、固定台詞、placeholder 與 asset release gate
@@ -112,22 +131,39 @@ Electron、Hono、D1 或 UI framework。
 - Node.js `24.15.0`
 - npm `11.12.1`
 - Git
-- Linux 真實 collector denied-egress integration test：`bubblewrap` 與 `strace`
-- macOS collector：系統提供的 `sandbox-exec`；公開發行另需 Apple signing／
-  notarization 身分與受控 release host
+- 公開 CLI 目標支援 Node.js `>=20`；repository gate 暫時仍固定上述 toolchain
+- 只有 legacy Tokscale／Electron packaging tests 仍需要 `bubblewrap`、`strace` 或
+  `sandbox-exec`
 - Cloudflare 遠端操作：Wrangler 與 owner 核准的 account／environment；只跑本機
   build 或 dry-run 不需要 production credential
 
-Windows collector 目前明確不支援。不得改成未隔離 spawn，也不得用
-`--no-sandbox` 繞過 Electron 或 collector 的安全控制。
+Legacy Tokscale collector 在 Windows 仍不支援。新的 TokenTracker sidecar 是
+Windows／macOS／Linux 目標路徑，但尚未通過完整 cross-platform CI smoke；不得把
+Linux smoke 描述成公開跨平台發行。
 
 ## 安裝與本機開發
+
+正式目標 UX 是 `npx tokenmonster`。Package 尚未發布到 npm registry；目前可從
+repository 直接跑同一個 CLI composition：
 
 ```sh
 git clone https://github.com/teddashh/TokenMonster.git tokenmonster
 cd tokenmonster
 npm ci
+npm run build --workspace @tokenmonster/companion-ui
+npm run build --workspace @tokenmonster/token-tracker-adapter
+npm run build --workspace @tokenmonster/token-tracker-runtime
+npm run build --workspace @tokenmonster/companion-gateway
+npm run build --workspace tokenmonster
+npm exec -- tokenmonster --no-open
 ```
+
+`--no-open` 適合 SSH／遠端機器，CLI 會印出一次性網址與對應的 `ssh -L` 指令。
+在有桌面瀏覽器的本機可省略它。這條路徑會沿用 TokenTracker 的本機 collector；
+不需要 clone 或另外啟動 TokenTracker repository。
+
+以下 Web／Electron 指令屬於既有公開網站或 legacy migration slice，不是新的
+companion 啟動方式。
 
 啟動 Web UI 的 Vite development server：
 
@@ -272,17 +308,22 @@ download link，或把本專案稱為已上線。
 
 ## Collector 與角色來源
 
-預設 collector 固定為 `tokscale@4.5.2`。Adapter 不接受 caller-controlled
-executable、argv 或 arbitrary environment，並將 upstream JSON 立即投影成最小化、
-allowlisted 的 daily aggregate schema。`tokentracker-cli@0.79.8` bridge 只是規劃中的
-mutually exclusive compatibility path，現在不是可用功能，也不能與 Tokscale 結果相加。
+永久 collection authority 是 exact-pinned `tokentracker-cli` child process；migration
+baseline 是 `0.80.0`。TokenMonster 只維護 child lifecycle、版本握手與嚴格的 loopback
+aggregate adapter，不 fork、vendor、submodule、deep-import 或直接讀 upstream
+queue／database，也不依賴 upstream dashboard plugin。升版由 bot 開 PR，通過
+cross-platform contract／privacy／one-command smoke 後才合併。
 
-針對最小 parser／sandbox patch 維護的 fork：
-[teddashh/tokenmonster-collector](https://github.com/teddashh/tokenmonster-collector)。
+目前 `tokscale@4.5.2` 與 collector fork 都不是長期 runtime，且不得新增產品功能；
+sidecar cutover 後會移除。兩種來源在 migration 期間不得涵蓋同一時間窗或相加。
 
 AI-Sister／`multi-ai-chat-app` 只作為設計參考與候選 persona 來源。Repository
 目前不包含核准可發行的 AI-Sister raster；四個 provider-inspired characters 都以
 TokenMonster-owned、independent-unaffiliated 的字母 placeholder 呈現。
+候選 wardrobe／action map 是 repository-only 規格；未來核准的 rendered bundle
+沿用 AI-Sister 現有 Cloudflare R2／CDN，由 companion 按需下載、驗證完整性並在
+本機快取，原始 parts 不搬進 TokenMonster。詳見
+[Character wardrobe map](docs/CHARACTER_WARDROBE_MAP.md)。
 
 ## 文件索引
 
@@ -293,10 +334,12 @@ TokenMonster-owned、independent-unaffiliated 的字母 placeholder 呈現。
 - [Private Alpha release checklist](docs/ALPHA_RELEASE_CHECKLIST.md)
 - [Data inventory](docs/DATA_INVENTORY.md)
 - [Threat model](docs/THREAT_MODEL.md)
+- [Character wardrobe map](docs/CHARACTER_WARDROBE_MAP.md)
 - [ADR 0001：repository boundaries](docs/adr/0001-repository-boundaries.md)
 - [ADR 0002：runtime and deployment](docs/adr/0002-runtime-and-deployment.md)
 - [ADR 0003：D1 atomic mutation adapter](docs/adr/0003-d1-atomic-mutation-adapter.md)
 - [ADR 0004：Electron packaging and signing](docs/adr/0004-electron-packaging-and-signing.md)
+- [ADR 0005：permanent TokenTracker sidecar adapter](docs/adr/0005-permanent-tokentracker-sidecar-adapter.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
 
 ## 參與開發

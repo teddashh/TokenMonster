@@ -1,5 +1,11 @@
 # TokenMonster data inventory
 
+> Architecture update (2026-07-15): collector/storage entries that assume
+> Tokscale/Electron describe the legacy migration slice. TokenTracker is the
+> sole upstream authority under
+> [ADR 0005](adr/0005-permanent-tokentracker-sidecar-adapter.md); TokenMonster
+> retains only minimized aggregates and product-owned state.
+
 > Status: Phase 0 privacy baseline
 >
 > Updated: 2026-07-15
@@ -32,10 +38,12 @@ without a reviewed contract and inventory change.
 
 | Location | Intended contents | Backup policy | User control |
 | --- | --- | --- | --- |
-| Collector process memory | Raw tokscale JSON long enough to validate and project | Never backed up | Ends with scan/process |
+| Managed TokenTracker or legacy collector process memory | Raw upstream JSON long enough to validate and project | Never backed up | Ends with request/process |
+| TokenTracker adapter/gateway request memory | Strict projected metrics and, for starter selection, four 28-day provider totals until they are reduced to a decision | Never backed up or persisted | Ends with request |
 | Companion SQLite | Safe local aggregates, revisions, character state, settings, bounded contribution queue | Local-only; excluded from crash bundles | Export/delete in companion |
 | OS secret store | OpenAI BYOK key plus separate contribution-upload and deletion bearer secrets | Never copied into app backup | Rotate/delete in companion |
-| Companion renderer memory | Current BYOK prompt/response and rendered state | Never backed up | Cleared when conversation/window closes |
+| Companion renderer memory | Current BYOK prompt/response, rendered state, and manual starter choice | Never backed up | Manual starter choice clears on reload/restart; conversation clears when conversation/window closes |
+| Future local character-asset cache | Approved, integrity-verified public raster objects only; no runtime or cache is implemented yet | Planned as disposable, content-addressed local cache | Planned to be clearable; code-native fallback remains available |
 | Cloudflare Worker memory | Validated request and transaction state | Never intentionally persisted | Request-scoped |
 | D1 current tables | Hashed enrollment auth, consent, recent canonical buckets, optional shares | Time Travel plus independent logical export | Revoke/delete within stated window |
 | D1 anonymous rollups | Irreversibly compacted historical coarse totals | Daily logical export; rebuild tested | Not attributable after compaction |
@@ -89,6 +97,26 @@ path, client data directory, message count, cost, performance, warning,
 diagnostic, raw provider/model strings outside the allowlist, prompt, response,
 and source content. Raw stdout/stderr must not be copied to application logs.
 
+### Starter-character provider projection (implemented)
+
+The adapter reads TokenTracker's local model-breakdown response for the latest
+28 UTC days and immediately reduces it to exactly four numeric provider totals:
+`openai`, `anthropic`, `google`, and `xai`. Those four values exist only in
+request memory. They are not stored in TokenMonster's database, diagnostic
+state, analytics, contribution queue, or cloud payload.
+
+The four totals stop at the starter selector. The gateway response includes
+only the resulting starter decision from this branch: selected character and
+coarse provider-family reason, or a manual-choice-required reason and any tied
+provider-family enums. It does not include numeric provider totals, upstream
+model identifiers, or raw source metadata. The gateway's separate aggregate
+metrics and daily series remain part of their existing content-blind DTO.
+
+If the model-breakdown request, validation, or provider projection fails, the
+gateway treats the four totals as unavailable and returns a manual-selection
+decision. That optional failure does not fail or suppress the independently
+loaded aggregate metrics.
+
 ## 4. Local character, settings, and diagnostics
 
 | Record | Allowed fields | Retention | Notes |
@@ -96,6 +124,7 @@ and source content. Raw stdout/stderr must not be copied to application logs.
 | Character profile | Character manifest ID, deterministic traits, explanation keys, 28-day normalized inputs | Until local reset | No prompt/content inference |
 | Mood history | Coarse mood, explanation key, day/hour aggregate references | Default 30 days | User may clear independently |
 | Preferences | Locale, theme, reduced motion, reminder/quiet hours, source choice | Until reset | Cloud toggle defaults off |
+| Manual starter choice | One allowlisted character ID | Current UI session only | Held in renderer memory; cleared by reload or restart and never sent to cloud |
 | Reminder ledger | Rule ID, scheduled/fired time, dedupe state | 30 days | Notification text contains no project/content |
 | Diagnostic state | Adapter versions, last success/error code, coarse OS/runtime version | Rolling 30 days | Detailed export requires preview |
 | Share-card draft | Derived traits, selected visibility fields, local image | Until user deletes/export completes | No upload unless separately confirmed |
@@ -103,6 +132,28 @@ and source content. Raw stdout/stderr must not be copied to application logs.
 Diagnostic exports must use an allowlist and a canary test. They may not copy
 the local database wholesale or include environment variables, home paths,
 process command lines, raw collector output, credentials, prompt, or response.
+
+### Future approved character-asset delivery (not implemented)
+
+TokenMonster currently has no cloud character-asset downloader, CDN request
+path, or runtime asset cache. The repository-only AI-Sister source/audit maps
+are not release authorization and are not runtime manifests.
+
+If that runtime is later approved, the release embeds the reviewed manifest
+that is authoritative for that build. Runtime GETs may target only the exact
+release-allowlisted HTTPS AI-Sister CDN origin and immutable public object keys
+under `tokenmonster/characters/v1`; no arbitrary or manifest-supplied origin is
+accepted. Each response must match the embedded SHA-256, byte size, and MIME
+type before display. Verified files may enter a content-addressed local cache;
+a failed request or validation uses the code-native local fallback or a
+previously verified compatible cache entry.
+
+The CDN necessarily observes the requested public object key and the client's
+IP address. The request carries no query parameters and no token totals,
+provider totals, starter rationale, user/account/install identifier, local
+filename or filesystem/project path, or other usage-derived data. Enabling
+this future egress requires a separate implementation, disclosure, tests, and
+release approval.
 
 ## 5. BYOK interaction data
 
@@ -227,4 +278,11 @@ at the most recently confirmed value.
 - Retention/compaction and deletion are tested with an attributable current
   bucket plus an already-anonymous historical rollup.
 - A clean diagnostic export contains no forbidden key or canary value.
+- Starter-selection tests prove that the 28-day model breakdown becomes four
+  request-scoped provider totals, only the decision crosses the gateway, and a
+  projection failure falls back to manual choice without breaking metrics.
+- Until an approved asset runtime exists, packet capture shows no character
+  asset request. Before enablement, tests must pin the exact AI-Sister CDN
+  origin, embedded approved manifest, SHA-256/size/MIME checks, immutable cache,
+  no-query request shape, and local fallback.
 - The production privacy page matches this inventory field-for-field.

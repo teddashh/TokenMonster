@@ -1,11 +1,17 @@
 # TokenMonster Alpha Release Checklist
 
+> Architecture update (2026-07-15): collector, local-runtime, and packaging
+> gates that assume Tokscale/Electron are legacy migration evidence. The
+> permanent target and cutover gates are defined by
+> [ADR 0005](adr/0005-permanent-tokentracker-sidecar-adapter.md).
+
 > 本表是 release evidence index，不是自動授權。**目前結論：STOP** — local
 > companion contribution source slice、cloud mutation/deletion、`day-all-v1` k=20
 > compaction、ordered scheduled maintenance與Companion background sync均已有本機測試，
 > 但background packet capture／wake soak、signing/native smoke、Cloudflare account/D1/domain/secrets與remote rehearsal/staging
 > E2E、backup/restore/suppression replay、project license／法律owner決策及raster rights
-> 仍未完成。只可進行本機測試或經核准的 fail-closed staging Web 預覽；
+> 仍未完成；AI-Sister cloud asset runtime 也尚未實作或核准，目前只能使用
+> code-native placeholders。只可進行本機測試或經核准的 fail-closed staging Web 預覽；
 > 不可 production deploy，也不可開始 30 人 External Alpha。
 
 執行細節見[部署 runbook](DEPLOYMENT_RUNBOOK.md)。產品範圍與 kill criteria 以
@@ -46,10 +52,21 @@
   totals 相加。
 - [ ] Usage authority/idempotency tests涵蓋 retry、replay、rescan、reorder、equal
   revision conflict、downward/zero correction；public truth 不 drift。
+- [ ] TokenTracker starter tests證明 local model-breakdown只在 request memory中立即投影
+  成 `openai`／`anthropic`／`google`／`xai` 四個 28-day totals；gateway只回 starter
+  decision，不回 numeric totals、model IDs或raw source metadata。Breakdown／projection
+  failure必須顯示manual choice且不影響aggregate metrics與daily series。
+- [ ] Manual starter choice目前只存在UI session memory；reload／restart會清除，且
+  persistence、diagnostic、analytics、cloud wire與asset request均找不到該值。
 - [ ] Monster engine deterministic/coverage/DST/explanation tests通過；無 volume
   strength ladder、rank 或核心功能同意誘因。
-- [ ] Character catalog與 release-artifact scan 證明只出現 code-native placeholders；
-  blocked `.webp`、candidate marker、secret/source map 不在 artifact。
+- [ ] Character catalog與 release-artifact scan 證明目前只出現 code-native
+  placeholders；blocked `.webp`、candidate marker、secret/source map 不在 artifact，
+  且目前runtime與packet capture沒有任何AI-Sister cloud asset GET。
+- [ ] 若未來asset runtime進入scope：release內嵌approved manifest是唯一authority，
+  GET只到一個exact allowlisted AI-Sister HTTPS CDN origin與immutable public key；
+  SHA-256／bytes／MIME、content-addressed cache corruption、offline fallback與no-query
+  packet-capture tests全部通過。此項runtime目前**尚未實作**。
 - [ ] Public API tests驗證 fail-closed `503`、fixed contributor wording、decimal strings、
   ETag/304、narrow CORS、Problem Details 與 security headers。
 - [ ] Web tests驗證 API unavailable 時不 fake counter、download 不冒充可用、zh-TW
@@ -98,6 +115,10 @@
 - [ ] AI-Sister raster 使用若在 scope：manifest schema v2、immutable provenance/hash、
   written public/commercial/modify/redistribute grant、rights/brand review與 unofficial/
   unaffiliated disclosure全部核准。
+- [ ] 若未來AI-Sister CDN delivery進入scope：release owner與privacy owner核准唯一
+  exact origin、`tokenmonster/characters/v1` immutable prefix、release-embedded manifest、
+  cache/eviction/fallback policy與edge-log retention；使用者disclosure明示CDN可看見
+  requested public object及client IP，但request沒有token/user/local-path資料或query。
 - [ ] 若上項未核准，release owner 確認 artifact **只有** TokenMonster code-native
   letter placeholders；lack of raster rights 不得以「之後補」豁免二進位掃描。
 - [ ] Alpha research owner 核准 30 位參與者招募、7 天 protocol、同意文案、support/
@@ -139,6 +160,9 @@
   spool E2E通過。
 - [ ] Collector detection與修復訊息可支援 cohort；support與incident on-call已排班。
 - [ ] Alpha build只含核准素材；目前 AI-Sister rasters未核准，因此只能 placeholders。
+- [ ] Cloud-off／asset packet capture證明目前沒有AI-Sister asset GET；未來若啟用，
+  capture只能看見approved public object request，不得含query string、token/provider
+  totals、starter rationale、user/install ID或filesystem/project path。
 - [ ] 招募名單、consent revision、退出/刪除流程與每日 safety review已確認。
 
 ## 6. Alpha exit metrics 與決策
@@ -170,8 +194,13 @@ trait/copy主要迭代與等規模復驗；D7未達標不進 Beta。Opt-in未達
 - Replay/rescan可增加 truth、revision conflict未 fail closed、deletion無法可靠移除
   current window，或 restore讓已刪資料復活。
 - Counter沒有 verified projection卻顯示數字，或 public copy宣稱全球／代表性 usage。
+- Numeric starter provider totals、upstream model IDs或raw source metadata穿過gateway；
+  或model-breakdown失敗連帶讓aggregate metrics不可用。
 - Blocked/unlicensed raster、secret、provider-branded asset未通過 rights/brand gate卻
   進 artifact。
+- AI-Sister cloud asset runtime在沒有release-embedded approved manifest、exact-origin
+  allowlist、SHA-256/bytes/MIME/cache/fallback驗證、no-query packet capture與CDN
+  object/IP disclosure前被啟用。
 - Release commit不乾淨、CI/audit/security evidence缺失、環境或 rollback target不明。
 
 ### `GO-STAGING-WEB-PREVIEW`

@@ -1,0 +1,550 @@
+{
+  "$schema": "./ai-sister-source-map.schema.json",
+  "schemaVersion": 1,
+  "auditedAt": "2026-07-15",
+  "source": {
+    "repository": "https://github.com/teddashh/Multi-Ai-Chatapp.git",
+    "commit": "0325b0489130116b9ddc597accc7e521434b6c2e",
+    "externalCandidateLibrary": {
+      "logicalRoot": "VOICE_LAB_MVP_DIR/tachie",
+      "kind": "local-only-candidate-bank",
+      "trackedBySourceRepository": false
+    }
+  },
+  "cloudDelivery": {
+    "owner": "ai-sister",
+    "storage": "cloudflare-r2",
+    "publicDelivery": "ai-sister-cdn",
+    "objectPrefix": "tokenmonster/characters/v1",
+    "manifestObject": "tokenmonster/characters/v1/manifest.json",
+    "manifestTrust": "release-embedded-approved-copy",
+    "publisherRunsIn": "ai-sister",
+    "tokenMonsterRole": "manifest-consumer-and-local-cache",
+    "downloadMode": "on-demand",
+    "objectImmutability": "versioned-path-no-overwrite",
+    "cachePolicy": "content-addressed-local-cache",
+    "integrity": "sha256-per-object",
+    "initialRenderedAssetStates": [
+      "outfit",
+      "supported",
+      "challenged",
+      "victory"
+    ],
+    "rawLayerPartsPublished": false,
+    "networkFailureFallback": "tokenmonster-letter-avatar-v1",
+    "status": "planned-release-blocked"
+  },
+  "rosterAudit": {
+    "target": {
+      "sisters": 4,
+      "friends": 8
+    },
+    "confirmed": {
+      "sisters": 4,
+      "friends": 7
+    },
+    "unresolvedSlots": [
+      {
+        "kind": "friend",
+        "count": 1,
+        "reason": "The audited source commit defines seven friends; no eighth canonical persona is present."
+      }
+    ]
+  },
+  "starterSelection": {
+    "availableCharacterIds": ["chatgpt", "claude", "gemini", "grok"],
+    "providerCharacterMap": {
+      "openai": "chatgpt",
+      "anthropic": "claude",
+      "google": "gemini",
+      "xai": "grok"
+    },
+    "window": "latest-28-utc-days",
+    "signal": "local-provider-total-tokens",
+    "rule": "unique-highest-positive-total",
+    "tieOutcome": "explicit-user-choice",
+    "noDataOutcome": "explicit-user-choice",
+    "manualOverride": "always",
+    "persistence": "local-preference-only",
+    "usedForProgression": false,
+    "leavesDevice": false,
+    "adapterReadiness": "implemented-safe-provider-breakdown-projection"
+  },
+  "characters": [
+    {
+      "sourceId": "chatgpt",
+      "displayName": "ChatGPT",
+      "kind": "sister",
+      "tokenMonsterCharacterId": "chatgpt",
+      "heroThemeId": "chatgpt",
+      "trackedArt": {
+        "avatar": "web/public/avatars/chatgpt.webp",
+        "hero": "web/public/hero/chatgpt.webp",
+        "personaReferences": []
+      },
+      "externalWardrobe": {
+        "sourceKey": "chatgpt",
+        "coverage": "complete-candidate-bank"
+      }
+    },
+    {
+      "sourceId": "claude",
+      "displayName": "Claude",
+      "kind": "sister",
+      "tokenMonsterCharacterId": "claude",
+      "heroThemeId": "claude",
+      "trackedArt": {
+        "avatar": "web/public/avatars/claude.webp",
+        "hero": "web/public/hero/claude.webp",
+        "personaReferences": []
+      },
+      "externalWardrobe": {
+        "sourceKey": "claude",
+        "coverage": "complete-candidate-bank"
+      }
+    },
+    {
+      "sourceId": "gemini",
+      "displayName": "Gemini",
+      "kind": "sister",
+      "tokenMonsterCharacterId": "gemini",
+      "heroThemeId": "gemini",
+      "trackedArt": {
+        "avatar": "web/public/avatars/gemini.webp",
+        "hero": "web/public/hero/gemini.webp",
+        "personaReferences": []
+      },
+      "externalWardrobe": {
+        "sourceKey": "gemini",
+        "coverage": "complete-candidate-bank"
+      }
+    },
+    {
+      "sourceId": "grok",
+      "displayName": "Grok",
+      "kind": "sister",
+      "tokenMonsterCharacterId": "grok",
+      "heroThemeId": "grok",
+      "trackedArt": {
+        "avatar": "web/public/avatars/grok.webp",
+        "hero": "web/public/hero/grok.webp",
+        "personaReferences": []
+      },
+      "externalWardrobe": {
+        "sourceKey": "grok",
+        "coverage": "complete-candidate-bank"
+      }
+    },
+    {
+      "sourceId": "deepseek",
+      "displayName": "DeepSeek",
+      "kind": "friend",
+      "tokenMonsterCharacterId": null,
+      "heroThemeId": "spring",
+      "trackedArt": {
+        "avatar": "web/public/avatars/deepseek.webp",
+        "hero": "web/public/hero/spring.webp",
+        "personaReferences": [
+          "server/persona-refs/DeepSeek.png",
+          "server/persona-refs/DeepSeek.Expressions.png"
+        ]
+      },
+      "externalWardrobe": {
+        "sourceKey": "deepseek",
+        "coverage": "complete-candidate-bank"
+      }
+    },
+    {
+      "sourceId": "qwen",
+      "displayName": "Qwen",
+      "kind": "friend",
+      "tokenMonsterCharacterId": null,
+      "heroThemeId": "summer",
+      "trackedArt": {
+        "avatar": "web/public/avatars/qwen.webp",
+        "hero": "web/public/hero/summer.webp",
+        "personaReferences": [
+          "server/persona-refs/Qwen.png",
+          "server/persona-refs/Qwen.Expressions.png"
+        ]
+      },
+      "externalWardrobe": {
+        "sourceKey": "qwen",
+        "coverage": "complete-candidate-bank"
+      }
+    },
+    {
+      "sourceId": "mistral",
+      "displayName": "Mistral",
+      "kind": "friend",
+      "tokenMonsterCharacterId": null,
+      "heroThemeId": "fall",
+      "trackedArt": {
+        "avatar": "web/public/avatars/mistral.webp",
+        "hero": "web/public/hero/fall.webp",
+        "personaReferences": [
+          "server/persona-refs/Mistral.png",
+          "server/persona-refs/Mistral.Expressions.png"
+        ]
+      },
+      "externalWardrobe": {
+        "sourceKey": "mistral",
+        "coverage": "complete-candidate-bank"
+      }
+    },
+    {
+      "sourceId": "venice",
+      "displayName": "Llama",
+      "kind": "friend",
+      "tokenMonsterCharacterId": null,
+      "heroThemeId": "winter",
+      "trackedArt": {
+        "avatar": "web/public/avatars/venice.webp",
+        "hero": "web/public/hero/winter.webp",
+        "personaReferences": [
+          "server/persona-refs/Llama.png",
+          "server/persona-refs/Llama.Expressions.png"
+        ]
+      },
+      "externalWardrobe": {
+        "sourceKey": "venice",
+        "coverage": "complete-candidate-bank"
+      }
+    },
+    {
+      "sourceId": "sakana",
+      "displayName": "Sakana",
+      "kind": "friend",
+      "tokenMonsterCharacterId": null,
+      "heroThemeId": "sakana",
+      "trackedArt": {
+        "avatar": "web/public/avatars/sakana.webp",
+        "hero": "web/public/hero/sakana.webp",
+        "personaReferences": [
+          "server/persona-refs/Sakana.png",
+          "server/persona-refs/Sakana.Expressions.png"
+        ]
+      },
+      "externalWardrobe": {
+        "sourceKey": "sakana",
+        "coverage": "complete-candidate-bank"
+      }
+    },
+    {
+      "sourceId": "perplexity",
+      "displayName": "Perplexity",
+      "kind": "friend",
+      "tokenMonsterCharacterId": null,
+      "heroThemeId": "perplexity",
+      "trackedArt": {
+        "avatar": "web/public/avatars/perplexity.webp",
+        "hero": "web/public/hero/perplexity.webp",
+        "personaReferences": [
+          "server/persona-refs/Perplexity.png",
+          "server/persona-refs/Perplexity.Expressions.png"
+        ]
+      },
+      "externalWardrobe": {
+        "sourceKey": "perplexity",
+        "coverage": "complete-candidate-bank"
+      }
+    },
+    {
+      "sourceId": "glm",
+      "displayName": "GLM",
+      "kind": "friend",
+      "tokenMonsterCharacterId": null,
+      "heroThemeId": "glm",
+      "trackedArt": {
+        "avatar": "web/public/avatars/glm.webp",
+        "hero": "web/public/hero/glm.webp",
+        "personaReferences": []
+      },
+      "externalWardrobe": {
+        "sourceKey": "glm",
+        "coverage": "missing"
+      }
+    }
+  ],
+  "wardrobe": {
+    "themes": [
+      {
+        "themeId": "tech",
+        "styleFacet": "builder",
+        "recommendedWhen": { "traitAny": ["cli-focused"] }
+      },
+      {
+        "themeId": "finance",
+        "styleFacet": "planner",
+        "recommendedWhen": { "traitAny": ["cache-savvy"] }
+      },
+      {
+        "themeId": "politics",
+        "styleFacet": "civic-strategist",
+        "recommendedWhen": { "traitAny": ["multi-provider"] }
+      },
+      {
+        "themeId": "education",
+        "styleFacet": "mentor",
+        "recommendedWhen": { "traitAny": ["tool-focused"] }
+      },
+      {
+        "themeId": "health",
+        "styleFacet": "caretaker",
+        "recommendedWhen": { "traitAny": ["balanced"] }
+      },
+      {
+        "themeId": "environment",
+        "styleFacet": "steward",
+        "recommendedWhen": { "traitAny": ["cache-savvy"] }
+      },
+      {
+        "themeId": "law",
+        "styleFacet": "guardian",
+        "recommendedWhen": { "traitAny": ["provider-focused"] }
+      },
+      {
+        "themeId": "relationship",
+        "styleFacet": "listener",
+        "recommendedWhen": { "traitAny": ["multi-provider"] }
+      },
+      {
+        "themeId": "family",
+        "styleFacet": "nurturer",
+        "recommendedWhen": { "traitAny": ["balanced"] }
+      },
+      {
+        "themeId": "workplace",
+        "styleFacet": "organizer",
+        "recommendedWhen": { "traitAny": ["cli-focused"] }
+      },
+      {
+        "themeId": "science",
+        "styleFacet": "researcher",
+        "recommendedWhen": { "traitAny": ["tool-focused"] }
+      },
+      {
+        "themeId": "culture",
+        "styleFacet": "storyteller",
+        "recommendedWhen": { "traitAny": ["multi-tool"] }
+      },
+      {
+        "themeId": "sports",
+        "styleFacet": "challenger",
+        "recommendedWhen": { "traitAny": ["output-heavy"] }
+      },
+      {
+        "themeId": "food",
+        "styleFacet": "host",
+        "recommendedWhen": { "traitAny": ["balanced"] }
+      },
+      {
+        "themeId": "travel",
+        "styleFacet": "explorer",
+        "recommendedWhen": { "traitAny": ["multi-tool"] }
+      },
+      {
+        "themeId": "psychology",
+        "styleFacet": "reflector",
+        "recommendedWhen": { "traitAny": ["night-oriented"] }
+      },
+      {
+        "themeId": "philosophy",
+        "styleFacet": "thinker",
+        "recommendedWhen": { "traitAny": ["provider-focused"] }
+      },
+      {
+        "themeId": "international",
+        "styleFacet": "connector",
+        "recommendedWhen": { "traitAny": ["multi-provider"] }
+      },
+      {
+        "themeId": "media",
+        "styleFacet": "communicator",
+        "recommendedWhen": { "traitAny": ["output-heavy"] }
+      },
+      {
+        "themeId": "festival",
+        "styleFacet": "celebrator",
+        "recommendedWhen": { "traitAny": ["output-heavy"] }
+      }
+    ],
+    "styleFacetEffect": "cosmetic-presentation-only",
+    "recommendationIsUnlockGate": false,
+    "unlockPolicy": {
+      "status": "not-implemented",
+      "allowedFutureSignals": [
+        "explicit-user-choice",
+        "content-blind-companion-event",
+        "allowlisted-workflow-trait"
+      ],
+      "forbiddenSignals": [
+        "absolute-token-volume",
+        "cost",
+        "spending",
+        "prompt-content",
+        "project-path",
+        "filename"
+      ]
+    },
+    "externalCandidateBank": {
+      "inventoryStatus": "observed-local-candidates-not-release-evidence",
+      "coveredPersonaIds": [
+        "chatgpt",
+        "claude",
+        "gemini",
+        "grok",
+        "deepseek",
+        "qwen",
+        "mistral",
+        "venice",
+        "sakana",
+        "perplexity"
+      ],
+      "candidateAssetStates": [
+        "outfit",
+        "supported",
+        "challenged",
+        "victory"
+      ],
+      "observedCounts": {
+        "personas": 10,
+        "themesPerPersona": 20,
+        "outfits": 200,
+        "reactionPoses": 600,
+        "layeredPartSets": 200
+      },
+      "relativePathTemplates": {
+        "outfit": "tachie/outfits_v2_norm/doll_{persona}__{theme}.png",
+        "reactionPose": "tachie/poses/react/doll_{persona}__{theme}__{state}.png",
+        "reactionMetadata": "tachie/poses/react/doll_{persona}__{theme}__{state}.json",
+        "layerManifest": "tachie/parts/{persona}__{theme}__v2_parts/parts.json",
+        "layerSource": "tachie/parts/{persona}__{theme}__v2_parts/source.json"
+      }
+    }
+  },
+  "animation": {
+    "classification": "custom-layered-2.5d",
+    "standardRuntimeFormatsPresent": [],
+    "runtimeCompatibility": "requires-tokenmonster-renderer-port",
+    "capabilities": [
+      "layer-compositing",
+      "idle-sway",
+      "breathing",
+      "blink",
+      "viseme-lip-sync",
+      "static-reaction-pose-swap"
+    ],
+    "actionVocabulary": [
+      "preen",
+      "check_phone",
+      "tidy_hair",
+      "sip",
+      "stretch",
+      "nod",
+      "shake",
+      "laugh",
+      "smirk",
+      "frown",
+      "pout",
+      "arms_crossed",
+      "lean_in",
+      "eyeroll",
+      "applause",
+      "tilt"
+    ],
+    "semanticStates": [
+      {
+        "stateId": "idle-static",
+        "sourcePosePreference": "outfit",
+        "actionPreferences": [],
+        "fallbackStateId": null,
+        "reducedMotionFallbackId": null
+      },
+      {
+        "stateId": "idle",
+        "sourcePosePreference": "outfit",
+        "actionPreferences": ["preen", "tidy_hair", "sip"],
+        "fallbackStateId": "idle-static",
+        "reducedMotionFallbackId": "idle-static"
+      },
+      {
+        "stateId": "connecting",
+        "sourcePosePreference": "outfit",
+        "actionPreferences": ["lean_in", "tilt"],
+        "fallbackStateId": "idle",
+        "reducedMotionFallbackId": "idle-static"
+      },
+      {
+        "stateId": "learning",
+        "sourcePosePreference": "outfit",
+        "actionPreferences": ["tilt", "lean_in"],
+        "fallbackStateId": "idle",
+        "reducedMotionFallbackId": "idle-static"
+      },
+      {
+        "stateId": "resting",
+        "sourcePosePreference": "outfit",
+        "actionPreferences": ["sip", "stretch"],
+        "fallbackStateId": "idle",
+        "reducedMotionFallbackId": "idle-static"
+      },
+      {
+        "stateId": "quiet",
+        "sourcePosePreference": "outfit",
+        "actionPreferences": ["check_phone", "tidy_hair"],
+        "fallbackStateId": "idle",
+        "reducedMotionFallbackId": "idle-static"
+      },
+      {
+        "stateId": "steady",
+        "sourcePosePreference": "supported",
+        "actionPreferences": ["nod", "lean_in"],
+        "fallbackStateId": "idle",
+        "reducedMotionFallbackId": "idle-static"
+      },
+      {
+        "stateId": "lively",
+        "sourcePosePreference": "supported",
+        "actionPreferences": ["laugh", "applause"],
+        "fallbackStateId": "steady",
+        "reducedMotionFallbackId": "idle-static"
+      },
+      {
+        "stateId": "notice",
+        "sourcePosePreference": "outfit",
+        "actionPreferences": ["tilt", "lean_in"],
+        "fallbackStateId": "idle",
+        "reducedMotionFallbackId": "idle-static"
+      },
+      {
+        "stateId": "error",
+        "sourcePosePreference": "challenged",
+        "actionPreferences": ["frown", "shake"],
+        "fallbackStateId": "notice",
+        "reducedMotionFallbackId": "idle-static"
+      },
+      {
+        "stateId": "wardrobe-unlocked",
+        "sourcePosePreference": "victory",
+        "actionPreferences": ["applause", "laugh"],
+        "fallbackStateId": "lively",
+        "reducedMotionFallbackId": "idle-static"
+      }
+    ]
+  },
+  "releasePolicy": {
+    "runtimeUse": "blocked",
+    "copyCandidateBinariesIntoRepository": false,
+    "requiredBeforeRuntimeUse": [
+      "explicit-redistribution-and-modification-grant",
+      "per-asset-integrity-manifest",
+      "provider-brand-review",
+      "content-rating-review",
+      "reviewed-browser-renderer",
+      "optimized-lazy-asset-delivery",
+      "ai-sister-r2-publisher-and-cache-smoke"
+    ],
+    "fallbackRenderer": "tokenmonster-letter-avatar-v1"
+  }
+}

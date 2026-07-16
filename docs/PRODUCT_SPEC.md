@@ -1,5 +1,10 @@
 # TokenMonster 產品規格
 
+> Architecture update (2026-07-15): local collector/runtime UX is now a
+> one-command TokenMonster companion over an exact-pinned TokenTracker sidecar.
+> Conflicting Tokscale/Electron or fork language is legacy and is superseded by
+> [ADR 0005](adr/0005-permanent-tokentracker-sidecar-adapter.md).
+
 | 欄位 | 內容 |
 | --- | --- |
 | 文件狀態 | Launch target + tested source-slice baseline；不是 production evidence |
@@ -187,11 +192,18 @@ TokenMonster 的差異化不是另一個成本報表，而是：
 1. 使用者從公開網站下載 collector／desktop companion。
 2. 安裝頁清楚說明 collector 會讀取什麼、不會讀取什麼。
 3. collector 掃描可支援的本地來源，列出偵測結果與資料精確度。
-4. 使用者從已核准的 core-four raster 選擇初始字母人；若權利尚未完成，同一流程只顯示 placeholder。
+4. 初始 roster 顯示四位預設 AI-Sister 姊妹；若權利尚未完成，同一流程只顯示 placeholder。系統可以依下節規則建議一位 starter，但使用者選擇永遠優先。
 5. 系統匯入並去重歷史 usage，建立本地 dashboard。
 6. 系統生成第一組 2 至 3 個主 traits，並為每個 trait 顯示原因。
 7. 系統詢問是否開啟通知；預設不開。
 8. 系統另外詢問是否匿名分享；預設不開，且可先預覽 payload。
+
+### 8.1.1 本機 starter 建議
+
+- TokenMonster 只把 TokenTracker exact source IDs `codex`、`claude`、`gemini`、`grok` 分別映射為 `openai`、`anthropic`、`google`、`xai`，再對應四位預設姊妹；不從 model 名稱或其他 source 猜測 provider。
+- 最近 28 個 UTC 日中，只有一個 provider 的正數總量嚴格最高時，系統才建議對應 starter。最高值平手、沒有正數資料或 provider breakdown endpoint 失敗時，一律請使用者手動選擇。
+- 這只是首次呈現的便利建議。使用者可在當下或之後覆寫；provider 總量不形成 XP、能力、階級、角色成長或服裝／動作解鎖條件。
+- Browser 只收到 allowlisted starter decision 與原因，不收到用來比較的 provider totals、model IDs 或 cost。
 
 ### 8.2 日常使用
 
@@ -406,9 +418,10 @@ Upload bearer secret 只存在 Authorization header；獨立 deletion secret 只
 
 - MVP catalog 的視覺方向限於 AI-Sister core-four 候選 raster assets。四張候選 WebP 初始一律為 `releaseStatus: "blocked"`。
 - 原始檔必須保留，不直接破壞性修改。
-- 只有取得 owner public-use grant、通過 brand review，且 manifest 改為 `approved` 的資產才能進入對外 artifact；否則 build 必須使用 TokenMonster placeholder。
-- 核准後的發布版可產生尺寸與格式最佳化衍生檔，例如 WebP／AVIF；仍需保留透明背景與正確色彩。
-- 角色狀態可透過已存在的 pose／expression 圖切換、色調、外光、陰影、粒子、配件 overlay、氣泡與小幅位移呈現。
+- 只有取得 owner public-use grant、通過 brand review，且 manifest 改為 `approved` 的資產才能進入發布 catalog；否則 TokenMonster 必須使用 placeholder。
+- 核准後的 pre-rendered 發布版可產生尺寸與格式最佳化衍生檔，例如 WebP／AVIF；仍需保留透明背景與正確色彩。這些 immutable outputs 留在 AI-Sister 的 Cloudflare R2／CDN `tokenmonster/characters/v1` prefix，TokenMonster release 只內嵌核准 manifest，不搬入 raw parts。
+- TokenMonster 的規劃路徑是依 manifest 按需下載、驗證 hash 後放入本機 cache；離線、下載或完整性失敗時立即使用內建 placeholder。Publisher、runtime downloader 與 cache 尚未實作，不得描述為目前已交付。
+- 角色狀態可透過已核准且實際存在的 pre-rendered pose／expression、色調、外光、陰影、粒子、配件 overlay、氣泡與小幅位移呈現。
 - 若某角色只有一張靜態設計，必須以 overlay 與 UI 表現狀態，不得宣稱該角色有 Live2D 動畫。
 - MVP 不批次搬入其他舊 repo 角色；core-four 以外的角色屬上線後擴充，每個都需獨立 provenance、權利與品質審查。
 - 每個角色都應共用同一套 trait 意義，避免角色選擇本身改變 usage 分析結果。

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-Hant" data-connection="connecting">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self'; object-src 'none'; script-src 'self'; style-src 'self'"
+    >
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#f6f2e8">
+    <title>TokenMonster</title>
+    <link rel="stylesheet" href="/assets/companion.css">
+    <script type="module" src="/assets/companion.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到主要內容</a>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="TokenMonster 首頁">
+        <span class="brand-mark" aria-hidden="true">T</span>
+        <span>TokenMonster</span>
+      </a>
+      <p class="connection-status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span data-status>正在連線</span>
+      </p>
+    </header>
+
+    <main id="main-content" class="page-shell">
+      <section class="companion-panel" aria-labelledby="welcome-title">
+        <div
+          class="companion-visual"
+          data-companion-visual
+          role="img"
+          aria-label="TokenMonster 字母 T 夥伴"
+        >
+          <span class="companion-ear companion-ear-left" aria-hidden="true"></span>
+          <span class="companion-ear companion-ear-right" aria-hidden="true"></span>
+          <span class="companion-face" aria-hidden="true">
+            <span class="companion-eye companion-eye-left"></span>
+            <span class="companion-eye companion-eye-right"></span>
+            <span class="companion-glyph" data-companion-glyph>T</span>
+          </span>
+          <span class="companion-shadow" aria-hidden="true"></span>
+        </div>
+        <div class="companion-copy">
+          <p class="eyebrow">你的本機 AI 用量夥伴</p>
+          <h1 id="welcome-title" data-companion-title>先選一位姊妹陪你。</h1>
+          <p class="companion-line" data-companion-line aria-live="polite">
+            我正在讀取你的本機用量。
+          </p>
+          <p class="updated-at" data-updated></p>
+          <button class="retry-button" type="button" data-retry hidden>
+            重新連線
+          </button>
+          <div class="character-picker" data-character-picker>
+            <p data-character-reason>連上本機用量後，我會先替你建議一位；你隨時可以換。</p>
+            <div class="character-options" role="group" aria-label="選擇陪伴角色">
+              <button type="button" data-character-id="chatgpt" aria-pressed="false">
+                <span aria-hidden="true">T</span>ChatGPT
+              </button>
+              <button type="button" data-character-id="claude" aria-pressed="false">
+                <span aria-hidden="true">C</span>Claude
+              </button>
+              <button type="button" data-character-id="gemini" aria-pressed="false">
+                <span aria-hidden="true">G</span>Gemini
+              </button>
+              <button type="button" data-character-id="grok" aria-pressed="false">
+                <span aria-hidden="true">X</span>Grok
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="usage-section" aria-labelledby="usage-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Token 用量</p>
+            <h2 id="usage-title">你的近期足跡</h2>
+          </div>
+        </div>
+        <dl class="metric-grid" aria-live="polite">
+          <div class="metric-card metric-card-primary">
+            <dt>今天（UTC）</dt>
+            <dd><span data-metric="today">—</span><small>tokens</small></dd>
+          </div>
+          <div class="metric-card">
+            <dt>近 7 天（UTC）</dt>
+            <dd><span data-metric="last7Days">—</span><small>tokens</small></dd>
+          </div>
+          <div class="metric-card">
+            <dt>近 28 天（UTC）</dt>
+            <dd><span data-metric="last28Days">—</span><small>tokens</small></dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="trend-panel" aria-labelledby="trend-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">UTC 每日趨勢</p>
+            <h2 id="trend-title">最近 28 個 UTC 日</h2>
+          </div>
+        </div>
+        <p class="trend-empty" data-trend-empty>連上後會顯示 UTC 每日趨勢。</p>
+        <div class="trend" data-trend hidden></div>
+        <ol class="visually-hidden" data-trend-accessible></ol>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>TokenMonster · Your local AI usage companion</p>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+export type TokenMonsterCliErrorCode =
+  | "invalid-arguments"
+  | "sidecar-start-failed"
+  | "gateway-start-failed";
+
+const MESSAGE_BY_CODE: Readonly<Record<TokenMonsterCliErrorCode, string>> = {
+  "invalid-arguments": "不支援這個參數。請執行 tokenmonster --help。",
+  "sidecar-start-failed":
+    "TokenTracker sidecar 無法啟動。請確認 Node.js 版本後重新執行 TokenMonster。",
+  "gateway-start-failed":
+    "TokenMonster 本機介面無法啟動。請關閉其他執行中的 TokenMonster 後再試。"
+};
+
+export class TokenMonsterCliError extends Error {
+  public override readonly name = "TokenMonsterCliError";
+  public readonly code: TokenMonsterCliErrorCode;
+
+  public constructor(code: TokenMonsterCliErrorCode) {
+    super(MESSAGE_BY_CODE[code]);
+    this.code = code;
+  }
+}

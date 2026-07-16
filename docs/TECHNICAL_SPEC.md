@@ -1,5 +1,10 @@
 # TokenMonster 技術規格
 
+> Architecture update (2026-07-15): collector, local store, IPC, and packaging
+> sections that assume Tokscale/Electron are legacy migration notes. The
+> permanent runtime boundary is specified by
+> [ADR 0005](adr/0005-permanent-tokentracker-sidecar-adapter.md).
+
 | 欄位 | 內容 |
 | --- | --- |
 | 文件狀態 | Target architecture + tested source-slice baseline；不是 production evidence |
@@ -118,7 +123,7 @@ packages/
 - `tokentracker-cli@0.79.8` bridge 只連到使用者明確啟用的 exact-compatible 本機安裝。
 - 若 adapter 無法安全修補 tokscale parser/total semantics，才建立獨立公開 fork `teddashh/tokenmonster-collector`，只帶最小 patch、上游 commit、測試與 notice；不得把 fork 變成 TokenMonster app monorepo。
 - `token-monitor` 與 `ai-avatar-bot` 僅供架構參考，不搬入 runtime source。
-- AI-Sister 只 vendoring 經核准的輸出 asset 與必要 persona facts，且每一檔都有 manifest provenance；不 submodule 整個 app。
+- AI-Sister source 與 raw parts 不 vendoring 或 submodule 進 TokenMonster。TokenMonster release 只內嵌核准的 immutable output manifest 與必要 persona facts，pre-rendered assets 由 AI-Sister 管理的 R2／CDN 提供。
 
 ## 4. Trust boundaries 與資料流
 
@@ -666,13 +671,23 @@ interface MonsterExplanationV1 {
 
 通知預設關閉，只在本地 scheduler 產生。必須支援 quiet hours、OS permission、單日 cap 與一鍵停用。提醒依相對個人 baseline 或使用者自設 budget，不把 estimated token 說成帳單，也不使用羞辱、醫療或成癮診斷文案。
 
+### 10.6 本機 starter-character decision
+
+已實作的 starter policy 是純本機、deterministic 的 presentation decision，不是 monster identity 或 progression rule：
+
+1. Adapter 只對固定 `GET /functions/tokentracker-usage-model-breakdown` 讀取最近 28 個 UTC 日，strict-validate pinned TokenTracker response，並只做 exact source mapping：`codex → openai`、`claude → anthropic`、`gemini → google`、`grok → xai`。其他合法 source 可存在但被忽略；絕不從 model ID 推論 provider，model IDs 與 cost 驗證後丟棄。
+2. `packages/characters` 在沒有 manual choice 時，只選擇四個 provider totals 中唯一、正數且嚴格最高者所對應的預設姊妹。最高值平手、全為零或沒有資料都回明確的 `user-choice-required` outcome；manual choice 永遠勝出。
+3. Provider endpoint timeout、network error 或 incompatible response 在 starter 流程中降級為手動選擇，不得阻擋本機圖表或 placeholder 角色。
+4. Gateway 對 browser 只輸出 allowlisted decision fields（selected／user-choice-required、reason、character ID、selection source，以及需要時的 tied provider family IDs），不輸出 provider totals、upstream source rows、model IDs 或 cost。
+5. 這些 totals 不得寫入 XP、power、rank、rarity、evolution、wardrobe/action access gate 或任何其他 progression/unlock 狀態；後續使用者覆寫是 authoritative local choice。
+
 ## 11. Characters、2D MVP 與互動
 
 ### 11.1 Asset manifest 與 rights gate
 
 `packages/characters/asset-manifest.json` 是唯一 ship allowlist，CI 依 `asset-manifest.schema.json` 驗證。每個 asset 至少需要：source repository + pinned commit/path、SHA-256、bytes/dimensions/media type、generation/edit history、content rating、license status、written grant reference、commercial/public/modify/redistribute scope、brand review、required disclosure、release status、alt text 與允許的 transforms。現有 v1 schema 尚未容納全部 rights 欄位；公開 asset approval 前必須升 manifest schema v2 並完成 migration，不能只在 PR 留口頭說明。
 
-CI 只複製同時滿足下列條件的檔案到 web/companion bundle：
+AI-Sister publisher 只可把同時滿足下列條件的 pre-rendered 檔案加入 CDN release set，TokenMonster build 只內嵌該 approved manifest，不把 raw parts 複製進 web/companion bundle：
 
 - `licenseStatus=approved` 且存在可稽核的 owner grant；
 - `brandReview` 通過 provider-inspired design/logo review；
@@ -692,6 +707,13 @@ CI 只複製同時滿足下列條件的檔案到 web/companion bundle：
 - `prefers-reduced-motion` 時停用位移與閃爍，只換靜態 state；
 - 圖像切換不得拉伸、切掉重要內容或移除 attribution；
 - 不使用 ai-avatar-bot 的 Live2D sample、Haru model、runtime 或 voice sample。
+
+### 11.2.1 Planned AI-Sister asset delivery
+
+- Approved pre-rendered assets 使用 AI-Sister 管理的 Cloudflare R2／CDN，固定 versioned prefix 為 `tokenmonster/characters/v1`；同一 key 不原地換內容，變更必須產生新的 asset ID／hash／manifest revision。
+- TokenMonster release 內嵌經 rights gate 核准的 strict manifest，至少固定 asset ID、相對 CDN key、media type、bytes、dimensions、SHA-256、release status 與 code-native fallback。Runtime 不接受任意 origin、path 或 server 回傳的臨時 asset URL。
+- 規劃中的 downloader 只依內嵌 manifest 按需抓取，套用 timeout、response-size／media-type 限制與 SHA-256 驗證，再 atomic 寫入以 hash 定址的本機 cache；cache hit 仍需對應 manifest hash。任何離線、404、timeout、hash mismatch 或 cache corruption 都 fail closed 到內建 placeholder，且不影響本機 usage 功能。
+- 可編輯 source、layered/raw parts、生成素材與 publisher credentials 全留在 AI-Sister 邊界；TokenMonster 只消費 approved pre-rendered outputs。Publisher、runtime downloader、cache eviction 與 CDN production configuration 目前皆為 planned，尚未實作或部署。
 
 ### 11.3 Fixed lines
 

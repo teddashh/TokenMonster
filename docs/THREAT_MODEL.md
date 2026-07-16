@@ -1,5 +1,10 @@
 # TokenMonster threat model
 
+> Architecture update (2026-07-15): Tokscale/Electron threats remain relevant
+> only during migration. The permanent model is an exact-pinned managed child,
+> strict loopback adapter/gateway, and TokenMonster-owned UI under
+> [ADR 0005](adr/0005-permanent-tokentracker-sidecar-adapter.md).
+
 > Status: Phase 0 baseline
 >
 > Updated: 2026-07-15
@@ -9,9 +14,11 @@
 
 ## 1. Scope and security objectives
 
-This model covers the tokscale adapter, optional TokenTracker bridge, Electron
-companion, local storage, OpenAI BYOK path, Cloudflare Worker/D1 ingestion,
-public aggregate/share surfaces, release artifacts, and character assets.
+This model covers the permanent TokenTracker sidecar adapter/gateway, legacy
+tokscale/Electron migration slice, local storage and loopback UI, OpenAI BYOK
+path, Cloudflare Worker/D1 ingestion, public aggregate/share surfaces, release
+artifacts, and both current placeholders and the unimplemented future
+AI-Sister CDN character-asset path.
 
 Security objectives, in priority order:
 
@@ -53,6 +60,24 @@ pinned collector process ── untrusted JSON ──► strict adapter projecti
                                                      public website
 ```
 
+The implemented starter path is an additional local-only minimization
+boundary, separate from the aggregate metrics path:
+
+```text
+TokenTracker local model breakdown (latest 28 UTC days)
+    │ untrusted response
+    ▼
+strict adapter ──► four request-scoped provider totals ──► starter selector
+                  (never persisted)                           │
+                                                              ▼
+                                                    decision-only gateway DTO
+                                                              │
+                                                              ▼
+                                                    loopback companion UI
+
+projection unavailable ──► manual choice; aggregate metrics continue
+```
+
 Trust-boundary rules:
 
 - Collector files and stdout are hostile input even when produced by a pinned
@@ -64,6 +89,12 @@ Trust-boundary rules:
   are disposable projections.
 - Character source files are untrusted for both technical payloads and legal
   redistribution rights.
+- Numeric starter provider totals and upstream model/source metadata stop
+  before the gateway. The UI receives only the starter decision, and its manual
+  override currently lasts only for the in-memory UI session.
+- No cloud character-asset runtime is implemented. Any future runtime trusts a
+  release-embedded approved manifest, not a mutable live manifest or URL
+  supplied by upstream data.
 
 ## 3. Threat actors and assumptions
 
@@ -93,6 +124,8 @@ The product removes incentives to inflate and discloses these limits.
 | COL-05 | Wrong binary/version silently changes totals | Resolve packaged executable, exact dependency pin, sourceVersion contract, golden fixtures, fail closed | Version mismatch and checksum/build tests | Blocker |
 | COL-06 | tokscale and TokenTracker double count same logs | One parser authority setting; mutually exclusive lifecycle and contract kind | E2E tries enabling both | Blocker |
 | COL-07 | Token component semantics double-add reasoning/cache | BigInt normalization; input excludes cache; reasoning subset of output; total invariant | Cross-client golden tests | Blocker |
+| COL-08 | Starter provider totals, model IDs, or raw source metadata leak through the loopback gateway | Immediate four-provider projection; decision-only starter DTO; strict schemas and unknown-field rejection; no persistence/logging | Gateway response canary and persistence/log scan | Blocker on regression |
+| COL-09 | Model-breakdown/projection failure takes down otherwise valid metrics | Provider totals are an independently caught optional branch; unavailable data maps to manual selection | Failure-injection test proves metrics still render and manual choice is offered | Blocker on regression |
 | LOC-01 | Malicious webpage reads optional loopback API | Bridge off unless selected; loopback only; unpredictable session token; origin/CORS/CSRF defenses | Browser attack E2E | Blocker if bridge ships |
 | LOC-02 | Renderer compromise reaches filesystem/process/secrets | Sandbox, context isolation, no Node integration, narrow validated IPC, CSP, navigation/window denylist | Electron security test/manual review | Blocker |
 | LOC-03 | Secret stored as plaintext on Linux | Async safeStorage check; disable persistence on `basic_text`; never use localStorage/SQLite | Linux backend test | Blocker |
@@ -114,6 +147,8 @@ The product removes incentives to inflate and discloses these limits.
 | OPS-02 | Logs/backups retain secrets or forbidden bodies | Body/header logging disabled, structured redaction, access control, retention policy | Canary scan and access review | Blocker |
 | SUP-01 | npm/GitHub Action/update supply-chain compromise | Exact pins/lockfile, action commit SHAs, audit/SBOM, reviewed update PR, signed/checksummed desktop artifacts | CI/release attestation | Blocker for GA |
 | AST-01 | Unlicensed or provider-branded art ships | Manifest defaults blocked, immutable source hash, owner grant, brand review, build allowlist | Release artifact inventory | Blocker for external Alpha |
+| AST-02 | Future asset runtime accepts a substituted origin/object or displays tampered content | Release-embedded approved manifest; one exact AI-Sister HTTPS CDN origin; immutable keys; SHA-256, byte-size, and MIME verification; content-addressed verified cache; code-native fallback | Redirect/origin, hash/size/MIME, cache-corruption, and offline-fallback tests | Not implemented; blocker before enablement |
+| AST-03 | Future asset GET leaks usage or is described as anonymous even though the CDN sees object/IP | Fixed public object key with no query parameters; never attach token/provider totals, starter rationale, user/install ID, or local path; explicit disclosure and bounded CDN logging review | Packet capture plus CDN configuration/privacy review | Not implemented; blocker before enablement |
 
 ## 5. Collector process policy
 
@@ -178,6 +213,9 @@ Public totals are computed from accepted rows/rollups, not a blind
   public counter.
 - Character traits use local content-blind aggregates. Missing task metadata
   cannot be replaced with guesses such as “debugging” or “researching.”
+- Starter selection reduces the local 28-day model breakdown to four transient
+  provider totals, then exposes only a coarse decision. Manual selection is an
+  in-memory UI-session value and is not uploaded or currently persisted.
 - Public breakdowns require 20 eligible current contributors; otherwise merge
   into `other` or suppress.
 - Revocation invalidates credentials immediately. Current attributable data
@@ -193,6 +231,9 @@ Required automated suites:
 - contract unknown-field/privacy canaries and boundary arithmetic;
 - adapter fixed-command, sanitized-environment, timeout, output-cap,
   schema-drift, sensitive-extra, and four-client golden tests;
+- TokenTracker model-breakdown projection tests proving four request-scoped
+  totals, decision-only gateway output, and manual fallback without metric
+  failure;
 - replay/revision/reorder/downward-correction and transactional-failure tests;
 - cloud-off egress and OpenAI `store: false` mock capture;
 - Electron preload/IPC authorization and loopback browser attack tests;
@@ -200,6 +241,9 @@ Required automated suites:
 - deletion across current bucket, share, cache, consent, and credential;
 - clean build, audit, SBOM, secret scan, signed artifact inventory, and restore
   drill before GA.
+- Before any character-asset egress is enabled: exact-origin/redirect denial,
+  embedded-manifest, SHA-256/size/MIME, cache-corruption, no-query packet
+  capture, CDN disclosure/logging, and local-fallback tests.
 
 If a forbidden field or secret reaches cloud wire, persistence, logs,
 analytics, diagnostics, crash reports, or a share:
@@ -222,6 +266,10 @@ The following are accepted for MVP only when prominently documented:
   continue;
 - approved provider-inspired characters remain unofficial and must carry an
   unaffiliated disclosure after brand review.
+- no AI-Sister cloud asset GET occurs in the current implementation. If the
+  future approved runtime is enabled, the AI-Sister CDN will observe the
+  requested public object and client IP even though no token, user, or local
+  path data is attached.
 
 Any change that adds raw events, hours/timezones to cloud, provider proxying,
 file/tool execution in BYOK chat, public per-user profiles, voice cloning, or
