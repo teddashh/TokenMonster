@@ -18,8 +18,9 @@ load-bearing product requirement, not an implementation detail.
   increase totals. Hourly data and event/session counts remain local.
 - Public copy says "tokens shared by opt-in contributors". Never describe the
   counter as all global AI usage or a statistically representative sample.
-- Character identity is driven by explainable workflow traits, not a strength
-  ladder. Do not reward wasteful token burn or introduce pay-to-win mechanics.
+- Local usage milestones may unlock characters, wardrobe, and actions; unlocks
+  stay explainable, local-only, and monotonic. Progression is never purchasable
+  and must not reward wasteful token burn.
 - BYOK credentials remain in the local secret store and calls are routed
   through the local companion. The public API must never receive provider keys.
 

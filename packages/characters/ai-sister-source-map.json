@@ -66,7 +66,7 @@
     "noDataOutcome": "explicit-user-choice",
     "manualOverride": "always",
     "persistence": "local-preference-only",
-    "usedForProgression": false,
+    "usedForProgression": true,
     "leavesDevice": false,
     "adapterReadiness": "implemented-safe-provider-breakdown-projection"
   },
@@ -372,20 +372,23 @@
     "styleFacetEffect": "cosmetic-presentation-only",
     "recommendationIsUnlockGate": false,
     "unlockPolicy": {
-      "status": "not-implemented",
-      "allowedFutureSignals": [
-        "explicit-user-choice",
-        "content-blind-companion-event",
-        "allowlisted-workflow-trait"
+      "status": "implemented-local-milestones",
+      "implementedAllowedSignals": [
+        "local-provider-cumulative-total",
+        "local-distinct-active-provider-breadth",
+        "local-active-day-streak",
+        "local-lifetime-total",
+        "local-allowlisted-workflow-trait"
       ],
-      "forbiddenSignals": [
+      "forbiddenForCloudSignals": [
         "absolute-token-volume",
         "cost",
         "spending",
         "prompt-content",
         "project-path",
         "filename"
-      ]
+      ],
+      "note": "Owner-approved 2026-07-16: usage-milestone progression; all signals local-only and never leave the device."
     },
     "externalCandidateBank": {
       "inventoryStatus": "observed-local-candidates-not-release-evidence",

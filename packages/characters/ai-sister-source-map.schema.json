@@ -174,7 +174,7 @@
         "noDataOutcome": { "const": "explicit-user-choice" },
         "manualOverride": { "const": "always" },
         "persistence": { "const": "local-preference-only" },
-        "usedForProgression": { "const": false },
+        "usedForProgression": { "const": true },
         "leavesDevice": { "const": false },
         "adapterReadiness": {
           "const": "implemented-safe-provider-breakdown-projection"
@@ -209,23 +209,30 @@
         "unlockPolicy": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["status", "allowedFutureSignals", "forbiddenSignals"],
+          "required": [
+            "status",
+            "implementedAllowedSignals",
+            "forbiddenForCloudSignals",
+            "note"
+          ],
           "properties": {
-            "status": { "const": "not-implemented" },
-            "allowedFutureSignals": {
+            "status": { "const": "implemented-local-milestones" },
+            "implementedAllowedSignals": {
               "type": "array",
-              "minItems": 3,
-              "maxItems": 3,
+              "minItems": 5,
+              "maxItems": 5,
               "uniqueItems": true,
               "items": {
                 "enum": [
-                  "explicit-user-choice",
-                  "content-blind-companion-event",
-                  "allowlisted-workflow-trait"
+                  "local-provider-cumulative-total",
+                  "local-distinct-active-provider-breadth",
+                  "local-active-day-streak",
+                  "local-lifetime-total",
+                  "local-allowlisted-workflow-trait"
                 ]
               }
             },
-            "forbiddenSignals": {
+            "forbiddenForCloudSignals": {
               "type": "array",
               "minItems": 6,
               "maxItems": 6,
@@ -240,6 +247,9 @@
                   "filename"
                 ]
               }
+            },
+            "note": {
+              "const": "Owner-approved 2026-07-16: usage-milestone progression; all signals local-only and never leave the device."
             }
           }
         },

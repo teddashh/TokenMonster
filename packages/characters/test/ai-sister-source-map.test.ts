@@ -102,8 +102,9 @@ interface AiSisterSourceMap {
     recommendationIsUnlockGate: boolean;
     unlockPolicy: {
       status: string;
-      allowedFutureSignals: string[];
-      forbiddenSignals: string[];
+      implementedAllowedSignals: string[];
+      forbiddenForCloudSignals: string[];
+      note: string;
     };
     externalCandidateBank: {
       inventoryStatus: string;
@@ -484,7 +485,7 @@ describe("AI-Sister repository-only source map", () => {
       noDataOutcome: "explicit-user-choice",
       manualOverride: "always",
       persistence: "local-preference-only",
-      usedForProgression: false,
+      usedForProgression: true,
       leavesDevice: false,
       adapterReadiness: "implemented-safe-provider-breakdown-projection",
     });
@@ -504,8 +505,18 @@ describe("AI-Sister repository-only source map", () => {
       "cosmetic-presentation-only",
     );
     expect(sourceMap.wardrobe.recommendationIsUnlockGate).toBe(false);
-    expect(sourceMap.wardrobe.unlockPolicy.status).toBe("not-implemented");
-    expect(sourceMap.wardrobe.unlockPolicy.forbiddenSignals).toEqual(
+    expect(sourceMap.wardrobe.unlockPolicy).toMatchObject({
+      status: "implemented-local-milestones",
+      implementedAllowedSignals: [
+        "local-provider-cumulative-total",
+        "local-distinct-active-provider-breadth",
+        "local-active-day-streak",
+        "local-lifetime-total",
+        "local-allowlisted-workflow-trait",
+      ],
+      note: "Owner-approved 2026-07-16: usage-milestone progression; all signals local-only and never leave the device.",
+    });
+    expect(sourceMap.wardrobe.unlockPolicy.forbiddenForCloudSignals).toEqual(
       expect.arrayContaining([
         "absolute-token-volume",
         "cost",
