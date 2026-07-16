@@ -166,7 +166,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mapfile -d '' files < <(find apps/companion/out/make -type f -print0)
+          # macOS runners ship bash 3.2, which lacks mapfile.
+          files=()
+          while IFS= read -r -d '' file; do
+            files+=("$file")
+          done < <(find apps/companion/out/make -type f -print0)
           if [[ "${#files[@]}" -eq 0 ]]; then
             echo "No desktop installer artifacts found" >&2
             exit 1
