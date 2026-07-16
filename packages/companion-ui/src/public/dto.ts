@@ -1,6 +1,52 @@
 export const COMPANION_API_ENDPOINT = "/api/companion" as const;
 export const COLLECTOR_STATUS_ENDPOINT = "/api/companion/status" as const;
 export const COLLECTOR_REFRESH_ENDPOINT = "/api/companion/refresh" as const;
+export const USAGE_FAMILIES_API_ENDPOINT = "/api/usage/families" as const;
+export const USAGE_MODELS_API_ENDPOINT = "/api/usage/models" as const;
+
+export const USAGE_WINDOWS = [7, 28, 90] as const;
+export type UsageWindow = (typeof USAGE_WINDOWS)[number];
+
+export const USAGE_FAMILIES = [
+  "openai",
+  "anthropic",
+  "google",
+  "xai",
+  "deepseek",
+  "qwen",
+  "mistral",
+  "venice",
+  "sakana",
+  "perplexity",
+  "glm",
+  "other"
+] as const;
+
+export type UsageFamily = (typeof USAGE_FAMILIES)[number];
+export type UsageFamilyTotals = Readonly<Record<UsageFamily, number>>;
+
+export interface UsageFamilyDay {
+  readonly utcDate: string;
+  readonly families: UsageFamilyTotals;
+}
+
+export interface UsageFamiliesResponse {
+  readonly window: UsageWindow;
+  readonly days: readonly UsageFamilyDay[];
+}
+
+export interface UsageModel {
+  readonly model: string;
+  readonly family: UsageFamily;
+  readonly totalTokens: number;
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+}
+
+export interface UsageModelsResponse {
+  readonly window: UsageWindow;
+  readonly models: readonly UsageModel[];
+}
 
 export const COMPANION_ERROR_CODES = [
   "sidecar-unavailable",
@@ -907,5 +953,146 @@ export function parseCompanionCollectorStatus(
     lastSuccessAt: lastSuccessAt as string | null,
     consecutiveFailures,
     canRetry
+  });
+}
+
+function isUsageWindow(value: unknown): value is UsageWindow {
+  return USAGE_WINDOWS.some((candidate) => candidate === value);
+}
+
+function isUsageFamily(value: unknown): value is UsageFamily {
+  return USAGE_FAMILIES.some((candidate) => candidate === value);
+}
+
+/** Strictly validates a contiguous, complete daily family response. */
+export function parseUsageFamiliesResponse(
+  value: unknown,
+  todayUtcDate = new Date().toISOString().slice(0, 10),
+  expectedWindow?: UsageWindow
+): UsageFamiliesResponse {
+  if (
+    parseUtcDate(todayUtcDate) === undefined ||
+    !isRecord(value) ||
+    !hasExactKeys(value, ["window", "days"]) ||
+    !isUsageWindow(value["window"]) ||
+    (expectedWindow !== undefined && value["window"] !== expectedWindow) ||
+    !Array.isArray(value["days"]) ||
+    value["days"].length !== value["window"]
+  ) {
+    throw new TypeError("Invalid usage families response");
+  }
+
+  const window = value["window"];
+  const firstUtcDate = utcDateOffset(todayUtcDate, -(window - 1));
+  const days: UsageFamilyDay[] = [];
+  for (const [index, candidate] of value["days"].entries()) {
+    if (
+      !isRecord(candidate) ||
+      !hasExactKeys(candidate, ["utcDate", "families"]) ||
+      candidate["utcDate"] !== utcDateOffset(firstUtcDate, index) ||
+      !isRecord(candidate["families"]) ||
+      !hasExactKeys(candidate["families"], USAGE_FAMILIES)
+    ) {
+      throw new TypeError("Invalid usage families response");
+    }
+
+    const families = candidate["families"];
+    if (USAGE_FAMILIES.some((family) => !isSafeTokenCount(families[family]))) {
+      throw new TypeError("Invalid usage families response");
+    }
+    days.push(
+      Object.freeze({
+        utcDate: candidate["utcDate"] as string,
+        families: Object.freeze(
+          Object.fromEntries(
+            USAGE_FAMILIES.map((family) => [family, families[family]])
+          )
+        ) as UsageFamilyTotals
+      })
+    );
+  }
+
+  return Object.freeze({ window, days: Object.freeze(days) });
+}
+
+/** Strictly validates the bounded, descending model usage response. */
+export function parseUsageModelsResponse(
+  value: unknown,
+  expectedWindow?: UsageWindow,
+  limit = 50
+): UsageModelsResponse {
+  if (
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > 50 ||
+    !isRecord(value) ||
+    !hasExactKeys(value, ["window", "models"]) ||
+    !isUsageWindow(value["window"]) ||
+    (expectedWindow !== undefined && value["window"] !== expectedWindow) ||
+    !Array.isArray(value["models"]) ||
+    value["models"].length > limit
+  ) {
+    throw new TypeError("Invalid usage models response");
+  }
+
+  const models: UsageModel[] = [];
+  let previousTotal = Number.MAX_SAFE_INTEGER;
+  const allowedKeys = [
+    "model",
+    "family",
+    "totalTokens",
+    "inputTokens",
+    "outputTokens"
+  ] as const;
+  for (const candidate of value["models"]) {
+    if (!isRecord(candidate)) {
+      throw new TypeError("Invalid usage models response");
+    }
+    const keys = Object.keys(candidate);
+    const model = candidate["model"];
+    const totalTokens = candidate["totalTokens"];
+    if (
+      keys.length < 3 ||
+      keys.length > allowedKeys.length ||
+      keys.some(
+        (key) =>
+          !allowedKeys.includes(key as (typeof allowedKeys)[number])
+      ) ||
+      !keys.includes("model") ||
+      !keys.includes("family") ||
+      !keys.includes("totalTokens") ||
+      typeof model !== "string" ||
+      model.length < 1 ||
+      model.length > 120 ||
+      model.trim() !== model ||
+      !isUsageFamily(candidate["family"]) ||
+      !isSafeTokenCount(totalTokens) ||
+      totalTokens > previousTotal ||
+      (keys.includes("inputTokens") &&
+        !isSafeTokenCount(candidate["inputTokens"])) ||
+      (keys.includes("outputTokens") &&
+        !isSafeTokenCount(candidate["outputTokens"]))
+    ) {
+      throw new TypeError("Invalid usage models response");
+    }
+    previousTotal = totalTokens;
+    models.push(
+      Object.freeze({
+        model,
+        family: candidate["family"],
+        totalTokens,
+        ...(keys.includes("inputTokens")
+          ? { inputTokens: candidate["inputTokens"] as number }
+          : {}),
+        ...(keys.includes("outputTokens")
+          ? { outputTokens: candidate["outputTokens"] as number }
+          : {})
+      })
+    );
+  }
+
+  return Object.freeze({
+    window: value["window"],
+    models: Object.freeze(models)
   });
 }

@@ -62,6 +62,88 @@
         <ol class="visually-hidden" data-trend-accessible></ol>
       </section>
 
+      <section
+        class="analytics-panel"
+        data-analytics
+        aria-labelledby="analytics-title"
+        aria-busy="true"
+      >
+        <div class="section-heading analytics-heading">
+          <div>
+            <p class="eyebrow">各家分析</p>
+            <h2 id="analytics-title">供應商與模型用量</h2>
+          </div>
+          <div class="window-switcher" role="group" aria-label="分析期間">
+            <button type="button" data-analytics-window="7" aria-pressed="false">
+              7 天
+            </button>
+            <button type="button" data-analytics-window="28" aria-pressed="true">
+              28 天
+            </button>
+            <button type="button" data-analytics-window="90" aria-pressed="false">
+              90 天
+            </button>
+          </div>
+        </div>
+        <p class="analytics-summary" data-analytics-summary aria-live="polite">
+          正在整理近 28 天的各家分析。
+        </p>
+
+        <div class="analytics-loading" data-analytics-loading aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="analytics-empty" data-analytics-empty hidden>
+          <strong>這段期間還很安靜</strong>
+          <span>有用量後，就會在這裡看到每一家與模型的分布。</span>
+        </div>
+        <div class="analytics-error" data-analytics-error hidden>
+          <strong>各家分析暫時載入不了。</strong>
+          <span>本機用量資料沒有遺失，可以再試一次。</span>
+          <button class="retry-button" type="button" data-analytics-retry>
+            重新載入分析
+          </button>
+        </div>
+
+        <div class="analytics-content" data-analytics-content hidden>
+          <div class="analytics-family-column">
+            <div class="analytics-subheading">
+              <h3>每日家族分布</h3>
+              <ul class="family-legend" data-family-legend aria-label="供應商圖例"></ul>
+            </div>
+            <div class="family-chart" data-family-chart></div>
+            <table class="visually-hidden">
+              <caption>每日各供應商家族 token 用量（UTC）</caption>
+              <thead>
+                <tr>
+                  <th scope="col">UTC 日期</th>
+                  <th scope="col">OpenAI</th>
+                  <th scope="col">Anthropic</th>
+                  <th scope="col">Google</th>
+                  <th scope="col">xAI</th>
+                  <th scope="col">DeepSeek</th>
+                  <th scope="col">Qwen</th>
+                  <th scope="col">Mistral</th>
+                  <th scope="col">Venice</th>
+                  <th scope="col">Sakana</th>
+                  <th scope="col">Perplexity</th>
+                  <th scope="col">GLM</th>
+                  <th scope="col">其他</th>
+                </tr>
+              </thead>
+              <tbody data-family-accessible></tbody>
+            </table>
+            <div class="analytics-subsection">
+              <h3>家族占比</h3>
+              <ol class="family-shares" data-family-shares></ol>
+            </div>
+          </div>
+          <div class="analytics-model-column">
+            <h3>Top 10 模型</h3>
+            <ol class="top-models" data-top-models></ol>
+          </div>
+        </div>
+      </section>
+
       <section class="companion-panel" aria-labelledby="welcome-title">
         <div class="character-stage">
           <div
