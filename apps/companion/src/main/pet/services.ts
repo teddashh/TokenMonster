@@ -19,6 +19,8 @@ import {
   type ManagedTokenTracker
 } from "@tokenmonster/token-tracker-runtime";
 
+import { resolveSidecarExecutable, utilityProcessSpawn } from "./sidecar.js";
+
 export const PET_CHARACTER_CDN_BASE_URL =
   "https://cdn.ted-h.com/tokenmonster/characters/v1" as const;
 
@@ -26,7 +28,7 @@ export const PET_STARTUP_MESSAGES = Object.freeze({
   gateway:
     "TokenMonster 本機介面無法啟動。請關閉其他執行中的 TokenMonster 後再試。",
   sidecar:
-    "TokenTracker sidecar 無法啟動。請確認 Node.js 版本後重新執行 TokenMonster。"
+    "TokenTracker sidecar 無法啟動。請重新啟動 TokenMonster;若持續發生,請回報問題。"
 });
 
 const DATA_PROBE_TRAILING_DAYS = 365;
@@ -101,7 +103,9 @@ export async function startPetServices(): Promise<PetServices> {
         const candidate = adapter ?? createTokenTrackerAdapter({ baseUrl });
         const summary = await candidate.getSummary(trailingUtcRange());
         return summary.tokens.totalTokens > 0;
-      }
+      },
+      resolveExecutable: resolveSidecarExecutable,
+      spawn: utilityProcessSpawn
     });
   } catch {
     await stopServices(null, runtime);
