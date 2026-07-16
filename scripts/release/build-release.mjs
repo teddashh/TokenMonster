@@ -127,6 +127,13 @@ async function copyPackageFiles(packageDir, destinationFor) {
     }
     await cp(source, join(destination, entry), { recursive: true });
   }
+  // Every workspace package ships compiled output; a missing dist means the
+  // build step was skipped on an unbuilt tree and the artifact would be empty.
+  try {
+    await stat(join(destination, "dist"));
+  } catch {
+    throw new Error(`${manifest.name} has no dist/ — build the workspaces first`);
+  }
   return manifest;
 }
 
