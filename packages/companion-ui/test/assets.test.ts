@@ -41,10 +41,14 @@ describe("companion static assets", () => {
     expect(html).toContain('lang="zh-Hant"');
     expect(html).toContain("先選一位姊妹陪你。");
     expect(html).toContain("TokenMonster 字母 T 夥伴");
-    expect(html.match(/data-character-id=/gu)).toHaveLength(4);
-    for (const characterId of ["chatgpt", "claude", "gemini", "grok"]) {
-      expect(html).toContain(`data-character-id="${characterId}"`);
-    }
+    expect(html).toContain("data-roster");
+    expect(html).toContain("data-character-doll");
+    expect(html).toContain("data-wardrobe-toggle");
+    expect(html).toContain("data-voice-toggle");
+    expect(html).toContain("點一下讓她們開口");
+    expect(html).toContain(
+      "TokenMonster 為獨立產品，未與該供應商合作、隸屬或獲其背書。"
+    );
     expect(html).toContain("正在啟動");
     expect(html).toContain("重新掃描");
     expect(html).toContain("data-rescan");
@@ -82,13 +86,23 @@ describe("companion static assets", () => {
     expect(html).toContain("object-src 'none'");
     expect(css).not.toMatch(/url\s*\(/iu);
     expect(js).not.toMatch(/https?:\/\/(?!www\.w3\.org\/2000\/svg)/u);
-    expect(js).not.toMatch(/\b(?:innerHTML|outerHTML|insertAdjacentHTML|eval|localStorage|sessionStorage)\b/u);
+    expect(js).not.toMatch(
+      /\b(?:innerHTML|outerHTML|insertAdjacentHTML|eval|sessionStorage)\b/u
+    );
+    expect(js).toContain('"tokenmonster-voice"');
     expect(js).toContain('const COMPANION_API_ENDPOINT = "/api/companion"');
     expect(js).toContain(
       'const COLLECTOR_STATUS_ENDPOINT = "/api/companion/status"'
     );
     expect(js).toContain(
       'const COLLECTOR_REFRESH_ENDPOINT = "/api/companion/refresh"'
+    );
+    expect(js).toContain('const CHARACTERS_API_ENDPOINT = "/api/characters"');
+    expect(js).toContain(
+      'const CHARACTER_SELECT_ENDPOINT = "/api/characters/select"'
+    );
+    expect(js).toContain(
+      'const CHARACTER_WARDROBE_ENDPOINT = "/api/characters/wardrobe"'
     );
     expect(js).toContain('credentials: "same-origin"');
     expect(js).toContain("更新於本機時間");
