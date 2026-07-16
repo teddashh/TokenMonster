@@ -26,6 +26,32 @@ No image, audio, or other binary asset is inside the tarball — the embedded
 asset manifest is JSON, and character assets download lazily from the CDN after
 unlock, exactly as in development.
 
+## Desktop installers
+
+The `Companion installers [package]` CI job packages the floating pet shell on
+Ubuntu, macOS, and Windows. It runs for a pushed commit whose message contains
+`[package]`, for version-tag pushes, and for manual `workflow_dispatch` runs
+(the dry-run path for branches, which builds and uploads artifacts without
+touching any release). Each matrix runner uploads its complete Forge maker
+directory as a seven-day GitHub Actions artifact named
+`tokenmonster-desktop-<os>`. Tag runs also attach every maker file to the
+matching GitHub Release, so owners can download the Windows `Setup.exe`, the
+macOS `.dmg`, or a platform `.zip` fallback directly from the release page.
+
+Create the release first and let it push the tag — for example
+`gh release create v0.1.0-rc.3 --prerelease --title …` — because the attach
+step uploads into an existing release; a bare `git push --tags` for a tag with
+no release fails that step.
+
+These internal builds are unsigned. Windows SmartScreen may require choosing
+「其他資訊→仍要執行」. On macOS, the unnotarized app may require right-clicking it
+and choosing Open. Signing and notarization remain separate release gates.
+
+To build the same internal maker output locally, run `npm run make:internal`
+inside `apps/companion`. This invokes Electron Forge and requires a development
+machine with a display and network access; the packaging command is not part of
+headless/offline verification.
+
 ## Installing a release tarball
 
 Use a directory-local install:
