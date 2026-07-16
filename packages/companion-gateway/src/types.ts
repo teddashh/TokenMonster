@@ -1,5 +1,9 @@
 import type { TokenTrackerAdapter } from "@tokenmonster/token-tracker-adapter";
 import type {
+  TokenMonsterUsageFamily,
+  TokenMonsterUsageFamilyTotals
+} from "@tokenmonster/token-tracker-adapter";
+import type {
   AssetManifest,
   StarterCharacterSelection
 } from "@tokenmonster/characters";
@@ -195,6 +199,31 @@ export interface CompanionApiErrorResponse {
 export type CompanionApiResponse =
   | CompanionApiHealthyResponse
   | CompanionApiErrorResponse;
+
+export type CompanionUsageWindow = 7 | 28 | 90;
+
+export interface CompanionUsageFamilyDay {
+  readonly utcDate: string;
+  readonly families: TokenMonsterUsageFamilyTotals;
+}
+
+export interface CompanionUsageFamiliesResponse {
+  readonly window: CompanionUsageWindow;
+  readonly days: readonly CompanionUsageFamilyDay[];
+}
+
+export interface CompanionUsageModel {
+  readonly model: string;
+  readonly family: TokenMonsterUsageFamily;
+  readonly totalTokens: number;
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+}
+
+export interface CompanionUsageModelsResponse {
+  readonly window: CompanionUsageWindow;
+  readonly models: readonly CompanionUsageModel[];
+}
 
 export type CompanionGatewayErrorCode =
   | "invalid-configuration"

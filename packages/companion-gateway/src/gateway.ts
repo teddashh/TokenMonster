@@ -17,9 +17,14 @@ import {
 } from "@tokenmonster/characters";
 import {
   MAX_TOKEN_TRACKER_RANGE_DAYS,
+  MAX_TOKEN_TRACKER_MODEL_NAME_LENGTH,
+  TOKEN_MONSTER_USAGE_FAMILIES,
   TokenTrackerAdapterError,
   type TokenMonsterDailyAggregateResponse,
+  type TokenMonsterDailyFamilySeries,
+  type TokenMonsterModelUsageResponse,
   type TokenMonsterProviderTotals,
+  type TokenMonsterUsageFamily,
   type TokenTrackerAdapter,
   type TokenTrackerAggregateRange
 } from "@tokenmonster/token-tracker-adapter";
@@ -42,7 +47,12 @@ import type {
   CompanionGatewayClock,
   CompanionGatewayOptions,
   CompanionCharacterFetch,
-  CompanionUiAssets
+  CompanionUiAssets,
+  CompanionUsageFamiliesResponse,
+  CompanionUsageFamilyDay,
+  CompanionUsageModel,
+  CompanionUsageModelsResponse,
+  CompanionUsageWindow
 } from "./types.js";
 
 const LOOPBACK_HOST = "127.0.0.1" as const;
@@ -50,6 +60,8 @@ const COMPANION_API_PATH = "/api/companion";
 const COLLECTOR_STATUS_PATH = "/api/companion/status";
 const COLLECTOR_REFRESH_PATH = "/api/companion/refresh";
 const CHARACTERS_API_PATH = "/api/characters";
+const USAGE_FAMILIES_API_PATH = "/api/usage/families";
+const USAGE_MODELS_API_PATH = "/api/usage/models";
 const CHARACTER_SELECT_PATH = "/api/characters/select";
 const CHARACTER_WARDROBE_PATH = "/api/characters/wardrobe";
 const CHARACTER_ASSET_PREFIX = "/assets/characters/objects/";
@@ -105,6 +117,11 @@ interface NormalizedOptions {
   readonly assets: NormalizedAssets;
   readonly clock: CompanionGatewayClock;
   readonly apiTimeoutMs: number;
+}
+
+interface ParsedRequestTarget {
+  readonly path: string;
+  readonly searchParams: URLSearchParams;
 }
 
 function isPlainRecord(value: unknown): value is Record<PropertyKey, unknown> {
@@ -262,6 +279,8 @@ function normalizeOptions(options: CompanionGatewayOptions): NormalizedOptions {
     typeof adapter["getDaily"] !== "function" ||
     typeof adapter["getProviderTotals"] !== "function" ||
     typeof adapter["getProgressionFamilyTotals"] !== "function" ||
+    typeof adapter["getDailyFamilySeries"] !== "function" ||
+    typeof adapter["getModelUsage"] !== "function" ||
     typeof adapter["getSummary"] !== "function" ||
     typeof adapter["probe"] !== "function" ||
     !isPlainRecord(collector) ||
@@ -466,7 +485,10 @@ function hasAcceptedMutationHeaders(
   return originValues.length === 1 && originValues[0] === origin;
 }
 
-function parseFixedPath(request: IncomingMessage, origin: string): string | null {
+function parseFixedTarget(
+  request: IncomingMessage,
+  origin: string
+): ParsedRequestTarget | null {
   const target = request.url;
   if (
     target === undefined ||
@@ -482,12 +504,21 @@ function parseFixedPath(request: IncomingMessage, origin: string): string | null
     const rawPath = target.split("?", 1)[0];
     if (
       parsed.origin !== origin ||
-      parsed.search !== "" ||
       rawPath !== parsed.pathname
     ) {
       return null;
     }
-    return parsed.pathname;
+    if (
+      parsed.search !== "" &&
+      parsed.pathname !== USAGE_FAMILIES_API_PATH &&
+      parsed.pathname !== USAGE_MODELS_API_PATH
+    ) {
+      return null;
+    }
+    return Object.freeze({
+      path: parsed.pathname,
+      searchParams: parsed.searchParams
+    });
   } catch {
     return null;
   }
@@ -528,6 +559,46 @@ function addUtcDays(utcDate: string, days: number): string {
   return new Date(time + days * 86_400_000).toISOString().slice(0, 10);
 }
 
+const USAGE_WINDOWS = Object.freeze([
+  7,
+  28,
+  90
+] as const satisfies readonly CompanionUsageWindow[]);
+const USAGE_FAMILY_KEYS = TOKEN_MONSTER_USAGE_FAMILIES;
+const USAGE_FAMILY_SET = new Set<TokenMonsterUsageFamily>(USAGE_FAMILY_KEYS);
+
+function parseUsageWindow(value: string | null): CompanionUsageWindow | null {
+  if (value === null || !/^(?:7|28|90)$/u.test(value)) return null;
+  const window = Number(value);
+  return USAGE_WINDOWS.find((candidate) => candidate === window) ?? null;
+}
+
+function parseUsageQuery(
+  path: string,
+  searchParams: URLSearchParams
+): Readonly<{ window: CompanionUsageWindow; limit: number | null }> | null {
+  const entries = [...searchParams.entries()];
+  const window = parseUsageWindow(searchParams.get("window"));
+  if (window === null) return null;
+  if (path === USAGE_FAMILIES_API_PATH) {
+    if (entries.length !== 1 || entries[0]?.[0] !== "window") return null;
+    return Object.freeze({ window, limit: null });
+  }
+  if (
+    path !== USAGE_MODELS_API_PATH ||
+    entries.length !== 2 ||
+    entries.filter(([key]) => key === "window").length !== 1 ||
+    entries.filter(([key]) => key === "limit").length !== 1
+  ) {
+    return null;
+  }
+  const rawLimit = searchParams.get("limit");
+  if (rawLimit === null || !/^(?:[1-9]|[1-4]\d|50)$/u.test(rawLimit)) {
+    return null;
+  }
+  return Object.freeze({ window, limit: Number(rawLimit) });
+}
+
 function isSafeCount(value: unknown): value is number {
   return (
     typeof value === "number" &&
@@ -551,6 +622,123 @@ function checkedAdd(left: number, right: number): number {
   const result = left + right;
   if (!Number.isSafeInteger(result)) throw PROJECTION_ERROR;
   return result;
+}
+
+function hasExactKeys(
+  value: Record<PropertyKey, unknown>,
+  keys: readonly string[]
+): boolean {
+  const ownKeys = Reflect.ownKeys(value);
+  return (
+    ownKeys.length === keys.length &&
+    keys.every((key) => ownKeys.includes(key))
+  );
+}
+
+function projectUsageFamiliesResponse(
+  upstream: TokenMonsterDailyFamilySeries,
+  window: CompanionUsageWindow,
+  toUtcDate: string
+): CompanionUsageFamiliesResponse {
+  if (!isPlainRecord(upstream) || !hasExactKeys(upstream, ["days"])) {
+    throw PROJECTION_ERROR;
+  }
+  const rawDays = ownDataValue(upstream, "days");
+  if (!Array.isArray(rawDays) || rawDays.length !== window) {
+    throw PROJECTION_ERROR;
+  }
+  const fromUtcDate = addUtcDays(toUtcDate, -(window - 1));
+  const days: CompanionUsageFamilyDay[] = rawDays.map((rawDay, index) => {
+    if (!isPlainRecord(rawDay) || !hasExactKeys(rawDay, ["utcDate", "families"])) {
+      throw PROJECTION_ERROR;
+    }
+    const utcDate = ownDataValue(rawDay, "utcDate");
+    const rawFamilies = ownDataValue(rawDay, "families");
+    if (
+      utcDate !== addUtcDays(fromUtcDate, index) ||
+      !isPlainRecord(rawFamilies) ||
+      !hasExactKeys(rawFamilies, USAGE_FAMILY_KEYS)
+    ) {
+      throw PROJECTION_ERROR;
+    }
+    const families = Object.fromEntries(
+      USAGE_FAMILY_KEYS.map((family) => {
+        const total = ownDataValue(rawFamilies, family);
+        if (!isSafeCount(total)) throw PROJECTION_ERROR;
+        return [family, total];
+      })
+    ) as Record<TokenMonsterUsageFamily, number>;
+    return Object.freeze({ utcDate, families: Object.freeze(families) });
+  });
+  return Object.freeze({ window, days: Object.freeze(days) });
+}
+
+function projectUsageModelsResponse(
+  upstream: TokenMonsterModelUsageResponse,
+  window: CompanionUsageWindow,
+  limit: number
+): CompanionUsageModelsResponse {
+  if (!isPlainRecord(upstream) || !hasExactKeys(upstream, ["models"])) {
+    throw PROJECTION_ERROR;
+  }
+  const rawModels = ownDataValue(upstream, "models");
+  if (!Array.isArray(rawModels) || rawModels.length > limit) {
+    throw PROJECTION_ERROR;
+  }
+  let previousTotal = Number.MAX_SAFE_INTEGER;
+  const models: CompanionUsageModel[] = rawModels.map((rawModel) => {
+    if (!isPlainRecord(rawModel)) throw PROJECTION_ERROR;
+    const keys = Reflect.ownKeys(rawModel);
+    const allowedKeys = [
+      "model",
+      "family",
+      "totalTokens",
+      "inputTokens",
+      "outputTokens"
+    ];
+    if (
+      keys.length < 3 ||
+      keys.length > allowedKeys.length ||
+      keys.some((key) => !allowedKeys.includes(String(key))) ||
+      !keys.includes("model") ||
+      !keys.includes("family") ||
+      !keys.includes("totalTokens")
+    ) {
+      throw PROJECTION_ERROR;
+    }
+    const model = ownDataValue(rawModel, "model");
+    const family = ownDataValue(rawModel, "family");
+    const totalTokens = ownDataValue(rawModel, "totalTokens");
+    const inputTokens = keys.includes("inputTokens")
+      ? ownDataValue(rawModel, "inputTokens")
+      : undefined;
+    const outputTokens = keys.includes("outputTokens")
+      ? ownDataValue(rawModel, "outputTokens")
+      : undefined;
+    if (
+      typeof model !== "string" ||
+      model.length < 1 ||
+      model.length > MAX_TOKEN_TRACKER_MODEL_NAME_LENGTH ||
+      model.trim() !== model ||
+      typeof family !== "string" ||
+      !USAGE_FAMILY_SET.has(family as TokenMonsterUsageFamily) ||
+      !isSafeCount(totalTokens) ||
+      totalTokens > previousTotal ||
+      (inputTokens !== undefined && !isSafeCount(inputTokens)) ||
+      (outputTokens !== undefined && !isSafeCount(outputTokens))
+    ) {
+      throw PROJECTION_ERROR;
+    }
+    previousTotal = totalTokens;
+    return Object.freeze({
+      model,
+      family: family as TokenMonsterUsageFamily,
+      totalTokens,
+      ...(inputTokens === undefined ? {} : { inputTokens }),
+      ...(outputTokens === undefined ? {} : { outputTokens })
+    });
+  });
+  return Object.freeze({ window, models: Object.freeze(models) });
 }
 
 const STARTER_PROVIDER_KEYS = [
@@ -803,11 +991,12 @@ export function createCompanionGateway(
           sendRequestRejected(response, 405);
           return;
         }
-        const path = parseFixedPath(request, activeOrigin);
-        if (path === null) {
+        const target = parseFixedTarget(request, activeOrigin);
+        if (target === null) {
           sendRequestRejected(response, 404);
           return;
         }
+        const path = target.path;
         const acceptsJsonBody =
           request.method === "POST" &&
           (path === CHARACTER_SELECT_PATH || path === CHARACTER_WARDROBE_PATH);
@@ -949,6 +1138,64 @@ export function createCompanionGateway(
           sendBuffer(response, 200, asset.contentType, asset.body, {
             "Cache-Control": "public, max-age=31536000, immutable"
           });
+          return;
+        }
+        if (
+          path === USAGE_FAMILIES_API_PATH ||
+          path === USAGE_MODELS_API_PATH
+        ) {
+          if (request.method !== "GET") {
+            response.setHeader("Allow", "GET");
+            sendRequestRejected(response, 405);
+            return;
+          }
+          const query = parseUsageQuery(path, target.searchParams);
+          if (query === null) {
+            sendRequestRejected(response, 400);
+            return;
+          }
+          if (activeApiRequests >= MAX_CONCURRENT_API_REQUESTS) {
+            sendApiError(response, "sidecar-unavailable");
+            return;
+          }
+          activeApiRequests += 1;
+          try {
+            const toUtcDate = utcDateFromInstant(normalized.clock());
+            const range = Object.freeze({
+              fromUtcDate: addUtcDays(toUtcDate, -(query.window - 1)),
+              toUtcDate
+            });
+            if (path === USAGE_FAMILIES_API_PATH) {
+              const upstream = await withTimeout(
+                normalized.adapter.getDailyFamilySeries(range),
+                normalized.apiTimeoutMs
+              );
+              sendJson(
+                response,
+                200,
+                projectUsageFamiliesResponse(
+                  upstream,
+                  query.window,
+                  toUtcDate
+                )
+              );
+            } else {
+              const limit = query.limit!;
+              const upstream = await withTimeout(
+                normalized.adapter.getModelUsage({ ...range, limit }),
+                normalized.apiTimeoutMs
+              );
+              sendJson(
+                response,
+                200,
+                projectUsageModelsResponse(upstream, query.window, limit)
+              );
+            }
+          } catch (error) {
+            sendApiError(response, classifyApiError(error));
+          } finally {
+            activeApiRequests -= 1;
+          }
           return;
         }
         if (path === COLLECTOR_STATUS_PATH) {

@@ -28,5 +28,10 @@ export type {
   CompanionGatewayErrorCode,
   CompanionGatewayOptions,
   CompanionPeriodTotals,
-  CompanionUiAssets
+  CompanionUiAssets,
+  CompanionUsageFamiliesResponse,
+  CompanionUsageFamilyDay,
+  CompanionUsageModel,
+  CompanionUsageModelsResponse,
+  CompanionUsageWindow
 } from "./types.js";

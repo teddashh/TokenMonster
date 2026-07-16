@@ -1,16 +1,22 @@
 import { z } from "zod";
 
 import {
+  MAX_TOKEN_TRACKER_MODEL_NAME_LENGTH,
   MAX_TOKEN_TRACKER_RANGE_DAYS,
+  TOKEN_MONSTER_USAGE_FAMILIES,
   TOKEN_TRACKER_PROGRESSION_SOURCE_MAP,
   TOKEN_TRACKER_PROVIDER_SOURCE_MAP
 } from "./constants.js";
 import { TokenTrackerAdapterError } from "./errors.js";
 import type {
   TokenMonsterDailyAggregateResponse,
+  TokenMonsterModelUsageEntry,
+  TokenMonsterModelUsageResponse,
   TokenMonsterProgressionFamilyTotals,
   TokenMonsterProviderTotals,
-  TokenMonsterTokenLedger
+  TokenMonsterTokenLedger,
+  TokenMonsterUsageFamily,
+  TokenMonsterUsageFamilyTotals
 } from "./types.js";
 
 const SafeCountSchema = z
@@ -59,7 +65,7 @@ const ModelTotalsSchema = z
   .record(z.string().min(1).max(256), SafeCountSchema)
   .refine((models) => Object.keys(models).length <= 512);
 
-const ModelIdentifierSchema = z.string().min(1).max(256);
+const ModelIdentifierSchema = z.string().max(256);
 
 const ModelBreakdownTokenFields = {
   total_tokens: SafeCountSchema,
@@ -276,4 +282,130 @@ export function projectProgressionFamilyTotals(
   }
 
   return Object.freeze(totals);
+}
+
+export function emptyUsageFamilyTotals(): TokenMonsterUsageFamilyTotals {
+  return Object.freeze(
+    Object.fromEntries(TOKEN_MONSTER_USAGE_FAMILIES.map((family) => [family, 0]))
+  ) as TokenMonsterUsageFamilyTotals;
+}
+
+function analyticsFamilyForSource(
+  source: UpstreamModelBreakdownResponse["sources"][number]
+): TokenMonsterUsageFamily {
+  if (!Object.hasOwn(TOKEN_TRACKER_PROGRESSION_SOURCE_MAP, source.source)) {
+    return "other";
+  }
+  if (source.source_scope !== "local") {
+    throw new TokenTrackerAdapterError("incompatible-schema");
+  }
+  const sourceId =
+    source.source as keyof typeof TOKEN_TRACKER_PROGRESSION_SOURCE_MAP;
+  return TOKEN_TRACKER_PROGRESSION_SOURCE_MAP[sourceId];
+}
+
+function checkedTokenSum(left: number, right: number): number {
+  const total = left + right;
+  if (!Number.isSafeInteger(total)) {
+    throw new TokenTrackerAdapterError("incompatible-schema");
+  }
+  return total;
+}
+
+function assertUniqueSources(response: UpstreamModelBreakdownResponse): void {
+  const seenSources = new Set<string>();
+  for (const source of response.sources) {
+    if (seenSources.has(source.source)) {
+      throw new TokenTrackerAdapterError("incompatible-schema");
+    }
+    seenSources.add(source.source);
+  }
+}
+
+export function projectUsageFamilyTotals(
+  response: UpstreamModelBreakdownResponse
+): TokenMonsterUsageFamilyTotals {
+  assertUniqueSources(response);
+  const totals = { ...emptyUsageFamilyTotals() };
+  for (const source of response.sources) {
+    const family = analyticsFamilyForSource(source);
+    totals[family] = checkedTokenSum(
+      totals[family],
+      source.totals.total_tokens
+    );
+  }
+  return Object.freeze(totals);
+}
+
+export function projectModelUsage(
+  response: UpstreamModelBreakdownResponse,
+  limit: number
+): TokenMonsterModelUsageResponse {
+  assertUniqueSources(response);
+  const aggregated = new Map<
+    string,
+    {
+      model: string;
+      family: TokenMonsterUsageFamily;
+      totalTokens: number;
+      inputTokens: number;
+      outputTokens: number;
+    }
+  >();
+
+  for (const source of response.sources) {
+    const family = analyticsFamilyForSource(source);
+    for (const upstreamModel of source.models) {
+      const model = upstreamModel.model
+        .trim()
+        .slice(0, MAX_TOKEN_TRACKER_MODEL_NAME_LENGTH)
+        .trimEnd();
+      if (model.length === 0) continue;
+      const key = `${family}\u0000${model}`;
+      const existing = aggregated.get(key);
+      if (existing === undefined) {
+        aggregated.set(key, {
+          model,
+          family,
+          totalTokens: upstreamModel.totals.total_tokens,
+          inputTokens: upstreamModel.totals.input_tokens,
+          outputTokens: upstreamModel.totals.output_tokens
+        });
+        continue;
+      }
+      existing.totalTokens = checkedTokenSum(
+        existing.totalTokens,
+        upstreamModel.totals.total_tokens
+      );
+      existing.inputTokens = checkedTokenSum(
+        existing.inputTokens,
+        upstreamModel.totals.input_tokens
+      );
+      existing.outputTokens = checkedTokenSum(
+        existing.outputTokens,
+        upstreamModel.totals.output_tokens
+      );
+    }
+  }
+
+  const models = [...aggregated.values()]
+    .sort(
+      (left, right) =>
+        right.totalTokens - left.totalTokens ||
+        left.family.localeCompare(right.family) ||
+        left.model.localeCompare(right.model)
+    )
+    .slice(0, limit)
+    .map(
+      (model): TokenMonsterModelUsageEntry =>
+        Object.freeze({
+          model: model.model,
+          family: model.family,
+          totalTokens: model.totalTokens,
+          inputTokens: model.inputTokens,
+          outputTokens: model.outputTokens
+        })
+    );
+
+  return Object.freeze({ models: Object.freeze(models) });
 }

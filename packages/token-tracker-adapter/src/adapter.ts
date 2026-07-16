@@ -4,6 +4,7 @@ import { TextDecoder } from "node:util";
 import {
   DEFAULT_TOKEN_TRACKER_BASE_URL,
   DEFAULT_TOKEN_TRACKER_TIMEOUT_MS,
+  MAX_TOKEN_TRACKER_MODEL_USAGE_LIMIT,
   MAX_TOKEN_TRACKER_RANGE_DAYS,
   MAX_TOKEN_TRACKER_RESPONSE_BYTES,
   MAX_TOKEN_TRACKER_TIMEOUT_MS,
@@ -18,9 +19,12 @@ import {
   UpstreamModelBreakdownResponseSchema,
   UpstreamSummaryResponseSchema,
   projectDailyResponse,
+  emptyUsageFamilyTotals,
+  projectModelUsage,
   projectProgressionFamilyTotals,
   projectProviderTotals,
   projectTokenLedger,
+  projectUsageFamilyTotals,
   type UpstreamDailyResponse,
   type UpstreamModelBreakdownResponse,
   type UpstreamSummaryResponse
@@ -28,6 +32,8 @@ import {
 import type {
   TokenMonsterAggregateSummary,
   TokenMonsterDailyAggregateResponse,
+  TokenMonsterDailyFamilySeries,
+  TokenMonsterModelUsageResponse,
   TokenMonsterProgressionFamilyTotals,
   TokenMonsterProviderTotals,
   TokenTrackerAdapter,
@@ -36,12 +42,14 @@ import type {
   TokenTrackerFetch,
   TokenTrackerFetchRequestInit,
   TokenTrackerFetchResponse,
+  TokenTrackerModelUsageQuery,
   TokenTrackerProbe,
   TokenTrackerStreamReader
 } from "./types.js";
 
 const ABORTED = Symbol("token-tracker-request-aborted");
 const MAX_RESPONSE_CHUNKS = 2_048;
+const MAX_CONCURRENT_FAMILY_REQUESTS = 8;
 const OPTION_KEYS = new Set<PropertyKey>(["baseUrl", "fetch", "timeoutMs"]);
 const PROBE_RANGE = Object.freeze({
   fromUtcDate: "1970-01-01",
@@ -165,6 +173,68 @@ function normalizeRange(
     throw new TokenTrackerAdapterError("invalid-range");
   }
   return Object.freeze({ fromUtcDate: from, toUtcDate: to });
+}
+
+function normalizeModelUsageQuery(
+  query: TokenTrackerModelUsageQuery
+): Readonly<{
+  range: Readonly<TokenTrackerAggregateRange>;
+  limit: number;
+}> {
+  if (
+    !isPlainRecord(query) ||
+    Reflect.ownKeys(query).length !== 3 ||
+    !Reflect.ownKeys(query).includes("fromUtcDate") ||
+    !Reflect.ownKeys(query).includes("toUtcDate") ||
+    !Reflect.ownKeys(query).includes("limit")
+  ) {
+    throw new TokenTrackerAdapterError("invalid-range");
+  }
+  const limit = ownDataValue(query, "limit");
+  if (typeof limit !== "number" || !Number.isFinite(limit)) {
+    throw new TokenTrackerAdapterError("invalid-range");
+  }
+  return Object.freeze({
+    range: normalizeRange({
+      fromUtcDate: ownDataValue(query, "fromUtcDate") as string,
+      toUtcDate: ownDataValue(query, "toUtcDate") as string
+    }),
+    limit: Math.min(
+      MAX_TOKEN_TRACKER_MODEL_USAGE_LIMIT,
+      Math.max(1, Math.trunc(limit))
+    )
+  });
+}
+
+function eachUtcDate(range: TokenTrackerAggregateRange): readonly string[] {
+  const fromDay = utcDayNumber(range.fromUtcDate)!;
+  const toDay = utcDayNumber(range.toUtcDate)!;
+  const days: string[] = [];
+  for (let day = fromDay; day <= toDay; day += 1) {
+    days.push(new Date(day * 86_400_000).toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  project: (value: T) => Promise<R>
+): Promise<readonly R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, values.length) },
+    async () => {
+      while (nextIndex < values.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await project(values[index]!);
+      }
+    }
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 function buildEndpoint(
@@ -462,6 +532,45 @@ export function createTokenTrackerAdapter(
       range: TokenTrackerAggregateRange
     ): Promise<TokenMonsterProgressionFamilyTotals> {
       return projectProgressionFamilyTotals(await fetchModelBreakdown(range));
+    },
+
+    async getDailyFamilySeries(
+      rangeInput: TokenTrackerAggregateRange
+    ): Promise<TokenMonsterDailyFamilySeries> {
+      const range = normalizeRange(rangeInput);
+      const daily = projectDailyResponse(await fetchDaily(range));
+      const activeDates = daily.days.map((day) => day.utcDate);
+      const activeTotals = await mapWithConcurrency(
+        activeDates,
+        MAX_CONCURRENT_FAMILY_REQUESTS,
+        async (utcDate) =>
+          projectUsageFamilyTotals(
+            await fetchModelBreakdown({
+              fromUtcDate: utcDate,
+              toUtcDate: utcDate
+            })
+          )
+      );
+      const byDate = new Map(
+        activeDates.map((utcDate, index) => [utcDate, activeTotals[index]!])
+      );
+      const days = eachUtcDate(range).map((utcDate) =>
+        Object.freeze({
+          utcDate,
+          families: byDate.get(utcDate) ?? emptyUsageFamilyTotals()
+        })
+      );
+      return Object.freeze({ days: Object.freeze(days) });
+    },
+
+    async getModelUsage(
+      query: TokenTrackerModelUsageQuery
+    ): Promise<TokenMonsterModelUsageResponse> {
+      const normalizedQuery = normalizeModelUsageQuery(query);
+      return projectModelUsage(
+        await fetchModelBreakdown(normalizedQuery.range),
+        normalizedQuery.limit
+      );
     }
   });
 }
