@@ -89,7 +89,9 @@ function closeView(
   gatewayView: WebContentsView | null
 ): void {
   if (gatewayView === null) return;
-  shellWindow.contentView.removeChildView(gatewayView);
+  if (!shellWindow.isDestroyed()) {
+    shellWindow.contentView.removeChildView(gatewayView);
+  }
   if (!gatewayView.webContents.isDestroyed()) gatewayView.webContents.close();
 }
 
@@ -125,8 +127,16 @@ export async function startPetCompanion(): Promise<void> {
   });
   shellWindow.setAlwaysOnTop(pinned, "floating");
   shellWindow.setMenu(null);
+  shellWindow.on("close", (event) => {
+    // Alt+F4 / window-manager close would destroy the shell and crash every
+    // later tray or activate callback; the pet hides to the tray instead.
+    if (quittingAllowed) return;
+    event.preventDefault();
+    hideWindow();
+  });
 
   const loadShell = async (): Promise<void> => {
+    if (shellWindow.isDestroyed()) return;
     await shellWindow.loadURL(petShellDataUrl(shellStatus, pinned));
   };
 
@@ -155,6 +165,7 @@ export async function startPetCompanion(): Promise<void> {
   };
 
   const showWindow = (): void => {
+    if (shellWindow.isDestroyed()) return;
     if (shellWindow.isMinimized()) shellWindow.restore();
     shellWindow.show();
     shellWindow.focus();
@@ -162,6 +173,7 @@ export async function startPetCompanion(): Promise<void> {
   };
 
   const hideWindow = (): void => {
+    if (shellWindow.isDestroyed()) return;
     shellWindow.hide();
     rebuildTrayMenu();
   };
@@ -196,17 +208,21 @@ export async function startPetCompanion(): Promise<void> {
     try {
       await dashboard.loadURL(`${activeServices.origin}/`);
     } catch {
-      dashboard.destroy();
+      if (!dashboard.isDestroyed()) dashboard.destroy();
     }
   };
 
   function rebuildTrayMenu(): void {
-    if (tray === null) return;
+    if (tray === null || shellWindow.isDestroyed()) return;
     tray.setContextMenu(
       Menu.buildFromTemplate([
         {
           label: shellWindow.isVisible() ? "隱藏 TokenMonster" : "顯示 TokenMonster",
-          click: () => (shellWindow.isVisible() ? hideWindow() : showWindow())
+          click: () => {
+            if (shellWindow.isDestroyed()) return;
+            if (shellWindow.isVisible()) hideWindow();
+            else showWindow();
+          }
         },
         {
           label: pinned ? "取消置頂" : "保持置頂",
@@ -331,7 +347,11 @@ export async function startPetCompanion(): Promise<void> {
 
   tray = new Tray(await app.getFileIcon(process.execPath, { size: "small" }));
   tray.setToolTip("TokenMonster");
-  tray.on("click", () => (shellWindow.isVisible() ? hideWindow() : showWindow()));
+  tray.on("click", () => {
+    if (shellWindow.isDestroyed()) return;
+    if (shellWindow.isVisible()) hideWindow();
+    else showWindow();
+  });
   rebuildTrayMenu();
 
   activeController = Object.freeze({ show: showWindow });
