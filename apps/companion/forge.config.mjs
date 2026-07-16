@@ -132,7 +132,9 @@ async function findRuntimeSnapshots(directory, depth = 0) {
       snapshots.push(...(await findRuntimeSnapshots(path, depth + 1)));
     } else if (
       metadata.isFile() &&
-      entry.name === "v8_context_snapshot.bin"
+      // macOS names the snapshot per-arch (v8_context_snapshot.arm64.bin)
+      // inside Electron Framework.framework; Linux/Windows use the bare name.
+      /^v8_context_snapshot(?:\.(?:arm64|x86_64))?\.bin$/u.test(entry.name)
     ) {
       snapshots.push(path);
     }
@@ -156,6 +158,8 @@ async function prepareBrowserProcessSnapshots(
     );
   }
   for (const source of sources) {
+    // The LoadBrowserProcessSpecificV8Snapshot fuse reads this literal name
+    // on every platform, without the macOS arch infix.
     const destination = join(dirname(source), "browser_v8_context_snapshot.bin");
     try {
       await lstat(destination);
