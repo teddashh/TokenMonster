@@ -18,6 +18,7 @@ import {
   UpstreamModelBreakdownResponseSchema,
   UpstreamSummaryResponseSchema,
   projectDailyResponse,
+  projectProgressionFamilyTotals,
   projectProviderTotals,
   projectTokenLedger,
   type UpstreamDailyResponse,
@@ -27,6 +28,7 @@ import {
 import type {
   TokenMonsterAggregateSummary,
   TokenMonsterDailyAggregateResponse,
+  TokenMonsterProgressionFamilyTotals,
   TokenMonsterProviderTotals,
   TokenTrackerAdapter,
   TokenTrackerAdapterOptions,
@@ -454,6 +456,12 @@ export function createTokenTrackerAdapter(
       range: TokenTrackerAggregateRange
     ): Promise<TokenMonsterProviderTotals> {
       return projectProviderTotals(await fetchModelBreakdown(range));
+    },
+
+    async getProgressionFamilyTotals(
+      range: TokenTrackerAggregateRange
+    ): Promise<TokenMonsterProgressionFamilyTotals> {
+      return projectProgressionFamilyTotals(await fetchModelBreakdown(range));
     }
   });
 }

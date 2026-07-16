@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   MAX_TOKEN_TRACKER_RESPONSE_BYTES,
   SUPPORTED_TOKEN_TRACKER_VERSION,
+  TOKEN_TRACKER_PROGRESSION_SOURCE_MAP,
   TOKEN_TRACKER_PROVIDER_SOURCE_MAP,
   TOKEN_TRACKER_USAGE_MODEL_BREAKDOWN_PATH,
   TokenTrackerAdapterError,
@@ -444,6 +445,81 @@ describe("content-blind TokenMonster projection", () => {
       google: 0,
       xai: 0
     });
+  });
+
+  it("projects all progression families and aggregates unknown source IDs as other", async () => {
+    const sources = [
+      modelBreakdownSource("codex", 11),
+      modelBreakdownSource("claude", 12),
+      modelBreakdownSource("gemini", 13),
+      modelBreakdownSource("grok", 14),
+      modelBreakdownSource("deepseek", 15),
+      modelBreakdownSource("qwen", 16),
+      modelBreakdownSource("mistral", 17),
+      modelBreakdownSource("venice", 18),
+      modelBreakdownSource("sakana", 19),
+      modelBreakdownSource("perplexity", 20),
+      modelBreakdownSource("glm", 21),
+      modelBreakdownSource("future-tool", 22),
+      modelBreakdownSource("Codex", 23)
+    ];
+    const result = await createTokenTrackerAdapter({
+      fetch: injectedFetch(modelBreakdownBody({ sources }))
+    }).getProgressionFamilyTotals({
+      fromUtcDate: "2026-07-01",
+      toUtcDate: "2026-07-02"
+    });
+
+    expect(TOKEN_TRACKER_PROGRESSION_SOURCE_MAP).toEqual({
+      codex: "openai",
+      claude: "anthropic",
+      gemini: "google",
+      grok: "xai",
+      deepseek: "deepseek",
+      qwen: "qwen",
+      mistral: "mistral",
+      venice: "venice",
+      sakana: "sakana",
+      perplexity: "perplexity",
+      glm: "glm"
+    });
+    expect(result).toEqual({
+      openai: 11,
+      anthropic: 12,
+      google: 13,
+      xai: 14,
+      deepseek: 15,
+      qwen: 16,
+      mistral: 17,
+      venice: 18,
+      sakana: 19,
+      perplexity: 20,
+      glm: 21,
+      other: 45
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("future-tool");
+    expect(JSON.stringify(result)).not.toContain("Codex");
+  });
+
+  it("rejects duplicate raw sources in the progression projection", async () => {
+    const adapter = createTokenTrackerAdapter({
+      fetch: injectedFetch(
+        modelBreakdownBody({
+          sources: [
+            modelBreakdownSource("future-tool", 10),
+            modelBreakdownSource("future-tool", 20)
+          ]
+        })
+      )
+    });
+
+    await expect(
+      adapter.getProgressionFamilyTotals({
+        fromUtcDate: "2026-07-01",
+        toUtcDate: "2026-07-02"
+      })
+    ).rejects.toMatchObject({ code: "incompatible-schema" });
   });
 });
 

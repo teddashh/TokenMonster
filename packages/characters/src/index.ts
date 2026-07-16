@@ -7,3 +7,4 @@ export * from "./starter-selection.js";
 export * from "./asset-manifest.js";
 export * from "./progression.js";
 export * from "./progression-store.js";
+export * from "./approved-manifest.js";
