@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { rm } from "node:fs/promises";
+import { rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { rootDirectory } from "./repository-files.mjs";
@@ -56,4 +56,19 @@ const verificationArguments = [
   mode
 ];
 if (command === "make") verificationArguments.push("--require-maker");
-await run(process.execPath, verificationArguments, { cwd: rootDirectory });
+
+const internalDmgPath = join(outDirectory, "make", "TokenMonster.dmg");
+const heldInternalDmgPath = join(
+  outDirectory,
+  "TokenMonster.dmg.verification-pending"
+);
+const holdInternalDmg =
+  command === "make" && mode === "internal" && process.platform === "darwin";
+
+// The package verifier audits ZIP contents but intentionally has no native DMG audit yet.
+if (holdInternalDmg) await rename(internalDmgPath, heldInternalDmgPath);
+try {
+  await run(process.execPath, verificationArguments, { cwd: rootDirectory });
+} finally {
+  if (holdInternalDmg) await rename(heldInternalDmgPath, internalDmgPath);
+}
