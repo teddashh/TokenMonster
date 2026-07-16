@@ -239,6 +239,9 @@ function evaluateStore(store: LocalProgressionStore, evaluatedAt: string): Progr
   return evaluateProgression({
     schemaVersion: PROGRESSION_SCHEMA_VERSION,
     evaluatedAt,
+    evaluationUtcDate: evaluatedAt.slice(0, 10),
+    baseline: store.lifetime.baseline,
+    baselineActiveDays: store.lifetime.baselineActiveDays,
     dailyProviderBuckets: store.lifetime.dailyProviderBuckets,
     traitIds: [],
     persistedUnlockedAt: store.unlockedAt,
@@ -250,6 +253,7 @@ function fallbackProgression(evaluatedAt: string): ProgressionState {
   return evaluateProgression({
     schemaVersion: PROGRESSION_SCHEMA_VERSION,
     evaluatedAt,
+    evaluationUtcDate: evaluatedAt.slice(0, 10),
     dailyProviderBuckets: [],
     traitIds: [],
     persistedUnlockedAt: {},
