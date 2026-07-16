@@ -233,7 +233,7 @@ describe("evaluateProgression", () => {
     );
     expect(character(three, "sakana").progress).toEqual({
       value: 0.75,
-      explanation: "Used 3 different providers — 1 more to meet Sakana.",
+      explanation: "已使用 3 個不同的 provider，再使用 1 個即可解鎖 Sakana。",
     });
     expect(character(three, "sakana").unlocked).toBe(false);
 
@@ -330,8 +330,7 @@ describe("evaluateProgression", () => {
       unlockedAt: EVALUATED_AT,
       progress: {
         value: 1,
-        explanation:
-          "Mistral remains unlocked because local unlocks never re-lock.",
+        explanation: "Mistral 已解鎖；本機解鎖不會倒退。",
       },
     });
     expect(
