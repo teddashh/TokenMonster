@@ -91,10 +91,10 @@ Trust-boundary rules:
   redistribution rights.
 - Numeric starter provider totals and upstream model/source metadata stop
   before the gateway. The UI receives only the starter decision, and its manual
-  override currently lasts only for the in-memory UI session.
-- No cloud character-asset runtime is implemented. Any future runtime trusts a
-  release-embedded approved manifest, not a mutable live manifest or URL
-  supplied by upstream data.
+  override is stored only in app-private local progression/preferences state.
+- The character-asset runtime trusts a release-embedded strict manifest, not a
+  mutable live manifest or URL supplied by upstream data. It fetches only
+  hash-named objects from the fixed HTTPS CDN origin after local unlock.
 
 ## 3. Threat actors and assumptions
 
@@ -146,9 +146,9 @@ The product removes incentives to inflate and discloses these limits.
 | OPS-01 | D1/cache loss makes counter unrecoverable | Anonymous rollups + current canonical rows; daily logical exports; rebuild/restore drill | Scheduled restore drill | Blocker for GA |
 | OPS-02 | Logs/backups retain secrets or forbidden bodies | Body/header logging disabled, structured redaction, access control, retention policy | Canary scan and access review | Blocker |
 | SUP-01 | npm/GitHub Action/update supply-chain compromise | Exact pins/lockfile, action commit SHAs, audit/SBOM, reviewed update PR, signed/checksummed desktop artifacts | CI/release attestation | Blocker for GA |
-| AST-01 | Unlicensed or provider-branded art ships | Manifest defaults blocked, immutable source hash, owner grant, brand review, build allowlist | Release artifact inventory | Blocker for external Alpha |
-| AST-02 | Future asset runtime accepts a substituted origin/object or displays tampered content | Release-embedded approved manifest; one exact AI-Sister HTTPS CDN origin; immutable keys; SHA-256, byte-size, and MIME verification; content-addressed verified cache; code-native fallback | Redirect/origin, hash/size/MIME, cache-corruption, and offline-fallback tests | Not implemented; blocker before enablement |
-| AST-03 | Future asset GET leaks usage or is described as anonymous even though the CDN sees object/IP | Fixed public object key with no query parameters; never attach token/provider totals, starter rationale, user/install ID, or local path; explicit disclosure and bounded CDN logging review | Packet capture plus CDN configuration/privacy review | Not implemented; blocker before enablement |
+| AST-01 | Unlicensed or provider-branded art ships | Release-embedded allowlist, immutable source hash, rights/brand review, build inventory | Release artifact inventory | Blocker for every asset update |
+| AST-02 | Asset runtime accepts a substituted origin/object or displays tampered content | Release-embedded strict manifest; fixed HTTPS CDN origin; immutable hash-named keys; SHA-256 and response-size verification; verified cache; letter fallback | Redirect/origin, hash/size, cache-corruption, and offline-fallback tests | Implemented; regression blocker |
+| AST-03 | Asset GET leaks usage or is described as anonymous even though the CDN sees object/IP | Fixed public object key with no query parameters; never attach token/provider totals, starter rationale, user/install ID, or local path; explicit disclosure; `--no-character-downloads` | Packet capture plus CDN configuration/privacy review | Implemented; regression blocker |
 
 ## 5. Collector process policy
 
@@ -214,8 +214,8 @@ Public totals are computed from accepted rows/rollups, not a blind
 - Character traits use local content-blind aggregates. Missing task metadata
   cannot be replaced with guesses such as “debugging” or “researching.”
 - Starter selection reduces the local 28-day model breakdown to four transient
-  provider totals, then exposes only a coarse decision. Manual selection is an
-  in-memory UI-session value and is not uploaded or currently persisted.
+  provider totals, then exposes only a coarse decision. Manual selection is
+  persisted only in app-private local JSON and is never uploaded.
 - Public breakdowns require 20 eligible current contributors; otherwise merge
   into `other` or suppress.
 - Revocation invalidates credentials immediately. Current attributable data
@@ -241,8 +241,8 @@ Required automated suites:
 - deletion across current bucket, share, cache, consent, and credential;
 - clean build, audit, SBOM, secret scan, signed artifact inventory, and restore
   drill before GA.
-- Before any character-asset egress is enabled: exact-origin/redirect denial,
-  embedded-manifest, SHA-256/size/MIME, cache-corruption, no-query packet
+- Character-asset egress: exact-origin/redirect denial, embedded-manifest,
+  SHA-256/size/MIME, cache-corruption, no-query packet
   capture, CDN disclosure/logging, and local-fallback tests.
 
 If a forbidden field or secret reaches cloud wire, persistence, logs,
