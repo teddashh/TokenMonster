@@ -1,5 +1,13 @@
 # TokenMonster companion
 
+The default Electron entry is the small floating pet shell. It owns the
+TokenTracker runtime and loopback companion gateway, embeds the gateway UI in a
+sandboxed `WebContentsView`, and never opens a browser tab. Start it with
+`npm start --workspace @tokenmonster/companion`. The migration-only legacy
+Electron experience remains available for local maintenance with
+`npm start --workspace @tokenmonster/companion -- --legacy`; it is not the
+default product entry.
+
 This workspace is the local Electron companion. It presents four rights-safe,
 code-native letter placeholders, deterministic offline fixed lines, a
 content-blind local SQLite store, 7/28-day provider/tool insights, safe local
