@@ -22,6 +22,11 @@
     ],
     "generatedRoot": "dist"
   },
+  "sidecar": {
+    "package": "tokentracker-cli",
+    "version": "0.80.0",
+    "extraResourceTarget": "sidecar"
+  },
   "collector": {
     "status": "ready",
     "signedReleaseStatus": "blocked-native-resigning-audit",
