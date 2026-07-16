@@ -8,8 +8,10 @@ import {
   Tray,
   WebContentsView,
   ipcMain,
+  nativeImage,
   session,
-  type IpcMainInvokeEvent
+  type IpcMainInvokeEvent,
+  type NativeImage
 } from "electron";
 
 import { installSessionGuards } from "../security.js";
@@ -34,14 +36,32 @@ const PET_SESSION_PARTITION = "persist:tokenmonster-pet";
 const PET_STATE_FILE = "pet-window-state.json";
 // CI smoke mode: report the boot outcome on stdout and exit, so the packaged
 // app (not just the dev tree) proves the sidecar and gateway actually start.
-const SMOKE_MODE = process.env["TOKENMONSTER_SMOKE"] === "1";
+// Dual-gated (env var AND argv flag) so an inherited environment variable
+// alone can never flip a real user's install into exit-after-boot behavior.
+const SMOKE_MODE =
+  process.env["TOKENMONSTER_SMOKE"] === "1" &&
+  process.argv.includes("--tokenmonster-smoke");
+const SMOKE_EXIT_TIMEOUT_MS = 10_000;
 
-function reportSmokeOutcome(outcome: "ok" | "gateway" | "sidecar"): void {
+function reportSmokeOutcome(
+  outcome: "ok" | "gateway" | "sidecar",
+  windDown: () => Promise<void>
+): void {
   if (!SMOKE_MODE) return;
   process.stdout.write(
     outcome === "ok" ? "TOKENMONSTER_SMOKE_OK\n" : `TOKENMONSTER_SMOKE_FAIL:${outcome}\n`
   );
-  app.exit(outcome === "ok" ? 0 : 1);
+  const code = outcome === "ok" ? 0 : 1;
+  // Wind services down first so the sidecar exits cleanly instead of being
+  // torn down mid-write by app.exit; bound the wait so a wedged shutdown
+  // cannot hang CI.
+  const forced = setTimeout(() => app.exit(code), SMOKE_EXIT_TIMEOUT_MS);
+  void windDown()
+    .catch(() => undefined)
+    .finally(() => {
+      clearTimeout(forced);
+      app.exit(code);
+    });
 }
 const PET_SHELL_CHANNELS = Object.freeze({
   hideWindow: "tokenmonster:pet:hide-window",
@@ -273,7 +293,10 @@ export async function startPetCompanion(): Promise<void> {
   };
 
   const showFailure = async (kind: "gateway" | "sidecar"): Promise<void> => {
-    reportSmokeOutcome(kind);
+    if (SMOKE_MODE) {
+      reportSmokeOutcome(kind, stopActiveServices);
+      return;
+    }
     await stopActiveServices();
     shellStatus = Object.freeze({
       kind: "error",
@@ -314,7 +337,7 @@ export async function startPetCompanion(): Promise<void> {
         if (services !== started) return;
         shellStatus = Object.freeze({ kind: "ready" });
         await loadShell();
-        reportSmokeOutcome("ok");
+        reportSmokeOutcome("ok", stopActiveServices);
 
         void started.runtime.closed.then((exit) => {
           if (services === started && !exit.expected) {
@@ -322,6 +345,9 @@ export async function startPetCompanion(): Promise<void> {
           }
         });
       } catch (error: unknown) {
+        // Local stderr only: the failure page hides every detail by design,
+        // which would make packaged-app startup failures undiagnosable.
+        console.error("TokenMonster pet startup failed:", error);
         await showFailure(
           error instanceof PetStartupError ? error.kind : "gateway"
         );
@@ -358,7 +384,15 @@ export async function startPetCompanion(): Promise<void> {
   shellWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   shellWindow.webContents.on("will-navigate", (event) => event.preventDefault());
 
-  tray = new Tray(await app.getFileIcon(process.execPath, { size: "small" }));
+  let trayIcon: NativeImage;
+  try {
+    trayIcon = await app.getFileIcon(process.execPath, { size: "small" });
+  } catch {
+    // Iconless environments (e.g. bare X under CI) have no file icon; a
+    // blank tray image keeps the menu and click target functional.
+    trayIcon = nativeImage.createEmpty();
+  }
+  tray = new Tray(trayIcon);
   tray.setToolTip("TokenMonster");
   tray.on("click", () => {
     if (shellWindow.isDestroyed()) return;

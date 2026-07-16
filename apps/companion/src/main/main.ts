@@ -615,7 +615,10 @@ async function startCompanion(): Promise<void> {
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createWindow().catch(() => app.exit(1));
+      void createWindow().catch((error: unknown) => {
+        console.error("TokenMonster window creation failed:", error);
+        app.exit(1);
+      });
     }
   });
 }
@@ -637,7 +640,11 @@ if (!ownsSingleInstance) {
   void app
     .whenReady()
     .then(petMode ? startPetCompanion : startCompanion)
-    .catch(() => app.exit(1));
+    .catch((error: unknown) => {
+      // Local stderr only: a silent exit(1) is undiagnosable in the field.
+      console.error("TokenMonster startup failed:", error);
+      app.exit(1);
+    });
 }
 
 app.on("before-quit", () => {
