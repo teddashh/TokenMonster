@@ -1119,6 +1119,9 @@ export function createCompanionGateway(
       ) {
         state = "closed";
         server.closeAllConnections();
+        await new Promise<void>((resolve) => {
+          server.close(() => resolve());
+        });
         throw new CompanionGatewayError("invalid-configuration");
       }
       const boundPort = (address as AddressInfo).port;
