@@ -1,5 +1,7 @@
+import { readFile } from "node:fs/promises";
 import Module, { createRequire } from "node:module";
 import { join } from "node:path";
+import { Script } from "node:vm";
 
 import { rootDirectory } from "./repository-files.mjs";
 
@@ -224,6 +226,25 @@ try {
 }
 if (!rejected || calls.length !== expectedCalls.length) {
   throw new Error("Bundled preload did not reject invalid input before IPC.");
+}
+
+// The sidecar shim is forked as its own file inside a utilityProcess.
+// Syntax-check the source (vite copies it into dist verbatim; the package
+// verifier asserts the dist copy ships) without executing — running it
+// would process.exit().
+const shimPath = join(
+  rootDirectory,
+  "apps",
+  "companion",
+  "src",
+  "main",
+  "pet",
+  "sidecar-shim.cjs"
+);
+const shimSource = await readFile(shimPath, "utf8");
+new Script(shimSource, { filename: "sidecar-shim.cjs" });
+if (!shimSource.includes("process.exit")) {
+  throw new Error("Bundled sidecar shim lost its explicit-exit contract.");
 }
 
 process.stdout.write("Verified bundled preload API and guarded IPC dispatch.\n");

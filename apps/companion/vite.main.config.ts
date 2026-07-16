@@ -41,8 +41,24 @@ const copyCompanionUi = () => ({
   }
 });
 
+// The sidecar shim is forked by utilityProcess as its own file; it must not
+// be bundled into main.js, so it is copied verbatim next to it.
+const copySidecarShim = () => ({
+  name: "tokenmonster-copy-sidecar-shim",
+  async writeBundle(): Promise<void> {
+    const destinationDirectory = fileURLToPath(
+      new URL("dist/main/main/", import.meta.url)
+    );
+    await mkdir(destinationDirectory, { recursive: true });
+    await copyFile(
+      fileURLToPath(new URL("src/main/pet/sidecar-shim.cjs", import.meta.url)),
+      join(destinationDirectory, "sidecar-shim.cjs")
+    );
+  }
+});
+
 export default defineConfig({
-  plugins: [copyCompanionUi()],
+  plugins: [copyCompanionUi(), copySidecarShim()],
   build: {
     emptyOutDir: true,
     lib: {

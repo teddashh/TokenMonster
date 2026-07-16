@@ -519,6 +519,20 @@ async function expectedAsarFiles() {
   files.push(
     ...(await walkFiles(join(companionDirectory, manifest.asar.generatedRoot)))
   );
+  // The utilityProcess sidecar shim must ship inside the ASAR. It reaches
+  // dist via a vite copy step, so a silently skipped copy would drop it from
+  // both sides of the staged-vs-workspace comparison and pass unnoticed —
+  // while the packaged app boots without a working sidecar.
+  const shimFile = join(
+    companionDirectory,
+    "dist",
+    "main",
+    "main",
+    "sidecar-shim.cjs"
+  );
+  if (!files.includes(shimFile)) {
+    throw new Error("Packaged ASAR staging is missing the sidecar shim.");
+  }
   return files.sort();
 }
 
@@ -1009,11 +1023,13 @@ function zipEntryKindAndMode(entry) {
   }
   if (
     !Number.isSafeInteger(entry.uncompressedSize) ||
-    entry.uncompressedSize < 1 ||
+    entry.uncompressedSize < 0 ||
     entry.uncompressedSize > 256 * 1024 * 1024
   ) {
     throw new Error("Maker ZIP file size is outside the release bound.");
   }
+  // Zero-byte regular files are legitimate: the sidecar dependency tree
+  // ships several (npm package fixtures like node-addon-api/nothing.c).
   return { kind: "file", mode: unixMode & 0o777 };
 }
 
