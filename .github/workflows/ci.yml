@@ -165,3 +165,75 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 30
+
+  release-smoke:
+    name: Release smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-15
+          - windows-2025
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install exact dependencies
+        shell: bash
+        run: npm ci
+
+      - name: Build release artifact
+        shell: bash
+        run: node scripts/release/build-release.mjs --version-suffix "ci.${{ github.run_id }}"
+
+      - name: Reject binary assets in release tarball
+        shell: bash
+        run: |
+          tarballs=(dist-release/tokenmonster-*.tgz)
+          if [[ "${#tarballs[@]}" -ne 1 || ! -f "${tarballs[0]}" ]]; then
+            echo "Expected exactly one release tarball" >&2
+            exit 1
+          fi
+          archive_entries="${{ runner.temp }}/tokenmonster-release-entries.txt"
+          tar -tzf "${tarballs[0]}" > "$archive_entries"
+          if forbidden_entries="$(grep -E '\.(webp|png|jpg|jpeg|gif|wav|mp3|node)$' "$archive_entries")"; then
+            echo "Release tarball contains forbidden binary assets:" >&2
+            echo "$forbidden_entries" >&2
+            exit 1
+          fi
+
+      - name: Install release tarball locally
+        shell: bash
+        run: |
+          tarballs=(dist-release/tokenmonster-*.tgz)
+          if [[ "${#tarballs[@]}" -ne 1 || ! -f "${tarballs[0]}" ]]; then
+            echo "Expected exactly one release tarball" >&2
+            exit 1
+          fi
+          tarball="$(cd "$(dirname "${tarballs[0]}")" && pwd)/$(basename "${tarballs[0]}")"
+          install_dir="${{ runner.temp }}/tokenmonster-install"
+          mkdir -p "$install_dir"
+          cd "$install_dir"
+          npm install "$tarball"
+
+      - name: Smoke-test installed release
+        shell: bash
+        run: node scripts/release/smoke-installed.mjs "${{ runner.temp }}/tokenmonster-install"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tokenmonster-release-${{ matrix.os }}
+          path: |
+            dist-release/*.tgz
+            dist-release/SHASUMS256.txt
+          retention-days: 7
