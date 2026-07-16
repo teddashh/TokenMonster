@@ -19,6 +19,20 @@ export const TOKEN_TRACKER_PROVIDER_SOURCE_MAP = Object.freeze({
   grok: "xai"
 } as const);
 
+export const TOKEN_TRACKER_PROGRESSION_SOURCE_MAP = Object.freeze({
+  codex: "openai",
+  claude: "anthropic",
+  gemini: "google",
+  grok: "xai",
+  deepseek: "deepseek",
+  qwen: "qwen",
+  mistral: "mistral",
+  venice: "venice",
+  sakana: "sakana",
+  perplexity: "perplexity",
+  glm: "glm"
+} as const);
+
 export const DEFAULT_TOKEN_TRACKER_TIMEOUT_MS = 2_000;
 export const MAX_TOKEN_TRACKER_TIMEOUT_MS = 10_000;
 export const MAX_TOKEN_TRACKER_RESPONSE_BYTES = 512 * 1_024;

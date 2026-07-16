@@ -1,5 +1,6 @@
 export { openTokenMonsterBrowser } from "./browser.js";
 export {
+  DEFAULT_CHARACTER_CDN_BASE_URL,
   TOKENMONSTER_CLI_VERSION,
   runTokenMonster,
   waitForTokenMonsterTermination
