@@ -524,7 +524,21 @@ async function assertAsarInventory(asarPath, extractedDirectory) {
       throw new Error(`ASAR file exceeds the 8 MiB bound: ${relativePath}`);
     }
     if (!contents.equals(expectedContents)) {
-      throw new Error(`Packaged file differs from built input: ${relativePath}`);
+      const bound = Math.min(contents.byteLength, expectedContents.byteLength);
+      let difference = 0;
+      while (
+        difference < bound &&
+        contents[difference] === expectedContents[difference]
+      ) {
+        difference += 1;
+      }
+      throw new Error(
+        `Packaged file differs from built input: ${relativePath} ` +
+          `(packaged ${contents.byteLength}B vs built ${expectedContents.byteLength}B; ` +
+          `first difference at byte ${difference}: ` +
+          `${contents.subarray(difference, difference + 8).toString("hex")} vs ` +
+          `${expectedContents.subarray(difference, difference + 8).toString("hex")})`
+      );
     }
 
     const lowerPath = relativePath.toLowerCase();
