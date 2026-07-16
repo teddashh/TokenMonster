@@ -43,6 +43,8 @@ export interface TokenMonsterCliDependencies {
 
 export interface RunTokenMonsterOptions {
   readonly argv?: readonly string[];
+  readonly environment?: Readonly<Record<string, string | undefined>>;
+  readonly homeDirectory?: string;
   readonly stdout?: TokenMonsterOutput | Pick<Writable, "write">;
   readonly stderr?: TokenMonsterOutput | Pick<Writable, "write">;
   readonly dependencies?: Partial<TokenMonsterCliDependencies>;
