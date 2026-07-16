@@ -13,6 +13,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
   min-width: 20rem;
 }
@@ -150,23 +154,49 @@ html[data-connection="error"] .status-dot {
 }
 
 .companion-panel {
+  position: relative;
+  grid-column: 1 / -1;
   display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   min-height: 31rem;
-  place-items: center;
-  align-content: center;
-  padding: clamp(2rem, 5vw, 4rem);
-  overflow: hidden;
+  padding: clamp(1.35rem, 3vw, 2.4rem);
+  overflow: clip;
   background:
     linear-gradient(160deg, rgb(240 255 247 / 88%), rgb(255 246 224 / 88%)),
     rgb(255 253 248 / 82%);
+  text-align: left;
+}
+
+.character-stage {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  align-content: center;
+  padding: 1rem;
   text-align: center;
 }
 
 .companion-visual {
   position: relative;
-  width: 13.5rem;
-  height: 14rem;
+  width: min(17rem, 100%);
+  height: 18rem;
   margin-bottom: 1.5rem;
+}
+
+.letter-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.character-doll {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: 50% 90%;
+  animation: character-idle 4.8s ease-in-out infinite alternate;
 }
 
 .companion-face {
@@ -177,8 +207,8 @@ html[data-connection="error"] .status-dot {
   place-items: center;
   border: 0.35rem solid #173f35;
   border-radius: 44% 44% 48% 48% / 40% 40% 56% 56%;
-  color: #173f35;
-  background: #bdebd8;
+  color: var(--letter-foreground, #173f35);
+  background: var(--letter-background, #bdebd8);
   box-shadow:
     inset 0 -1rem 0 rgb(70 158 130 / 13%),
     0 0.7rem 0 #173f35,
@@ -199,7 +229,7 @@ html[data-connection="error"] .status-dot {
   width: 0.55rem;
   height: 0.72rem;
   border-radius: 50%;
-  background: #173f35;
+  background: var(--letter-foreground, #173f35);
 }
 
 .companion-eye-left {
@@ -218,7 +248,7 @@ html[data-connection="error"] .status-dot {
   height: 4.4rem;
   border: 0.32rem solid #173f35;
   border-radius: 50% 50% 22% 55%;
-  background: #f2bc68;
+  background: var(--letter-accent, #f2bc68);
 }
 
 .companion-ear-left {
@@ -240,6 +270,16 @@ html[data-connection="error"] .status-dot {
   border-radius: 50%;
   background: rgb(23 63 53 / 15%);
   filter: blur(0.3rem);
+}
+
+@keyframes character-idle {
+  from {
+    transform: translateY(0) rotate(-0.35deg) scale(1);
+  }
+
+  to {
+    transform: translateY(-1%) rotate(0.35deg) scale(1.01);
+  }
 }
 
 .eyebrow {
@@ -338,9 +378,238 @@ h2 {
 
 .retry-button:focus-visible,
 .brand:focus-visible,
-.character-options button:focus-visible {
+.roster-chip:focus-visible,
+.wardrobe-item:focus-visible,
+.wardrobe-toggle:focus-visible,
+.voice-toggle:focus-visible,
+.voice-hint:focus-visible {
   outline: 0.2rem solid #c37b23;
   outline-offset: 0.2rem;
+}
+
+.character-controls {
+  min-width: 0;
+  padding: clamp(1rem, 3vw, 2rem);
+  border-left: 1px solid rgb(49 52 46 / 9%);
+}
+
+.character-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.character-heading p {
+  margin: 0;
+}
+
+.character-heading [data-character-reason] {
+  color: #64675f;
+  font-size: 0.84rem;
+}
+
+.roster-rail {
+  display: grid;
+  grid-auto-columns: minmax(5rem, 1fr);
+  grid-auto-flow: column;
+  gap: 0.55rem;
+  margin-top: 1rem;
+  padding: 0.2rem 0.2rem 0.75rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.roster-chip {
+  display: grid;
+  min-width: 0;
+  min-height: 6.3rem;
+  place-items: center;
+  align-content: center;
+  padding: 0.55rem 0.35rem;
+  border: 1px solid rgb(32 33 30 / 12%);
+  border-radius: 0.9rem;
+  color: #555850;
+  background: rgb(255 255 255 / 76%);
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.roster-chip:hover:not(:disabled),
+.roster-chip[aria-pressed="true"] {
+  border-color: #1d5448;
+  color: #173f35;
+  background: #e1f4eb;
+  box-shadow: inset 0 0 0 1px #1d5448;
+}
+
+.roster-chip:disabled {
+  cursor: not-allowed;
+}
+
+.roster-portrait {
+  position: relative;
+  display: grid;
+  width: 3.35rem;
+  height: 3.35rem;
+  margin-bottom: 0.4rem;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #d8d9d3;
+}
+
+.roster-portrait img {
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.roster-glyph {
+  color: #686b64;
+  font-size: 1.35rem;
+  font-weight: 950;
+}
+
+.roster-chip:disabled .roster-glyph {
+  opacity: 0.38;
+}
+
+.progress-ring {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    #3d8d74 var(--progress-turn, 0turn),
+    rgb(255 255 255 / 35%) 0
+  );
+  mask: radial-gradient(circle, transparent 56%, #000 58%);
+}
+
+.roster-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-controls {
+  display: grid;
+  justify-items: end;
+  gap: 0.35rem;
+}
+
+.voice-toggle,
+.voice-hint,
+.wardrobe-toggle {
+  padding: 0.48rem 0.72rem;
+  border: 1px solid rgb(29 84 72 / 24%);
+  border-radius: 999px;
+  color: #1d5448;
+  background: rgb(255 255 255 / 72%);
+  font-size: 0.74rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.voice-hint {
+  border: 0;
+  color: #754717;
+  background: #ffebc9;
+}
+
+.wardrobe-toggle {
+  margin-top: 0.65rem;
+}
+
+.wardrobe-drawer {
+  margin-top: 0.75rem;
+  padding: 0.9rem;
+  border-radius: 1rem;
+  background: rgb(241 238 229 / 72%);
+}
+
+.wardrobe-drawer > p {
+  margin: 0 0 0.65rem;
+  color: #666960;
+  font-size: 0.78rem;
+}
+
+.wardrobe-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
+  gap: 0.55rem;
+}
+
+.wardrobe-item {
+  display: grid;
+  min-width: 0;
+  padding: 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  color: #4e514a;
+  background: rgb(255 255 255 / 82%);
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.wardrobe-item img {
+  width: 100%;
+  height: 4.5rem;
+  object-fit: contain;
+}
+
+.wardrobe-placeholder {
+  display: grid;
+  height: 4.5rem;
+  place-items: center;
+  color: #686b64;
+  font-size: 1.5rem;
+  font-weight: 950;
+}
+
+.wardrobe-item[aria-pressed="true"] {
+  border-color: #1d5448;
+  color: #173f35;
+  box-shadow: inset 0 0 0 1px #1d5448;
+}
+
+.wardrobe-item.is-locked {
+  cursor: not-allowed;
+  filter: grayscale(0.7);
+  opacity: 0.48;
+}
+
+.character-disclosure {
+  grid-column: 1 / -1;
+  margin: 1rem 0 0;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgb(49 52 46 / 9%);
+  color: #777971;
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.unlock-toast {
+  position: fixed;
+  z-index: 10;
+  right: 1rem;
+  bottom: 1rem;
+  max-width: min(22rem, calc(100% - 2rem));
+  margin: 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid rgb(29 84 72 / 18%);
+  border-radius: 0.9rem;
+  color: #173f35;
+  background: #e1f4eb;
+  box-shadow: 0 0.8rem 2rem rgb(29 84 72 / 18%);
+  font-size: 0.88rem;
+  font-weight: 850;
 }
 
 .character-picker {
@@ -589,7 +858,22 @@ html[data-character="grok"] .character-options button[aria-pressed="true"] span 
   }
 
   .companion-panel {
+    grid-template-columns: 1fr;
     min-height: 27rem;
+  }
+
+  .character-stage {
+    grid-template-columns: minmax(10rem, 0.8fr) minmax(0, 1.2fr);
+    gap: 1rem;
+  }
+
+  .companion-visual {
+    margin-bottom: 0;
+  }
+
+  .character-controls {
+    border-top: 1px solid rgb(49 52 46 / 9%);
+    border-left: 0;
   }
 
   .trend-panel {
@@ -630,12 +914,19 @@ html[data-character="grok"] .character-options button[aria-pressed="true"] span 
 
   .companion-panel {
     min-height: 25rem;
-    padding: 1.5rem;
+    padding: 1rem;
+  }
+
+  .character-stage {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 0.5rem;
   }
 
   .companion-visual {
     width: 10.8rem;
     height: 11.2rem;
+    margin-bottom: 1rem;
   }
 
   .companion-eye {
@@ -662,6 +953,22 @@ html[data-character="grok"] .character-options button[aria-pressed="true"] span 
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .character-controls {
+    padding: 1rem 0.25rem 0.25rem;
+  }
+
+  .character-heading {
+    display: grid;
+  }
+
+  .voice-controls {
+    justify-items: start;
+  }
+
+  .roster-rail {
+    grid-auto-columns: 4.8rem;
+  }
+
   .metric-card-primary {
     grid-column: auto;
   }
@@ -673,5 +980,9 @@ html[data-character="grok"] .character-options button[aria-pressed="true"] span 
   *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .character-doll {
+    animation: none;
   }
 }
