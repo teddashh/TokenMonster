@@ -17,6 +17,7 @@ import {
   MAX_TOKEN_TRACKER_SHUTDOWN_TIMEOUT_MS,
   MAX_TOKEN_TRACKER_STARTUP_TIMEOUT_MS,
   MIN_TOKEN_TRACKER_REFRESH_INTERVAL_MS,
+  MIN_TOKEN_TRACKER_REFRESH_RETRIGGER_MS,
   PINNED_TOKEN_TRACKER_VERSION
 } from "./constants.js";
 import { TokenTrackerRuntimeError } from "./errors.js";
@@ -24,10 +25,14 @@ import type {
   ManagedTokenTracker,
   ManagedTokenTrackerExit,
   StartManagedTokenTrackerOptions,
+  TokenTrackerDataAvailabilityProbe,
   TokenTrackerExecutable,
   TokenTrackerExecutableResolver,
   TokenTrackerReadinessProbe,
+  TokenTrackerRuntimeClock,
+  TokenTrackerRuntimePhase,
   TokenTrackerRuntimeScheduler,
+  TokenTrackerRuntimeStatus,
   TokenTrackerSpawn,
   TokenTrackerSpawnOptions
 } from "./types.js";
@@ -124,6 +129,8 @@ const defaultSpawn: TokenTrackerSpawn = (command, arguments_, options) =>
 
 interface NormalizedOptions {
   readonly readinessProbe: TokenTrackerReadinessProbe;
+  readonly dataAvailabilityProbe: TokenTrackerDataAvailabilityProbe;
+  readonly clock: TokenTrackerRuntimeClock;
   readonly startupTimeoutMs: number;
   readonly refreshTimeoutMs: number;
   readonly shutdownTimeoutMs: number;
@@ -224,6 +231,8 @@ function normalizeOptions(
   }
   const allowedKeys = new Set<PropertyKey>([
     "readinessProbe",
+    "dataAvailabilityProbe",
+    "clock",
     "startupTimeoutMs",
     "refreshTimeoutMs",
     "shutdownTimeoutMs",
@@ -237,6 +246,9 @@ function normalizeOptions(
     throw new TokenTrackerRuntimeError("invalid-configuration");
   }
   const readinessProbe = options.readinessProbe;
+  const dataAvailabilityProbe =
+    options.dataAvailabilityProbe ?? (() => true);
+  const clock = options.clock ?? (() => new Date());
   const spawn = options.spawn ?? defaultSpawn;
   const resolveExecutable =
     options.resolveExecutable ?? resolveTokenTrackerExecutable;
@@ -246,6 +258,8 @@ function normalizeOptions(
     options.refreshIntervalMs ?? DEFAULT_TOKEN_TRACKER_REFRESH_INTERVAL_MS;
   if (
     typeof readinessProbe !== "function" ||
+    typeof dataAvailabilityProbe !== "function" ||
+    typeof clock !== "function" ||
     typeof spawn !== "function" ||
     typeof resolveExecutable !== "function" ||
     typeof scheduler !== "object" ||
@@ -266,6 +280,8 @@ function normalizeOptions(
   }
   return Object.freeze({
     readinessProbe,
+    dataAvailabilityProbe,
+    clock,
     startupTimeoutMs: normalizeDuration(
       options.startupTimeoutMs,
       DEFAULT_TOKEN_TRACKER_STARTUP_TIMEOUT_MS,
@@ -689,6 +705,46 @@ function waitForRefreshExit(
   })();
 }
 
+async function probeDataAvailability(
+  normalized: NormalizedOptions,
+  baseUrl: string
+): Promise<boolean> {
+  const timer = createTimerPromise(
+    normalized.scheduler,
+    normalized.refreshTimeoutMs
+  );
+  try {
+    const result = await Promise.race([
+      Promise.resolve(normalized.dataAvailabilityProbe(baseUrl)),
+      timer.promise.then(() => {
+        throw new TokenTrackerRuntimeError("refresh-timeout");
+      })
+    ]);
+    if (typeof result !== "boolean") {
+      throw new TokenTrackerRuntimeError("refresh-failed");
+    }
+    return result;
+  } catch (error) {
+    if (error instanceof TokenTrackerRuntimeError) throw error;
+    throw new TokenTrackerRuntimeError("refresh-failed");
+  } finally {
+    timer.cancel();
+  }
+}
+
+function readRuntimeInstant(clock: TokenTrackerRuntimeClock): Date {
+  let instant: Date;
+  try {
+    instant = clock();
+  } catch {
+    throw new TokenTrackerRuntimeError("invalid-configuration");
+  }
+  if (!(instant instanceof Date) || !Number.isFinite(instant.getTime())) {
+    throw new TokenTrackerRuntimeError("invalid-configuration");
+  }
+  return instant;
+}
+
 export async function startManagedTokenTracker(
   options: StartManagedTokenTrackerOptions
 ): Promise<ManagedTokenTracker> {
@@ -744,6 +800,16 @@ export async function startManagedTokenTracker(
   let stopRequested = false;
   let stopPromise: Promise<void> | null = null;
   let closedResolved = false;
+  let phase: TokenTrackerRuntimePhase = "syncing";
+  let lastSuccessAt: string | null = null;
+  let consecutiveFailures = 0;
+  let lastRefreshStartedAtMs: number | null = null;
+
+  const recordRefreshFailure = (): void => {
+    if (stopRequested || closedResolved) return;
+    consecutiveFailures += 1;
+    phase = lastSuccessAt === null ? "refresh-failed" : "stale";
+  };
 
   const resolveClosed = (exit: ManagedTokenTrackerExit): void => {
     if (closedResolved) return;
@@ -762,14 +828,41 @@ export async function startManagedTokenTracker(
     }
   };
 
-  const refreshLocalUsage = (): Promise<void> => {
+  const getStatus = (): TokenTrackerRuntimeStatus =>
+    Object.freeze({
+      phase,
+      lastSuccessAt,
+      consecutiveFailures,
+      canRetry:
+        !stopRequested &&
+        !closedResolved &&
+        refreshInFlight === null &&
+        initialRefresh === null &&
+        phase !== "starting" &&
+        phase !== "syncing"
+    });
+
+  const startRefresh = (delayMs = 0): Promise<void> => {
     if (stopRequested || closedResolved) {
       return Promise.reject(
         new TokenTrackerRuntimeError("sidecar-unavailable")
       );
     }
     if (refreshInFlight !== null) return refreshInFlight;
+    if (initialRefresh !== null) {
+      normalized.scheduler.clearImmediate(initialRefresh);
+      initialRefresh = null;
+    }
+    phase = "syncing";
     const operation = (async (): Promise<void> => {
+      if (delayMs > 0) {
+        const delay = createTimerPromise(normalized.scheduler, delayMs);
+        await delay.promise;
+      }
+      if (stopRequested || closedResolved) {
+        throw new TokenTrackerRuntimeError("sidecar-unavailable");
+      }
+      lastRefreshStartedAtMs = readRuntimeInstant(normalized.clock).getTime();
       let child: ChildProcess;
       try {
         child = spawnOwned(normalized, executable, [
@@ -779,12 +872,21 @@ export async function startManagedTokenTracker(
           "--all-local-sources"
         ], "ignore");
       } catch {
+        recordRefreshFailure();
         throw new TokenTrackerRuntimeError("refresh-failed");
       }
       const exitPromise = observeChildExit(child);
       refreshChildren.set(child, exitPromise);
       try {
         await waitForRefreshExit(child, exitPromise, normalized);
+        const hasData = await probeDataAvailability(normalized, baseUrl);
+        lastSuccessAt = readRuntimeInstant(normalized.clock).toISOString();
+        consecutiveFailures = 0;
+        phase = hasData ? "ready" : "ready-no-data";
+      } catch (error) {
+        recordRefreshFailure();
+        if (error instanceof TokenTrackerRuntimeError) throw error;
+        throw new TokenTrackerRuntimeError("refresh-failed");
       } finally {
         refreshChildren.delete(child);
       }
@@ -798,8 +900,28 @@ export async function startManagedTokenTracker(
     return wrappedOperation;
   };
 
+  const refreshLocalUsage = (): Promise<void> => startRefresh();
+
+  const requestRefresh = async (): Promise<TokenTrackerRuntimeStatus> => {
+    if (refreshInFlight !== null) {
+      await refreshInFlight.catch(() => undefined);
+      return getStatus();
+    }
+    const now = readRuntimeInstant(normalized.clock).getTime();
+    const delayMs =
+      lastRefreshStartedAtMs === null
+        ? 0
+        : Math.max(
+            0,
+            MIN_TOKEN_TRACKER_REFRESH_RETRIGGER_MS -
+              Math.max(0, now - lastRefreshStartedAtMs)
+          );
+    await startRefresh(delayMs).catch(() => undefined);
+    return getStatus();
+  };
+
   const runScheduledRefresh = (): void => {
-    void refreshLocalUsage().catch(() => undefined);
+    void startRefresh().catch(() => undefined);
   };
 
   initialRefresh = normalized.scheduler.setImmediate(() => {
@@ -872,6 +994,8 @@ export async function startManagedTokenTracker(
     baseUrl,
     version: PINNED_TOKEN_TRACKER_VERSION,
     closed: closedDeferred.promise,
+    getStatus,
+    requestRefresh,
     refreshLocalUsage,
     stop
   });

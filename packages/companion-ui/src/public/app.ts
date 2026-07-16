@@ -1,4 +1,6 @@
 export const COMPANION_API_ENDPOINT = "/api/companion" as const;
+export const COLLECTOR_STATUS_ENDPOINT = "/api/companion/status" as const;
+export const COLLECTOR_REFRESH_ENDPOINT = "/api/companion/refresh" as const;
 
 export const COMPANION_ERROR_CODES = [
   "sidecar-unavailable",
@@ -69,6 +71,25 @@ export interface CompanionErrorSnapshot {
 export type CompanionSnapshot =
   | CompanionHealthySnapshot
   | CompanionErrorSnapshot;
+
+export const COMPANION_COLLECTOR_PHASES = [
+  "starting",
+  "syncing",
+  "ready",
+  "ready-no-data",
+  "refresh-failed",
+  "stale"
+] as const;
+
+export type CompanionCollectorPhase =
+  (typeof COMPANION_COLLECTOR_PHASES)[number];
+
+export interface CompanionCollectorStatus {
+  readonly phase: CompanionCollectorPhase;
+  readonly lastSuccessAt: string | null;
+  readonly consecutiveFailures: number;
+  readonly canRetry: boolean;
+}
 
 const UTC_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 const UTC_TIMESTAMP_PATTERN =
@@ -354,10 +375,60 @@ export function parseCompanionSnapshot(value: unknown): CompanionSnapshot {
   return parsed;
 }
 
+function isCompanionCollectorPhase(
+  value: unknown
+): value is CompanionCollectorPhase {
+  return COMPANION_COLLECTOR_PHASES.some((phase) => phase === value);
+}
+
+/** Strictly validates the content-blind collector DTO accepted by the UI. */
+export function parseCompanionCollectorStatus(
+  value: unknown
+): CompanionCollectorStatus {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "phase",
+      "lastSuccessAt",
+      "consecutiveFailures",
+      "canRetry"
+    ])
+  ) {
+    throw new TypeError("Invalid collector response");
+  }
+  const phase = value["phase"];
+  const lastSuccessAt = value["lastSuccessAt"];
+  const consecutiveFailures = value["consecutiveFailures"];
+  const canRetry = value["canRetry"];
+  if (
+    !isCompanionCollectorPhase(phase) ||
+    (lastSuccessAt !== null &&
+      parseGeneratedAt(lastSuccessAt) === undefined) ||
+    !isSafeTokenCount(consecutiveFailures) ||
+    typeof canRetry !== "boolean" ||
+    ((phase === "ready" || phase === "ready-no-data") &&
+      (lastSuccessAt === null || consecutiveFailures !== 0)) ||
+    (phase === "refresh-failed" &&
+      (lastSuccessAt !== null || consecutiveFailures < 1)) ||
+    (phase === "stale" &&
+      (lastSuccessAt === null || consecutiveFailures < 1))
+  ) {
+    throw new TypeError("Invalid collector response");
+  }
+  return Object.freeze({
+    phase,
+    lastSuccessAt: lastSuccessAt as string | null,
+    consecutiveFailures,
+    canRetry
+  });
+}
+
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const MAX_RESPONSE_CHARACTERS = 65_536;
 const REQUEST_TIMEOUT_MS = 8_000;
-const HEALTHY_REFRESH_MS = 60_000;
+const REFRESH_REQUEST_TIMEOUT_MS = 100_000;
+const ACTIVE_POLL_MS = 5_000;
+const SETTLED_POLL_MS = 60_000;
 const UNAVAILABLE_RETRY_DELAYS_MS = [5_000, 15_000, 60_000] as const;
 
 export interface UnavailableRetryBackoff {
@@ -435,7 +506,10 @@ export function startCompanionUi(): void {
     throw new Error("Required character choices are unavailable");
   }
   const updatedElement = requiredElement<HTMLElement>("[data-updated]");
-  const retryButton = requiredElement<HTMLButtonElement>("[data-retry]");
+  const staleBadgeElement = requiredElement<HTMLElement>(
+    "[data-stale-badge]"
+  );
+  const rescanButton = requiredElement<HTMLButtonElement>("[data-rescan]");
   const trendElement = requiredElement<HTMLElement>("[data-trend]");
   const trendEmptyElement = requiredElement<HTMLElement>("[data-trend-empty]");
   const trendAccessibleElement = requiredElement<HTMLOListElement>(
@@ -448,6 +522,7 @@ export function startCompanionUi(): void {
   };
   const unavailableRetryBackoff = createUnavailableRetryBackoff();
   let manualCharacterId: CompanionCharacterId | undefined;
+  let lastGoodSnapshot: CompanionHealthySnapshot | undefined;
 
   function renderCharacter(
     characterId: CompanionCharacterId,
@@ -515,73 +590,118 @@ export function startCompanionUi(): void {
     });
   }
 
-let refreshTimer: number | undefined;
-let currentController: AbortController | undefined;
-let blockedByIncompatibility = false;
+  let refreshTimer: number | undefined;
+  let currentController: AbortController | undefined;
+  let blockedByIncompatibility = false;
 
-function clearRefreshTimer(): void {
-  if (refreshTimer === undefined) return;
-  window.clearTimeout(refreshTimer);
-  refreshTimer = undefined;
-}
-
-function setRefreshTimer(delayMs: number): void {
-  clearRefreshTimer();
-  refreshTimer = window.setTimeout(() => {
+  function clearRefreshTimer(): void {
+    if (refreshTimer === undefined) return;
+    window.clearTimeout(refreshTimer);
     refreshTimer = undefined;
-    void refresh();
-  }, delayMs);
-}
+  }
 
-function setMetricPlaceholders(): void {
-  metricElements.today.textContent = "—";
-  metricElements.last7Days.textContent = "—";
-  metricElements.last28Days.textContent = "—";
-}
+  function setRefreshTimer(delayMs: number): void {
+    clearRefreshTimer();
+    refreshTimer = window.setTimeout(() => {
+      refreshTimer = undefined;
+      void pollCollector();
+    }, delayMs);
+  }
 
-function showConnecting(): void {
-  document.documentElement.dataset["connection"] = "connecting";
-  statusElement.textContent = "正在連線";
-  companionLineElement.textContent = "我正在讀取你的本機用量。";
-  updatedElement.textContent = "";
-  retryButton.hidden = true;
-}
+  function setMetricPlaceholders(): void {
+    metricElements.today.textContent = "—";
+    metricElements.last7Days.textContent = "—";
+    metricElements.last28Days.textContent = "—";
+  }
 
-function showUnavailable(): void {
-  document.documentElement.dataset["connection"] = "error";
-  statusElement.textContent = "暫時中斷";
-  companionLineElement.textContent =
-    "本機用量服務暫時沒回應，我會稍後再試。";
-  updatedElement.textContent = "";
-  retryButton.textContent = "立即重試";
-  retryButton.hidden = false;
-  setMetricPlaceholders();
-  clearTrend("連線恢復後會顯示 UTC 每日趨勢。", false);
-}
+  function prepareRescan(
+    label: string,
+    enabled: boolean
+  ): void {
+    rescanButton.textContent = label;
+    rescanButton.disabled = !enabled;
+  }
 
-function showIncompatible(): void {
-  document.documentElement.dataset["connection"] = "error";
-  statusElement.textContent = "需要更新";
-  companionLineElement.textContent =
-    "目前版本無法讀取用量。請重新啟動或更新 TokenMonster，再重新檢查。";
-  updatedElement.textContent = "";
-  retryButton.textContent = "重新檢查";
-  retryButton.hidden = false;
-  setMetricPlaceholders();
-  clearTrend("更新完成後會顯示 UTC 每日趨勢。", false);
-}
+  function clearLastGoodDisplay(trendMessage: string): void {
+    if (lastGoodSnapshot !== undefined) return;
+    setMetricPlaceholders();
+    clearTrend(trendMessage, false);
+  }
 
-function handleUnavailable(): void {
-  blockedByIncompatibility = false;
-  showUnavailable();
-  setRefreshTimer(unavailableRetryBackoff.nextDelayMs());
-}
+  function showStarting(): void {
+    document.documentElement.dataset["connection"] = "starting";
+    statusElement.textContent = "正在啟動";
+    companionLineElement.textContent = "本機用量服務正在準備，很快就好。";
+    updatedElement.textContent = "";
+    staleBadgeElement.hidden = true;
+    prepareRescan("重新掃描", false);
+    clearLastGoodDisplay("啟動完成後會顯示 UTC 每日趨勢。");
+  }
 
-function handleIncompatible(): void {
-  blockedByIncompatibility = true;
-  clearRefreshTimer();
-  showIncompatible();
-}
+  function showSyncing(status: CompanionCollectorStatus): void {
+    document.documentElement.dataset["connection"] = "syncing";
+    statusElement.textContent = "正在同步";
+    companionLineElement.textContent =
+      lastGoodSnapshot === undefined
+        ? "我正在掃描支援的本機用量來源，先不把空白當成零。"
+        : "我正在重新掃描；先保留上次整理好的用量。";
+    updatedElement.textContent =
+      lastGoodSnapshot === undefined
+        ? ""
+        : `上次更新於本機時間 ${timeFormatter.format(new Date(lastGoodSnapshot.generatedAt))}`;
+    staleBadgeElement.hidden = true;
+    prepareRescan("正在掃描", status.canRetry);
+    clearLastGoodDisplay("掃描完成後會顯示 UTC 每日趨勢。");
+  }
+
+  function showRefreshFailed(status: CompanionCollectorStatus): void {
+    document.documentElement.dataset["connection"] = "error";
+    statusElement.textContent = "掃描未完成";
+    companionLineElement.textContent =
+      "第一次掃描沒有完成。可以再試一次，我也會繼續留在這裡。";
+    updatedElement.textContent = `已嘗試 ${numberFormatter.format(status.consecutiveFailures)} 次`;
+    staleBadgeElement.hidden = true;
+    prepareRescan("再試一次", status.canRetry);
+    setMetricPlaceholders();
+    clearTrend("重新掃描成功後會顯示 UTC 每日趨勢。", false);
+  }
+
+  function showUnavailable(): void {
+    document.documentElement.dataset["connection"] = "error";
+    statusElement.textContent = "暫時中斷";
+    companionLineElement.textContent =
+      "本機用量服務暫時沒回應，我會稍後再試。";
+    updatedElement.textContent =
+      lastGoodSnapshot === undefined
+        ? ""
+        : `保留本機時間 ${timeFormatter.format(new Date(lastGoodSnapshot.generatedAt))} 的資料`;
+    staleBadgeElement.hidden = lastGoodSnapshot === undefined;
+    prepareRescan("立即重試", true);
+    clearLastGoodDisplay("連線恢復後會顯示 UTC 每日趨勢。");
+  }
+
+  function showIncompatible(): void {
+    document.documentElement.dataset["connection"] = "error";
+    statusElement.textContent = "需要更新";
+    companionLineElement.textContent =
+      "目前版本無法讀取用量。請重新啟動或更新 TokenMonster，再重新檢查。";
+    updatedElement.textContent = "";
+    staleBadgeElement.hidden = lastGoodSnapshot === undefined;
+    prepareRescan("重新檢查", true);
+    clearLastGoodDisplay("更新完成後會顯示 UTC 每日趨勢。");
+  }
+
+  function handleUnavailable(): void {
+    blockedByIncompatibility = false;
+    showUnavailable();
+    setRefreshTimer(unavailableRetryBackoff.nextDelayMs());
+  }
+
+  function handleIncompatible(): void {
+    blockedByIncompatibility = true;
+    clearRefreshTimer();
+    showIncompatible();
+  }
 
 function formatDate(utcDate: string): string {
   return `${utcDate.slice(5, 7)}/${utcDate.slice(8, 10)}`;
@@ -693,27 +813,54 @@ function renderTrend(snapshot: CompanionHealthySnapshot): void {
   trendElement.dataset["healthy"] = "true";
 }
 
-function showHealthy(snapshot: CompanionHealthySnapshot): void {
-  blockedByIncompatibility = false;
-  unavailableRetryBackoff.reset();
-  document.documentElement.dataset["connection"] = "healthy";
-  renderStarter(snapshot.starter);
-  statusElement.textContent = "已連線";
-  companionLineElement.textContent =
-    snapshot.totals.today === 0
-      ? "今天（UTC）還很安靜，我會在這裡陪你。"
-      : "今天（UTC）的用量已經整理好了。";
-  updatedElement.textContent = `更新於本機時間 ${timeFormatter.format(new Date(snapshot.generatedAt))}`;
-  retryButton.hidden = true;
-  metricElements.today.textContent = numberFormatter.format(snapshot.totals.today);
-  metricElements.last7Days.textContent = numberFormatter.format(
-    snapshot.totals.last7Days
-  );
-  metricElements.last28Days.textContent = numberFormatter.format(
-    snapshot.totals.last28Days
-  );
-  renderTrend(snapshot);
-}
+  function renderSnapshotData(snapshot: CompanionHealthySnapshot): void {
+    lastGoodSnapshot = snapshot;
+    renderStarter(snapshot.starter);
+    metricElements.today.textContent = numberFormatter.format(
+      snapshot.totals.today
+    );
+    metricElements.last7Days.textContent = numberFormatter.format(
+      snapshot.totals.last7Days
+    );
+    metricElements.last28Days.textContent = numberFormatter.format(
+      snapshot.totals.last28Days
+    );
+    renderTrend(snapshot);
+  }
+
+  function showSettled(
+    snapshot: CompanionHealthySnapshot,
+    collector: CompanionCollectorStatus
+  ): void {
+    blockedByIncompatibility = false;
+    unavailableRetryBackoff.reset();
+    renderSnapshotData(snapshot);
+    prepareRescan("重新掃描", collector.canRetry);
+    if (collector.phase === "stale") {
+      document.documentElement.dataset["connection"] = "stale";
+      statusElement.textContent = "資料稍舊";
+      companionLineElement.textContent =
+        "這是上次成功整理的用量；這次掃描沒完成，你可以再試一次。";
+      updatedElement.textContent = `上次成功於本機時間 ${timeFormatter.format(new Date(collector.lastSuccessAt!))}`;
+      staleBadgeElement.hidden = false;
+      return;
+    }
+    staleBadgeElement.hidden = true;
+    if (collector.phase === "ready-no-data") {
+      document.documentElement.dataset["connection"] = "no-data";
+      statusElement.textContent = "掃描完成";
+      companionLineElement.textContent =
+        "還沒找到支援的本機用量來源；這不是安靜的一天，你可以隨時重新掃描。";
+    } else {
+      document.documentElement.dataset["connection"] = "healthy";
+      statusElement.textContent = "已連線";
+      companionLineElement.textContent =
+        snapshot.totals.today === 0
+          ? "今天（UTC）還很安靜，我會在這裡陪你。"
+          : "今天（UTC）的用量已經整理好了。";
+    }
+    updatedElement.textContent = `更新於本機時間 ${timeFormatter.format(new Date(collector.lastSuccessAt!))}`;
+  }
 
 async function readBoundedJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -731,14 +878,31 @@ async function readBoundedJson(response: Response): Promise<unknown> {
   return JSON.parse(body) as unknown;
 }
 
-async function refresh(): Promise<void> {
-  clearRefreshTimer();
-  currentController?.abort();
-  const controller = new AbortController();
-  currentController = controller;
-  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  function handleApiError(error: CompanionErrorCode): void {
+    if (shouldAutomaticallyRetry(error)) {
+      handleUnavailable();
+    } else {
+      handleIncompatible();
+    }
+  }
 
-  try {
+  function parseCollectorPayload(
+    value: unknown
+  ): CompanionCollectorStatus | CompanionErrorSnapshot {
+    try {
+      return parseCompanionCollectorStatus(value);
+    } catch {
+      const error = parseCompanionSnapshot(value);
+      if (error.status !== "error") {
+        throw new TypeError("Invalid collector response");
+      }
+      return error;
+    }
+  }
+
+  async function readMetrics(
+    controller: AbortController
+  ): Promise<CompanionHealthySnapshot | undefined> {
     const response = await fetch(COMPANION_API_ENDPOINT, {
       method: "GET",
       cache: "no-store",
@@ -749,46 +913,142 @@ async function refresh(): Promise<void> {
     });
     const payload = parseCompanionSnapshot(await readBoundedJson(response));
     if (payload.status === "error") {
-      if (shouldAutomaticallyRetry(payload.error)) {
-        handleUnavailable();
-      } else {
-        handleIncompatible();
-      }
-      return;
+      handleApiError(payload.error);
+      return undefined;
     }
     if (!response.ok) {
       handleUnavailable();
+      return undefined;
+    }
+    return payload;
+  }
+
+  async function applyCollectorStatus(
+    collector: CompanionCollectorStatus,
+    controller: AbortController
+  ): Promise<void> {
+    if (collector.phase === "starting") {
+      blockedByIncompatibility = false;
+      showStarting();
+      setRefreshTimer(ACTIVE_POLL_MS);
       return;
     }
-    showHealthy(payload);
-    setRefreshTimer(HEALTHY_REFRESH_MS);
-  } catch {
-    handleUnavailable();
-  } finally {
-    window.clearTimeout(timeout);
-    if (currentController === controller) currentController = undefined;
+    if (collector.phase === "syncing") {
+      blockedByIncompatibility = false;
+      showSyncing(collector);
+      setRefreshTimer(ACTIVE_POLL_MS);
+      return;
+    }
+    if (collector.phase === "refresh-failed") {
+      blockedByIncompatibility = false;
+      showRefreshFailed(collector);
+      setRefreshTimer(SETTLED_POLL_MS);
+      return;
+    }
+    const snapshot = await readMetrics(controller);
+    if (snapshot === undefined) return;
+    showSettled(snapshot, collector);
+    setRefreshTimer(SETTLED_POLL_MS);
   }
-}
 
-retryButton.addEventListener("click", () => {
-  clearRefreshTimer();
-  unavailableRetryBackoff.reset();
-  blockedByIncompatibility = false;
-  showConnecting();
-  void refresh();
-});
+  async function pollCollector(): Promise<void> {
+    clearRefreshTimer();
+    currentController?.abort();
+    const controller = new AbortController();
+    currentController = controller;
+    const timeout = window.setTimeout(
+      () => controller.abort(),
+      REQUEST_TIMEOUT_MS
+    );
 
-document.addEventListener("visibilitychange", () => {
-  if (
-    document.visibilityState === "visible" &&
-    !blockedByIncompatibility
-  ) {
-    void refresh();
+    try {
+      const response = await fetch(COLLECTOR_STATUS_ENDPOINT, {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+        redirect: "error",
+        headers: { Accept: "application/json" },
+        signal: controller.signal
+      });
+      const payload = parseCollectorPayload(await readBoundedJson(response));
+      if ("status" in payload) {
+        handleApiError(payload.error);
+        return;
+      }
+      if (!response.ok) {
+        handleUnavailable();
+        return;
+      }
+      await applyCollectorStatus(payload, controller);
+    } catch {
+      if (!controller.signal.aborted || currentController === controller) {
+        handleUnavailable();
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      if (currentController === controller) currentController = undefined;
+    }
   }
-});
 
-  showConnecting();
-  void refresh();
+  async function requestRescan(): Promise<void> {
+    clearRefreshTimer();
+    currentController?.abort();
+    unavailableRetryBackoff.reset();
+    blockedByIncompatibility = false;
+    showSyncing(
+      Object.freeze({
+        phase: "syncing",
+        lastSuccessAt: lastGoodSnapshot?.generatedAt ?? null,
+        consecutiveFailures: 0,
+        canRetry: false
+      })
+    );
+    const controller = new AbortController();
+    currentController = controller;
+    const timeout = window.setTimeout(
+      () => controller.abort(),
+      REFRESH_REQUEST_TIMEOUT_MS
+    );
+    try {
+      const response = await fetch(COLLECTOR_REFRESH_ENDPOINT, {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        redirect: "error",
+        headers: { Accept: "application/json" },
+        signal: controller.signal
+      });
+      const payload = parseCollectorPayload(await readBoundedJson(response));
+      if ("status" in payload) {
+        handleApiError(payload.error);
+        return;
+      }
+      await applyCollectorStatus(payload, controller);
+    } catch {
+      if (!controller.signal.aborted || currentController === controller) {
+        handleUnavailable();
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      if (currentController === controller) currentController = undefined;
+    }
+  }
+
+  rescanButton.addEventListener("click", () => {
+    if (!rescanButton.disabled) void requestRescan();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (
+      document.visibilityState === "visible" &&
+      !blockedByIncompatibility
+    ) {
+      void pollCollector();
+    }
+  });
+
+  showStarting();
+  void pollCollector();
 }
 
 if (typeof document !== "undefined") startCompanionUi();

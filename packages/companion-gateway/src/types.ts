@@ -11,6 +11,7 @@ export interface CompanionUiAssets {
 
 interface CompanionGatewayBaseOptions {
   readonly adapter: TokenTrackerAdapter;
+  readonly collector: CompanionCollectorController;
   readonly clock?: CompanionGatewayClock;
   readonly apiTimeoutMs?: number;
 }
@@ -37,6 +38,26 @@ export interface CompanionGatewayAddress {
 export interface CompanionGateway {
   start(port?: number): Promise<CompanionGatewayAddress>;
   close(): Promise<void>;
+}
+
+export type CompanionCollectorPhase =
+  | "starting"
+  | "syncing"
+  | "ready"
+  | "ready-no-data"
+  | "refresh-failed"
+  | "stale";
+
+export interface CompanionCollectorStatus {
+  readonly phase: CompanionCollectorPhase;
+  readonly lastSuccessAt: string | null;
+  readonly consecutiveFailures: number;
+  readonly canRetry: boolean;
+}
+
+export interface CompanionCollectorController {
+  getStatus(): CompanionCollectorStatus;
+  requestRefresh(): Promise<CompanionCollectorStatus>;
 }
 
 export interface CompanionDailyTotal {

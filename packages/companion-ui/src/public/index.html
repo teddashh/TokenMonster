@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant" data-connection="connecting">
+<html lang="zh-Hant" data-connection="starting">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -22,7 +22,7 @@
       </a>
       <p class="connection-status" aria-live="polite">
         <span class="status-dot" aria-hidden="true"></span>
-        <span data-status>正在連線</span>
+        <span data-status>正在啟動</span>
       </p>
     </header>
 
@@ -47,11 +47,12 @@
           <p class="eyebrow">你的本機 AI 用量夥伴</p>
           <h1 id="welcome-title" data-companion-title>先選一位姊妹陪你。</h1>
           <p class="companion-line" data-companion-line aria-live="polite">
-            我正在讀取你的本機用量。
+            本機用量服務正在準備，很快就好。
           </p>
           <p class="updated-at" data-updated></p>
-          <button class="retry-button" type="button" data-retry hidden>
-            重新連線
+          <p class="stale-badge" data-stale-badge hidden>顯示上次成功整理的資料</p>
+          <button class="retry-button" type="button" data-rescan disabled>
+            重新掃描
           </button>
           <div class="character-picker" data-character-picker>
             <p data-character-reason>連上本機用量後，我會先替你建議一位；你隨時可以換。</p>

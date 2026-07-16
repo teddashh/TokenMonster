@@ -404,6 +404,158 @@ describe("local-only refresh", () => {
     await runtime.stop();
   });
 
+  it("records an asynchronously scheduled initial-refresh failure", async () => {
+    const scheduler = new ManualScheduler();
+    const main = announcedServerChild();
+    const processQueue = queuedSpawn([
+      successfulVersionChild(),
+      main,
+      exitingRefreshChild(2)
+    ]);
+    const runtime = await startManagedTokenTracker({
+      readinessProbe: async () => undefined,
+      spawn: processQueue.spawn,
+      resolveExecutable: executable,
+      refreshIntervalMs: false,
+      scheduler
+    });
+
+    scheduler.runInitialRefresh();
+    await vi.waitFor(() =>
+      expect(runtime.getStatus()).toMatchObject({
+        phase: "refresh-failed",
+        lastSuccessAt: null,
+        consecutiveFailures: 1,
+        canRetry: true
+      })
+    );
+    await runtime.stop();
+  });
+
+  it("reports syncing before the first refresh, then failure, recovery, and stale state", async () => {
+    const scheduler = new ManualScheduler();
+    const main = announcedServerChild();
+    const processQueue = queuedSpawn([
+      successfulVersionChild(),
+      main,
+      exitingRefreshChild(3),
+      exitingRefreshChild(0),
+      exitingRefreshChild(4)
+    ]);
+    let now = new Date("2026-07-15T12:00:00.000Z");
+    const runtime = await startManagedTokenTracker({
+      readinessProbe: async () => undefined,
+      dataAvailabilityProbe: async () => true,
+      clock: () => now,
+      spawn: processQueue.spawn,
+      resolveExecutable: executable,
+      refreshIntervalMs: false,
+      scheduler
+    });
+
+    expect(runtime.getStatus()).toEqual({
+      phase: "syncing",
+      lastSuccessAt: null,
+      consecutiveFailures: 0,
+      canRetry: false
+    });
+    await expect(runtime.refreshLocalUsage()).rejects.toMatchObject({
+      code: "refresh-failed"
+    });
+    expect(runtime.getStatus()).toMatchObject({
+      phase: "refresh-failed",
+      lastSuccessAt: null,
+      consecutiveFailures: 1,
+      canRetry: true
+    });
+
+    now = new Date("2026-07-15T12:00:05.000Z");
+    await runtime.refreshLocalUsage();
+    expect(runtime.getStatus()).toEqual({
+      phase: "ready",
+      lastSuccessAt: "2026-07-15T12:00:05.000Z",
+      consecutiveFailures: 0,
+      canRetry: true
+    });
+
+    now = new Date("2026-07-15T12:00:10.000Z");
+    await expect(runtime.refreshLocalUsage()).rejects.toMatchObject({
+      code: "refresh-failed"
+    });
+    expect(runtime.getStatus()).toEqual({
+      phase: "stale",
+      lastSuccessAt: "2026-07-15T12:00:05.000Z",
+      consecutiveFailures: 1,
+      canRetry: true
+    });
+    await runtime.stop();
+  });
+
+  it("marks a successful zero-data probe as ready-no-data", async () => {
+    const scheduler = new ManualScheduler();
+    const main = announcedServerChild();
+    const processQueue = queuedSpawn([
+      successfulVersionChild(),
+      main,
+      exitingRefreshChild(0)
+    ]);
+    const runtime = await startManagedTokenTracker({
+      readinessProbe: async () => undefined,
+      dataAvailabilityProbe: async () => false,
+      clock: () => new Date("2026-07-15T12:00:00.000Z"),
+      spawn: processQueue.spawn,
+      resolveExecutable: executable,
+      refreshIntervalMs: false,
+      scheduler
+    });
+
+    await runtime.refreshLocalUsage();
+    expect(runtime.getStatus()).toEqual({
+      phase: "ready-no-data",
+      lastSuccessAt: "2026-07-15T12:00:00.000Z",
+      consecutiveFailures: 0,
+      canRetry: true
+    });
+    await runtime.stop();
+  });
+
+  it("deduplicates requested refreshes and delays a retrigger until five seconds", async () => {
+    const scheduler = new ManualScheduler();
+    const main = announcedServerChild();
+    const firstRefresh = new FakeChild();
+    const processQueue = queuedSpawn([
+      successfulVersionChild(),
+      main,
+      firstRefresh,
+      exitingRefreshChild(0)
+    ]);
+    let now = new Date("2026-07-15T12:00:00.000Z");
+    const runtime = await startManagedTokenTracker({
+      readinessProbe: async () => undefined,
+      clock: () => now,
+      spawn: processQueue.spawn,
+      resolveExecutable: executable,
+      refreshIntervalMs: false,
+      scheduler
+    });
+
+    const first = runtime.requestRefresh();
+    const duplicate = runtime.requestRefresh();
+    expect(processQueue.calls).toHaveLength(3);
+    firstRefresh.emitExit(0);
+    await expect(Promise.all([first, duplicate])).resolves.toEqual([
+      expect.objectContaining({ phase: "ready" }),
+      expect.objectContaining({ phase: "ready" })
+    ]);
+
+    now = new Date("2026-07-15T12:00:04.999Z");
+    const retrigger = runtime.requestRefresh();
+    expect(processQueue.calls).toHaveLength(3);
+    await expect(retrigger).resolves.toMatchObject({ phase: "ready" });
+    expect(processQueue.calls).toHaveLength(4);
+    await runtime.stop();
+  });
+
   it("runs an immediate refresh, keeps periodic work single-flight, and cancels it on stop", async () => {
     const scheduler = new ManualScheduler();
     const main = announcedServerChild();
