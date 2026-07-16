@@ -694,7 +694,12 @@ async function verifyRawFuseWires(binaryPath) {
   return wires;
 }
 
-function openZip(path) {
+function openZip(path, options = {}) {
+  // PowerShell 5.1 Compress-Archive (cross-zip's win32 backend) writes
+  // non-conformant backslash separators. Lenient mode lets yauzl normalize
+  // them to "/" before its own traversal/absolute-path validation and before
+  // safeZipEntryName re-checks the normalized name.
+  const allowBackslashSeparators = options.allowBackslashSeparators === true;
   return new Promise((resolvePromise, reject) => {
     yauzl.open(
       path,
@@ -702,7 +707,7 @@ function openZip(path) {
         autoClose: false,
         decodeStrings: true,
         lazyEntries: true,
-        strictFileNames: true,
+        strictFileNames: !allowBackslashSeparators,
         validateEntrySizes: true
       },
       (error, zip) => {
@@ -837,7 +842,7 @@ async function zipInventory(path, options = {}) {
   const lenientModes = options.lenientModes === true;
   const entryBound = lenientModes ? 8192 : 512;
   const byteBound = (lenientModes ? 2 : 1) * 1_024 * 1_024 * 1_024;
-  const zip = await openZip(path);
+  const zip = await openZip(path, { allowBackslashSeparators: lenientModes });
   try {
     return await new Promise((resolvePromise, reject) => {
       const files = new Map();
