@@ -233,7 +233,8 @@ export async function startPetCompanion(): Promise<void> {
     dashboardWindows.clear();
     closeView(shellWindow, gatewayView);
     gatewayView = null;
-    await closePetServices(activeServices);
+    // Clear the cookie while we still own the loopback port, so nothing can
+    // present it to whoever reclaims that port after closePetServices.
     try {
       await session
         .fromPartition(PET_SESSION_PARTITION)
@@ -241,6 +242,7 @@ export async function startPetCompanion(): Promise<void> {
     } catch {
       // Best effort: the next bootstrap overwrites the session cookie anyway.
     }
+    await closePetServices(activeServices);
   };
 
   const showFailure = async (kind: "gateway" | "sidecar"): Promise<void> => {

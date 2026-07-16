@@ -1061,9 +1061,7 @@ export function parseUsageModelsResponse(
       !keys.includes("model") ||
       !keys.includes("family") ||
       !keys.includes("totalTokens") ||
-      typeof model !== "string" ||
-      model.length < 1 ||
-      model.length > 120 ||
+      !isShortText(model, 120) ||
       model.trim() !== model ||
       !isUsageFamily(candidate["family"]) ||
       !isSafeTokenCount(totalTokens) ||

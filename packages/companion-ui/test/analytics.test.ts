@@ -130,6 +130,17 @@ describe("usage model DTO parser", () => {
     ).toThrow("Invalid usage models response");
   });
 
+  it("rejects model names containing control characters", () => {
+    for (const model of ["gpt\u00005", "gpt\n5", "gpt\u007f5"]) {
+      expect(() =>
+        parseUsageModelsResponse({
+          window: 28,
+          models: [{ model, family: "openai", totalTokens: 1 }]
+        })
+      ).toThrow("Invalid usage models response");
+    }
+  });
+
   it("accepts 120 characters and rejects a model name over the cap", () => {
     expect(
       parseUsageModelsResponse({
