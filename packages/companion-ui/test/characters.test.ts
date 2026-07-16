@@ -3,10 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyCharacterSelection,
   applyCharacterWardrobe,
+  createPortraitSwitchStateMachine,
   createCharacterImageFallbackTracker,
   createCharacterUnlockQueue,
   createVoicePlaybackGate,
   diffCharacterUnlocks,
+  enabledCharacterAnimationClasses,
+  isGlmLetterCharacter,
   parseCharactersSnapshot,
   requestCharacterSelection,
   requestCharacterWardrobe,
@@ -61,8 +64,8 @@ const CHARACTER_RESPONSE = {
       ]
     },
     {
-      characterId: "claude",
-      displayName: "Claude",
+      characterId: "glm",
+      displayName: "GLM",
       kind: "sister",
       unlocked: true,
       unlockedAt: "2026-07-02T00:00:00.000Z",
@@ -257,9 +260,71 @@ describe("character roster response contract", () => {
       "Invalid characters response"
     );
   });
+
+  it("allows letter mode only for GLM", () => {
+    const parsed = validSnapshot();
+    expect(isGlmLetterCharacter(parsed.characters[1]!)).toBe(true);
+    expect(isGlmLetterCharacter(parsed.characters[0]!)).toBe(false);
+
+    const invalid = {
+      ...CHARACTER_RESPONSE,
+      characters: [
+        CHARACTER_RESPONSE.characters[0],
+        {
+          ...CHARACTER_RESPONSE.characters[1],
+          characterId: "claude",
+          displayName: "Claude"
+        },
+        CHARACTER_RESPONSE.characters[2]
+      ]
+    };
+    expect(() => parseCharactersSnapshot(invalid)).toThrow(
+      "Invalid characters response"
+    );
+  });
 });
 
 describe("character interaction logic", () => {
+  it("preloads before committing a portrait switch and retains the current portrait on failure", async () => {
+    const events: string[] = [];
+    let finishPreload: (() => void) | undefined;
+    const preload = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishPreload = resolve;
+        })
+    );
+    const machine = createPortraitSwitchStateMachine({
+      preload,
+      onSwitching: (target) => events.push(`switching:${target.characterId}`),
+      onCommit: (target) => events.push(`commit:${target.characterId}`),
+      onError: (target) => events.push(`error:${target.characterId}`)
+    });
+    const first = { characterId: "chatgpt", imagePath: IMAGE_PATH };
+    const pending = machine.transition(first);
+
+    expect(machine.current()).toBeUndefined();
+    expect(events).toEqual(["switching:chatgpt"]);
+    finishPreload!();
+    await expect(pending).resolves.toBe(true);
+    expect(machine.current()).toBe(first);
+    expect(events).toEqual(["switching:chatgpt", "commit:chatgpt"]);
+
+    preload.mockRejectedValueOnce(new Error("404"));
+    const failed = { characterId: "sakana", imagePath: POSE_PATH };
+    await expect(machine.transition(failed)).resolves.toBe(false);
+    expect(machine.current()).toBe(first);
+    expect(events.at(-1)).toBe("error:sakana");
+  });
+
+  it("returns no animation classes when reduced motion is requested", () => {
+    expect(enabledCharacterAnimationClasses(true)).toEqual([]);
+    expect(enabledCharacterAnimationClasses(false)).toContain("character-idle");
+    expect(enabledCharacterAnimationClasses(false)).toContain(
+      "character-crossfade-in"
+    );
+  });
+
   it("diffs character and wardrobe unlocks, then serializes their toasts", () => {
     const previous = validSnapshot();
     const sakana = CHARACTER_RESPONSE.characters[2];
@@ -356,15 +421,15 @@ describe("character POST flows", () => {
     const fetcher = vi.fn(async () =>
       jsonResponse({
         status: "ok",
-        selection: { characterId: "claude", selectedBy: "manual" }
+        selection: { characterId: "glm", selectedBy: "manual" }
       })
     ) as CharacterFetch;
 
-    const response = await requestCharacterSelection("claude", fetcher);
+    const response = await requestCharacterSelection("glm", fetcher);
     const updated = applyCharacterSelection(validSnapshot(), response);
 
     expect(updated.selection).toEqual({
-      characterId: "claude",
+      characterId: "glm",
       selectedBy: "manual"
     });
     expect(fetcher).toHaveBeenCalledWith(
@@ -372,7 +437,7 @@ describe("character POST flows", () => {
       expect.objectContaining({
         method: "POST",
         credentials: "same-origin",
-        body: JSON.stringify({ characterId: "claude" })
+        body: JSON.stringify({ characterId: "glm" })
       })
     );
   });
