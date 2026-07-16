@@ -26,6 +26,27 @@ export type TokenTrackerReadinessProbe = (
   signal: AbortSignal
 ) => Promise<void>;
 
+export type TokenTrackerDataAvailabilityProbe = (
+  baseUrl: string
+) => boolean | Promise<boolean>;
+
+export type TokenTrackerRuntimeClock = () => Date;
+
+export type TokenTrackerRuntimePhase =
+  | "starting"
+  | "syncing"
+  | "ready"
+  | "ready-no-data"
+  | "refresh-failed"
+  | "stale";
+
+export interface TokenTrackerRuntimeStatus {
+  readonly phase: TokenTrackerRuntimePhase;
+  readonly lastSuccessAt: string | null;
+  readonly consecutiveFailures: number;
+  readonly canRetry: boolean;
+}
+
 export type TokenTrackerExecutableResolver = () =>
   | TokenTrackerExecutable
   | Promise<TokenTrackerExecutable>;
@@ -41,6 +62,8 @@ export interface TokenTrackerRuntimeScheduler {
 
 export interface StartManagedTokenTrackerOptions {
   readonly readinessProbe: TokenTrackerReadinessProbe;
+  readonly dataAvailabilityProbe?: TokenTrackerDataAvailabilityProbe;
+  readonly clock?: TokenTrackerRuntimeClock;
   readonly startupTimeoutMs?: number;
   readonly refreshTimeoutMs?: number;
   readonly shutdownTimeoutMs?: number;
@@ -61,6 +84,8 @@ export interface ManagedTokenTracker {
   readonly baseUrl: string;
   readonly version: typeof PINNED_TOKEN_TRACKER_VERSION;
   readonly closed: Promise<ManagedTokenTrackerExit>;
+  getStatus(): TokenTrackerRuntimeStatus;
+  requestRefresh(): Promise<TokenTrackerRuntimeStatus>;
   refreshLocalUsage(): Promise<void>;
   stop(): Promise<void>;
 }

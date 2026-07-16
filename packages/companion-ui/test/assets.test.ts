@@ -45,7 +45,9 @@ describe("companion static assets", () => {
     for (const characterId of ["chatgpt", "claude", "gemini", "grok"]) {
       expect(html).toContain(`data-character-id="${characterId}"`);
     }
-    expect(html).toContain("正在連線");
+    expect(html).toContain("正在啟動");
+    expect(html).toContain("重新掃描");
+    expect(html).toContain("data-rescan");
     expect(html).toContain('data-metric="today">—</span>');
     expect(html).toContain('data-metric="last7Days">—</span>');
     expect(html).toContain('data-metric="last28Days">—</span>');
@@ -82,6 +84,12 @@ describe("companion static assets", () => {
     expect(js).not.toMatch(/https?:\/\/(?!www\.w3\.org\/2000\/svg)/u);
     expect(js).not.toMatch(/\b(?:innerHTML|outerHTML|insertAdjacentHTML|eval|localStorage|sessionStorage)\b/u);
     expect(js).toContain('const COMPANION_API_ENDPOINT = "/api/companion"');
+    expect(js).toContain(
+      'const COLLECTOR_STATUS_ENDPOINT = "/api/companion/status"'
+    );
+    expect(js).toContain(
+      'const COLLECTOR_REFRESH_ENDPOINT = "/api/companion/refresh"'
+    );
     expect(js).toContain('credentials: "same-origin"');
     expect(js).toContain("更新於本機時間");
     expect(js).toContain("依近 28 天的本機使用分布先由她陪你");
@@ -99,11 +107,28 @@ describe("companion static assets", () => {
     expect(js).toContain("重新檢查");
   });
 
+  it("distinguishes first sync, no-data, failed, and stale collector states", async () => {
+    const [html, css, js] = await Promise.all([
+      readAsset("index.html"),
+      readAsset("styles.css"),
+      readAsset("app.js")
+    ]);
+
+    expect(js).toContain("先不把空白當成零");
+    expect(js).toContain("這不是安靜的一天");
+    expect(js).toContain("第一次掃描沒有完成");
+    expect(js).toContain("這是上次成功整理的用量");
+    expect(html).toContain("data-stale-badge");
+    expect(css).toContain('html[data-connection="stale"]');
+    expect(js).toContain("const ACTIVE_POLL_MS = 5_000");
+    expect(js).toContain("const SETTLED_POLL_MS = 60_000");
+  });
+
   it("keeps setup, policy, and unfinished controls off the main screen", async () => {
     const html = await readAsset("index.html");
 
     expect(html).not.toMatch(/collector|BYOK|cloud|API key|OAuth|k\s*=\s*20/iu);
-    expect(html).not.toMatch(/掃描|選擇.*收集|隱私政策|安全停用|觀測日/u);
+    expect(html).not.toMatch(/選擇.*收集|隱私政策|安全停用|觀測日/u);
     expect(html).not.toContain("<select");
     expect(html).not.toContain("<form");
   });
