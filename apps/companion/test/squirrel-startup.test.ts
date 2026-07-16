@@ -1,0 +1,164 @@
+import { EventEmitter } from "node:events";
+import { basename, dirname, resolve } from "node:path";
+
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  classifySquirrelArgv,
+  handleSquirrelStartup,
+  type SquirrelStartupDependencies
+} from "../src/main/squirrel-startup.js";
+
+const execPath = "/Users/example/App/TokenMonster.exe";
+
+function spawnedProcess(): EventEmitter & { unref: ReturnType<typeof vi.fn> } {
+  return Object.assign(new EventEmitter(), { unref: vi.fn() });
+}
+
+function dependencies(
+  argv: readonly string[],
+  platform: NodeJS.Platform = "win32"
+): {
+  deps: SquirrelStartupDependencies;
+  child: ReturnType<typeof spawnedProcess>;
+  spawn: ReturnType<typeof vi.fn>;
+  quit: ReturnType<typeof vi.fn>;
+} {
+  const child = spawnedProcess();
+  const spawn = vi.fn(() => child);
+  const quit = vi.fn();
+  return {
+    deps: {
+      argv,
+      platform,
+      execPath,
+      spawn: spawn as unknown as SquirrelStartupDependencies["spawn"],
+      quit,
+      timeoutMs: 50
+    },
+    child,
+    spawn,
+    quit
+  };
+}
+
+describe("classifySquirrelArgv", () => {
+  it.each([
+    ["--squirrel-install", "install"],
+    ["--squirrel-updated", "updated"],
+    ["--squirrel-uninstall", "uninstall"],
+    ["--squirrel-obsolete", "obsolete"],
+    ["--squirrel-firstrun", "firstrun"]
+  ] as const)("classifies %s", (flag, expected) => {
+    expect(classifySquirrelArgv(["TokenMonster.exe", flag], "win32")).toBe(
+      expected
+    );
+  });
+
+  it("scans dev-offset argv and returns the first flag", () => {
+    expect(
+      classifySquirrelArgv(
+        ["electron.exe", "app", "--squirrel-uninstall", "--squirrel-install"],
+        "win32"
+      )
+    ).toBe("uninstall");
+  });
+
+  it("returns null without a flag or off Windows", () => {
+    expect(classifySquirrelArgv(["TokenMonster.exe"], "win32")).toBeNull();
+    expect(
+      classifySquirrelArgv(["TokenMonster", "--squirrel-install"], "linux")
+    ).toBeNull();
+  });
+});
+
+describe("handleSquirrelStartup", () => {
+  it("creates the executable shortcut on install, then quits", () => {
+    const { deps, child, spawn, quit } = dependencies([
+      "TokenMonster.exe",
+      "--squirrel-install"
+    ]);
+    expect(handleSquirrelStartup(deps)).toBe(true);
+    expect(spawn).toHaveBeenCalledWith(
+      resolve(dirname(execPath), "..", "Update.exe"),
+      [`--createShortcut=${basename(execPath)}`],
+      { detached: true, windowsHide: true, stdio: "ignore" }
+    );
+    expect(quit).not.toHaveBeenCalled();
+    child.emit("close");
+    expect(quit).toHaveBeenCalledOnce();
+  });
+
+  it("removes the executable shortcut on uninstall", () => {
+    const { deps, child, spawn, quit } = dependencies([
+      "TokenMonster.exe",
+      "--squirrel-uninstall"
+    ]);
+    expect(handleSquirrelStartup(deps)).toBe(true);
+    expect(spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      [`--removeShortcut=${basename(execPath)}`],
+      expect.any(Object)
+    );
+    child.emit("close");
+    expect(quit).toHaveBeenCalledOnce();
+  });
+
+  it("quits obsolete versions without spawning", () => {
+    const { deps, spawn, quit } = dependencies([
+      "TokenMonster.exe",
+      "--squirrel-obsolete"
+    ]);
+    expect(handleSquirrelStartup(deps)).toBe(true);
+    expect(spawn).not.toHaveBeenCalled();
+    expect(quit).toHaveBeenCalledOnce();
+  });
+
+  it("does not handle first-run startup", () => {
+    const { deps, spawn, quit } = dependencies([
+      "TokenMonster.exe",
+      "--squirrel-firstrun"
+    ]);
+    expect(handleSquirrelStartup(deps)).toBe(false);
+    expect(spawn).not.toHaveBeenCalled();
+    expect(quit).not.toHaveBeenCalled();
+  });
+
+  it("still quits when spawning Update.exe throws", () => {
+    const { deps, spawn, quit } = dependencies([
+      "TokenMonster.exe",
+      "--squirrel-updated"
+    ]);
+    spawn.mockImplementation(() => {
+      throw new Error("spawn failed");
+    });
+    expect(handleSquirrelStartup(deps)).toBe(true);
+    expect(quit).toHaveBeenCalledOnce();
+  });
+
+  it("bounds the wait for Update.exe to exit", () => {
+    vi.useFakeTimers();
+    try {
+      const { deps, quit } = dependencies([
+        "TokenMonster.exe",
+        "--squirrel-install"
+      ]);
+      expect(handleSquirrelStartup(deps)).toBe(true);
+      expect(quit).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(50);
+      expect(quit).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does nothing off Windows", () => {
+    const { deps, spawn, quit } = dependencies(
+      ["TokenMonster", "--squirrel-install"],
+      "darwin"
+    );
+    expect(handleSquirrelStartup(deps)).toBe(false);
+    expect(spawn).not.toHaveBeenCalled();
+    expect(quit).not.toHaveBeenCalled();
+  });
+});
