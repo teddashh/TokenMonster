@@ -104,6 +104,37 @@ export interface TokenMonsterProgressionFamilyTotals {
   readonly other: number;
 }
 
+export type TokenMonsterUsageFamily = keyof TokenMonsterProgressionFamilyTotals;
+
+export type TokenMonsterUsageFamilyTotals = Readonly<
+  Record<TokenMonsterUsageFamily, number>
+>;
+
+export interface TokenMonsterDailyFamilyUsage {
+  readonly utcDate: string;
+  readonly families: TokenMonsterUsageFamilyTotals;
+}
+
+export interface TokenMonsterDailyFamilySeries {
+  readonly days: readonly TokenMonsterDailyFamilyUsage[];
+}
+
+export interface TokenTrackerModelUsageQuery extends TokenTrackerAggregateRange {
+  readonly limit: number;
+}
+
+export interface TokenMonsterModelUsageEntry {
+  readonly model: string;
+  readonly family: TokenMonsterUsageFamily;
+  readonly totalTokens: number;
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+}
+
+export interface TokenMonsterModelUsageResponse {
+  readonly models: readonly TokenMonsterModelUsageEntry[];
+}
+
 export interface TokenTrackerAdapter {
   probe(): Promise<TokenTrackerProbe>;
   getSummary(
@@ -118,4 +149,10 @@ export interface TokenTrackerAdapter {
   getProgressionFamilyTotals(
     range: TokenTrackerAggregateRange
   ): Promise<TokenMonsterProgressionFamilyTotals>;
+  getDailyFamilySeries(
+    range: TokenTrackerAggregateRange
+  ): Promise<TokenMonsterDailyFamilySeries>;
+  getModelUsage(
+    query: TokenTrackerModelUsageQuery
+  ): Promise<TokenMonsterModelUsageResponse>;
 }

@@ -523,6 +523,213 @@ describe("content-blind TokenMonster projection", () => {
   });
 });
 
+describe("usage analytics projections", () => {
+  it("builds a complete daily family series and buckets unknown sources as other", async () => {
+    const fetchImpl = vi.fn<TokenTrackerFetch>(async (endpoint) => {
+      const url = new URL(endpoint);
+      const from = url.searchParams.get("from")!;
+      const to = url.searchParams.get("to")!;
+      if (url.pathname === "/functions/tokentracker-usage-daily") {
+        return jsonResponse(
+          dailyBody({
+            from,
+            to,
+            data: [
+              { day: "2026-07-01", ...tokenFields(), total_cost_usd: 0 },
+              { day: "2026-07-03", ...tokenFields(), total_cost_usd: 0 }
+            ]
+          })
+        );
+      }
+      const sources =
+        from === "2026-07-01"
+          ? [
+              modelBreakdownSource("codex", 10),
+              modelBreakdownSource("qwen", 20),
+              modelBreakdownSource("future-provider", 30)
+            ]
+          : [modelBreakdownSource("claude", 40)];
+      return jsonResponse(modelBreakdownBody({ from, to, sources }));
+    });
+    const result = await createTokenTrackerAdapter({ fetch: fetchImpl })
+      .getDailyFamilySeries({
+        fromUtcDate: "2026-07-01",
+        toUtcDate: "2026-07-03"
+      });
+
+    expect(result).toEqual({
+      days: [
+        {
+          utcDate: "2026-07-01",
+          families: {
+            openai: 10,
+            anthropic: 0,
+            google: 0,
+            xai: 0,
+            deepseek: 0,
+            qwen: 20,
+            mistral: 0,
+            venice: 0,
+            sakana: 0,
+            perplexity: 0,
+            glm: 0,
+            other: 30
+          }
+        },
+        {
+          utcDate: "2026-07-02",
+          families: {
+            openai: 0,
+            anthropic: 0,
+            google: 0,
+            xai: 0,
+            deepseek: 0,
+            qwen: 0,
+            mistral: 0,
+            venice: 0,
+            sakana: 0,
+            perplexity: 0,
+            glm: 0,
+            other: 0
+          }
+        },
+        {
+          utcDate: "2026-07-03",
+          families: {
+            openai: 0,
+            anthropic: 40,
+            google: 0,
+            xai: 0,
+            deepseek: 0,
+            qwen: 0,
+            mistral: 0,
+            venice: 0,
+            sakana: 0,
+            perplexity: 0,
+            glm: 0,
+            other: 0
+          }
+        }
+      ]
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(Object.isFrozen(result.days)).toBe(true);
+    expect(Object.isFrozen(result.days[0]?.families)).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("future-provider");
+  });
+
+  it("maps malformed family-series upstream data to incompatible-schema", async () => {
+    const fetchImpl = vi.fn<TokenTrackerFetch>(async (endpoint) => {
+      const url = new URL(endpoint);
+      if (url.pathname === "/functions/tokentracker-usage-daily") {
+        return jsonResponse(
+          dailyBody({
+            from: "2026-07-01",
+            to: "2026-07-01",
+            data: [{ day: "2026-07-01", ...tokenFields(), total_cost_usd: 0 }]
+          })
+        );
+      }
+      return jsonResponse(
+        modelBreakdownBody({
+          from: "2026-07-01",
+          to: "2026-07-01",
+          secretPath: "/private/canary"
+        })
+      );
+    });
+
+    await expect(
+      createTokenTrackerAdapter({ fetch: fetchImpl }).getDailyFamilySeries({
+        fromUtcDate: "2026-07-01",
+        toUtcDate: "2026-07-01"
+      })
+    ).rejects.toMatchObject({ code: "incompatible-schema" });
+  });
+
+  it("sorts and sanitizes model usage, drops blank names, and clamps limits", async () => {
+    const longModel = `  ${"x".repeat(130)}  `;
+    const sources = [
+      modelBreakdownSource("codex", 40, {
+        models: [
+          {
+            model: "  gpt-fast  ",
+            model_id: "  gpt-fast  ",
+            totals: modelBreakdownTotals(10, {
+              input_tokens: 6,
+              output_tokens: 4
+            })
+          },
+          {
+            model: longModel,
+            model_id: longModel,
+            totals: modelBreakdownTotals(30, {
+              input_tokens: 20,
+              output_tokens: 10
+            })
+          },
+          {
+            model: "   ",
+            model_id: "   ",
+            totals: modelBreakdownTotals(999)
+          }
+        ]
+      }),
+      modelBreakdownSource("future-provider", 20, {
+        models: [
+          {
+            model: "local-model",
+            model_id: "local-model",
+            totals: modelBreakdownTotals(20, {
+              input_tokens: 12,
+              output_tokens: 8
+            })
+          }
+        ]
+      })
+    ];
+    const body = modelBreakdownBody({ sources });
+    const range = {
+      fromUtcDate: "2026-07-01",
+      toUtcDate: "2026-07-02"
+    } as const;
+
+    const all = await createTokenTrackerAdapter({ fetch: injectedFetch(body) })
+      .getModelUsage({ ...range, limit: 999 });
+    expect(all).toEqual({
+      models: [
+        {
+          model: "x".repeat(120),
+          family: "openai",
+          totalTokens: 30,
+          inputTokens: 20,
+          outputTokens: 10
+        },
+        {
+          model: "local-model",
+          family: "other",
+          totalTokens: 20,
+          inputTokens: 12,
+          outputTokens: 8
+        },
+        {
+          model: "gpt-fast",
+          family: "openai",
+          totalTokens: 10,
+          inputTokens: 6,
+          outputTokens: 4
+        }
+      ]
+    });
+    await expect(
+      createTokenTrackerAdapter({ fetch: injectedFetch(body) }).getModelUsage({
+        ...range,
+        limit: 0
+      })
+    ).resolves.toEqual({ models: [all.models[0]] });
+  });
+});
+
 describe("strict and bounded upstream responses", () => {
   it("rejects schema drift and echoed range mismatches", async () => {
     const withUnknownField = createTokenTrackerAdapter({

@@ -15,6 +15,8 @@ import { join } from "node:path";
 import {
   TokenTrackerAdapterError,
   type TokenMonsterDailyAggregateResponse,
+  type TokenMonsterDailyFamilySeries,
+  type TokenMonsterModelUsageResponse,
   type TokenMonsterProviderTotals,
   type TokenTrackerAdapter,
   type TokenTrackerAggregateRange
@@ -29,7 +31,8 @@ import {
   type CompanionCollectorController,
   type CompanionCollectorStatus,
   type CompanionGateway,
-  type CompanionGatewayAddress
+  type CompanionGatewayAddress,
+  type CompanionUsageFamiliesResponse
 } from "../src/index.js";
 
 const UI_ASSETS = Object.freeze({
@@ -145,6 +148,41 @@ function progressionTotals(openai: number) {
   });
 }
 
+function usageFamilyTotals(openai = 0, anthropic = 0) {
+  return Object.freeze({
+    openai,
+    anthropic,
+    google: 0,
+    xai: 0,
+    deepseek: 0,
+    qwen: 0,
+    mistral: 0,
+    venice: 0,
+    sakana: 0,
+    perplexity: 0,
+    glm: 0,
+    other: 0
+  });
+}
+
+function familySeriesFor(
+  range: TokenTrackerAggregateRange
+): TokenMonsterDailyFamilySeries {
+  const start = Date.parse(`${range.fromUtcDate}T00:00:00.000Z`);
+  const end = Date.parse(`${range.toUtcDate}T00:00:00.000Z`);
+  const days = [];
+  for (let time = start; time <= end; time += 86_400_000) {
+    const utcDate = new Date(time).toISOString().slice(0, 10);
+    days.push(
+      Object.freeze({
+        utcDate,
+        families: usageFamilyTotals(utcDate === range.toUtcDate ? 11 : 0)
+      })
+    );
+  }
+  return Object.freeze({ days: Object.freeze(days) });
+}
+
 function fakeAdapter(
   getDaily: TokenTrackerAdapter["getDaily"] = async (range) =>
     responseFor(range),
@@ -165,7 +203,12 @@ function fakeAdapter(
         perplexity: 0,
         glm: 0,
         other: 0
-      })
+      }),
+  getDailyFamilySeries: TokenTrackerAdapter["getDailyFamilySeries"] = async (
+    range
+  ) => familySeriesFor(range),
+  getModelUsage: TokenTrackerAdapter["getModelUsage"] = async () =>
+    Object.freeze({ models: Object.freeze([]) })
 ): TokenTrackerAdapter {
   return Object.freeze({
     probe: vi.fn(async () => ({
@@ -178,7 +221,9 @@ function fakeAdapter(
     }),
     getDaily: vi.fn(getDaily),
     getProviderTotals: vi.fn(getProviderTotals),
-    getProgressionFamilyTotals: vi.fn(getProgressionFamilyTotals)
+    getProgressionFamilyTotals: vi.fn(getProgressionFamilyTotals),
+    getDailyFamilySeries: vi.fn(getDailyFamilySeries),
+    getModelUsage: vi.fn(getModelUsage)
   });
 }
 
@@ -287,6 +332,19 @@ async function characterRequest(
 ): Promise<Response> {
   return fetch(`${address.origin}/api/characters`, {
     headers: { Cookie: cookie, Origin: address.origin }
+  });
+}
+
+async function usageRequest(
+  address: CompanionGatewayAddress,
+  cookie: string | null,
+  path: string
+): Promise<Response> {
+  return fetch(`${address.origin}${path}`, {
+    headers: {
+      ...(cookie === null ? {} : { Cookie: cookie }),
+      Origin: address.origin
+    }
   });
 }
 
@@ -696,6 +754,158 @@ describe("companion gateway", () => {
     });
     expect(anonymous.status).toBe(404);
     expect(adapter.getDaily).not.toHaveBeenCalled();
+  });
+
+  it("returns session-gated family and model analytics for fixed UTC windows", async () => {
+    const getDailyFamilySeries = vi.fn<
+      TokenTrackerAdapter["getDailyFamilySeries"]
+    >(async (range) => familySeriesFor(range));
+    const getModelUsage = vi.fn<TokenTrackerAdapter["getModelUsage"]>(
+      async () =>
+        Object.freeze({
+          models: Object.freeze([
+            Object.freeze({
+              model: "claude-sonnet",
+              family: "anthropic" as const,
+              totalTokens: 20,
+              inputTokens: 12,
+              outputTokens: 8
+            }),
+            Object.freeze({
+              model: "gpt-5",
+              family: "openai" as const,
+              totalTokens: 10
+            })
+          ])
+        })
+    );
+    const adapter = fakeAdapter(
+      undefined,
+      undefined,
+      undefined,
+      getDailyFamilySeries,
+      getModelUsage
+    );
+    const { address } = await startGateway(adapter);
+    const cookie = await bootstrap(address);
+
+    const families = await usageRequest(
+      address,
+      cookie,
+      "/api/usage/families?window=7"
+    );
+    expect(families.status).toBe(200);
+    expect(families.headers.get("cache-control")).toBe("no-store");
+    const familiesBody =
+      (await families.json()) as CompanionUsageFamiliesResponse;
+    expect(familiesBody).toMatchObject({ window: 7 });
+    expect(familiesBody.days).toHaveLength(7);
+    expect(familiesBody.days.at(-1)).toEqual({
+      utcDate: "2026-07-15",
+      families: usageFamilyTotals(11)
+    });
+    expect(getDailyFamilySeries).toHaveBeenCalledWith({
+      fromUtcDate: "2026-07-09",
+      toUtcDate: "2026-07-15"
+    });
+
+    const models = await usageRequest(
+      address,
+      cookie,
+      "/api/usage/models?window=28&limit=2"
+    );
+    expect(models.status).toBe(200);
+    expect(models.headers.get("cache-control")).toBe("no-store");
+    expect(await models.json()).toEqual({
+      window: 28,
+      models: [
+        {
+          model: "claude-sonnet",
+          family: "anthropic",
+          totalTokens: 20,
+          inputTokens: 12,
+          outputTokens: 8
+        },
+        { model: "gpt-5", family: "openai", totalTokens: 10 }
+      ]
+    });
+    expect(getModelUsage).toHaveBeenCalledWith({
+      fromUtcDate: "2026-06-18",
+      toUtcDate: "2026-07-15",
+      limit: 2
+    });
+  });
+
+  it.each([
+    "/api/usage/families",
+    "/api/usage/families?window=14",
+    "/api/usage/families?window=7&extra=1",
+    "/api/usage/families?window=7&window=28",
+    "/api/usage/models?window=7",
+    "/api/usage/models?window=7&limit=0",
+    "/api/usage/models?window=7&limit=51",
+    "/api/usage/models?window=90&limit=1&extra=1"
+  ])("rejects invalid usage analytics query %s", async (path) => {
+    const adapter = fakeAdapter();
+    const { address } = await startGateway(adapter);
+    const cookie = await bootstrap(address);
+
+    const response = await usageRequest(address, cookie, path);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "request-rejected" });
+    expect(adapter.getDailyFamilySeries).not.toHaveBeenCalled();
+    expect(adapter.getModelUsage).not.toHaveBeenCalled();
+  });
+
+  it("gives unauthenticated usage routes the same indistinguishable 404 as characters", async () => {
+    const adapter = fakeAdapter();
+    const { address } = await startGateway(adapter);
+
+    const [families, models, characters] = await Promise.all([
+      usageRequest(address, null, "/api/usage/families?window=7"),
+      usageRequest(address, null, "/api/usage/models?window=7&limit=5"),
+      fetch(`${address.origin}/api/characters`)
+    ]);
+    expect([families.status, models.status, characters.status]).toEqual([
+      404,
+      404,
+      404
+    ]);
+    expect(await families.text()).toBe(await characters.text());
+    expect(await models.json()).toEqual({ error: "request-rejected" });
+    expect(adapter.getDailyFamilySeries).not.toHaveBeenCalled();
+    expect(adapter.getModelUsage).not.toHaveBeenCalled();
+  });
+
+  it("maps usage adapter failures to generic envelopes without upstream detail", async () => {
+    const canary = "/private/upstream/status-599";
+    const adapter = fakeAdapter(
+      undefined,
+      undefined,
+      undefined,
+      async () => {
+        throw new Error(canary);
+      },
+      async () => {
+        throw new Error(canary);
+      }
+    );
+    const { address } = await startGateway(adapter);
+    const cookie = await bootstrap(address);
+
+    for (const path of [
+      "/api/usage/families?window=7",
+      "/api/usage/models?window=7&limit=5"
+    ]) {
+      const response = await usageRequest(address, cookie, path);
+      expect(response.status).toBe(503);
+      const body = await response.text();
+      expect(JSON.parse(body)).toEqual({
+        status: "error",
+        error: "sidecar-unavailable"
+      });
+      expect(body).not.toContain(canary);
+    }
   });
 
   it("maps incompatible data and unavailable sidecars to stable safe errors", async () => {
