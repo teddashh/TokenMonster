@@ -36,9 +36,12 @@ import {
 } from "../src/index.js";
 
 const UI_ASSETS = Object.freeze({
-  html: "<!doctype html><link rel=\"stylesheet\" href=\"/assets/companion.css\"><script type=\"module\" src=\"/assets/companion.js\"></script>",
+  html: "<!doctype html><link rel=\"stylesheet\" href=\"/assets/companion.css\"><script type=\"module\" src=\"/assets/main.js\"></script>",
   css: "body { color: #123; }",
-  javascript: "globalThis.TokenMonster = true;"
+  scripts: Object.freeze({
+    "main.js": "import \"./dto.js\";\nglobalThis.TokenMonster = true;",
+    "dto.js": "export const dto = true;"
+  })
 });
 
 const gateways: CompanionGateway[] = [];
@@ -459,11 +462,28 @@ describe("companion gateway", () => {
     expect(css.status).toBe(200);
     expect(await css.text()).toBe(UI_ASSETS.css);
 
-    const javascript = await fetch(`${address.origin}/assets/companion.js`, {
+    const mainScript = await fetch(`${address.origin}/assets/main.js`, {
       headers: { Cookie: cookie }
     });
-    expect(javascript.status).toBe(200);
-    expect(await javascript.text()).toBe(UI_ASSETS.javascript);
+    expect(mainScript.status).toBe(200);
+    expect(await mainScript.text()).toBe(UI_ASSETS.scripts["main.js"]);
+    expect(mainScript.headers.get("content-type")).toBe(
+      "text/javascript; charset=utf-8"
+    );
+
+    const moduleScript = await fetch(`${address.origin}/assets/dto.js`, {
+      headers: { Cookie: cookie }
+    });
+    expect(moduleScript.status).toBe(200);
+    expect(await moduleScript.text()).toBe(UI_ASSETS.scripts["dto.js"]);
+
+    const unknownScript = await fetch(`${address.origin}/assets/nope.js`, {
+      headers: { Cookie: cookie }
+    });
+    expect(unknownScript.status).toBe(404);
+
+    const anonymousScript = await fetch(`${address.origin}/assets/main.js`);
+    expect(anonymousScript.status).toBe(404);
 
     const unknown = await fetch(`${address.origin}/favicon.ico`, {
       headers: { Cookie: cookie }
@@ -1314,13 +1334,15 @@ describe("companion gateway", () => {
     expect(maximumActive).toBe(3);
   });
 
-  it("reads only the three allowlisted files from an injected static directory", async () => {
+  it("serves only index.html, styles.css, and safe module scripts from an injected static directory", async () => {
     const directory = await mkdtemp(join(tmpdir(), "tokenmonster-gateway-"));
     temporaryDirectories.push(directory);
     await Promise.all([
       writeFile(join(directory, "index.html"), UI_ASSETS.html),
       writeFile(join(directory, "styles.css"), UI_ASSETS.css),
-      writeFile(join(directory, "app.js"), UI_ASSETS.javascript),
+      writeFile(join(directory, "main.js"), UI_ASSETS.scripts["main.js"]),
+      writeFile(join(directory, "dto.js"), UI_ASSETS.scripts["dto.js"]),
+      writeFile(join(directory, "Weird_Name.js"), "must never be served"),
       writeFile(join(directory, "private.txt"), "must never be served")
     ]);
     const gateway = createCompanionGateway({
@@ -1332,6 +1354,17 @@ describe("companion gateway", () => {
     gateways.push(gateway);
     const address = await gateway.start();
     const cookie = await bootstrap(address);
+
+    const moduleScript = await fetch(`${address.origin}/assets/dto.js`, {
+      headers: { Cookie: cookie }
+    });
+    expect(moduleScript.status).toBe(200);
+    expect(await moduleScript.text()).toBe(UI_ASSETS.scripts["dto.js"]);
+
+    const unsafeName = await fetch(`${address.origin}/assets/Weird_Name.js`, {
+      headers: { Cookie: cookie }
+    });
+    expect(unsafeName.status).toBe(404);
 
     const privateFile = await fetch(`${address.origin}/private.txt`, {
       headers: { Cookie: cookie }
@@ -1351,9 +1384,10 @@ describe("companion gateway", () => {
     await Promise.all([
       writeFile(join(directory, "index.html"), UI_ASSETS.html),
       writeFile(join(directory, "styles.css"), UI_ASSETS.css),
-      writeFile(join(outside, "app.js"), UI_ASSETS.javascript)
+      writeFile(join(directory, "main.js"), UI_ASSETS.scripts["main.js"]),
+      writeFile(join(outside, "dto.js"), UI_ASSETS.scripts["dto.js"])
     ]);
-    await symlink(join(outside, "app.js"), join(directory, "app.js"));
+    await symlink(join(outside, "dto.js"), join(directory, "dto.js"));
 
     expect(() =>
       createCompanionGateway({
