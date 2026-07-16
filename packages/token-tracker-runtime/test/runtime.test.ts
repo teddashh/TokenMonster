@@ -209,6 +209,20 @@ describe("managed environment", () => {
     );
     expect(PINNED_TOKEN_TRACKER_VERSION).toBe("0.80.0");
   });
+
+  it("keeps the packaged sidecar manifest on the runtime pin", async () => {
+    const manifest = JSON.parse(
+      await readFile(
+        new URL(
+          "../../../apps/companion/packaging/runtime-bundle-manifest.json",
+          import.meta.url
+        ),
+        "utf8"
+      )
+    ) as { sidecar?: { package?: string; version?: string } };
+    expect(manifest.sidecar?.package).toBe("tokentracker-cli");
+    expect(manifest.sidecar?.version).toBe(PINNED_TOKEN_TRACKER_VERSION);
+  });
 });
 
 describe("managed sidecar lifecycle", () => {

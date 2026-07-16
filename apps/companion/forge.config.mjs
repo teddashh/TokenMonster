@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
@@ -353,6 +354,163 @@ async function prepareVerifiedCollectorExtraResource(
   }
 }
 
+function resolveLockedDependency(entryPath, dependency) {
+  const candidates = [`${entryPath}/node_modules/${dependency}`];
+  const segments = entryPath.split("/");
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    if (segments[index] === "node_modules") {
+      candidates.push(
+        [...segments.slice(0, index + 1), ...dependency.split("/")].join("/")
+      );
+    }
+  }
+  return [...new Set(candidates)].find(
+    (candidate) => packageLock.packages?.[candidate] !== undefined
+  );
+}
+
+function sidecarDependencyClosure() {
+  const rootLockPath = "node_modules/tokentracker-cli";
+  const closure = new Set();
+  const pending = [rootLockPath];
+  while (pending.length > 0) {
+    const entryPath = pending.shift();
+    if (entryPath === undefined || closure.has(entryPath)) continue;
+    const lockEntry = packageLock.packages?.[entryPath];
+    if (lockEntry === null || typeof lockEntry !== "object") {
+      throw new Error(`Sidecar lock entry is missing: ${entryPath}.`);
+    }
+    closure.add(entryPath);
+    for (const dependency of Object.keys(lockEntry.dependencies ?? {}).sort()) {
+      const dependencyPath = resolveLockedDependency(entryPath, dependency);
+      if (dependencyPath === undefined) {
+        throw new Error(
+          `Sidecar hard dependency ${dependency} is missing from package-lock.json for ${entryPath}.`
+        );
+      }
+      pending.push(dependencyPath);
+    }
+    for (const dependency of Object.keys(
+      lockEntry.optionalDependencies ?? {}
+    ).sort()) {
+      const dependencyPath = resolveLockedDependency(entryPath, dependency);
+      if (dependencyPath !== undefined) pending.push(dependencyPath);
+    }
+  }
+  return [...closure].sort();
+}
+
+async function copySidecarPackage(
+  source,
+  destination,
+  budget,
+  depth = 0
+) {
+  if (depth > 32) {
+    throw new Error("Sidecar staging exceeded its directory depth bound.");
+  }
+  const metadata = await lstat(source);
+  if (metadata.isSymbolicLink()) {
+    throw new Error(`Sidecar source contains a symbolic link: ${source}.`);
+  }
+  if (metadata.isDirectory()) {
+    const directoryMode = metadata.mode & 0o7777;
+    await mkdir(destination, { mode: directoryMode, recursive: true });
+    await chmod(destination, directoryMode);
+    for (const entry of (await readdir(source, { withFileTypes: true })).sort(
+      (left, right) => left.name.localeCompare(right.name)
+    )) {
+      const entrySource = join(source, entry.name);
+      const entryMetadata = await lstat(entrySource);
+      if (entryMetadata.isSymbolicLink()) {
+        throw new Error(
+          `Sidecar source contains a symbolic link: ${entrySource}.`
+        );
+      }
+      if (
+        entryMetadata.isDirectory() &&
+        (entry.name === "node_modules" || entry.name === ".bin")
+      ) {
+        continue;
+      }
+      await copySidecarPackage(
+        entrySource,
+        join(destination, entry.name),
+        budget,
+        depth + 1
+      );
+    }
+    return;
+  }
+  if (!metadata.isFile()) {
+    throw new Error(`Sidecar source contains a non-regular entry: ${source}.`);
+  }
+  budget.fileCount += 1;
+  budget.totalBytes += metadata.size;
+  if (budget.fileCount > 8192 || budget.totalBytes > 256 * 1024 * 1024) {
+    throw new Error("Sidecar staging exceeded its file or byte bound.");
+  }
+  await copyFile(source, destination, constants.COPYFILE_EXCL);
+  await chmod(destination, metadata.mode & 0o7777);
+}
+
+async function prepareSidecarExtraResource(resourcesAppPath) {
+  if (
+    runtimeManifest.sidecar?.package !== "tokentracker-cli" ||
+    runtimeManifest.sidecar?.extraResourceTarget !== "sidecar" ||
+    typeof runtimeManifest.sidecar?.version !== "string"
+  ) {
+    throw new Error("Sidecar runtime manifest does not match release policy.");
+  }
+  const rootLockPath = "node_modules/tokentracker-cli";
+  const rootLockEntry = packageLock.packages?.[rootLockPath];
+  if (
+    rootLockEntry === null ||
+    typeof rootLockEntry !== "object" ||
+    rootLockEntry.version !== runtimeManifest.sidecar.version
+  ) {
+    throw new Error("Sidecar package-lock version does not match the manifest.");
+  }
+  const installedManifestPath = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    "..",
+    "..",
+    rootLockPath,
+    "package.json"
+  );
+  const installedManifest = JSON.parse(
+    readFileSync(installedManifestPath, "utf8")
+  );
+  if (
+    installedManifest.name !== runtimeManifest.sidecar.package ||
+    installedManifest.version !== runtimeManifest.sidecar.version
+  ) {
+    throw new Error("Installed sidecar package identity is invalid.");
+  }
+
+  const workspaceDirectory = resolve(dirname(installedManifestPath), "..", "..");
+  const resourcesDirectory = resolve(resourcesAppPath, "..");
+  const targetDirectory = resolve(
+    resourcesDirectory,
+    ...runtimeManifest.sidecar.extraResourceTarget.split("/")
+  );
+  if (!targetDirectory.startsWith(`${resourcesDirectory}${sep}`)) {
+    throw new Error("Sidecar extraResource target escaped the app resources.");
+  }
+  await rm(targetDirectory, { force: true, recursive: true });
+  await mkdir(targetDirectory, { mode: 0o755, recursive: true });
+
+  const budget = { fileCount: 0, totalBytes: 0 };
+  for (const lockPath of sidecarDependencyClosure()) {
+    const source = resolve(workspaceDirectory, ...lockPath.split("/"));
+    const destination = resolve(targetDirectory, ...lockPath.split("/"));
+    if (!destination.startsWith(`${targetDirectory}${sep}`)) {
+      throw new Error("Sidecar package destination escaped its extraResource root.");
+    }
+    await copySidecarPackage(source, destination, budget);
+  }
+}
+
 async function prepareRuntimeResources(
   forgeConfig,
   resourcesAppPath,
@@ -370,6 +528,7 @@ async function prepareRuntimeResources(
     platform,
     arch
   );
+  await prepareSidecarExtraResource(resourcesAppPath);
 }
 
 async function removeGroupWorldWrite(path, depth = 0, counter = { value: 0 }) {
