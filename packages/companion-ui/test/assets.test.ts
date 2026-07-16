@@ -46,6 +46,7 @@ describe("companion static assets", () => {
     expect(js).not.toMatch(/\bfrom\s+["']\.\/(?![^"']+\.js["'])/u);
 
     const emittedFiles = new Set(await readdir(assetDirectory));
+    expect(emittedFiles.has("analytics-panel.js")).toBe(true);
     for (const fileName of emittedFiles) {
       if (!fileName.endsWith(".js")) continue;
       const moduleSource = await readAsset(fileName);
@@ -84,6 +85,14 @@ describe("companion static assets", () => {
     expect(html).toContain("近 7 天（UTC）");
     expect(html).toContain("近 28 天（UTC）");
     expect(html).toContain("最近 28 個 UTC 日");
+    expect(html).toContain("供應商與模型用量");
+    expect(html).toContain('data-analytics-window="7"');
+    expect(html).toContain('data-analytics-window="28"');
+    expect(html).toContain('data-analytics-window="90"');
+    expect(html.indexOf('class="analytics-panel"')).toBeLessThan(
+      html.indexOf('class="companion-panel"')
+    );
+    expect(html).not.toContain('style="');
     expect(html).not.toMatch(/data-metric="(?:today|last7Days|last28Days)">\d/u);
   });
 
