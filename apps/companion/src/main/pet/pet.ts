@@ -8,15 +8,18 @@ import {
   Tray,
   WebContentsView,
   ipcMain,
+  session,
   type IpcMainInvokeEvent
 } from "electron";
 
+import { installSessionGuards } from "../security.js";
 import {
   DEFAULT_PET_WINDOW_STATE,
   readPetWindowState,
   writePetWindowState,
   type PetWindowState
 } from "./bounds-store.js";
+import { originNavigationGuard } from "./navigation.js";
 import {
   PET_STARTUP_MESSAGES,
   PetStartupError,
@@ -91,6 +94,7 @@ function closeView(
 }
 
 export async function startPetCompanion(): Promise<void> {
+  installSessionGuards(session.fromPartition(PET_SESSION_PARTITION));
   const statePath = join(app.getPath("userData"), PET_STATE_FILE);
   const restored = await readPetWindowState(statePath);
   let pinned = restored.pinned;
@@ -101,6 +105,7 @@ export async function startPetCompanion(): Promise<void> {
   let shutdownOperation: Promise<void> | null = null;
   let quittingAllowed = false;
   let tray: Tray | null = null;
+  const dashboardWindows = new Set<BrowserWindow>();
 
   const shellWindow = new BrowserWindow({
     ...restored.bounds,
@@ -179,12 +184,14 @@ export async function startPetCompanion(): Promise<void> {
       }
     });
     dashboard.setMenu(null);
-    dashboard.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-    dashboard.webContents.on("will-navigate", (event, targetUrl) => {
-      if (new URL(targetUrl).origin !== activeServices.origin) {
-        event.preventDefault();
-      }
+    dashboardWindows.add(dashboard);
+    dashboard.on("closed", () => {
+      dashboardWindows.delete(dashboard);
     });
+    dashboard.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    const dashboardNavigation = originNavigationGuard(activeServices.origin);
+    dashboard.webContents.on("will-navigate", dashboardNavigation);
+    dashboard.webContents.on("will-redirect", dashboardNavigation);
     dashboard.once("ready-to-show", () => dashboard.show());
     try {
       await dashboard.loadURL(`${activeServices.origin}/`);
@@ -217,9 +224,23 @@ export async function startPetCompanion(): Promise<void> {
   const stopActiveServices = async (): Promise<void> => {
     const activeServices = services;
     services = null;
+    // Orphaned dashboards would keep polling the old origin; once that port
+    // is freed, any local process could reclaim it and harvest the session
+    // cookie (host-only cookies on 127.0.0.1 are not port-scoped).
+    for (const dashboard of dashboardWindows) {
+      if (!dashboard.isDestroyed()) dashboard.destroy();
+    }
+    dashboardWindows.clear();
     closeView(shellWindow, gatewayView);
     gatewayView = null;
     await closePetServices(activeServices);
+    try {
+      await session
+        .fromPartition(PET_SESSION_PARTITION)
+        .clearStorageData({ storages: ["cookies"] });
+    } catch {
+      // Best effort: the next bootstrap overwrites the session cookie anyway.
+    }
   };
 
   const showFailure = async (kind: "gateway" | "sidecar"): Promise<void> => {
@@ -251,11 +272,9 @@ export async function startPetCompanion(): Promise<void> {
         });
         gatewayView = view;
         view.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-        view.webContents.on("will-navigate", (event, targetUrl) => {
-          if (new URL(targetUrl).origin !== started.origin) {
-            event.preventDefault();
-          }
-        });
+        const viewNavigation = originNavigationGuard(started.origin);
+        view.webContents.on("will-navigate", viewNavigation);
+        view.webContents.on("will-redirect", viewNavigation);
         shellWindow.contentView.addChildView(view);
         updateGatewayViewBounds(shellWindow, view);
 
