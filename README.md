@@ -3,7 +3,7 @@
 [English](README.en.md) · 繁體中文
 
 TokenMonster 是一個 local-first 的 AI 使用量夥伴：它在本機整理 token
-用量、呈現內容不可知的趨勢，並讓可解釋的字母角色依工作型態產生互動。使用者也可在
+用量、呈現內容不可知的趨勢，並讓可解釋的字母人角色依本機使用里程碑產生互動。使用者也可在
 明確預覽與同意後，選擇把嚴格限縮的 UTC 每日彙總貢獻給公開計數器。
 
 > **目前狀態：可測試的 source vertical slice，尚未上線。** Companion、Web、API、
@@ -27,21 +27,45 @@ TokenMonster 是一個 local-first 的 AI 使用量夥伴：它在本機整理 t
 TokenMonster 的隱私邊界是產品需求，不是日後才補上的設定。
 
 - 永遠不保存、記錄、分析或送到 TokenMonster cloud：prompt、response、原始碼內容、
-  filename、project path、API key、OAuth token 或 provider credential；cloud 也不保存
-  或記錄原始 HTTP request body。
+  filename、project path、API key、OAuth token、provider credential、原始使用量
+  store 內容或 model ID；cloud 也不保存或記錄原始 HTTP request body。
 - 本機收集、圖表、角色推導、固定台詞、匯出與重設，不需要 TokenMonster cloud；
   cloud 關閉或離線時仍應可用。
 - 匿名貢獻預設關閉。只有使用者明確預覽並同意後，才會傳送嚴格 schema 的已結束
   UTC 日彙總；hourly 資料、event/session count 與今日未完整資料只留在本機。
 - 公開數字只能稱為「選擇加入之貢獻者分享的 tokens」；它不是全世界的 AI 用量，
   也不是具統計代表性的樣本。
-- 角色 traits 由可說明的工作流程特徵推導，不是強弱排行榜；產品不獎勵浪費 token，
-  也不加入 pay-to-win 機制。
+- 角色、衣櫥與動作解鎖只來自可說明的本機使用里程碑，而且單向保留；產品不獎勵
+  浪費 token，進度無法購買，也沒有 pay-to-win。
 - BYOK key 留在本機 secret store。使用者主動發出的聊天內容只會暫存在 companion
   記憶體，並由本機直接送往所選 provider；它不會經過 TokenMonster API 或 D1。
 
 詳細資料生命週期請閱讀 [Data inventory](docs/DATA_INVENTORY.md) 與
 [Threat model](docs/THREAT_MODEL.md)。
+
+## 本機 companion 體驗
+
+- 首次啟動會清楚顯示 collector 的 `starting` → `syncing` → `ready` 狀態。掃描完成但
+  還沒有支援資料時是 `ready-no-data`；首次掃描失敗是 `refresh-failed`；已有上次成功資料時
+  則是 `stale`，並繼續顯示該份本機快照。使用者可按「重新掃描」；gateway 會共用進行中的
+  refresh，並將新請求限制為至少間隔 5 秒。
+- 陪伴名單共 11 位：ChatGPT、Claude、Gemini、Grok 四位姊妹，以及 DeepSeek、
+  Qwen、Mistral、Venice（UI 顯示 Llama）、Sakana、Perplexity 與 GLM 七位朋友。
+  OpenAI、Anthropic、Google、xAI 中近 28 個 UTC 日用量唯一最高的 family，會讓對應
+  姊妹成為自動起始角色（元祖）；平手或沒有資料時改由使用者選擇。
+- 角色依 provider family 累積量、總用量、活躍日連續或 provider 廣度等明確的本機里程碑
+  解鎖。每位有圖像的角色有 20 種衣櫥主題與 `supported`、`challenged`、`victory`
+  pose art；GLM 目前使用內建字母模式。所有解鎖都只存在本機、單向保留且不可購買。
+- 娃娃圖與未來的語音檔不包在 npm package 內。只有解鎖後顯示所需的 hash-named object
+  才會由固定 HTTPS CDN 按需 `GET`，經 SHA-256 驗證後存入
+  `~/.tokenmonster/asset-cache`。沒有 query string、使用量、角色選擇記錄或使用者 ID；CDN
+  仍會看到公開 object key 與 client IP。`--no-character-downloads` 停用所有角色圖像與語音
+  下載，只使用已驗證快取與內建字母模式。語音素材將於後續版本經同一 manifest
+  gate 交付；UI 預設關閉，必須由使用者開啟。
+
+在預設未加入匿名貢獻的情況下，上述無 query 的靜態 asset `GET` 是 companion 唯一會主動連到
+TokenMonster 營運基礎設施的流量，而且可用 `--no-character-downloads` 完全停用。匿名 UTC 日彙總
+仍只會在另行明確 opt in 後傳送；BYOK 請求則由本機直接連到使用者選定的 provider。
 
 ## 現有功能與發行狀態
 
@@ -50,7 +74,7 @@ TokenMonster 的隱私邊界是產品需求，不是日後才補上的設定。
 | Local companion（sidecar path） | 輕量 localhost UI、啟動即顯示角色、真實 UTC 今日／7／28 日 totals 與每日趨勢 | Source CLI 與隔離 Linux smoke 已完成；角色 workflow traits 仍需安全 aggregate contract，registry 發布與跨平台 smoke 待完成 |
 | Collector | exact-pinned `tokentracker-cli@0.80.0` child、local-only refresh、strict loopback adapter／gateway；legacy slice 仍含 `tokscale@4.5.2` | Sidecar source slice 與隔離 Linux smoke 已完成；registry publish、Windows／macOS CI smoke 與 cutover 待完成 |
 | Legacy Electron companion | 本機 SQLite、舊 7／28 日趨勢、traits／固定台詞、share card、export／reset | Migration-only；不再作為支援的安裝或 collection 路徑，sidecar cutover 後移除或降為 thin shell |
-| Characters | Sidecar UI 的四個可切換字母姊妹；依本機近 28 日安全 provider 分項建議起始角色 | Strict provider 投影、平手／無資料手選與 session override 已接通；token 不作為升級或解鎖，AI-Sister rich assets 仍待核准與 R2 downloader |
+| Characters | 11 位可切換字母人；本機起始角色、單向解鎖、10 位的 20 種衣櫥與 pose art，GLM 使用 letter mode | 圖像 downloader、SHA-256 驗證、本機快取與 offline flag 已接通；voice manifest 目前為空，UI 預設關閉 |
 | BYOK | Companion main process 直接呼叫 OpenAI Responses API；`store: false`、`background: false`，不使用 tools／files／conversation IDs | 已實作；仍需安全 release host 與真實 key 的人工 network smoke |
 | 匿名貢獻 | 預設關閉、精確 payload preview、accountless enrollment、背景 sync／冪等 retry、stop、delete／status | 已實作及本機測試；尚未做 staging／cloud-off packet-capture E2E |
 | Web／API | zh-TW-first React/Vite SPA、Hono Worker API、公開 totals、enrollment／ingest／delete／status | 已實作、build 及 fail-closed dry-run；未配置遠端環境 |
@@ -68,13 +92,15 @@ flowchart LR
     Tracker[exact-pinned TokenTracker child\nhooks、parsers、去重、本機 store]
     Adapter[TokenMonster sidecar adapter\nloopback aggregate API]
     State[(TokenMonster derived state\n與 opt-in outbox)]
-    UI[Companion\n圖表、traits、字母角色]
+    UI[Companion\n圖表、本機解鎖、字母人]
+    Cache[(~/.tokenmonster/asset-cache\n已驗證 hash objects)]
     Preview[明確貢獻預覽\n背景 sync + 手動 retry]
     Vault[OS-backed secret store]
     BYOK[本機 BYOK client]
     Logs --> Tracker --> Adapter
     Adapter --> State
     State --> UI
+    Cache --> UI
     State --> Preview
     Vault --> BYOK
   end
@@ -88,6 +114,7 @@ flowchart LR
   Rollups --> Projection
   Projection --> Public[公開 contributor counter]
   BYOK -->|prompt 暫存；直接送出| Provider[所選 AI provider]
+  CDN[固定 HTTPS CDN\n靜態 hash-named assets] -->|unlock 後按需 GET| Cache
 ```
 
 TokenTracker 是 collection／dedupe 的唯一 authority；TokenMonster 不讀它的 raw
@@ -163,6 +190,10 @@ npm exec -- tokenmonster --no-open
 `--no-open` 適合 SSH／遠端機器，CLI 會印出一次性網址與對應的 `ssh -L` 指令。
 在有桌面瀏覽器的本機可省略它。這條路徑會沿用 TokenTracker 的本機 collector；
 不需要 clone 或另外啟動 TokenTracker repository。
+
+若不希望 companion 連到角色 CDN，加上 `--no-character-downloads`。此模式不下載圖像或
+未來的語音檔，只讀取 `~/.tokenmonster/asset-cache` 中逐次重新驗證的內容，缺少時回退到
+內建字母模式；用量整理、圖表與解鎖進度不受影響。
 
 以下 Web／Electron 指令屬於既有公開網站或 legacy migration slice，不是新的
 companion 啟動方式。
@@ -302,8 +333,7 @@ Production／staging 目前都是 **STOP**，至少還缺：
   平台的 native packaged smoke；
 - 加密 logical backup、deletion suppression replay、restore-from-zero 與 rollback drill；
 - privacy／terms／legal review、project license 決策與 third-party redistribution review；
-- AI-Sister raster redistribution rights、來源證據與獨立 brand review。現階段只可使用
-  code-native 字母 placeholder。
+- 後續 voice pack 的獨立 rights／brand gate；目前 release manifest 不含語音檔。
 
 在所有 gate 有可重現證據以前，不要建立 production D1、開啟 mutation flag、發布
 download link，或把本專案稱為已上線。
@@ -319,12 +349,12 @@ cross-platform contract／privacy／one-command smoke 後才合併。
 目前 `tokscale@4.5.2` 與 collector fork 都不是長期 runtime，且不得新增產品功能；
 sidecar cutover 後會移除。兩種來源在 migration 期間不得涵蓋同一時間窗或相加。
 
-AI-Sister／`multi-ai-chat-app` 只作為設計參考與候選 persona 來源。Repository
-目前不包含核准可發行的 AI-Sister raster；四個 provider-inspired characters 都以
-TokenMonster-owned、independent-unaffiliated 的字母 placeholder 呈現。
-候選 wardrobe／action map 是 repository-only 規格；未來核准的 rendered bundle
-沿用 AI-Sister 現有 Cloudflare R2／CDN，由 companion 按需下載、驗證完整性並在
-本機快取，原始 parts 不搬進 TokenMonster。詳見
+AI-Sister／`multi-ai-chat-app` 是設計與 persona 來源，但不是 TokenMonster 的 runtime
+依賴。Release 內嵌的 strict manifest 列出 10 位已核准角色、每位 20 種主題與 pose
+的 immutable hash-named outputs；GLM 沒有對應圖像 bundle，因此維持 TokenMonster-owned
+letter mode。Companion 只在解鎖後由固定 CDN 取得 manifest 已列出的 object，驗證 SHA-256
+後才在本機顯示與快取；原始 parts、生成工具、prompt 與 publisher credential 都不進入
+TokenMonster。詳見
 [Character wardrobe map](docs/CHARACTER_WARDROBE_MAP.md)。
 
 ## 文件索引

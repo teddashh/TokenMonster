@@ -8,7 +8,7 @@
 
 > Status: Phase 0 privacy baseline
 >
-> Updated: 2026-07-15
+> Updated: 2026-07-16
 >
 > Owner: product/privacy owner (to assign before Private Alpha)
 
@@ -25,10 +25,10 @@ without a reviewed contract and inventory change.
   consent choices.
 - The default collector persists only projected aggregates. Raw upstream JSON
   is parsed in memory and then discarded.
-- Prompt, response, source content, filename, path, repository, provider
-  account, API key, cookie, and authorization material are forbidden in the
-  contribution body, cloud database, application log, analytics, share, and
-  diagnostic bundle.
+- Prompt, response, source content, filename, path, repository, raw upstream
+  store content, raw model ID, provider account, API key, cookie, and
+  authorization material are forbidden in the contribution body, cloud
+  database, application log, analytics, share, and diagnostic bundle.
 - Local hourly buckets support charts and character rhythm. Cloud contribution
   contains UTC daily buckets only.
 - Public copy says “tokens shared by TokenMonster contributors”; it never
@@ -42,8 +42,9 @@ without a reviewed contract and inventory change.
 | TokenTracker adapter/gateway request memory | Strict projected metrics and, for starter selection, four 28-day provider totals until they are reduced to a decision | Never backed up or persisted | Ends with request |
 | Companion SQLite | Safe local aggregates, revisions, character state, settings, bounded contribution queue | Local-only; excluded from crash bundles | Export/delete in companion |
 | OS secret store | OpenAI BYOK key plus separate contribution-upload and deletion bearer secrets | Never copied into app backup | Rotate/delete in companion |
-| Companion renderer memory | Current BYOK prompt/response, rendered state, and manual starter choice | Never backed up | Manual starter choice clears on reload/restart; conversation clears when conversation/window closes |
-| Future local character-asset cache | Approved, integrity-verified public raster objects only; no runtime or cache is implemented yet | Planned as disposable, content-addressed local cache | Planned to be clearable; code-native fallback remains available |
+| Companion renderer memory | Current BYOK prompt/response and rendered state | Never backed up | Conversation clears when conversation/window closes |
+| `~/.tokenmonster/progression-v1.json` and character preferences | Local aggregate progression ledger, monotonic unlock timestamps, selected character, and active wardrobe choices | Local-only; mode `0600` in a mode `0700` directory | Rebuilt/fails closed to letter mode if invalid; never uploaded |
+| `~/.tokenmonster/asset-cache` | Approved, integrity-verified public raster/voice objects named by SHA-256 | Disposable, local-only cache; each read revalidates its digest | `--no-character-downloads` makes the cache read-only from the network's perspective; missing content falls back to letter mode |
 | Cloudflare Worker memory | Validated request and transaction state | Never intentionally persisted | Request-scoped |
 | D1 current tables | Hashed enrollment auth, consent, recent canonical buckets, optional shares | Time Travel plus independent logical export | Revoke/delete within stated window |
 | D1 anonymous rollups | Irreversibly compacted historical coarse totals | Daily logical export; rebuild tested | Not attributable after compaction |
@@ -124,7 +125,7 @@ loaded aggregate metrics.
 | Character profile | Character manifest ID, deterministic traits, explanation keys, 28-day normalized inputs | Until local reset | No prompt/content inference |
 | Mood history | Coarse mood, explanation key, day/hour aggregate references | Default 30 days | User may clear independently |
 | Preferences | Locale, theme, reduced motion, reminder/quiet hours, source choice | Until reset | Cloud toggle defaults off |
-| Manual starter choice | One allowlisted character ID | Current UI session only | Held in renderer memory; cleared by reload or restart and never sent to cloud |
+| Manual character choice | One allowlisted roster ID plus selection timestamp | Until locally changed/reset | Stored in local progression/preferences JSON; never sent to cloud |
 | Reminder ledger | Rule ID, scheduled/fired time, dedupe state | 30 days | Notification text contains no project/content |
 | Diagnostic state | Adapter versions, last success/error code, coarse OS/runtime version | Rolling 30 days | Detailed export requires preview |
 | Share-card draft | Derived traits, selected visibility fields, local image | Until user deletes/export completes | No upload unless separately confirmed |
@@ -133,27 +134,28 @@ Diagnostic exports must use an allowlist and a canary test. They may not copy
 the local database wholesale or include environment variables, home paths,
 process command lines, raw collector output, credentials, prompt, or response.
 
-### Future approved character-asset delivery (not implemented)
+### Character-asset delivery (implemented)
 
-TokenMonster currently has no cloud character-asset downloader, CDN request
-path, or runtime asset cache. The repository-only AI-Sister source/audit maps
-are not release authorization and are not runtime manifests.
-
-If that runtime is later approved, the release embeds the reviewed manifest
-that is authoritative for that build. Runtime GETs may target only the exact
-release-allowlisted HTTPS AI-Sister CDN origin and immutable public object keys
-under `tokenmonster/characters/v1`; no arbitrary or manifest-supplied origin is
-accepted. Each response must match the embedded SHA-256, byte size, and MIME
-type before display. Verified files may enter a content-addressed local cache;
-a failed request or validation uses the code-native local fallback or a
-previously verified compatible cache entry.
+The release embeds the reviewed strict manifest that is authoritative for that
+build. Runtime GETs target only the configured fixed HTTPS CDN origin and
+immutable hash-named public object keys under `tokenmonster/characters/v1`;
+the runtime does not accept an origin or URL from a server response. An object
+is available only after its character/theme is locally unlocked. Each cache
+read and download must match the filename's SHA-256; downloads additionally
+enforce a 10-second timeout, a 4 MiB response cap, and an allowlisted media
+extension before an atomic cache write. A failed request or validation falls
+back to the code-native letter renderer or a previously verified cache entry
+without affecting local usage features.
 
 The CDN necessarily observes the requested public object key and the client's
-IP address. The request carries no query parameters and no token totals,
-provider totals, starter rationale, user/account/install identifier, local
-filename or filesystem/project path, or other usage-derived data. Enabling
-this future egress requires a separate implementation, disclosure, tests, and
-release approval.
+IP address. The request is a redirect-denying `GET` with no query parameters,
+token/provider totals, starter rationale, user/account/install identifier,
+local filename or filesystem/project path, or other usage-derived data.
+`--no-character-downloads` sets the CDN origin to null and therefore disables
+all image and future voice downloads while retaining verified cache and letter
+fallbacks. The current manifest has no voice lines; the UI preference defaults
+voice off, and later voice objects must pass the same local unlock, manifest,
+hash, and cache gate.
 
 ## 5. BYOK interaction data
 

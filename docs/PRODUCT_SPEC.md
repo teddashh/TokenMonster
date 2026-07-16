@@ -9,7 +9,7 @@
 | --- | --- |
 | 文件狀態 | Launch target + tested source-slice baseline；不是 production evidence |
 | 文件版本 | 0.3 |
-| 更新日期 | 2026-07-15 |
+| 更新日期 | 2026-07-16 |
 | 產品名稱 | TokenMonster |
 | 首要目標 | 將產品安全、可信地上線，並驗證「AI 使用足跡可以養出像自己的角色」 |
 | 規格範圍 | 產品承諾、MVP、使用流程、成功指標、驗收條件與待決策項目 |
@@ -29,9 +29,10 @@
 2. MVP 實作範圍：為了可安全上線、可驗證核心價值而收斂的第一版。
 3. 建議預設：尚未被產品負責人裁決，但團隊可依此先行，不應阻塞低風險工作。
 
-### 1.1 目前實作快照（2026-07-15）
+### 1.1 目前實作快照（2026-07-16）
 
-Local Companion、exact-pinned Tokscale、角色 placeholder／規則引擎、BYOK 對話、
+Local Companion、exact-pinned TokenTracker sidecar、11 位角色與本機進度引擎、按需角色
+asset downloader／cache、BYOK 對話、
 本機圖表與 export/reset，以及預設關閉的匿名 contribution source slice（實際
 payload preview、enrollment、OS-backed scoped secrets、背景 sync／冪等 retry、停止、
 刪除與狀態查詢），已有可重跑的本機 source tests。Web/API、D1 mutation/deletion、
@@ -44,12 +45,12 @@ rollup。
 這些都只是 source-level evidence，不是 production evidence。Companion background
 sync的packet capture／wake soak、Cloudflare account／D1／domain／secrets、remote rehearsal／staging E2E、
 backup/restore與suppression replay、signed installer、平台實機smoke、專案 license／
-法律文件與 AI-Sister raster 權利仍是上線閘門。本文其餘需求描述的是完整 launch
+法律文件與後續 voice 資產權利仍是上線閘門。本文其餘需求描述的是完整 launch
 target；不得因列在本規格中就宣稱已部署或已對外提供。
 
-`tokentracker-cli@0.79.8` bridge 目前只是相容性 target design，尚未接入 Companion
-runtime；現有唯一 authoritative collector 是 Tokscale。未取得書面權利核准前，
-公開 artifact 只包含 code-native 字母人 placeholder，不包含候選 raster。
+`tokentracker-cli@0.80.0` 是現有唯一 authoritative collector，Tokscale／Electron
+是 migration-only legacy slice。圖像不包在 npm artifact；release 只內嵌核准 manifest，
+由 companion 在解鎖後按需下載、驗證並快取。
 
 ## 2. 產品摘要
 
@@ -189,10 +190,15 @@ TokenMonster 的差異化不是另一個成本報表，而是：
 
 ### 8.1 首次安裝
 
+Collector 狀態依序為 `starting` → `syncing` → `ready`；無支援資料但掃描完成時是
+`ready-no-data`，無上次成功資料的失敗是 `refresh-failed`，已有上次快照的失敗是
+`stale`。使用者可手動「重新掃描」；gateway 共用 in-flight refresh，並限制新 refresh request
+至少間隔 5 秒。
+
 1. 使用者從公開網站下載 collector／desktop companion。
 2. 安裝頁清楚說明 collector 會讀取什麼、不會讀取什麼。
 3. collector 掃描可支援的本地來源，列出偵測結果與資料精確度。
-4. 初始 roster 顯示四位預設 AI-Sister 姊妹；若權利尚未完成，同一流程只顯示 placeholder。系統可以依下節規則建議一位 starter，但使用者選擇永遠優先。
+4. 初始 roster 顯示四位姊妹與七位朋友。系統可依下節規則建議一位 starter，但使用者選擇永遠優先；GLM 固定使用內建字母模式。
 5. 系統匯入並去重歷史 usage，建立本地 dashboard。
 6. 系統生成第一組 2 至 3 個主 traits，並為每個 trait 顯示原因。
 7. 系統詢問是否開啟通知；預設不開。
@@ -202,7 +208,7 @@ TokenMonster 的差異化不是另一個成本報表，而是：
 
 - TokenMonster 只把 TokenTracker exact source IDs `codex`、`claude`、`gemini`、`grok` 分別映射為 `openai`、`anthropic`、`google`、`xai`，再對應四位預設姊妹；不從 model 名稱或其他 source 猜測 provider。
 - 最近 28 個 UTC 日中，只有一個 provider 的正數總量嚴格最高時，系統才建議對應 starter。最高值平手、沒有正數資料或 provider breakdown endpoint 失敗時，一律請使用者手動選擇。
-- 這只是首次呈現的便利建議。使用者可在當下或之後覆寫；provider 總量不形成 XP、能力、階級、角色成長或服裝／動作解鎖條件。
+- 這是首次呈現的便利建議，同時會把該姊妹記為本機已解鎖的起始角色。使用者可在當下或之後覆寫；進度不形成能力、階級或排名。
 - Browser 只收到 allowlisted starter decision 與原因，不收到用來比較的 provider totals、model IDs 或 cost。
 
 ### 8.2 日常使用
@@ -267,7 +273,7 @@ TokenMonster 的差異化不是另一個成本報表，而是：
 
 #### C. AI 字母人
 
-- Launch roster 限於 AI-Sister core-four 候選角色；只有 manifest `releaseStatus: "approved"` 才可顯示實際 raster，否則必須使用 placeholder。
+- Launch roster 是 11 位角色；release-embedded strict manifest 為其中 10 位列出各 20 種衣櫥與 pose art，GLM 使用 letter mode。
 - 使用圖像切換、裁切、色彩效果、配件 overlay、對話框與輕量 CSS/canvas 動畫呈現狀態。
 - 不要求 Live2D、3D rig 或即時嘴型。
 - 顯示 2 至 3 個可解釋主 traits。
@@ -416,14 +422,13 @@ Upload bearer secret 只存在 Authorization header；獨立 deletion secret 只
 
 ### 10.6 AI-Sister raster 角色呈現
 
-- MVP catalog 的視覺方向限於 AI-Sister core-four 候選 raster assets。四張候選 WebP 初始一律為 `releaseStatus: "blocked"`。
-- 原始檔必須保留，不直接破壞性修改。
-- 只有取得 owner public-use grant、通過 brand review，且 manifest 改為 `approved` 的資產才能進入發布 catalog；否則 TokenMonster 必須使用 placeholder。
-- 核准後的 pre-rendered 發布版可產生尺寸與格式最佳化衍生檔，例如 WebP／AVIF；仍需保留透明背景與正確色彩。這些 immutable outputs 留在 AI-Sister 的 Cloudflare R2／CDN `tokenmonster/characters/v1` prefix，TokenMonster release 只內嵌核准 manifest，不搬入 raw parts。
-- TokenMonster 的規劃路徑是依 manifest 按需下載、驗證 hash 後放入本機 cache；離線、下載或完整性失敗時立即使用內建 placeholder。Publisher、runtime downloader 與 cache 尚未實作，不得描述為目前已交付。
-- 角色狀態可透過已核准且實際存在的 pre-rendered pose／expression、色調、外光、陰影、粒子、配件 overlay、氣泡與小幅位移呈現。
-- 若某角色只有一張靜態設計，必須以 overlay 與 UI 表現狀態，不得宣稱該角色有 Live2D 動畫。
-- MVP 不批次搬入其他舊 repo 角色；core-four 以外的角色屬上線後擴充，每個都需獨立 provenance、權利與品質審查。
+- Launch roster 有 11 位：ChatGPT、Claude、Gemini、Grok、DeepSeek、Qwen、Mistral、Venice／Llama、Sakana、Perplexity 與 GLM。
+- Release 內嵌 strict manifest，列出前 10 位角色各 20 種衣櫥與 `supported`、`challenged`、`victory` pose objects；GLM 使用 code-native letter mode。
+- 圖像不打包進 npm artifact。解鎖後所需的 hash-named object 才從固定 HTTPS CDN 按需 `GET`，經 SHA-256 驗證後 atomic 寫入 `~/.tokenmonster/asset-cache`。
+- `--no-character-downloads` 將 CDN origin 設為 null，只使用逐次驗證的本機 cache 與 letter fallback；用量、圖表與進度不受影響。
+- Asset request 沒有 query string、token／provider totals、starter rationale、user／install ID 或本機 path；CDN 仍可看到公開 object key 與 client IP。
+- 角色圖像不是 Live2D 或 3D rig；狀態透過核准的 pre-rendered pose 與輕量 UI 效果呈現。原始 parts、生成工具、prompt 與 publisher credential 不進入 TokenMonster。
+- 語音後續由同一 manifest、unlock、hash 與 cache gate 交付；目前 manifest 的 `voice` 為空，UI 預設關閉語音。
 - 每個角色都應共用同一套 trait 意義，避免角色選擇本身改變 usage 分析結果。
 
 ### 10.7 BYOK 與固定台詞

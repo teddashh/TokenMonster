@@ -4,7 +4,7 @@ English · [繁體中文](README.md)
 
 TokenMonster is a local-first AI usage companion. It organizes token usage on
 the user's device, presents content-blind trends, and lets explainable letter
-characters react to workflow traits. A user can also preview and explicitly
+characters react to local usage milestones. A user can also preview and explicitly
 opt in to contributing strictly limited UTC daily aggregates to a public
 counter.
 
@@ -33,8 +33,8 @@ later.
 
 - TokenMonster cloud never persists, logs, analyzes, or receives prompts,
   responses, source-code content, filenames, project paths, API keys, OAuth
-  tokens, or provider credentials. It also never persists or logs raw HTTP
-  request bodies.
+  tokens, provider credentials, raw usage-store contents, or model IDs. It
+  also never persists or logs raw HTTP request bodies.
 - Local collection, charts, character derivation, fixed lines, export, and
   reset do not depend on TokenMonster cloud and must continue to work offline.
 - Anonymous contribution is off by default. Only after an exact preview and
@@ -44,15 +44,51 @@ later.
 - Public copy may only describe "tokens shared by opt-in contributors." The
   counter is neither all global AI usage nor a statistically representative
   sample.
-- Character traits are derived from explainable workflow signals, not a power
-  ladder. The product does not reward wasteful token use or add pay-to-win
-  mechanics.
+- Character, wardrobe, and action unlocks come only from explainable local
+  usage milestones and remain unlocked monotonically. The product does not
+  reward wasteful token use; progression cannot be bought, and there is no
+  pay-to-win mechanic.
 - BYOK credentials remain in the local secret store. User-initiated chat is
   transient in companion memory and travels directly from the device to the
   selected provider; it never traverses the TokenMonster API or D1.
 
 See the [data inventory](docs/DATA_INVENTORY.md) and
 [threat model](docs/THREAT_MODEL.md) for the detailed data lifecycle.
+
+## Local companion experience
+
+- First run exposes the collector's `starting` → `syncing` → `ready`
+  phases. A successful scan without supported data is `ready-no-data`; a first
+  failed scan is `refresh-failed`; a failure after a successful scan is
+  `stale`, and the UI keeps showing that last local snapshot. The user can
+  select "重新掃描"; the gateway shares an in-flight refresh and permits a new
+  request no more often than every five seconds.
+- The roster has eleven companions: the ChatGPT, Claude, Gemini, and Grok
+  sisters, plus the DeepSeek, Qwen, Mistral, Venice (displayed as Llama),
+  Sakana, Perplexity, and GLM friends. The uniquely most-used OpenAI,
+  Anthropic, Google, or xAI family over the latest 28 UTC days selects its
+  sister as the automatic starter (元祖). A tie or no data asks the user to
+  choose.
+- Characters unlock through explicit local milestones based on provider-family
+  totals, lifetime total, active-day streak, or provider breadth. Every
+  art-backed character has 20 wardrobe themes with `supported`, `challenged`,
+  and `victory` pose art; GLM currently uses the built-in letter mode. Unlocks
+  are local-only, monotonic, and never purchasable.
+- Doll art and future voice files are not bundled in the npm package. Only a
+  hash-named object needed after unlock is fetched on demand from the fixed
+  HTTPS CDN, verified with SHA-256, and stored under
+  `~/.tokenmonster/asset-cache`. Requests carry no query string, usage value,
+  character-selection record, or user ID; the CDN still sees the public object
+  key and client IP. `--no-character-downloads` disables every character image
+  and voice download and uses only verified cache entries plus built-in letter
+  mode. Voice assets will ship later through the same manifest gate; the UI
+  defaults voice off until the user enables it.
+
+With anonymous contribution left at its default off setting, those queryless
+static asset GETs are the companion's only automatic traffic to
+TokenMonster-operated infrastructure, and `--no-character-downloads` disables
+even that. Anonymous UTC daily aggregates travel only after separate explicit
+opt-in; BYOK requests go directly from the device to the selected provider.
 
 ## Implemented surface and release status
 
@@ -61,7 +97,7 @@ See the [data inventory](docs/DATA_INVENTORY.md) and
 | Local companion (sidecar path) | Lightweight localhost UI, an immediately visible character, real UTC today/7/28 totals, and a daily trend | Source CLI and isolated Linux smoke pass; safe workflow-trait aggregates, registry publication, and cross-platform smoke remain |
 | Collector | Exact-pinned `tokentracker-cli@0.80.0` child, local-only refresh, strict loopback adapter/gateway; the legacy slice still contains `tokscale@4.5.2` | Sidecar source slice and isolated Linux smoke pass; registry publication, Windows/macOS CI smoke, and cutover remain |
 | Legacy Electron companion | Local SQLite, old 7/28-day trends, traits/fixed lines, share card, and export/reset | Migration-only; no longer the supported install or collection path, and removed or reduced to a thin shell after cutover |
-| Characters | Four switchable letter sisters in the sidecar UI; a safe local 28-day provider projection suggests the starter | Strict provider projection, tie/no-data choice, and session override are wired; tokens are not progression or unlocks, while rich AI-Sister assets still need approval and the R2 downloader |
+| Characters | Eleven switchable letter characters; local starter selection and monotonic unlocks, 20 themes plus pose art for ten characters, and GLM letter mode | Image downloading, SHA-256 verification, local cache, and the offline flag are wired; the voice manifest is currently empty and the UI defaults voice off |
 | BYOK | Companion main process calls OpenAI Responses directly with `store: false`, `background: false`, and no tools/files/conversation IDs | Implemented; a manual real-key network smoke on a safe release host remains |
 | Anonymous contribution | Off by default, exact payload preview, accountless enrollment, background sync/idempotent retry, stop, delete/status | Implemented and locally tested; staging and cloud-off packet-capture E2E remain |
 | Web/API | zh-TW-first React/Vite SPA, Hono Worker API, public totals, enrollment/ingest/delete/status | Implemented, built, and fail-closed in dry-run; no remote environment is configured |
@@ -79,13 +115,15 @@ flowchart LR
     Tracker[exact-pinned TokenTracker child\nhooks, parsers, dedupe, local store]
     Adapter[TokenMonster sidecar adapter\nloopback aggregate API]
     State[(TokenMonster derived state\nand opt-in outbox)]
-    UI[Companion\ncharts, traits, letter characters]
+    UI[Companion\ncharts, local unlocks, letter characters]
+    Cache[(~/.tokenmonster/asset-cache\nverified hash objects)]
     Preview[Explicit contribution preview\nbackground sync + manual retry]
     Vault[OS-backed secret store]
     BYOK[Local BYOK client]
     Logs --> Tracker --> Adapter
     Adapter --> State
     State --> UI
+    Cache --> UI
     State --> Preview
     Vault --> BYOK
   end
@@ -99,6 +137,7 @@ flowchart LR
   Rollups --> Projection
   Projection --> Public[public contributor counter]
   BYOK -->|transient prompt; direct request| Provider[selected AI provider]
+  CDN[fixed HTTPS CDN\nstatic hash-named assets] -->|on-demand GET after unlock| Cache
 ```
 
 TokenTracker is the sole collection and deduplication authority; TokenMonster
@@ -180,6 +219,12 @@ npm exec -- tokenmonster --no-open
 the matching `ssh -L` command. Omit it on a local desktop. This path uses the
 TokenTracker collector bundled as an exact dependency; users do not clone or
 start the TokenTracker repository separately.
+
+Add `--no-character-downloads` when the companion must not contact the
+character CDN. This mode downloads neither images nor future voice files. It
+revalidates and reads only `~/.tokenmonster/asset-cache`, falling back to the
+built-in letter renderer when an object is absent; collection, charts, and
+local unlock progress are unaffected.
 
 The Web/Electron commands below belong to the public site or legacy migration
 slice; they are not the new companion launch path.
@@ -333,8 +378,8 @@ Production and staging are both **STOP**. At minimum, the following gates remain
   and rollback drills;
 - privacy/terms/legal review, a project-license decision, and third-party
   redistribution review;
-- AI-Sister raster redistribution rights, provenance evidence, and independent
-  brand review. Only code-native letter placeholders may be used today.
+- a separate rights/brand gate for future voice packs; the current release
+  manifest contains no voice files.
 
 Until every gate has reproducible evidence, do not create production D1 state,
 enable mutations, publish a download link, or call this project live.
@@ -354,14 +399,14 @@ inputs and receive no new product work. They are removed after sidecar cutover;
 the two sources must never cover or be summed for the same time window during
 migration.
 
-AI-Sister/`multi-ai-chat-app` is a design reference and candidate persona
-source only. This repository does not contain approved, releasable AI-Sister
-raster art. All four provider-inspired characters currently use
-TokenMonster-owned, independent-unaffiliated letter placeholders.
-The candidate wardrobe/action map is a repository-only specification. Future
-approved rendered bundles stay on AI-Sister's existing Cloudflare R2/CDN;
-the companion downloads them on demand, verifies integrity, and caches them
-locally, while raw parts remain outside TokenMonster. See the
+AI-Sister/`multi-ai-chat-app` is the design and persona source, but it is not a
+TokenMonster runtime dependency. The release-embedded strict manifest lists
+immutable hash-named output for ten approved characters, each with 20 themes
+and poses. GLM has no matching art bundle and therefore stays in
+TokenMonster-owned letter mode. Only after unlock does the companion fetch a
+manifest-listed object from the fixed CDN, verify its SHA-256, display it, and
+cache it locally. Raw parts, generation tools, prompts, and publisher
+credentials never enter TokenMonster. See the
 [character wardrobe map](docs/CHARACTER_WARDROBE_MAP.md).
 
 ## Documentation
