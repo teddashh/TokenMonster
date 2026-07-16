@@ -68,6 +68,7 @@ import {
   saveSelectedCharacter,
   stopContributionForLocalSourceReset
 } from "./local-state.js";
+import { showPetWindow, startPetCompanion } from "./pet/pet.js";
 import {
   RENDERER_CSP,
   createIpcRequestGate,
@@ -96,6 +97,7 @@ protocol.registerSchemesAsPrivileged([
   }
 ]);
 app.enableSandbox();
+const petMode = !process.argv.slice(1).includes("--legacy");
 const ownsSingleInstance = app.requestSingleInstanceLock();
 const ipcGate = createIpcRequestGate();
 let byokService: ByokChatService | null = null;
@@ -615,16 +617,24 @@ if (!ownsSingleInstance) {
   app.quit();
 } else {
   app.on("second-instance", () => {
+    if (petMode) {
+      showPetWindow();
+      return;
+    }
     const window = BrowserWindow.getAllWindows()[0];
     if (window !== undefined) {
       if (window.isMinimized()) window.restore();
       window.focus();
     }
   });
-  void app.whenReady().then(startCompanion).catch(() => app.exit(1));
+  void app
+    .whenReady()
+    .then(petMode ? startPetCompanion : startCompanion)
+    .catch(() => app.exit(1));
 }
 
 app.on("before-quit", () => {
+  if (petMode) return;
   if (contributionSyncScheduler !== null) {
     powerMonitor.off("resume", contributionSyncScheduler.wake);
     contributionSyncScheduler.dispose();
@@ -644,6 +654,7 @@ app.on("before-quit", () => {
 });
 
 app.on("window-all-closed", () => {
+  if (petMode) return;
   byokService?.dispose();
   if (process.platform !== "darwin") {
     app.quit();

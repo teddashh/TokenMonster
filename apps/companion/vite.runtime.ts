@@ -3,6 +3,14 @@ import type { Plugin } from "vite";
 export const runtimeExternal = (source: string): boolean =>
   source === "electron" || source.startsWith("node:");
 
+function normalizedSource(code: string): string {
+  return code.replace(/\r\n?/gu, "\n");
+}
+
+function normalizedModuleId(id: string): string {
+  return id.replaceAll("\\", "/").split("?", 1)[0] ?? "";
+}
+
 const COMMONJS_GUARD_EXPORT = `export = Object.freeze({
   chatRequest,
   collectorScanRequest,
@@ -44,21 +52,31 @@ export function normalizePreloadGuardExport(): Plugin {
     name: "tokenmonster-preload-guard-export",
     enforce: "pre",
     transform(code, id) {
-      if (!id.replaceAll("\\", "/").endsWith("/src/preload/guards.cts")) {
+      if (!normalizedModuleId(id).endsWith("/src/preload/guards.cts")) {
         return null;
       }
-      const first = code.indexOf(COMMONJS_GUARD_EXPORT);
-      if (
-        first === -1 ||
-        first !== code.lastIndexOf(COMMONJS_GUARD_EXPORT) ||
-        code.slice(first).trim() !== COMMONJS_GUARD_EXPORT
-      ) {
-        throw new Error("Preload guard export shape changed; packaging review required.");
-      }
-      return {
-        code: `${code.slice(0, first)}${ESM_GUARD_EXPORT}\n`,
-        map: null
-      };
+      return normalizePreloadGuardSource(code);
     }
   };
+}
+
+export function normalizePreloadGuardSource(code: string): Readonly<{
+  code: string;
+  map: null;
+}> {
+  const platformNeutralCode = normalizedSource(code);
+  const first = platformNeutralCode.indexOf(COMMONJS_GUARD_EXPORT);
+  if (
+    first === -1 ||
+    first !== platformNeutralCode.lastIndexOf(COMMONJS_GUARD_EXPORT) ||
+    platformNeutralCode.slice(first).trim() !== COMMONJS_GUARD_EXPORT
+  ) {
+    throw new Error(
+      "Preload guard export shape changed; packaging review required."
+    );
+  }
+  return Object.freeze({
+    code: `${platformNeutralCode.slice(0, first)}${ESM_GUARD_EXPORT}\n`,
+    map: null
+  });
 }

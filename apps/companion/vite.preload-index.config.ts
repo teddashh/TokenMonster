@@ -12,7 +12,12 @@ export default defineConfig({
   build: {
     emptyOutDir: false,
     lib: {
-      entry: fileURLToPath(new URL("src/preload/index.cts", import.meta.url)),
+      entry: {
+        index: fileURLToPath(new URL("src/preload/index.cts", import.meta.url)),
+        "pet-shell": fileURLToPath(
+          new URL("src/preload/pet-shell.cts", import.meta.url)
+        )
+      },
       formats: ["cjs"]
     },
     minify: false,
@@ -20,7 +25,7 @@ export default defineConfig({
     rollupOptions: {
       external: runtimeExternal,
       output: {
-        entryFileNames: "preload/index.cjs"
+        entryFileNames: "preload/[name].cjs"
       }
     },
     sourcemap: false,
