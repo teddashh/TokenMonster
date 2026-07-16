@@ -263,6 +263,31 @@ describe("evaluateProgression", () => {
     expect(character(state, "mistral").unlocked).toBe(false);
   });
 
+  it("optionally anchors the active-day streak to the evaluation UTC date", () => {
+    const days = [
+      bucket("2026-07-13", { openai: 1 }),
+      bucket("2026-07-14", { openai: 1 }),
+      bucket("2026-07-15", { openai: 1 }),
+    ];
+
+    expect(
+      evaluateProgression(
+        input(days, { evaluationUtcDate: "2026-08-20" }),
+      ).counters.activeDayStreak,
+    ).toBe(0);
+    expect(
+      evaluateProgression(
+        input(days, { evaluationUtcDate: "2026-07-16" }),
+      ).counters.activeDayStreak,
+    ).toBe(3);
+    expect(
+      evaluateProgression(
+        input(days, { evaluationUtcDate: "2026-07-15" }),
+      ).counters.activeDayStreak,
+    ).toBe(3);
+    expect(evaluateProgression(input(days)).counters.activeDayStreak).toBe(3);
+  });
+
   it("fast-tracks a recommended wardrobe theme by exactly one tier", () => {
     const state = evaluateProgression(
       input([bucket("2026-07-16", { openai: 1 })], {

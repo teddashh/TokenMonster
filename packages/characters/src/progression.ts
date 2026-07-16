@@ -525,42 +525,8 @@ export const EMPTY_PERSISTED_SELECTION: PersistedSelection = deepFreeze({
   autoStarterSelectedAt: null,
 });
 
-const UnlockKeySchema = z.string().superRefine((value, context) => {
-  const parts = value.split(":");
-  const kind = parts[0];
-  const characterId = parts[1];
-  if (!PROGRESSION_CHARACTER_IDS.includes(characterId as ProgressionCharacterId)) {
-    context.addIssue({ code: "custom", message: "Unknown unlock character ID." });
-    return;
-  }
-  if (kind === "character" && parts.length === 2) return;
-  const itemId = parts[2];
-  if (
-    kind === "theme" &&
-    parts.length === 3 &&
-    WARDROBE_THEME_IDS.includes(itemId as WardrobeThemeId)
-  ) {
-    return;
-  }
-  if (
-    kind === "pose" &&
-    parts.length === 3 &&
-    PROGRESSION_POSE_SET_IDS.includes(itemId as ProgressionPoseSetId)
-  ) {
-    return;
-  }
-  if (
-    kind === "action" &&
-    parts.length === 3 &&
-    PROGRESSION_ACTION_IDS.includes(itemId as ProgressionActionId)
-  ) {
-    return;
-  }
-  context.addIssue({ code: "custom", message: "Unknown unlock key." });
-});
-
 export const PersistedUnlockedAtSchema = z.record(
-  UnlockKeySchema,
+  z.string(),
   UtcTimestampSchema,
 );
 export type PersistedUnlockedAt = Readonly<Record<string, string>>;
@@ -569,6 +535,9 @@ export const ProgressionInputSchema = z
   .object({
     schemaVersion: z.literal(PROGRESSION_SCHEMA_VERSION),
     evaluatedAt: UtcTimestampSchema,
+    evaluationUtcDate: UtcDateSchema.optional(),
+    baseline: ProviderTotalsSchema.optional(),
+    baselineActiveDays: SafeCountSchema.optional(),
     dailyProviderBuckets: z
       .array(DailyProviderBucketSchema)
       .superRefine((buckets, context) => {
@@ -594,6 +563,9 @@ export const ProgressionInputSchema = z
 export type ProgressionInput = Readonly<{
   schemaVersion: typeof PROGRESSION_SCHEMA_VERSION;
   evaluatedAt: string;
+  evaluationUtcDate?: string | undefined;
+  baseline?: ProviderTotals | undefined;
+  baselineActiveDays?: number | undefined;
   dailyProviderBuckets: readonly DailyProviderBucket[];
   traitIds: readonly MonsterTraitIdV1[];
   persistedUnlockedAt: PersistedUnlockedAt;
@@ -715,6 +687,11 @@ function saturatingAdd(left: number, right: number): number {
 
 export function deriveLifetimeCounters(
   dailyProviderBucketsInput: readonly DailyProviderBucket[],
+  options?: Readonly<{
+    baseline?: ProviderTotals | undefined;
+    baselineActiveDays?: number | undefined;
+    evaluationUtcDate?: string | undefined;
+  }>,
 ): Readonly<{
   providerTotals: ProviderTotals;
   lifetimeTotal: number;
@@ -722,16 +699,30 @@ export function deriveLifetimeCounters(
   activeDays: number;
   activeDayStreak: number;
 }>;
-export function deriveLifetimeCounters(dailyProviderBucketsInput: unknown): Readonly<{
+export function deriveLifetimeCounters(
+  dailyProviderBucketsInput: unknown,
+  optionsInput?: unknown,
+): Readonly<{
   providerTotals: ProviderTotals;
   lifetimeTotal: number;
   distinctActiveProviders: number;
   activeDays: number;
   activeDayStreak: number;
 }>;
-export function deriveLifetimeCounters(dailyProviderBucketsInput: unknown) {
+export function deriveLifetimeCounters(
+  dailyProviderBucketsInput: unknown,
+  optionsInput: unknown = {},
+) {
   const buckets = z.array(DailyProviderBucketSchema).parse(dailyProviderBucketsInput);
-  const providerTotals = { ...emptyProviderTotals() };
+  const options = z
+    .object({
+      baseline: ProviderTotalsSchema.optional(),
+      baselineActiveDays: SafeCountSchema.optional(),
+      evaluationUtcDate: UtcDateSchema.optional(),
+    })
+    .strict()
+    .parse(optionsInput);
+  const providerTotals = { ...(options.baseline ?? emptyProviderTotals()) };
   const sortedBuckets = [...buckets].sort((left, right) =>
     left.utcDate.localeCompare(right.utcDate),
   );
@@ -760,18 +751,40 @@ export function deriveLifetimeCounters(dailyProviderBucketsInput: unknown) {
       )
       .map(({ utcDate }) => utcDate),
   );
-  const activeDays = activeDates.size;
+  const activeDays = saturatingAdd(
+    options.baselineActiveDays ?? 0,
+    activeDates.size,
+  );
   let activeDayStreak = 0;
-  let expectedTimestamp: number | null = null;
-  for (let index = sortedBuckets.length - 1; index >= 0; index -= 1) {
-    const bucket = sortedBuckets[index]!;
-    const timestamp = Date.parse(`${bucket.utcDate}T00:00:00.000Z`);
-    const active = Object.values(bucket.providerTotals).some((total) => total > 0);
-    if (!active || (expectedTimestamp !== null && timestamp !== expectedTimestamp)) {
-      break;
+  if (options.evaluationUtcDate === undefined) {
+    let expectedTimestamp: number | null = null;
+    for (let index = sortedBuckets.length - 1; index >= 0; index -= 1) {
+      const bucket = sortedBuckets[index]!;
+      const timestamp = Date.parse(`${bucket.utcDate}T00:00:00.000Z`);
+      const active = Object.values(bucket.providerTotals).some((total) => total > 0);
+      if (!active || (expectedTimestamp !== null && timestamp !== expectedTimestamp)) {
+        break;
+      }
+      activeDayStreak += 1;
+      expectedTimestamp = timestamp - 86_400_000;
     }
-    activeDayStreak += 1;
-    expectedTimestamp = timestamp - 86_400_000;
+  } else {
+    const evaluationTimestamp = Date.parse(
+      `${options.evaluationUtcDate}T00:00:00.000Z`,
+    );
+    const yesterdayTimestamp = evaluationTimestamp - 86_400_000;
+    let expectedTimestamp = activeDates.has(options.evaluationUtcDate)
+      ? evaluationTimestamp
+      : yesterdayTimestamp;
+    let expectedDate = new Date(expectedTimestamp).toISOString().slice(0, 10);
+    if (!activeDates.has(expectedDate)) {
+      expectedDate = "";
+    }
+    while (expectedDate !== "" && activeDates.has(expectedDate)) {
+      activeDayStreak += 1;
+      expectedTimestamp -= 86_400_000;
+      expectedDate = new Date(expectedTimestamp).toISOString().slice(0, 10);
+    }
   }
 
   return deepFreeze({
@@ -924,7 +937,11 @@ export function evaluateProgression(input: ProgressionInput): ProgressionState;
 export function evaluateProgression(input: unknown): ProgressionState;
 export function evaluateProgression(input: unknown): ProgressionState {
   const parsed = ProgressionInputSchema.parse(input);
-  const counters = deriveLifetimeCounters(parsed.dailyProviderBuckets);
+  const counters = deriveLifetimeCounters(parsed.dailyProviderBuckets, {
+    baseline: parsed.baseline,
+    baselineActiveDays: parsed.baselineActiveDays,
+    evaluationUtcDate: parsed.evaluationUtcDate,
+  });
   const selection = resolveSelection(parsed.selection, counters, parsed.evaluatedAt);
   const traitIds = new Set(parsed.traitIds);
   const lockedCandidates: UnlockCandidate[] = [];
