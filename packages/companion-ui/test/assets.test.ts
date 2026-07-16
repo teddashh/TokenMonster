@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -19,20 +19,45 @@ async function readAsset(fileName: string): Promise<string> {
   return readFile(resolve(assetDirectory, fileName), "utf8");
 }
 
+async function readJavaScriptGraph(): Promise<string> {
+  const fileNames = (await readdir(assetDirectory))
+    .filter((fileName) => fileName.endsWith(".js"))
+    .sort();
+  return (await Promise.all(fileNames.map(readAsset))).join("\n");
+}
+
 describe("companion static assets", () => {
-  it("exports the three self-contained gateway assets", async () => {
+  it("exports the complete browser-native module graph", async () => {
     expect(builtModule.COMPANION_UI_ENTRY_FILE).toBe("index.html");
     await expect(stat(assetDirectory)).resolves.toMatchObject({});
 
-    const [html, css, js] = await Promise.all([
+    const [html, css, main, js] = await Promise.all([
       readAsset("index.html"),
       readAsset("styles.css"),
-      readAsset("app.js")
+      readAsset("main.js"),
+      readJavaScriptGraph()
     ]);
     expect(html.length).toBeGreaterThan(1_000);
     expect(css.length).toBeGreaterThan(1_000);
     expect(js.length).toBeGreaterThan(1_000);
-    expect(js).not.toMatch(/\bfrom\s+["'][./]/u);
+    expect(main.length).toBeGreaterThan(1_000);
+    expect(html).toContain('<script type="module" src="/assets/main.js">');
+    expect(html.match(/<script\b/gu)).toHaveLength(1);
+    expect(js).not.toMatch(/\bfrom\s+["']\.\/(?![^"']+\.js["'])/u);
+
+    const emittedFiles = new Set(await readdir(assetDirectory));
+    for (const fileName of emittedFiles) {
+      if (!fileName.endsWith(".js")) continue;
+      const moduleSource = await readAsset(fileName);
+      const imports = [
+        ...moduleSource.matchAll(
+          /(?:from\s+|export\s+\*\s+from\s+)["']\.\/([^"']+\.js)["']/gu
+        )
+      ];
+      for (const moduleImport of imports) {
+        expect(emittedFiles.has(moduleImport[1]!)).toBe(true);
+      }
+    }
   });
 
   it("shows the character and honest loading values before JavaScript runs", async () => {
@@ -66,7 +91,7 @@ describe("companion static assets", () => {
     const [html, css, js] = await Promise.all([
       readAsset("index.html"),
       readAsset("styles.css"),
-      readAsset("app.js")
+      readJavaScriptGraph()
     ]);
     const references = [...html.matchAll(/(?:href|src)="([^"]+)"/gu)].map(
       (match) => match[1]
@@ -111,7 +136,7 @@ describe("companion static assets", () => {
   });
 
   it("gives transient and incompatible failures different recovery copy", async () => {
-    const js = await readAsset("app.js");
+    const js = await readJavaScriptGraph();
 
     expect(js).toContain("本機用量服務暫時沒回應，我會稍後再試。");
     expect(js).toContain(
@@ -125,7 +150,7 @@ describe("companion static assets", () => {
     const [html, css, js] = await Promise.all([
       readAsset("index.html"),
       readAsset("styles.css"),
-      readAsset("app.js")
+      readJavaScriptGraph()
     ]);
 
     expect(js).toContain("先不把空白當成零");
