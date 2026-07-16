@@ -43,6 +43,38 @@ export class UsageAnalyticsError extends Error {
   }
 }
 
+// Reads at most maximumBytes before giving up, so a hostile loopback peer
+// cannot make the renderer buffer an unbounded body ahead of the size check.
+async function readBodyWithinLimit(
+  response: Response,
+  maximumBytes: number
+): Promise<string | undefined> {
+  if (response.body === null) {
+    const body = await response.text();
+    return body.length > maximumBytes ? undefined : body;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    receivedBytes += value.byteLength;
+    if (receivedBytes > maximumBytes) {
+      await reader.cancel().catch(() => undefined);
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  const combined = new Uint8Array(receivedBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(combined);
+}
+
 export async function readCharacterJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type") ?? "";
   const declaredLength = Number(response.headers.get("content-length") ?? "0");
@@ -52,8 +84,8 @@ export async function readCharacterJson(response: Response): Promise<unknown> {
   ) {
     throw new TypeError("Invalid characters response");
   }
-  const body = await response.text();
-  if (body.length > 262_144) {
+  const body = await readBodyWithinLimit(response, 262_144);
+  if (body === undefined) {
     throw new TypeError("Invalid characters response");
   }
   return JSON.parse(body) as unknown;
@@ -68,8 +100,8 @@ async function readUsageJson(response: Response): Promise<unknown> {
   ) {
     throw new UsageAnalyticsError("invalid-response");
   }
-  const body = await response.text();
-  if (body.length > 65_536) {
+  const body = await readBodyWithinLimit(response, 65_536);
+  if (body === undefined) {
     throw new UsageAnalyticsError("invalid-response");
   }
   try {
