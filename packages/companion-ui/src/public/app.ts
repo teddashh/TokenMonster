@@ -91,9 +91,155 @@ export interface CompanionCollectorStatus {
   readonly canRetry: boolean;
 }
 
+export const CHARACTERS_API_ENDPOINT = "/api/characters" as const;
+export const CHARACTER_SELECT_ENDPOINT = "/api/characters/select" as const;
+export const CHARACTER_WARDROBE_ENDPOINT =
+  "/api/characters/wardrobe" as const;
+
+export const CHARACTER_IDS = [
+  "chatgpt",
+  "claude",
+  "gemini",
+  "grok",
+  "deepseek",
+  "qwen",
+  "mistral",
+  "venice",
+  "sakana",
+  "perplexity",
+  "glm"
+] as const;
+
+export type CharacterId = (typeof CHARACTER_IDS)[number];
+
+export const CHARACTER_THEME_IDS = [
+  "tech",
+  "finance",
+  "politics",
+  "education",
+  "health",
+  "environment",
+  "law",
+  "relationship",
+  "family",
+  "workplace",
+  "science",
+  "culture",
+  "sports",
+  "food",
+  "travel",
+  "psychology",
+  "philosophy",
+  "international",
+  "media",
+  "festival"
+] as const;
+
+export type CharacterThemeId = (typeof CHARACTER_THEME_IDS)[number];
+export type CharacterPose = "supported" | "challenged" | "victory";
+export type VoiceTrigger =
+  | "greeting"
+  | "unlock"
+  | "quiet"
+  | "active"
+  | "error";
+
+export interface CharacterPosePaths {
+  readonly supported: string | null;
+  readonly challenged: string | null;
+  readonly victory: string | null;
+}
+
+export interface CharacterTheme {
+  readonly themeId: CharacterThemeId;
+  readonly unlocked: boolean;
+  readonly outfitPath: string;
+  readonly posePaths: CharacterPosePaths;
+}
+
+export type CharacterVisual =
+  | Readonly<{
+      mode: "letter";
+      glyph: string;
+      background: string;
+      foreground: string;
+      accent: string;
+    }>
+  | Readonly<{
+      mode: "doll";
+      avatarPath: string;
+      themes: readonly CharacterTheme[];
+    }>;
+
+export interface CharacterProgress {
+  readonly value: number;
+  readonly explain: string;
+}
+
+export interface CharacterVoiceLine {
+  readonly id: string;
+  readonly trigger: VoiceTrigger;
+  readonly path: string;
+  readonly durationMs: number;
+}
+
+export interface CharacterRosterEntry {
+  readonly characterId: CharacterId;
+  readonly displayName: string;
+  readonly kind: "sister" | "friend";
+  readonly unlocked: boolean;
+  readonly unlockedAt: string | null;
+  readonly isStarter: boolean;
+  readonly activeThemeId: CharacterThemeId | null;
+  readonly visual: CharacterVisual;
+  readonly progress: CharacterProgress | null;
+  readonly voiceLines: readonly CharacterVoiceLine[];
+}
+
+export interface CharactersSnapshot {
+  readonly status: "ok";
+  readonly generatedAt: string;
+  readonly selection: Readonly<{
+    characterId: CharacterId | null;
+    selectedBy: "manual" | "auto-starter" | null;
+  }>;
+  readonly voiceEnabled: boolean;
+  readonly characters: readonly CharacterRosterEntry[];
+}
+
+export interface CharacterSelectionResponse {
+  readonly status: "ok";
+  readonly selection: Readonly<{
+    characterId: CharacterId;
+    selectedBy: "manual";
+  }>;
+}
+
+export interface CharacterWardrobeResponse {
+  readonly status: "ok";
+  readonly characterId: CharacterId;
+  readonly activeThemeId: CharacterThemeId;
+}
+
+export interface CharacterUnlock {
+  readonly key: string;
+  readonly kind: "character" | "theme";
+  readonly characterId: CharacterId;
+  readonly displayName: string;
+  readonly themeId: CharacterThemeId | null;
+}
+
+export type CharacterConnectionState =
+  | "healthy"
+  | "stale"
+  | "refresh-failed"
+  | "other";
+
 const UTC_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 const UTC_TIMESTAMP_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u;
+const UTC_TIMESTAMP_MS_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -134,6 +280,700 @@ function parseGeneratedAt(value: unknown): string | undefined {
     return undefined;
   }
   return Number.isFinite(Date.parse(value)) ? value : undefined;
+}
+
+function parseGeneratedAtWithMilliseconds(value: unknown): string | undefined {
+  return typeof value === "string" && UTC_TIMESTAMP_MS_PATTERN.test(value)
+    ? parseGeneratedAt(value)
+    : undefined;
+}
+
+const CHARACTER_ASSET_IMAGE_PATTERN =
+  /^\/assets\/characters\/objects\/[0-9a-f]{64}\.(?:webp|png)$/u;
+const CHARACTER_ASSET_AUDIO_PATTERN =
+  /^\/assets\/characters\/objects\/[0-9a-f]{64}\.wav$/u;
+const CSS_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/u;
+const VOICE_LINE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+function isCharacterId(value: unknown): value is CharacterId {
+  return CHARACTER_IDS.some((candidate) => candidate === value);
+}
+
+function isCharacterThemeId(value: unknown): value is CharacterThemeId {
+  return CHARACTER_THEME_IDS.some((candidate) => candidate === value);
+}
+
+function isShortText(value: unknown, maximumLength = 240): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= maximumLength &&
+    !/[\u0000-\u001f\u007f]/u.test(value)
+  );
+}
+
+function parseNullableImagePath(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  return typeof value === "string" && CHARACTER_ASSET_IMAGE_PATTERN.test(value)
+    ? value
+    : undefined;
+}
+
+function parsePosePaths(value: unknown): CharacterPosePaths | undefined {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["supported", "challenged", "victory"])
+  ) {
+    return undefined;
+  }
+  const supported = parseNullableImagePath(value["supported"]);
+  const challenged = parseNullableImagePath(value["challenged"]);
+  const victory = parseNullableImagePath(value["victory"]);
+  if (
+    supported === undefined ||
+    challenged === undefined ||
+    victory === undefined
+  ) {
+    return undefined;
+  }
+  return Object.freeze({ supported, challenged, victory });
+}
+
+function parseCharacterTheme(value: unknown): CharacterTheme | undefined {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["themeId", "unlocked", "outfitPath", "posePaths"])
+  ) {
+    return undefined;
+  }
+  const themeId = value["themeId"];
+  const outfitPath = value["outfitPath"];
+  const posePaths = parsePosePaths(value["posePaths"]);
+  if (
+    !isCharacterThemeId(themeId) ||
+    typeof value["unlocked"] !== "boolean" ||
+    typeof outfitPath !== "string" ||
+    !CHARACTER_ASSET_IMAGE_PATTERN.test(outfitPath) ||
+    posePaths === undefined
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    themeId,
+    unlocked: value["unlocked"],
+    outfitPath,
+    posePaths
+  });
+}
+
+function parseCharacterVisual(value: unknown): CharacterVisual | undefined {
+  if (!isRecord(value) || typeof value["mode"] !== "string") {
+    return undefined;
+  }
+  if (value["mode"] === "letter") {
+    if (
+      !hasExactKeys(value, [
+        "mode",
+        "glyph",
+        "background",
+        "foreground",
+        "accent"
+      ]) ||
+      typeof value["glyph"] !== "string" ||
+      [...value["glyph"]].length !== 1 ||
+      typeof value["background"] !== "string" ||
+      !CSS_COLOR_PATTERN.test(value["background"]) ||
+      typeof value["foreground"] !== "string" ||
+      !CSS_COLOR_PATTERN.test(value["foreground"]) ||
+      typeof value["accent"] !== "string" ||
+      !CSS_COLOR_PATTERN.test(value["accent"])
+    ) {
+      return undefined;
+    }
+    return Object.freeze({
+      mode: "letter",
+      glyph: value["glyph"],
+      background: value["background"],
+      foreground: value["foreground"],
+      accent: value["accent"]
+    });
+  }
+  if (
+    value["mode"] !== "doll" ||
+    !hasExactKeys(value, ["mode", "avatarPath", "themes"]) ||
+    typeof value["avatarPath"] !== "string" ||
+    !CHARACTER_ASSET_IMAGE_PATTERN.test(value["avatarPath"]) ||
+    !Array.isArray(value["themes"]) ||
+    value["themes"].length > 20
+  ) {
+    return undefined;
+  }
+  const themes: CharacterTheme[] = [];
+  const themeIds = new Set<CharacterThemeId>();
+  for (const candidate of value["themes"]) {
+    const theme = parseCharacterTheme(candidate);
+    if (theme === undefined || themeIds.has(theme.themeId)) return undefined;
+    themeIds.add(theme.themeId);
+    themes.push(theme);
+  }
+  return Object.freeze({
+    mode: "doll",
+    avatarPath: value["avatarPath"],
+    themes: Object.freeze(themes)
+  });
+}
+
+function parseCharacterProgress(
+  value: unknown
+): CharacterProgress | null | undefined {
+  if (value === null) return null;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["value", "explain"]) ||
+    typeof value["value"] !== "number" ||
+    !Number.isFinite(value["value"]) ||
+    value["value"] < 0 ||
+    value["value"] > 1 ||
+    !isShortText(value["explain"])
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    value: value["value"],
+    explain: value["explain"]
+  });
+}
+
+function isVoiceTrigger(value: unknown): value is VoiceTrigger {
+  return (
+    value === "greeting" ||
+    value === "unlock" ||
+    value === "quiet" ||
+    value === "active" ||
+    value === "error"
+  );
+}
+
+function parseVoiceLine(value: unknown): CharacterVoiceLine | undefined {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["id", "trigger", "path", "durationMs"]) ||
+    typeof value["id"] !== "string" ||
+    !VOICE_LINE_ID_PATTERN.test(value["id"]) ||
+    value["id"].length > 80 ||
+    !isVoiceTrigger(value["trigger"]) ||
+    typeof value["path"] !== "string" ||
+    !CHARACTER_ASSET_AUDIO_PATTERN.test(value["path"]) ||
+    !Number.isSafeInteger(value["durationMs"]) ||
+    (value["durationMs"] as number) < 1 ||
+    (value["durationMs"] as number) > 60_000
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    id: value["id"],
+    trigger: value["trigger"],
+    path: value["path"],
+    durationMs: value["durationMs"] as number
+  });
+}
+
+function parseRosterEntry(value: unknown): CharacterRosterEntry | undefined {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "characterId",
+      "displayName",
+      "kind",
+      "unlocked",
+      "unlockedAt",
+      "isStarter",
+      "activeThemeId",
+      "visual",
+      "progress",
+      "voiceLines"
+    ])
+  ) {
+    return undefined;
+  }
+  const characterId = value["characterId"];
+  const unlockedAt = value["unlockedAt"];
+  const activeThemeId = value["activeThemeId"];
+  const visual = parseCharacterVisual(value["visual"]);
+  const progress = parseCharacterProgress(value["progress"]);
+  if (
+    !isCharacterId(characterId) ||
+    !isShortText(value["displayName"], 80) ||
+    (value["kind"] !== "sister" && value["kind"] !== "friend") ||
+    typeof value["unlocked"] !== "boolean" ||
+    (unlockedAt !== null && parseGeneratedAt(unlockedAt) === undefined) ||
+    typeof value["isStarter"] !== "boolean" ||
+    (activeThemeId !== null && !isCharacterThemeId(activeThemeId)) ||
+    visual === undefined ||
+    progress === undefined ||
+    (!value["unlocked"] && progress === null) ||
+    !Array.isArray(value["voiceLines"]) ||
+    value["voiceLines"].length > 16
+  ) {
+    return undefined;
+  }
+  if (
+    visual.mode === "letter" &&
+    activeThemeId !== null
+  ) {
+    return undefined;
+  }
+  if (
+    visual.mode === "doll" &&
+    activeThemeId !== null &&
+    !visual.themes.some(
+      (theme) => theme.themeId === activeThemeId && theme.unlocked
+    )
+  ) {
+    return undefined;
+  }
+  const voiceLines: CharacterVoiceLine[] = [];
+  const voiceLineIds = new Set<string>();
+  for (const candidate of value["voiceLines"]) {
+    const voiceLine = parseVoiceLine(candidate);
+    if (voiceLine === undefined || voiceLineIds.has(voiceLine.id)) {
+      return undefined;
+    }
+    voiceLineIds.add(voiceLine.id);
+    voiceLines.push(voiceLine);
+  }
+  return Object.freeze({
+    characterId,
+    displayName: value["displayName"],
+    kind: value["kind"],
+    unlocked: value["unlocked"],
+    unlockedAt: unlockedAt as string | null,
+    isStarter: value["isStarter"],
+    activeThemeId: activeThemeId as CharacterThemeId | null,
+    visual,
+    progress,
+    voiceLines: Object.freeze(voiceLines)
+  });
+}
+
+/** Strictly validates the complete character roster DTO. */
+export function parseCharactersSnapshot(value: unknown): CharactersSnapshot {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "status",
+      "generatedAt",
+      "selection",
+      "voiceEnabled",
+      "characters"
+    ]) ||
+    value["status"] !== "ok" ||
+    parseGeneratedAtWithMilliseconds(value["generatedAt"]) === undefined ||
+    !isRecord(value["selection"]) ||
+    !hasExactKeys(value["selection"], ["characterId", "selectedBy"]) ||
+    typeof value["voiceEnabled"] !== "boolean" ||
+    !Array.isArray(value["characters"]) ||
+    value["characters"].length > 16
+  ) {
+    throw new TypeError("Invalid characters response");
+  }
+  const selectedCharacterId = value["selection"]["characterId"];
+  const selectedBy = value["selection"]["selectedBy"];
+  if (
+    (selectedCharacterId !== null && !isCharacterId(selectedCharacterId)) ||
+    (selectedBy !== null &&
+      selectedBy !== "manual" &&
+      selectedBy !== "auto-starter") ||
+    ((selectedCharacterId === null) !== (selectedBy === null))
+  ) {
+    throw new TypeError("Invalid characters response");
+  }
+  const characters: CharacterRosterEntry[] = [];
+  const characterIds = new Set<CharacterId>();
+  for (const candidate of value["characters"]) {
+    const character = parseRosterEntry(candidate);
+    if (
+      character === undefined ||
+      characterIds.has(character.characterId)
+    ) {
+      throw new TypeError("Invalid characters response");
+    }
+    characterIds.add(character.characterId);
+    characters.push(character);
+  }
+  if (
+    selectedCharacterId !== null &&
+    !characters.some(
+      (character) =>
+        character.characterId === selectedCharacterId && character.unlocked
+    )
+  ) {
+    throw new TypeError("Invalid characters response");
+  }
+  return Object.freeze({
+    status: "ok",
+    generatedAt: value["generatedAt"] as string,
+    selection: Object.freeze({
+      characterId: selectedCharacterId as CharacterId | null,
+      selectedBy: selectedBy as "manual" | "auto-starter" | null
+    }),
+    voiceEnabled: value["voiceEnabled"],
+    characters: Object.freeze(characters)
+  });
+}
+
+export function diffCharacterUnlocks(
+  previous: CharactersSnapshot | undefined,
+  current: CharactersSnapshot
+): readonly CharacterUnlock[] {
+  if (previous === undefined) return Object.freeze([]);
+  const previousById = new Map(
+    previous.characters.map((character) => [character.characterId, character])
+  );
+  const unlocks: CharacterUnlock[] = [];
+  for (const character of current.characters) {
+    const prior = previousById.get(character.characterId);
+    if (
+      character.unlocked &&
+      character.unlockedAt !== null &&
+      (!prior?.unlocked || prior.unlockedAt !== character.unlockedAt)
+    ) {
+      unlocks.push(
+        Object.freeze({
+          key: `character:${character.characterId}:${character.unlockedAt}`,
+          kind: "character",
+          characterId: character.characterId,
+          displayName: character.displayName,
+          themeId: null
+        })
+      );
+    }
+    if (character.visual.mode !== "doll") continue;
+    const priorThemes = new Map(
+      prior?.visual.mode === "doll"
+        ? prior.visual.themes.map((theme) => [theme.themeId, theme])
+        : []
+    );
+    for (const theme of character.visual.themes) {
+      if (theme.unlocked && !priorThemes.get(theme.themeId)?.unlocked) {
+        unlocks.push(
+          Object.freeze({
+            key: `theme:${character.characterId}:${theme.themeId}`,
+            kind: "theme",
+            characterId: character.characterId,
+            displayName: character.displayName,
+            themeId: theme.themeId
+          })
+        );
+      }
+    }
+  }
+  return Object.freeze(unlocks);
+}
+
+export interface CharacterUnlockQueue {
+  enqueue(unlocks: readonly CharacterUnlock[]): CharacterUnlock | undefined;
+  current(): CharacterUnlock | undefined;
+  finish(): CharacterUnlock | undefined;
+  pendingCount(): number;
+}
+
+export function createCharacterUnlockQueue(): CharacterUnlockQueue {
+  const queued: CharacterUnlock[] = [];
+  const seen = new Set<string>();
+  let active: CharacterUnlock | undefined;
+  return Object.freeze({
+    enqueue(unlocks: readonly CharacterUnlock[]): CharacterUnlock | undefined {
+      for (const unlock of unlocks) {
+        if (!seen.has(unlock.key)) {
+          seen.add(unlock.key);
+          queued.push(unlock);
+        }
+      }
+      active ??= queued.shift();
+      return active;
+    },
+    current(): CharacterUnlock | undefined {
+      return active;
+    },
+    finish(): CharacterUnlock | undefined {
+      active = queued.shift();
+      return active;
+    },
+    pendingCount(): number {
+      return queued.length;
+    }
+  });
+}
+
+export function resolveCharacterPose(
+  connection: CharacterConnectionState,
+  todayTokens: number,
+  celebrating: boolean
+): CharacterPose | null {
+  if (connection === "refresh-failed" || connection === "stale") {
+    return "challenged";
+  }
+  if (celebrating) return "victory";
+  if (connection === "healthy" && todayTokens > 0) return "supported";
+  return null;
+}
+
+export interface VoicePreferenceStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+export interface VoicePlaybackGate {
+  arm(): void;
+  isArmed(): boolean;
+  isEnabled(): boolean;
+  setEnabled(enabled: boolean): void;
+  allow(trigger: VoiceTrigger, characterId: CharacterId, now: number): boolean;
+}
+
+export function createVoicePlaybackGate(
+  storage: VoicePreferenceStorage
+): VoicePlaybackGate {
+  let armed = false;
+  let enabled = false;
+  try {
+    enabled = storage.getItem("tokenmonster-voice") === "on";
+  } catch {
+    enabled = false;
+  }
+  const greetedCharacters = new Set<CharacterId>();
+  const hourlyTriggers = new Map<string, number>();
+  return Object.freeze({
+    arm(): void {
+      armed = true;
+    },
+    isArmed(): boolean {
+      return armed;
+    },
+    isEnabled(): boolean {
+      return enabled;
+    },
+    setEnabled(nextEnabled: boolean): void {
+      enabled = nextEnabled;
+      try {
+        storage.setItem(
+          "tokenmonster-voice",
+          nextEnabled ? "on" : "off"
+        );
+      } catch {
+        // A blocked storage area only makes this preference session-local.
+      }
+    },
+    allow(
+      trigger: VoiceTrigger,
+      characterId: CharacterId,
+      now: number
+    ): boolean {
+      if (!armed || !enabled) return false;
+      if (trigger === "greeting") {
+        if (greetedCharacters.has(characterId)) return false;
+        greetedCharacters.add(characterId);
+        return true;
+      }
+      if (trigger === "quiet" || trigger === "active") {
+        const key = trigger;
+        const lastPlayedAt = hourlyTriggers.get(key);
+        if (lastPlayedAt !== undefined && now - lastPlayedAt < 3_600_000) {
+          return false;
+        }
+        hourlyTriggers.set(key, now);
+      }
+      return true;
+    }
+  });
+}
+
+interface ImageFailure {
+  failureCount: number;
+  failedOnPoll: number;
+}
+
+export interface CharacterImageFallbackTracker {
+  advancePoll(): void;
+  canAttempt(characterId: CharacterId, path: string): boolean;
+  recordFailure(characterId: CharacterId, path: string): void;
+  recordSuccess(characterId: CharacterId, path: string): void;
+}
+
+export function createCharacterImageFallbackTracker(): CharacterImageFallbackTracker {
+  let pollNumber = 0;
+  const failures = new Map<string, ImageFailure>();
+  const keyFor = (characterId: CharacterId, path: string): string =>
+    `${characterId}:${path}`;
+  return Object.freeze({
+    advancePoll(): void {
+      pollNumber += 1;
+    },
+    canAttempt(characterId: CharacterId, path: string): boolean {
+      const failure = failures.get(keyFor(characterId, path));
+      return (
+        failure === undefined ||
+        (failure.failureCount === 1 && failure.failedOnPoll < pollNumber)
+      );
+    },
+    recordFailure(characterId: CharacterId, path: string): void {
+      const key = keyFor(characterId, path);
+      const previous = failures.get(key);
+      failures.set(key, {
+        failureCount: (previous?.failureCount ?? 0) + 1,
+        failedOnPoll: pollNumber
+      });
+    },
+    recordSuccess(characterId: CharacterId, path: string): void {
+      failures.delete(keyFor(characterId, path));
+    }
+  });
+}
+
+export type CharacterFetch = (
+  input: RequestInfo | URL,
+  init?: RequestInit
+) => Promise<Response>;
+
+async function readCharacterJson(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type") ?? "";
+  const declaredLength = Number(response.headers.get("content-length") ?? "0");
+  if (
+    !contentType.toLowerCase().startsWith("application/json") ||
+    (Number.isFinite(declaredLength) && declaredLength > 262_144)
+  ) {
+    throw new TypeError("Invalid characters response");
+  }
+  const body = await response.text();
+  if (body.length > 262_144) {
+    throw new TypeError("Invalid characters response");
+  }
+  return JSON.parse(body) as unknown;
+}
+
+function parseSelectionResponse(value: unknown): CharacterSelectionResponse {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["status", "selection"]) ||
+    value["status"] !== "ok" ||
+    !isRecord(value["selection"]) ||
+    !hasExactKeys(value["selection"], ["characterId", "selectedBy"]) ||
+    !isCharacterId(value["selection"]["characterId"]) ||
+    value["selection"]["selectedBy"] !== "manual"
+  ) {
+    throw new TypeError("Invalid character selection response");
+  }
+  return Object.freeze({
+    status: "ok",
+    selection: Object.freeze({
+      characterId: value["selection"]["characterId"],
+      selectedBy: "manual"
+    })
+  });
+}
+
+function parseWardrobeResponse(value: unknown): CharacterWardrobeResponse {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["status", "characterId", "activeThemeId"]) ||
+    value["status"] !== "ok" ||
+    !isCharacterId(value["characterId"]) ||
+    !isCharacterThemeId(value["activeThemeId"])
+  ) {
+    throw new TypeError("Invalid character wardrobe response");
+  }
+  return Object.freeze({
+    status: "ok",
+    characterId: value["characterId"],
+    activeThemeId: value["activeThemeId"]
+  });
+}
+
+export async function requestCharacterSelection(
+  characterId: CharacterId,
+  fetcher: CharacterFetch = fetch
+): Promise<CharacterSelectionResponse> {
+  const response = await fetcher(CHARACTER_SELECT_ENDPOINT, {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    redirect: "error",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ characterId })
+  });
+  if (!response.ok) throw new Error("Character selection failed");
+  return parseSelectionResponse(await readCharacterJson(response));
+}
+
+export async function requestCharacterWardrobe(
+  characterId: CharacterId,
+  themeId: CharacterThemeId,
+  fetcher: CharacterFetch = fetch
+): Promise<CharacterWardrobeResponse> {
+  const response = await fetcher(CHARACTER_WARDROBE_ENDPOINT, {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    redirect: "error",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ characterId, themeId })
+  });
+  if (!response.ok) throw new Error("Character wardrobe update failed");
+  return parseWardrobeResponse(await readCharacterJson(response));
+}
+
+export function applyCharacterSelection(
+  snapshot: CharactersSnapshot,
+  response: CharacterSelectionResponse
+): CharactersSnapshot {
+  const character = snapshot.characters.find(
+    (candidate) =>
+      candidate.characterId === response.selection.characterId &&
+      candidate.unlocked
+  );
+  if (character === undefined) {
+    throw new TypeError("Invalid character selection response");
+  }
+  return Object.freeze({
+    ...snapshot,
+    selection: response.selection
+  });
+}
+
+export function applyCharacterWardrobe(
+  snapshot: CharactersSnapshot,
+  response: CharacterWardrobeResponse
+): CharactersSnapshot {
+  let matched = false;
+  const characters = snapshot.characters.map((character) => {
+    if (character.characterId !== response.characterId) return character;
+    if (
+      character.visual.mode !== "doll" ||
+      !character.visual.themes.some(
+        (theme) =>
+          theme.themeId === response.activeThemeId && theme.unlocked
+      )
+    ) {
+      throw new TypeError("Invalid character wardrobe response");
+    }
+    matched = true;
+    return Object.freeze({
+      ...character,
+      activeThemeId: response.activeThemeId
+    });
+  });
+  if (!matched) throw new TypeError("Invalid character wardrobe response");
+  return Object.freeze({
+    ...snapshot,
+    characters: Object.freeze(characters)
+  });
 }
 
 function utcDateOffset(utcDate: string, days: number): string {
@@ -471,10 +1311,40 @@ const CHARACTER_VIEW = Object.freeze({
   chatgpt: Object.freeze({ glyph: "T", name: "ChatGPT" }),
   claude: Object.freeze({ glyph: "C", name: "Claude" }),
   gemini: Object.freeze({ glyph: "G", name: "Gemini" }),
-  grok: Object.freeze({ glyph: "X", name: "Grok" })
+  grok: Object.freeze({ glyph: "X", name: "Grok" }),
+  deepseek: Object.freeze({ glyph: "D", name: "DeepSeek" }),
+  qwen: Object.freeze({ glyph: "Q", name: "Qwen" }),
+  mistral: Object.freeze({ glyph: "M", name: "Mistral" }),
+  venice: Object.freeze({ glyph: "L", name: "Llama" }),
+  sakana: Object.freeze({ glyph: "S", name: "Sakana" }),
+  perplexity: Object.freeze({ glyph: "P", name: "Perplexity" }),
+  glm: Object.freeze({ glyph: "Z", name: "GLM" })
 } as const satisfies Readonly<
-  Record<CompanionCharacterId, Readonly<{ glyph: string; name: string }>>
+  Record<CharacterId, Readonly<{ glyph: string; name: string }>>
 >);
+
+const THEME_LABELS = Object.freeze({
+  tech: "科技",
+  finance: "金融",
+  politics: "政治",
+  education: "教育",
+  health: "健康",
+  environment: "環境",
+  law: "法律",
+  relationship: "關係",
+  family: "家庭",
+  workplace: "職場",
+  science: "科學",
+  culture: "文化",
+  sports: "運動",
+  food: "美食",
+  travel: "旅行",
+  psychology: "心理",
+  philosophy: "哲學",
+  international: "國際",
+  media: "媒體",
+  festival: "節慶"
+} as const satisfies Readonly<Record<CharacterThemeId, string>>);
 
 function requiredElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -493,18 +1363,31 @@ export function startCompanionUi(): void {
   const companionGlyphElement = requiredElement<HTMLElement>(
     "[data-companion-glyph]"
   );
+  const letterLayerElement = requiredElement<HTMLElement>(
+    "[data-letter-layer]"
+  );
+  const dollImageElement = requiredElement<HTMLImageElement>(
+    "[data-character-doll]"
+  );
   const companionTitleElement = requiredElement<HTMLElement>(
     "[data-companion-title]"
   );
   const characterReasonElement = requiredElement<HTMLElement>(
     "[data-character-reason]"
   );
-  const characterButtons = [
-    ...document.querySelectorAll<HTMLButtonElement>("[data-character-id]")
-  ];
-  if (characterButtons.length !== COMPANION_CHARACTER_IDS.length) {
-    throw new Error("Required character choices are unavailable");
-  }
+  const rosterElement = requiredElement<HTMLElement>("[data-roster]");
+  const wardrobeToggle = requiredElement<HTMLButtonElement>(
+    "[data-wardrobe-toggle]"
+  );
+  const wardrobeDrawer = requiredElement<HTMLElement>(
+    "[data-wardrobe-drawer]"
+  );
+  const wardrobeList = requiredElement<HTMLElement>("[data-wardrobe-list]");
+  const voiceControls = requiredElement<HTMLElement>("[data-voice-controls]");
+  const voiceToggle = requiredElement<HTMLButtonElement>("[data-voice-toggle]");
+  const voiceHint = requiredElement<HTMLButtonElement>("[data-voice-hint]");
+  const voiceAudio = requiredElement<HTMLAudioElement>("[data-voice-audio]");
+  const toastElement = requiredElement<HTMLElement>("[data-unlock-toast]");
   const updatedElement = requiredElement<HTMLElement>("[data-updated]");
   const staleBadgeElement = requiredElement<HTMLElement>(
     "[data-stale-badge]"
@@ -521,13 +1404,435 @@ export function startCompanionUi(): void {
     last28Days: requiredElement<HTMLElement>("[data-metric='last28Days']")
   };
   const unavailableRetryBackoff = createUnavailableRetryBackoff();
-  let manualCharacterId: CompanionCharacterId | undefined;
   let lastGoodSnapshot: CompanionHealthySnapshot | undefined;
+  let charactersSnapshot: CharactersSnapshot | undefined;
+  let latestTodayTokens = 0;
+  let characterConnectionState: CharacterConnectionState = "other";
+  let previousCharacterConnectionState: CharacterConnectionState = "other";
+  let wardrobeOpen = false;
+  let celebrationTimer: number | undefined;
+  let characterRequestSequence = 0;
+  const imageFallback = createCharacterImageFallbackTracker();
+  const unlockQueue = createCharacterUnlockQueue();
+  const voiceGate = createVoicePlaybackGate({
+    getItem: (key) => window.localStorage.getItem(key),
+    setItem: (key, value) => window.localStorage.setItem(key, value)
+  });
+
+  function selectedCharacter(): CharacterRosterEntry | undefined {
+    const snapshot = charactersSnapshot;
+    if (snapshot === undefined) return undefined;
+    const celebration = unlockQueue.current();
+    if (celebration !== undefined) {
+      const celebratingCharacter = snapshot.characters.find(
+        (character) =>
+          character.characterId === celebration.characterId &&
+          character.unlocked
+      );
+      if (celebratingCharacter !== undefined) return celebratingCharacter;
+    }
+    const selectedId = snapshot.selection.characterId;
+    return (
+      snapshot.characters.find(
+        (character) => character.characterId === selectedId && character.unlocked
+      ) ??
+      snapshot.characters.find(
+        (character) => character.isStarter && character.unlocked
+      ) ??
+      snapshot.characters.find((character) => character.unlocked)
+    );
+  }
+
+  function setLetterStage(character?: CharacterRosterEntry): void {
+    const view =
+      character === undefined
+        ? CHARACTER_VIEW.chatgpt
+        : CHARACTER_VIEW[character.characterId];
+    companionGlyphElement.textContent =
+      character?.visual.mode === "letter" ? character.visual.glyph : view.glyph;
+    const style = companionVisualElement.style;
+    if (character?.visual.mode === "letter") {
+      style.setProperty("--letter-background", character.visual.background);
+      style.setProperty("--letter-foreground", character.visual.foreground);
+      style.setProperty("--letter-accent", character.visual.accent);
+    } else {
+      style.removeProperty("--letter-background");
+      style.removeProperty("--letter-foreground");
+      style.removeProperty("--letter-accent");
+    }
+    dollImageElement.onload = null;
+    dollImageElement.onerror = null;
+    dollImageElement.removeAttribute("src");
+    dollImageElement.hidden = true;
+    letterLayerElement.hidden = false;
+  }
+
+  function activeTheme(
+    character: CharacterRosterEntry
+  ): CharacterTheme | undefined {
+    if (character.visual.mode !== "doll") return undefined;
+    return (
+      character.visual.themes.find(
+        (theme) =>
+          theme.themeId === character.activeThemeId && theme.unlocked
+      ) ?? character.visual.themes.find((theme) => theme.unlocked)
+    );
+  }
+
+  function stageImagePath(character: CharacterRosterEntry): string | undefined {
+    const theme = activeTheme(character);
+    if (theme === undefined) return undefined;
+    const pose = resolveCharacterPose(
+      characterConnectionState,
+      latestTodayTokens,
+      unlockQueue.current()?.characterId === character.characterId
+    );
+    return pose === null ? theme.outfitPath : (theme.posePaths[pose] ?? theme.outfitPath);
+  }
+
+  function playVoice(
+    character: CharacterRosterEntry,
+    trigger: VoiceTrigger
+  ): CharacterVoiceLine | undefined {
+    if (charactersSnapshot?.voiceEnabled !== true) return undefined;
+    const line = character.voiceLines.find(
+      (candidate) => candidate.trigger === trigger
+    );
+    if (
+      line === undefined ||
+      !voiceGate.allow(trigger, character.characterId, Date.now())
+    ) {
+      return undefined;
+    }
+    voiceAudio.pause();
+    voiceAudio.currentTime = 0;
+    voiceAudio.src = line.path;
+    void voiceAudio.play().catch(() => undefined);
+    return line;
+  }
+
+  function renderCharacterStage(): void {
+    const character = selectedCharacter();
+    if (character === undefined) {
+      setLetterStage();
+      return;
+    }
+    const view = CHARACTER_VIEW[character.characterId];
+    document.documentElement.dataset["character"] = character.characterId;
+    companionTitleElement.textContent = `嗨，我是 ${character.displayName}。`;
+    companionVisualElement.setAttribute(
+      "aria-label",
+      `TokenMonster ${character.displayName} 夥伴`
+    );
+    setLetterStage(character);
+    const imagePath = stageImagePath(character);
+    if (
+      character.visual.mode !== "doll" ||
+      imagePath === undefined ||
+      !imageFallback.canAttempt(character.characterId, imagePath)
+    ) {
+      return;
+    }
+    dollImageElement.onload = () => {
+      if (
+        selectedCharacter()?.characterId !== character.characterId ||
+        dollImageElement.getAttribute("src") !== imagePath
+      ) {
+        return;
+      }
+      imageFallback.recordSuccess(character.characterId, imagePath);
+      letterLayerElement.hidden = true;
+      dollImageElement.hidden = false;
+    };
+    dollImageElement.onerror = () => {
+      if (dollImageElement.getAttribute("src") !== imagePath) return;
+      imageFallback.recordFailure(character.characterId, imagePath);
+      setLetterStage(character);
+    };
+    dollImageElement.src = imagePath;
+    dollImageElement.alt = "";
+  }
+
+  function characterExplain(character: CharacterRosterEntry): string {
+    return (
+      character.progress?.explain ??
+      "她會照自己的步調準備好，不需要為了解鎖多用 token。"
+    );
+  }
+
+  async function chooseCharacter(characterId: CharacterId): Promise<void> {
+    try {
+      const response = await requestCharacterSelection(characterId);
+      if (charactersSnapshot === undefined) return;
+      charactersSnapshot = applyCharacterSelection(
+        charactersSnapshot,
+        response
+      );
+      renderCharacterPanel();
+    } catch {
+      characterReasonElement.textContent =
+        "這次沒有換成功，原本的夥伴會繼續陪你。";
+    }
+  }
+
+  function renderRoster(): void {
+    const fragment = document.createDocumentFragment();
+    for (const character of charactersSnapshot?.characters ?? []) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "roster-chip";
+      button.dataset["characterId"] = character.characterId;
+      button.setAttribute(
+        "aria-pressed",
+        charactersSnapshot?.selection.characterId === character.characterId
+          ? "true"
+          : "false"
+      );
+      const portrait = document.createElement("span");
+      portrait.className = "roster-portrait";
+      const glyph = document.createElement("span");
+      glyph.className = "roster-glyph";
+      glyph.setAttribute("aria-hidden", "true");
+      glyph.textContent = CHARACTER_VIEW[character.characterId].glyph;
+      portrait.append(glyph);
+      if (character.unlocked && character.visual.mode === "doll") {
+        const avatar = document.createElement("img");
+        avatar.alt = "";
+        avatar.loading = "lazy";
+        avatar.src = character.visual.avatarPath;
+        avatar.addEventListener("load", () => {
+          glyph.hidden = true;
+        });
+        avatar.addEventListener("error", () => {
+          avatar.hidden = true;
+          glyph.hidden = false;
+        });
+        portrait.append(avatar);
+      }
+      if (!character.unlocked && character.progress !== null) {
+        const ring = document.createElement("span");
+        ring.className = "progress-ring";
+        ring.style.setProperty(
+          "--progress-turn",
+          `${character.progress.value}turn`
+        );
+        ring.setAttribute("aria-hidden", "true");
+        portrait.append(ring);
+      }
+      const name = document.createElement("span");
+      name.className = "roster-name";
+      name.textContent = character.displayName;
+      button.append(portrait, name);
+      if (character.unlocked) {
+        button.setAttribute("aria-label", `選擇 ${character.displayName}`);
+        button.addEventListener("click", () => {
+          void chooseCharacter(character.characterId);
+        });
+      } else {
+        const explain = characterExplain(character);
+        const accessibleExplain = document.createElement("span");
+        accessibleExplain.className = "visually-hidden";
+        accessibleExplain.textContent = explain;
+        button.append(accessibleExplain);
+        button.title = explain;
+        button.disabled = true;
+        button.setAttribute("aria-disabled", "true");
+        button.setAttribute(
+          "aria-label",
+          `${character.displayName} 尚未解鎖。${explain}`
+        );
+      }
+      fragment.append(button);
+    }
+    rosterElement.replaceChildren(fragment);
+  }
+
+  async function chooseTheme(
+    characterId: CharacterId,
+    themeId: CharacterThemeId
+  ): Promise<void> {
+    try {
+      const response = await requestCharacterWardrobe(characterId, themeId);
+      if (charactersSnapshot === undefined) return;
+      charactersSnapshot = applyCharacterWardrobe(
+        charactersSnapshot,
+        response
+      );
+      renderCharacterPanel();
+    } catch {
+      characterReasonElement.textContent =
+        "這套服裝暫時沒有換上，先保留現在的樣子。";
+    }
+  }
+
+  function renderWardrobe(): void {
+    wardrobeToggle.setAttribute("aria-expanded", wardrobeOpen ? "true" : "false");
+    wardrobeToggle.textContent = wardrobeOpen ? "收起衣櫥" : "打開衣櫥";
+    wardrobeDrawer.hidden = !wardrobeOpen;
+    const character = selectedCharacter();
+    const fragment = document.createDocumentFragment();
+    if (character?.visual.mode === "doll") {
+      for (const theme of character.visual.themes) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "wardrobe-item";
+        button.dataset["themeId"] = theme.themeId;
+        button.setAttribute(
+          "aria-pressed",
+          theme.themeId === character.activeThemeId ? "true" : "false"
+        );
+        const label = document.createElement("span");
+        label.textContent = THEME_LABELS[theme.themeId];
+        if (theme.unlocked) {
+          const image = document.createElement("img");
+          image.src = theme.outfitPath;
+          image.alt = "";
+          image.loading = "lazy";
+          image.addEventListener("error", () => {
+            image.hidden = true;
+          });
+          button.append(image, label);
+          button.setAttribute(
+            "aria-label",
+            `換上${THEME_LABELS[theme.themeId]}服裝`
+          );
+          button.addEventListener("click", () => {
+            void chooseTheme(character.characterId, theme.themeId);
+          });
+        } else {
+          const explain = characterExplain(character);
+          const placeholder = document.createElement("span");
+          placeholder.className = "wardrobe-placeholder";
+          placeholder.setAttribute("aria-hidden", "true");
+          placeholder.textContent = CHARACTER_VIEW[character.characterId].glyph;
+          button.append(placeholder, label);
+          button.classList.add("is-locked");
+          button.disabled = true;
+          button.title = explain;
+          button.setAttribute("aria-disabled", "true");
+          button.setAttribute(
+            "aria-label",
+            `${THEME_LABELS[theme.themeId]}服裝尚未解鎖。${explain}`
+          );
+        }
+        fragment.append(button);
+      }
+    }
+    const hasThemes = fragment.childNodes.length > 0;
+    wardrobeList.replaceChildren(fragment);
+    wardrobeToggle.hidden = !hasThemes;
+  }
+
+  function renderVoiceControls(): void {
+    const hasVoiceLines =
+      charactersSnapshot?.voiceEnabled === true &&
+      charactersSnapshot.characters.some(
+        (character) => character.voiceLines.length > 0
+      );
+    voiceControls.hidden = !hasVoiceLines;
+    if (!hasVoiceLines) return;
+    const enabled = voiceGate.isEnabled();
+    voiceToggle.textContent = enabled ? "關閉角色語音" : "開啟角色語音";
+    voiceToggle.setAttribute("aria-pressed", enabled ? "true" : "false");
+    voiceHint.hidden = enabled;
+  }
+
+  function triggerStageVoices(): void {
+    const character = selectedCharacter();
+    if (character === undefined || unlockQueue.current() !== undefined) return;
+    if (playVoice(character, "greeting") !== undefined) return;
+    if (characterConnectionState === "healthy") {
+      playVoice(character, latestTodayTokens === 0 ? "quiet" : "active");
+    }
+  }
+
+  function renderCharacterPanel(): void {
+    const character = selectedCharacter();
+    if (character !== undefined) {
+      characterReasonElement.textContent =
+        charactersSnapshot?.selection.selectedBy === "manual"
+          ? "這是你選的夥伴；想換人或換衣服都可以慢慢來。"
+          : "先由她陪你；你隨時可以換，不需要多用 token。";
+    }
+    renderCharacterStage();
+    renderRoster();
+    renderWardrobe();
+    renderVoiceControls();
+    triggerStageVoices();
+  }
+
+  function showCurrentUnlock(): void {
+    const unlock = unlockQueue.current();
+    if (unlock === undefined) {
+      toastElement.hidden = true;
+      renderCharacterPanel();
+      return;
+    }
+    const character = charactersSnapshot?.characters.find(
+      (candidate) => candidate.characterId === unlock.characterId
+    );
+    toastElement.textContent =
+      unlock.kind === "character"
+        ? `${unlock.displayName} 來了！`
+        : `${unlock.displayName} 的${THEME_LABELS[unlock.themeId!]}服裝準備好了！`;
+    toastElement.hidden = false;
+    renderCharacterPanel();
+    const line =
+      character === undefined ? undefined : playVoice(character, "unlock");
+    celebrationTimer = window.setTimeout(
+      () => {
+        celebrationTimer = undefined;
+        unlockQueue.finish();
+        showCurrentUnlock();
+      },
+      Math.max(2_800, Math.min(line?.durationMs ?? 0, 5_000) + 300)
+    );
+  }
+
+  function enqueueUnlocks(unlocks: readonly CharacterUnlock[]): void {
+    const wasIdle = unlockQueue.current() === undefined;
+    const current = unlockQueue.enqueue(unlocks);
+    if (wasIdle && current !== undefined && celebrationTimer === undefined) {
+      showCurrentUnlock();
+    }
+  }
+
+  async function pollCharacters(): Promise<void> {
+    const requestSequence = ++characterRequestSequence;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(CHARACTERS_API_ENDPOINT, {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+        redirect: "error",
+        headers: { Accept: "application/json" },
+        signal: controller.signal
+      });
+      if (!response.ok) throw new Error("Characters unavailable");
+      const next = parseCharactersSnapshot(await readCharacterJson(response));
+      if (requestSequence !== characterRequestSequence) return;
+      const unlocks = diffCharacterUnlocks(charactersSnapshot, next);
+      imageFallback.advancePoll();
+      charactersSnapshot = next;
+      renderCharacterPanel();
+      enqueueUnlocks(unlocks);
+    } catch {
+      if (charactersSnapshot === undefined) setLetterStage();
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
 
   function renderCharacter(
     characterId: CompanionCharacterId,
     reason: string
   ): void {
+    if (charactersSnapshot !== undefined) {
+      renderCharacterPanel();
+      return;
+    }
     const view = CHARACTER_VIEW[characterId];
     document.documentElement.dataset["character"] = characterId;
     companionGlyphElement.textContent = view.glyph;
@@ -537,20 +1842,11 @@ export function startCompanionUi(): void {
       `TokenMonster ${view.name} 字母角色`
     );
     characterReasonElement.textContent = reason;
-    for (const button of characterButtons) {
-      button.setAttribute(
-        "aria-pressed",
-        button.dataset["characterId"] === characterId ? "true" : "false"
-      );
-    }
   }
 
   function renderStarter(starter: CompanionStarterSelection): void {
-    if (manualCharacterId !== undefined) {
-      renderCharacter(
-        manualCharacterId,
-        "這是你選的陪伴角色；本機用量不會限制你換人。"
-      );
+    if (charactersSnapshot !== undefined) {
+      renderCharacterPanel();
       return;
     }
     if (starter.outcome === "selected") {
@@ -567,28 +1863,38 @@ export function startCompanionUi(): void {
       "aria-label",
       "TokenMonster 字母 T 夥伴"
     );
-    for (const button of characterButtons) {
-      button.setAttribute("aria-pressed", "false");
-    }
     characterReasonElement.textContent =
       starter.reason === "highest-provider-total-tie"
         ? "近 28 天有兩位並列，這次由你選；之後也能隨時換。"
         : "目前沒有足夠的 provider 分項，由你選；不需要多用 token。";
   }
 
-  for (const button of characterButtons) {
-    const characterId = button.dataset["characterId"];
-    if (!isCompanionCharacterId(characterId)) {
-      throw new Error("Invalid character choice");
+  wardrobeToggle.addEventListener("click", () => {
+    wardrobeOpen = !wardrobeOpen;
+    renderWardrobe();
+  });
+
+  document.addEventListener(
+    "click",
+    () => {
+      voiceGate.arm();
+      triggerStageVoices();
+    },
+    { capture: true, once: true }
+  );
+
+  function toggleVoice(): void {
+    voiceGate.setEnabled(!voiceGate.isEnabled());
+    if (!voiceGate.isEnabled()) {
+      voiceAudio.pause();
+      voiceAudio.removeAttribute("src");
     }
-    button.addEventListener("click", () => {
-      manualCharacterId = characterId;
-      renderCharacter(
-        characterId,
-        "這是你選的陪伴角色；本機用量不會限制你換人。"
-      );
-    });
+    renderVoiceControls();
+    triggerStageVoices();
   }
+
+  voiceToggle.addEventListener("click", toggleVoice);
+  voiceHint.addEventListener("click", toggleVoice);
 
   let refreshTimer: number | undefined;
   let currentController: AbortController | undefined;
@@ -628,6 +1934,21 @@ export function startCompanionUi(): void {
     clearTrend(trendMessage, false);
   }
 
+  function updateCharacterConnection(
+    nextState: CharacterConnectionState
+  ): void {
+    previousCharacterConnectionState = characterConnectionState;
+    characterConnectionState = nextState;
+    renderCharacterStage();
+    if (
+      nextState === "refresh-failed" &&
+      previousCharacterConnectionState !== "refresh-failed"
+    ) {
+      const character = selectedCharacter();
+      if (character !== undefined) playVoice(character, "error");
+    }
+  }
+
   function showStarting(): void {
     document.documentElement.dataset["connection"] = "starting";
     statusElement.textContent = "正在啟動";
@@ -636,6 +1957,7 @@ export function startCompanionUi(): void {
     staleBadgeElement.hidden = true;
     prepareRescan("重新掃描", false);
     clearLastGoodDisplay("啟動完成後會顯示 UTC 每日趨勢。");
+    updateCharacterConnection("other");
   }
 
   function showSyncing(status: CompanionCollectorStatus): void {
@@ -652,6 +1974,7 @@ export function startCompanionUi(): void {
     staleBadgeElement.hidden = true;
     prepareRescan("正在掃描", status.canRetry);
     clearLastGoodDisplay("掃描完成後會顯示 UTC 每日趨勢。");
+    updateCharacterConnection("other");
   }
 
   function showRefreshFailed(status: CompanionCollectorStatus): void {
@@ -664,6 +1987,7 @@ export function startCompanionUi(): void {
     prepareRescan("再試一次", status.canRetry);
     setMetricPlaceholders();
     clearTrend("重新掃描成功後會顯示 UTC 每日趨勢。", false);
+    updateCharacterConnection("refresh-failed");
   }
 
   function showUnavailable(): void {
@@ -678,6 +2002,7 @@ export function startCompanionUi(): void {
     staleBadgeElement.hidden = lastGoodSnapshot === undefined;
     prepareRescan("立即重試", true);
     clearLastGoodDisplay("連線恢復後會顯示 UTC 每日趨勢。");
+    updateCharacterConnection("other");
   }
 
   function showIncompatible(): void {
@@ -689,6 +2014,7 @@ export function startCompanionUi(): void {
     staleBadgeElement.hidden = lastGoodSnapshot === undefined;
     prepareRescan("重新檢查", true);
     clearLastGoodDisplay("更新完成後會顯示 UTC 每日趨勢。");
+    updateCharacterConnection("other");
   }
 
   function handleUnavailable(): void {
@@ -815,6 +2141,7 @@ function renderTrend(snapshot: CompanionHealthySnapshot): void {
 
   function renderSnapshotData(snapshot: CompanionHealthySnapshot): void {
     lastGoodSnapshot = snapshot;
+    latestTodayTokens = snapshot.totals.today;
     renderStarter(snapshot.starter);
     metricElements.today.textContent = numberFormatter.format(
       snapshot.totals.today
@@ -843,6 +2170,7 @@ function renderTrend(snapshot: CompanionHealthySnapshot): void {
         "這是上次成功整理的用量；這次掃描沒完成，你可以再試一次。";
       updatedElement.textContent = `上次成功於本機時間 ${timeFormatter.format(new Date(collector.lastSuccessAt!))}`;
       staleBadgeElement.hidden = false;
+      updateCharacterConnection("stale");
       return;
     }
     staleBadgeElement.hidden = true;
@@ -860,6 +2188,8 @@ function renderTrend(snapshot: CompanionHealthySnapshot): void {
           : "今天（UTC）的用量已經整理好了。";
     }
     updatedElement.textContent = `更新於本機時間 ${timeFormatter.format(new Date(collector.lastSuccessAt!))}`;
+    updateCharacterConnection("healthy");
+    triggerStageVoices();
   }
 
 async function readBoundedJson(response: Response): Promise<unknown> {
@@ -948,6 +2278,7 @@ async function readBoundedJson(response: Response): Promise<unknown> {
     const snapshot = await readMetrics(controller);
     if (snapshot === undefined) return;
     showSettled(snapshot, collector);
+    await pollCharacters();
     setRefreshTimer(SETTLED_POLL_MS);
   }
 
@@ -1048,6 +2379,7 @@ async function readBoundedJson(response: Response): Promise<unknown> {
   });
 
   showStarting();
+  void pollCharacters();
   void pollCollector();
 }
 
