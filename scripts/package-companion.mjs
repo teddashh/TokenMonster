@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
+import { existsSync, realpathSync } from "node:fs";
 import { rename, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { rootDirectory } from "./repository-files.mjs";
 
@@ -14,6 +15,20 @@ if (!new Set(["internal", "signed"]).has(mode)) {
 
 const companionDirectory = join(rootDirectory, "apps", "companion");
 const outDirectory = join(companionDirectory, "out");
+
+// Windows cannot spawn the npm .cmd shim without a shell (Node >= 20 EINVAL),
+// so run npm's JS entry point with the current node binary, exactly like
+// run-workspaces.mjs does.
+function resolveNpmCli() {
+  const nodeDir = dirname(realpathSync(process.execPath));
+  const candidates = [
+    join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js"),
+    join(nodeDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js")
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+const npmCli = resolveNpmCli();
 const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
 const releaseEnvironment = {
   ...process.env,
@@ -46,9 +61,15 @@ function run(executable, arguments_, options = {}) {
   });
 }
 
+function runNpm(npmArguments) {
+  return npmCli === null
+    ? run(npmExecutable, npmArguments)
+    : run(process.execPath, [npmCli, ...npmArguments]);
+}
+
 await rm(outDirectory, { force: true, recursive: true });
-await run(npmExecutable, ["run", "build"]);
-await run(npmExecutable, ["run", `forge:${command}`]);
+await runNpm(["run", "build"]);
+await runNpm(["run", `forge:${command}`]);
 
 const verificationArguments = [
   join(rootDirectory, "scripts", "verify-companion-package.mjs"),
