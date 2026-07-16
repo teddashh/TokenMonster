@@ -5,6 +5,7 @@ import {
   lstat,
   mkdir,
   readFile,
+  readdir,
   realpath,
   rename,
   rm,
@@ -59,6 +60,33 @@ const THEMES = [
   "festival",
 ];
 const POSE_STATES = ["supported", "challenged", "victory"];
+const VOICE_PERSONAS = [
+  "openai",
+  "anthropic",
+  "google",
+  "xai",
+  "deepseek",
+  "qwen",
+  "mistral",
+  "venice",
+  "sakana",
+  "perplexity",
+];
+const VOICE_CHARACTER_IDS = {
+  openai: "chatgpt",
+  anthropic: "claude",
+  google: "gemini",
+  xai: "grok",
+  deepseek: "deepseek",
+  qwen: "qwen",
+  mistral: "mistral",
+  venice: "venice",
+  sakana: "sakana",
+  perplexity: "perplexity",
+};
+const VOICE_FILENAME_PATTERN = /^([a-z0-9]+)__([a-z0-9]+)\.wav$/u;
+const MAX_VOICE_FILE_BYTES = 400_000;
+const MAX_VOICE_DURATION_MS = 6_000;
 const WEBP_QUALITY = 82;
 const CACHE_VERSION = "1";
 const SCRIPT_ROOT = resolve(import.meta.dirname, "../..");
@@ -68,6 +96,7 @@ function usage() {
 
 Options:
   --out <dir>           Output directory (default: ~/.cache/tokenmonster-asset-build)
+  --voice-dir <dir>     Directory containing approved persona__trigger.wav clips
   --personas <a,b>      Comma-separated persona IDs
   --themes <a,b>        Comma-separated theme IDs
   --sample              Select the first three requested themes per persona
@@ -100,6 +129,7 @@ function parseArguments(argv) {
   let outDir = join(homedir(), ".cache", "tokenmonster-asset-build");
   let personas = [...PERSONAS];
   let themes = [...THEMES];
+  let voiceDir = null;
   let sample = false;
   let allowPngPassthrough = false;
 
@@ -119,6 +149,7 @@ function parseArguments(argv) {
     }
     if (
       argument === "--out" ||
+      argument === "--voice-dir" ||
       argument === "--personas" ||
       argument === "--themes"
     ) {
@@ -129,6 +160,8 @@ function parseArguments(argv) {
       index += 1;
       if (argument === "--out") {
         outDir = resolve(value);
+      } else if (argument === "--voice-dir") {
+        voiceDir = resolve(value);
       } else if (argument === "--personas") {
         personas = parseList(value, PERSONAS, argument);
       } else {
@@ -141,6 +174,7 @@ function parseArguments(argv) {
 
   return {
     outDir,
+    voiceDir,
     personas,
     themes: sample ? themes.slice(0, 3) : themes,
     sample,
@@ -163,10 +197,12 @@ function buildCharactersPackage() {
   const result = run(
     process.execPath,
     [join(SCRIPT_ROOT, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.build.json"],
-    { cwd: join(SCRIPT_ROOT, "packages", "characters"), stdio: "inherit" },
+    { cwd: join(SCRIPT_ROOT, "packages", "characters") },
   );
   if (result.status !== 0) {
-    throw new Error("Could not build @tokenmonster/characters before validation");
+    throw new Error(
+      `Could not build @tokenmonster/characters before validation: ${(result.stderr ?? result.stdout ?? "").trim()}`,
+    );
   }
 }
 
@@ -261,6 +297,97 @@ function imageMetadata(bytes, sourcePath) {
   }
 
   throw new Error(`Expected PNG or JPEG image bytes: ${sourcePath}`);
+}
+
+function voiceMetadata(bytes, sourcePath) {
+  if (bytes.length > MAX_VOICE_FILE_BYTES) {
+    throw new Error(
+      `Voice clip exceeds ${MAX_VOICE_FILE_BYTES} bytes: ${sourcePath}`,
+    );
+  }
+  if (
+    bytes.length < 12 ||
+    bytes.toString("ascii", 0, 4) !== "RIFF" ||
+    bytes.toString("ascii", 8, 12) !== "WAVE"
+  ) {
+    throw new Error(`Voice clip is not a RIFF/WAVE file: ${sourcePath}`);
+  }
+  if (bytes.readUInt32LE(4) !== bytes.length - 8) {
+    throw new Error(`Voice clip has an invalid RIFF size: ${sourcePath}`);
+  }
+
+  let format = null;
+  let dataBytes = null;
+  let offset = 12;
+  while (offset < bytes.length) {
+    if (offset + 8 > bytes.length) {
+      throw new Error(`Voice clip has a truncated chunk header: ${sourcePath}`);
+    }
+    const chunkId = bytes.toString("ascii", offset, offset + 4);
+    const chunkSize = bytes.readUInt32LE(offset + 4);
+    const chunkStart = offset + 8;
+    const chunkEnd = chunkStart + chunkSize;
+    if (chunkEnd > bytes.length) {
+      throw new Error(`Voice clip has a truncated ${chunkId} chunk: ${sourcePath}`);
+    }
+
+    if (chunkId === "fmt ") {
+      if (format !== null) {
+        throw new Error(`Voice clip has duplicate fmt chunks: ${sourcePath}`);
+      }
+      if (chunkSize < 16) {
+        throw new Error(`Voice clip has an invalid fmt chunk: ${sourcePath}`);
+      }
+      format = {
+        audioFormat: bytes.readUInt16LE(chunkStart),
+        channels: bytes.readUInt16LE(chunkStart + 2),
+        sampleRate: bytes.readUInt32LE(chunkStart + 4),
+        byteRate: bytes.readUInt32LE(chunkStart + 8),
+        blockAlign: bytes.readUInt16LE(chunkStart + 12),
+        bitsPerSample: bytes.readUInt16LE(chunkStart + 14),
+      };
+    } else if (chunkId === "data") {
+      if (dataBytes !== null) {
+        throw new Error(`Voice clip has duplicate data chunks: ${sourcePath}`);
+      }
+      dataBytes = chunkSize;
+    }
+
+    offset = chunkEnd + (chunkSize % 2);
+    if (offset > bytes.length) {
+      throw new Error(`Voice clip has a missing chunk padding byte: ${sourcePath}`);
+    }
+  }
+
+  if (format === null || dataBytes === null) {
+    throw new Error(`Voice clip must contain fmt and data chunks: ${sourcePath}`);
+  }
+  if (format.audioFormat !== 1) {
+    throw new Error(`Voice clip must use PCM format 1: ${sourcePath}`);
+  }
+  if (format.bitsPerSample !== 16) {
+    throw new Error(`Voice clip must be 16-bit: ${sourcePath}`);
+  }
+  if (format.channels !== 1) {
+    throw new Error(`Voice clip must be mono: ${sourcePath}`);
+  }
+  if (format.sampleRate !== 22_050) {
+    throw new Error(`Voice clip must use a 22050 Hz sample rate: ${sourcePath}`);
+  }
+  if (format.blockAlign !== 2 || format.byteRate !== 44_100) {
+    throw new Error(`Voice clip has inconsistent PCM rate fields: ${sourcePath}`);
+  }
+  if (dataBytes % format.blockAlign !== 0) {
+    throw new Error(`Voice clip data is not sample-aligned: ${sourcePath}`);
+  }
+
+  const durationMs = Math.round((dataBytes / format.byteRate) * 1_000);
+  if (durationMs < 1 || durationMs > MAX_VOICE_DURATION_MS) {
+    throw new Error(
+      `Voice clip duration must be between 1 and ${MAX_VOICE_DURATION_MS} ms: ${sourcePath}`,
+    );
+  }
+  return { durationMs };
 }
 
 function targetDimensions(dimensions, kind, encoder) {
@@ -404,6 +531,20 @@ async function main() {
   if (isInside(assetBankDir, outDir)) {
     throw new Error("--out must not be equal to or inside ASSET_BANK_DIR");
   }
+  let voiceDir = null;
+  if (options.voiceDir !== null) {
+    const voiceDirStats = await lstat(options.voiceDir);
+    if (voiceDirStats.isSymbolicLink()) {
+      throw new Error(`--voice-dir must not be a symlink: ${options.voiceDir}`);
+    }
+    if (!voiceDirStats.isDirectory()) {
+      throw new Error(`--voice-dir is not a directory: ${options.voiceDir}`);
+    }
+    voiceDir = await realpath(options.voiceDir);
+    if (isInside(voiceDir, outDir)) {
+      throw new Error("--out must not be equal to or inside --voice-dir");
+    }
+  }
 
   async function assertInsideBank(sourcePath) {
     const sourceStats = await lstat(sourcePath);
@@ -456,7 +597,68 @@ async function main() {
       "asset-manifest.js",
     ),
   );
-  const { parseAssetManifest } = await import(charactersModuleUrl.href);
+  const { ASSET_VOICE_TRIGGERS, parseAssetManifest } = await import(
+    charactersModuleUrl.href
+  );
+
+  const voiceClips = [];
+  if (voiceDir !== null) {
+    const filenames = (await readdir(voiceDir)).sort((left, right) =>
+      left.localeCompare(right),
+    );
+    const seenVoiceLines = new Set();
+    for (const filename of filenames) {
+      const sourcePath = join(voiceDir, filename);
+      const sourceStats = await lstat(sourcePath);
+      if (sourceStats.isSymbolicLink()) {
+        throw new Error(`Voice clip symlinks are not allowed: ${filename}`);
+      }
+      if (!sourceStats.isFile()) {
+        throw new Error(`Voice clip is not a regular file: ${filename}`);
+      }
+      const resolvedSourcePath = await realpath(sourcePath);
+      if (!isInside(voiceDir, resolvedSourcePath)) {
+        throw new Error(`Voice clip escaped --voice-dir: ${filename}`);
+      }
+
+      const filenameMatch = VOICE_FILENAME_PATTERN.exec(filename);
+      if (filenameMatch === null) {
+        throw new Error(
+          `Voice clip filename must be <persona>__<trigger>.wav: ${filename}`,
+        );
+      }
+      const [, persona, trigger] = filenameMatch;
+      if (!VOICE_PERSONAS.includes(persona)) {
+        throw new Error(`Voice clip has an unknown persona: ${filename}`);
+      }
+      if (!ASSET_VOICE_TRIGGERS.includes(trigger)) {
+        throw new Error(`Voice clip has an unknown trigger: ${filename}`);
+      }
+      const lineKey = `${persona}/${trigger}`;
+      if (seenVoiceLines.has(lineKey)) {
+        throw new Error(`Duplicate voice clip for ${lineKey}`);
+      }
+      seenVoiceLines.add(lineKey);
+
+      const bytes = await readFile(resolvedSourcePath);
+      const { durationMs } = voiceMetadata(bytes, resolvedSourcePath);
+      voiceClips.push({
+        characterId: VOICE_CHARACTER_IDS[persona],
+        trigger,
+        bytes,
+        durationMs,
+        mtimeMs: sourceStats.mtimeMs,
+      });
+    }
+  }
+  voiceClips.sort((left, right) => {
+    const characterOrder =
+      PERSONAS.indexOf(left.characterId) - PERSONAS.indexOf(right.characterId);
+    return characterOrder === 0
+      ? ASSET_VOICE_TRIGGERS.indexOf(left.trigger) -
+          ASSET_VOICE_TRIGGERS.indexOf(right.trigger)
+      : characterOrder;
+  });
 
   const objectsDir = join(outDir, "objects");
   const cachePath = join(outDir, ".asset-pipeline-cache.json");
@@ -481,6 +683,36 @@ async function main() {
       },
     ]),
   );
+
+  const voiceLinesByCharacter = new Map();
+  for (const clip of voiceClips) {
+    latestSourceMtimeMs = Math.max(latestSourceMtimeMs, clip.mtimeMs);
+    const objectSha256 = sha256(clip.bytes);
+    const object = {
+      path: `objects/${objectSha256}.wav`,
+      bytes: clip.bytes.length,
+      sha256: objectSha256,
+    };
+    const targetPath = join(objectsDir, `${objectSha256}.wav`);
+    if (!(await objectMatches(targetPath, objectSha256, clip.bytes.length))) {
+      await atomicWriteFile(targetPath, clip.bytes);
+    }
+    referencedObjects.set(object.path, object);
+    const lines = voiceLinesByCharacter.get(clip.characterId) ?? [];
+    lines.push({
+      id: `${clip.characterId}-${clip.trigger}`,
+      trigger: clip.trigger,
+      object,
+      durationMs: clip.durationMs,
+    });
+    voiceLinesByCharacter.set(clip.characterId, lines);
+  }
+  const voice = PERSONAS.filter((characterId) =>
+    voiceLinesByCharacter.has(characterId),
+  ).map((characterId) => ({
+    characterId,
+    lines: voiceLinesByCharacter.get(characterId),
+  }));
 
   async function recordMissing(characterId, kind, sourcePath, details = {}) {
     perPersona[characterId].missing += 1;
@@ -727,7 +959,7 @@ async function main() {
     schemaVersion: "1",
     generatedAt: generatedAtFromSources(latestSourceMtimeMs),
     characters,
-    voice: [],
+    voice,
   };
   parseAssetManifest(manifest);
 
@@ -773,6 +1005,11 @@ async function main() {
     },
     counts,
     totalBytes,
+    voice: {
+      characters: voice.length,
+      lines: voiceClips.length,
+      bytes: voiceClips.reduce((total, clip) => total + clip.bytes.length, 0),
+    },
     perPersonaBytes: Object.fromEntries(
       options.personas.map((characterId) => [
         characterId,
