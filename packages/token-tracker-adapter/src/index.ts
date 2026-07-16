@@ -7,6 +7,7 @@ export {
   MAX_TOKEN_TRACKER_TIMEOUT_MS,
   SUPPORTED_TOKEN_TRACKER_VERSION,
   TOKEN_TRACKER_PROVIDER_SOURCE_MAP,
+  TOKEN_TRACKER_PROGRESSION_SOURCE_MAP,
   TOKEN_TRACKER_USAGE_DAILY_PATH,
   TOKEN_TRACKER_USAGE_MODEL_BREAKDOWN_PATH,
   TOKEN_TRACKER_USAGE_SUMMARY_PATH
@@ -20,6 +21,7 @@ export type {
   TokenMonsterDailyAggregate,
   TokenMonsterDailyAggregateResponse,
   TokenMonsterProviderTotals,
+  TokenMonsterProgressionFamilyTotals,
   TokenMonsterTokenLedger,
   TokenTrackerAdapter,
   TokenTrackerAdapterOptions,
