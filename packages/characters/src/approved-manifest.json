@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1",
-  "generatedAt": "2026-07-16T00:00:00.000Z",
+  "generatedAt": "2026-07-16T07:01:30.000Z",
   "characters": [
     {
       "characterId": "chatgpt",
@@ -6723,5 +6723,556 @@
       ]
     }
   ],
-  "voice": []
+  "voice": [
+    {
+      "characterId": "chatgpt",
+      "lines": [
+        {
+          "id": "chatgpt-greeting",
+          "trigger": "greeting",
+          "object": {
+            "path": "objects/23fb1241f3857b2b94ddba48528e3e528c7fe1914a31f657ec2d200e093be837.wav",
+            "bytes": 162382,
+            "sha256": "23fb1241f3857b2b94ddba48528e3e528c7fe1914a31f657ec2d200e093be837"
+          },
+          "durationMs": 3680
+        },
+        {
+          "id": "chatgpt-unlock",
+          "trigger": "unlock",
+          "object": {
+            "path": "objects/bda2849856f99eccfaf077ee88f624085dc863996ed8490a6152ba626eabcf1d.wav",
+            "bytes": 115278,
+            "sha256": "bda2849856f99eccfaf077ee88f624085dc863996ed8490a6152ba626eabcf1d"
+          },
+          "durationMs": 2612
+        },
+        {
+          "id": "chatgpt-quiet",
+          "trigger": "quiet",
+          "object": {
+            "path": "objects/ceba79d6242ba84e9e2f9a833cd8b1246fcac21fc22a6a1711b0f229d2f92b7a.wav",
+            "bytes": 134734,
+            "sha256": "ceba79d6242ba84e9e2f9a833cd8b1246fcac21fc22a6a1711b0f229d2f92b7a"
+          },
+          "durationMs": 3053
+        },
+        {
+          "id": "chatgpt-active",
+          "trigger": "active",
+          "object": {
+            "path": "objects/99199ab3515b21424b73de0617f551ef6ea10269ad2ebf4f0e1adee7394e7e09.wav",
+            "bytes": 169550,
+            "sha256": "99199ab3515b21424b73de0617f551ef6ea10269ad2ebf4f0e1adee7394e7e09"
+          },
+          "durationMs": 3843
+        },
+        {
+          "id": "chatgpt-error",
+          "trigger": "error",
+          "object": {
+            "path": "objects/17d5d9029407af9689e43c35ee2320093dd57fab6b8927dce345217246ff3930.wav",
+            "bytes": 118862,
+            "sha256": "17d5d9029407af9689e43c35ee2320093dd57fab6b8927dce345217246ff3930"
+          },
+          "durationMs": 2694
+        }
+      ]
+    },
+    {
+      "characterId": "claude",
+      "lines": [
+        {
+          "id": "claude-greeting",
+          "trigger": "greeting",
+          "object": {
+            "path": "objects/0549f5fdeee5c2fa63e9929903e823e7b868a8fdea69a1a9eb81f263e422478e.wav",
+            "bytes": 90702,
+            "sha256": "0549f5fdeee5c2fa63e9929903e823e7b868a8fdea69a1a9eb81f263e422478e"
+          },
+          "durationMs": 2055
+        },
+        {
+          "id": "claude-unlock",
+          "trigger": "unlock",
+          "object": {
+            "path": "objects/5a49d53deabef36ef4a7d486b840b4a99abc96cdacdbac62c99c10689b4cea6f.wav",
+            "bytes": 101454,
+            "sha256": "5a49d53deabef36ef4a7d486b840b4a99abc96cdacdbac62c99c10689b4cea6f"
+          },
+          "durationMs": 2299
+        },
+        {
+          "id": "claude-quiet",
+          "trigger": "quiet",
+          "object": {
+            "path": "objects/23506d21fd33766235d0f75f864e809dc81366e9a0db0fc47bbf878e45df640b.wav",
+            "bytes": 132174,
+            "sha256": "23506d21fd33766235d0f75f864e809dc81366e9a0db0fc47bbf878e45df640b"
+          },
+          "durationMs": 2995
+        },
+        {
+          "id": "claude-active",
+          "trigger": "active",
+          "object": {
+            "path": "objects/994c9ef7a271ba2d38b3e7166ef8f4606a2b697ec93ce5ae687057632bd547e2.wav",
+            "bytes": 111694,
+            "sha256": "994c9ef7a271ba2d38b3e7166ef8f4606a2b697ec93ce5ae687057632bd547e2"
+          },
+          "durationMs": 2531
+        },
+        {
+          "id": "claude-error",
+          "trigger": "error",
+          "object": {
+            "path": "objects/527bfe3b6b66da26ab0118f3a4beaa13c19b7788961b91f4ab589309dad2fdd8.wav",
+            "bytes": 140878,
+            "sha256": "527bfe3b6b66da26ab0118f3a4beaa13c19b7788961b91f4ab589309dad2fdd8"
+          },
+          "durationMs": 3193
+        }
+      ]
+    },
+    {
+      "characterId": "gemini",
+      "lines": [
+        {
+          "id": "gemini-greeting",
+          "trigger": "greeting",
+          "object": {
+            "path": "objects/b6a281771789cc2096b537dfddda39be2226c2d4ed1ed7bc8983583a479fbfc6.wav",
+            "bytes": 100430,
+            "sha256": "b6a281771789cc2096b537dfddda39be2226c2d4ed1ed7bc8983583a479fbfc6"
+          },
+          "durationMs": 2276
+        },
+        {
+          "id": "gemini-unlock",
+          "trigger": "unlock",
+          "object": {
+            "path": "objects/ef3b898815cba075b5045f8f8883a1f132ce4f4a3ec8ae51807e2f3be863c655.wav",
+            "bytes": 126030,
+            "sha256": "ef3b898815cba075b5045f8f8883a1f132ce4f4a3ec8ae51807e2f3be863c655"
+          },
+          "durationMs": 2856
+        },
+        {
+          "id": "gemini-quiet",
+          "trigger": "quiet",
+          "object": {
+            "path": "objects/be82223e17999c942e1fb20a01972f245857af236944d0a7aaac393c002010b8.wav",
+            "bytes": 127054,
+            "sha256": "be82223e17999c942e1fb20a01972f245857af236944d0a7aaac393c002010b8"
+          },
+          "durationMs": 2879
+        },
+        {
+          "id": "gemini-active",
+          "trigger": "active",
+          "object": {
+            "path": "objects/45b3a2cb6495fc27ee93608fcbd24c107d3ca69cbaabc13cccff81c1ed3d2d6e.wav",
+            "bytes": 182862,
+            "sha256": "45b3a2cb6495fc27ee93608fcbd24c107d3ca69cbaabc13cccff81c1ed3d2d6e"
+          },
+          "durationMs": 4145
+        },
+        {
+          "id": "gemini-error",
+          "trigger": "error",
+          "object": {
+            "path": "objects/467598e382388b997059b5e038d7290357bd25574431a0d8378db6d0085d7899.wav",
+            "bytes": 162382,
+            "sha256": "467598e382388b997059b5e038d7290357bd25574431a0d8378db6d0085d7899"
+          },
+          "durationMs": 3680
+        }
+      ]
+    },
+    {
+      "characterId": "grok",
+      "lines": [
+        {
+          "id": "grok-greeting",
+          "trigger": "greeting",
+          "object": {
+            "path": "objects/d8a370e7c6f4c5ec8261cee1a536b5a1592aa18bda5217eefbb7ecdeabbd017e.wav",
+            "bytes": 59470,
+            "sha256": "d8a370e7c6f4c5ec8261cee1a536b5a1592aa18bda5217eefbb7ecdeabbd017e"
+          },
+          "durationMs": 1347
+        },
+        {
+          "id": "grok-unlock",
+          "trigger": "unlock",
+          "object": {
+            "path": "objects/7b84a1574bbc09822ff19f48b51a06dedd7a63b6e20a13c7d974ecf87d65410a.wav",
+            "bytes": 119374,
+            "sha256": "7b84a1574bbc09822ff19f48b51a06dedd7a63b6e20a13c7d974ecf87d65410a"
+          },
+          "durationMs": 2705
+        },
+        {
+          "id": "grok-quiet",
+          "trigger": "quiet",
+          "object": {
+            "path": "objects/2e1182a55630e210dcdf22c096cf20e01947382fffedc4d33d45f864557fc6c2.wav",
+            "bytes": 93774,
+            "sha256": "2e1182a55630e210dcdf22c096cf20e01947382fffedc4d33d45f864557fc6c2"
+          },
+          "durationMs": 2125
+        },
+        {
+          "id": "grok-active",
+          "trigger": "active",
+          "object": {
+            "path": "objects/e38a1f7ddc688cd068c96b71c5a6e52d20518dd51a6b5f2c233bcaa63c8d5a7d.wav",
+            "bytes": 122958,
+            "sha256": "e38a1f7ddc688cd068c96b71c5a6e52d20518dd51a6b5f2c233bcaa63c8d5a7d"
+          },
+          "durationMs": 2786
+        },
+        {
+          "id": "grok-error",
+          "trigger": "error",
+          "object": {
+            "path": "objects/982a3c8be1de6b66ddaa4eb0d0b96a9381d7110c42553ee9e560d9589a5a914b.wav",
+            "bytes": 112206,
+            "sha256": "982a3c8be1de6b66ddaa4eb0d0b96a9381d7110c42553ee9e560d9589a5a914b"
+          },
+          "durationMs": 2543
+        }
+      ]
+    },
+    {
+      "characterId": "deepseek",
+      "lines": [
+        {
+          "id": "deepseek-greeting",
+          "trigger": "greeting",
+          "object": {
+            "path": "objects/f5fc89e228f9b6826779152f87a8dcd1d343c4cbfa15f0ba38cef2562e28895f.wav",
+            "bytes": 95310,
+            "sha256": "f5fc89e228f9b6826779152f87a8dcd1d343c4cbfa15f0ba38cef2562e28895f"
+          },
+          "durationMs": 2159
+        },
+        {
+          "id": "deepseek-unlock",
+          "trigger": "unlock",
+          "object": {
+            "path": "objects/00a52e6e9fbbcfe4d69ef0c4921e5843d3c3a76fadd638890e9b767c8a7551a4.wav",
+            "bytes": 136782,
+            "sha256": "00a52e6e9fbbcfe4d69ef0c4921e5843d3c3a76fadd638890e9b767c8a7551a4"
+          },
+          "durationMs": 3100
+        },
+        {
+          "id": "deepseek-quiet",
+          "trigger": "quiet",
+          "object": {
+            "path": "objects/a54374f9f90a33974cfb3694b587fda0980e6fb6a005d1c9aa698df29aa84dd1.wav",
+            "bytes": 97358,
+            "sha256": "a54374f9f90a33974cfb3694b587fda0980e6fb6a005d1c9aa698df29aa84dd1"
+          },
+          "durationMs": 2206
+        },
+        {
+          "id": "deepseek-active",
+          "trigger": "active",
+          "object": {
+            "path": "objects/ad92c33015cb47198a6effcbf77af07acc77a34d7c559e32e2ac88134375710c.wav",
+            "bytes": 89166,
+            "sha256": "ad92c33015cb47198a6effcbf77af07acc77a34d7c559e32e2ac88134375710c"
+          },
+          "durationMs": 2020
+        },
+        {
+          "id": "deepseek-error",
+          "trigger": "error",
+          "object": {
+            "path": "objects/d6e3b76f339532196f06168d4d26001faa74022a44b44d52f58875db46384080.wav",
+            "bytes": 92750,
+            "sha256": "d6e3b76f339532196f06168d4d26001faa74022a44b44d52f58875db46384080"
+          },
+          "durationMs": 2101
+        }
+      ]
+    },
+    {
+      "characterId": "qwen",
+      "lines": [
+        {
+          "id": "qwen-greeting",
+          "trigger": "greeting",
+          "object": {
+            "path": "objects/6453fcd8a435c86bcd53ac46cc05cb9d5f0a43069851864784a84318c7cdd8c4.wav",
+            "bytes": 108622,
+            "sha256": "6453fcd8a435c86bcd53ac46cc05cb9d5f0a43069851864784a84318c7cdd8c4"
+          },
+          "durationMs": 2461
+        },
+        {
+          "id": "qwen-unlock",
+          "trigger": "unlock",
+          "object": {
+            "path": "objects/5becb6fe447032634cafd48291bea7dc255ca9cb6fa39b63cb3e9cef9faa93d2.wav",
+            "bytes": 145486,
+            "sha256": "5becb6fe447032634cafd48291bea7dc255ca9cb6fa39b63cb3e9cef9faa93d2"
+          },
+          "durationMs": 3297
+        },
+        {
+          "id": "qwen-quiet",
+          "trigger": "quiet",
+          "object": {
+            "path": "objects/d90173e99b72345ce7bf41da55253fd1a24b5ccc5ec50de0e909d381a4ba9f15.wav",
+            "bytes": 144462,
+            "sha256": "d90173e99b72345ce7bf41da55253fd1a24b5ccc5ec50de0e909d381a4ba9f15"
+          },
+          "durationMs": 3274
+        },
+        {
+          "id": "qwen-active",
+          "trigger": "active",
+          "object": {
+            "path": "objects/e652fc9390a17e49f7e1bc0eef98c62d0e45ea551d17944a1db7128ea67a10b4.wav",
+            "bytes": 113742,
+            "sha256": "e652fc9390a17e49f7e1bc0eef98c62d0e45ea551d17944a1db7128ea67a10b4"
+          },
+          "durationMs": 2577
+        },
+        {
+          "id": "qwen-error",
+          "trigger": "error",
+          "object": {
+            "path": "objects/af55598e90682a86e93c6fc440a52f342748a6d2998a18aa0dc057b57d14b8dd.wav",
+            "bytes": 115278,
+            "sha256": "af55598e90682a86e93c6fc440a52f342748a6d2998a18aa0dc057b57d14b8dd"
+          },
+          "durationMs": 2612
+        }
+      ]
+    },
+    {
+      "characterId": "mistral",
+      "lines": [
+        {
+          "id": "mistral-greeting",
+          "trigger": "greeting",
+          "object": {
+            "path": "objects/f2278091d33168adb7cdbfaa8cf22fa76008fd4177ae0d897d60226e8b0a17f5.wav",
+            "bytes": 145998,
+            "sha256": "f2278091d33168adb7cdbfaa8cf22fa76008fd4177ae0d897d60226e8b0a17f5"
+          },
+          "durationMs": 3309
+        },
+        {
+          "id": "mistral-unlock",
+          "trigger": "unlock",
+          "object": {
+            "path": "objects/4d583af515cb6401ea59206ee29e331bc1425f4bafe0b9e982578b21970b69d3.wav",
+            "bytes": 119374,
+            "sha256": "4d583af515cb6401ea59206ee29e331bc1425f4bafe0b9e982578b21970b69d3"
+          },
+          "durationMs": 2705
+        },
+        {
+          "id": "mistral-quiet",
+          "trigger": "quiet",
+          "object": {
+            "path": "objects/8caafb4d70227b4be7b9ec5f4dedbbfa2dfabb138e6f256129fb3e819cffdc0c.wav",
+            "bytes": 145998,
+            "sha256": "8caafb4d70227b4be7b9ec5f4dedbbfa2dfabb138e6f256129fb3e819cffdc0c"
+          },
+          "durationMs": 3309
+        },
+        {
+          "id": "mistral-active",
+          "trigger": "active",
+          "object": {
+            "path": "objects/551efca9fa04fd5ba1e0eaa89848ea9715549164380823c1038fa33afa41ebdb.wav",
+            "bytes": 145998,
+            "sha256": "551efca9fa04fd5ba1e0eaa89848ea9715549164380823c1038fa33afa41ebdb"
+          },
+          "durationMs": 3309
+        },
+        {
+          "id": "mistral-error",
+          "trigger": "error",
+          "object": {
+            "path": "objects/c6acb1a1d5eb82dc0551517663d507063215a33a22ce8e6fec53566a6941df60.wav",
+            "bytes": 190542,
+            "sha256": "c6acb1a1d5eb82dc0551517663d507063215a33a22ce8e6fec53566a6941df60"
+          },
+          "durationMs": 4319
+        }
+      ]
+    },
+    {
+      "characterId": "venice",
+      "lines": [
+        {
+          "id": "venice-greeting",
+          "trigger": "greeting",
+          "object": {
+            "path": "objects/de8eacd0202d1cf909acc04f3a531c8628827c494dd2e1328de015c8f3ae618c.wav",
+            "bytes": 107086,
+            "sha256": "de8eacd0202d1cf909acc04f3a531c8628827c494dd2e1328de015c8f3ae618c"
+          },
+          "durationMs": 2426
+        },
+        {
+          "id": "venice-unlock",
+          "trigger": "unlock",
+          "object": {
+            "path": "objects/f6d490469a97db508a0e01d9184e768ea4705166656b464405bb0b883e5fe35b.wav",
+            "bytes": 123470,
+            "sha256": "f6d490469a97db508a0e01d9184e768ea4705166656b464405bb0b883e5fe35b"
+          },
+          "durationMs": 2798
+        },
+        {
+          "id": "venice-quiet",
+          "trigger": "quiet",
+          "object": {
+            "path": "objects/2b483add026a88d6b5e437cad1836dae77ed731dfcef29d7de0146a6a647cb3c.wav",
+            "bytes": 120910,
+            "sha256": "2b483add026a88d6b5e437cad1836dae77ed731dfcef29d7de0146a6a647cb3c"
+          },
+          "durationMs": 2740
+        },
+        {
+          "id": "venice-active",
+          "trigger": "active",
+          "object": {
+            "path": "objects/581c5141f0bf67ae373a4e80d207707aa74843e349af5515a16ab5743b09b5b8.wav",
+            "bytes": 76878,
+            "sha256": "581c5141f0bf67ae373a4e80d207707aa74843e349af5515a16ab5743b09b5b8"
+          },
+          "durationMs": 1741
+        },
+        {
+          "id": "venice-error",
+          "trigger": "error",
+          "object": {
+            "path": "objects/0eaa627aa04a0e6be1310d8854ab7b07cdd1a0e43e10283332316820f9976fe3.wav",
+            "bytes": 125518,
+            "sha256": "0eaa627aa04a0e6be1310d8854ab7b07cdd1a0e43e10283332316820f9976fe3"
+          },
+          "durationMs": 2844
+        }
+      ]
+    },
+    {
+      "characterId": "sakana",
+      "lines": [
+        {
+          "id": "sakana-greeting",
+          "trigger": "greeting",
+          "object": {
+            "path": "objects/0199a96e59b7a05a72017d0810da02b041dfb12159e22cec3a0bef9437cb548a.wav",
+            "bytes": 113742,
+            "sha256": "0199a96e59b7a05a72017d0810da02b041dfb12159e22cec3a0bef9437cb548a"
+          },
+          "durationMs": 2577
+        },
+        {
+          "id": "sakana-unlock",
+          "trigger": "unlock",
+          "object": {
+            "path": "objects/2ed781593dc9e01df959f7af476a7af2eb53c66af86ea1cf5c47fd171f56c8cc.wav",
+            "bytes": 116302,
+            "sha256": "2ed781593dc9e01df959f7af476a7af2eb53c66af86ea1cf5c47fd171f56c8cc"
+          },
+          "durationMs": 2635
+        },
+        {
+          "id": "sakana-quiet",
+          "trigger": "quiet",
+          "object": {
+            "path": "objects/d6848f5c12e8e3ac8c8ad40529d36d79e07df8eafafd920cce8b4bd1a8607ca5.wav",
+            "bytes": 121422,
+            "sha256": "d6848f5c12e8e3ac8c8ad40529d36d79e07df8eafafd920cce8b4bd1a8607ca5"
+          },
+          "durationMs": 2752
+        },
+        {
+          "id": "sakana-active",
+          "trigger": "active",
+          "object": {
+            "path": "objects/6ea1454f7ef8b45af41c8e1654b1cf3fc331774d08db1df679c56517febef0bb.wav",
+            "bytes": 150606,
+            "sha256": "6ea1454f7ef8b45af41c8e1654b1cf3fc331774d08db1df679c56517febef0bb"
+          },
+          "durationMs": 3413
+        },
+        {
+          "id": "sakana-error",
+          "trigger": "error",
+          "object": {
+            "path": "objects/812565cc449649796f73dcb27d25a61bb684cb2a82711d5020384cde3142dbc6.wav",
+            "bytes": 176206,
+            "sha256": "812565cc449649796f73dcb27d25a61bb684cb2a82711d5020384cde3142dbc6"
+          },
+          "durationMs": 3994
+        }
+      ]
+    },
+    {
+      "characterId": "perplexity",
+      "lines": [
+        {
+          "id": "perplexity-greeting",
+          "trigger": "greeting",
+          "object": {
+            "path": "objects/9219e26231e189e8dc43d9be02c339c19ef788f76d7d9b9c7b0b11d52676b245.wav",
+            "bytes": 131150,
+            "sha256": "9219e26231e189e8dc43d9be02c339c19ef788f76d7d9b9c7b0b11d52676b245"
+          },
+          "durationMs": 2972
+        },
+        {
+          "id": "perplexity-unlock",
+          "trigger": "unlock",
+          "object": {
+            "path": "objects/746cda7685badf4f25a5bfe4a41e2a09bc48170861c5f2a3788b208f58c34937.wav",
+            "bytes": 91726,
+            "sha256": "746cda7685badf4f25a5bfe4a41e2a09bc48170861c5f2a3788b208f58c34937"
+          },
+          "durationMs": 2078
+        },
+        {
+          "id": "perplexity-quiet",
+          "trigger": "quiet",
+          "object": {
+            "path": "objects/e274bf7bfe4468c3f6ceb5c05c2144911ef889beaa80040c21a6ac975e0d9d32.wav",
+            "bytes": 71246,
+            "sha256": "e274bf7bfe4468c3f6ceb5c05c2144911ef889beaa80040c21a6ac975e0d9d32"
+          },
+          "durationMs": 1614
+        },
+        {
+          "id": "perplexity-active",
+          "trigger": "active",
+          "object": {
+            "path": "objects/d5fff05e5b508b26f0fafbacae92e0a6f24f6541f5b2d1bea77d2b42303566dc.wav",
+            "bytes": 102990,
+            "sha256": "d5fff05e5b508b26f0fafbacae92e0a6f24f6541f5b2d1bea77d2b42303566dc"
+          },
+          "durationMs": 2334
+        },
+        {
+          "id": "perplexity-error",
+          "trigger": "error",
+          "object": {
+            "path": "objects/19db62688fa06db29aaf76578293f9a0263738fbc529aea29eda154659f0c7e0.wav",
+            "bytes": 107598,
+            "sha256": "19db62688fa06db29aaf76578293f9a0263738fbc529aea29eda154659f0c7e0"
+          },
+          "durationMs": 2438
+        }
+      ]
+    }
+  ]
 }
