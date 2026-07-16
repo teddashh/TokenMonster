@@ -49,8 +49,8 @@ export class PetStartupError extends Error {
   public override readonly name = "PetStartupError";
   public readonly kind: "gateway" | "sidecar";
 
-  public constructor(kind: "gateway" | "sidecar") {
-    super(PET_STARTUP_MESSAGES[kind]);
+  public constructor(kind: "gateway" | "sidecar", options?: ErrorOptions) {
+    super(PET_STARTUP_MESSAGES[kind], options);
     this.kind = kind;
   }
 }
@@ -107,9 +107,9 @@ export async function startPetServices(): Promise<PetServices> {
       resolveExecutable: resolveSidecarExecutable,
       spawn: utilityProcessSpawn
     });
-  } catch {
+  } catch (error: unknown) {
     await stopServices(null, runtime);
-    throw new PetStartupError("sidecar");
+    throw new PetStartupError("sidecar", { cause: error });
   }
 
   if (adapter === null) {
@@ -145,9 +145,9 @@ export async function startPetServices(): Promise<PetServices> {
       origin: address.origin,
       bootstrapUrl: address.bootstrapUrl
     });
-  } catch {
+  } catch (error: unknown) {
     await stopServices(gateway, runtime);
-    throw new PetStartupError("gateway");
+    throw new PetStartupError("gateway", { cause: error });
   }
 }
 
