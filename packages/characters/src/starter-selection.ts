@@ -74,8 +74,8 @@ export type StarterCharacterSelection =
     }>;
 
 /**
- * Selects only a starter presentation. Provider totals never become character
- * capabilities, progression, or access gates.
+ * Selects only a starter decision. The progression engine may use that narrow,
+ * explainable result to unlock the starter; no capabilities enter this DTO.
  */
 export function selectStarterCharacter(
   input: StarterSelectionInput,
