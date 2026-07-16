@@ -145,7 +145,9 @@ jobs:
       - name: Generate release evidence
         run: |
           mkdir -p release-evidence
-          npm sbom --sbom-format cyclonedx > release-evidence/sbom.cdx.json
+          # Release evidence covers shipped (production) dependencies; dev-only
+          # toolchains (electron-forge) carry override pins npm flags as invalid.
+          npm sbom --sbom-format cyclonedx --omit dev > release-evidence/sbom.cdx.json
           npm pack --dry-run --json --workspaces > release-evidence/npm-pack-inventory.json
           LC_ALL=C find apps/web/dist apps/api/dist apps/companion/out/make packages/*/dist \
             -type f -print0 | sort -z | xargs -0 sha256sum \
