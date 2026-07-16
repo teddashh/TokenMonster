@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self'; object-src 'none'; script-src 'self'; style-src 'self'"
+      content="default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'"
     >
     <meta name="color-scheme" content="light">
     <meta name="theme-color" content="#f6f2e8">
@@ -27,58 +27,11 @@
     </header>
 
     <main id="main-content" class="page-shell">
-      <section class="companion-panel" aria-labelledby="welcome-title">
-        <div
-          class="companion-visual"
-          data-companion-visual
-          role="img"
-          aria-label="TokenMonster 字母 T 夥伴"
-        >
-          <span class="companion-ear companion-ear-left" aria-hidden="true"></span>
-          <span class="companion-ear companion-ear-right" aria-hidden="true"></span>
-          <span class="companion-face" aria-hidden="true">
-            <span class="companion-eye companion-eye-left"></span>
-            <span class="companion-eye companion-eye-right"></span>
-            <span class="companion-glyph" data-companion-glyph>T</span>
-          </span>
-          <span class="companion-shadow" aria-hidden="true"></span>
-        </div>
-        <div class="companion-copy">
-          <p class="eyebrow">你的本機 AI 用量夥伴</p>
-          <h1 id="welcome-title" data-companion-title>先選一位姊妹陪你。</h1>
-          <p class="companion-line" data-companion-line aria-live="polite">
-            本機用量服務正在準備，很快就好。
-          </p>
-          <p class="updated-at" data-updated></p>
-          <p class="stale-badge" data-stale-badge hidden>顯示上次成功整理的資料</p>
-          <button class="retry-button" type="button" data-rescan disabled>
-            重新掃描
-          </button>
-          <div class="character-picker" data-character-picker>
-            <p data-character-reason>連上本機用量後，我會先替你建議一位；你隨時可以換。</p>
-            <div class="character-options" role="group" aria-label="選擇陪伴角色">
-              <button type="button" data-character-id="chatgpt" aria-pressed="false">
-                <span aria-hidden="true">T</span>ChatGPT
-              </button>
-              <button type="button" data-character-id="claude" aria-pressed="false">
-                <span aria-hidden="true">C</span>Claude
-              </button>
-              <button type="button" data-character-id="gemini" aria-pressed="false">
-                <span aria-hidden="true">G</span>Gemini
-              </button>
-              <button type="button" data-character-id="grok" aria-pressed="false">
-                <span aria-hidden="true">X</span>Grok
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section class="usage-section" aria-labelledby="usage-title">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Token 用量</p>
-            <h2 id="usage-title">你的近期足跡</h2>
+            <h1 id="usage-title">你的近期足跡</h1>
           </div>
         </div>
         <dl class="metric-grid" aria-live="polite">
@@ -107,6 +60,90 @@
         <p class="trend-empty" data-trend-empty>連上後會顯示 UTC 每日趨勢。</p>
         <div class="trend" data-trend hidden></div>
         <ol class="visually-hidden" data-trend-accessible></ol>
+      </section>
+
+      <section class="companion-panel" aria-labelledby="welcome-title">
+        <div class="character-stage">
+          <div
+            class="companion-visual"
+            data-companion-visual
+            role="img"
+            aria-label="TokenMonster 字母 T 夥伴"
+          >
+            <span class="letter-layer" data-letter-layer>
+              <span class="companion-ear companion-ear-left" aria-hidden="true"></span>
+              <span class="companion-ear companion-ear-right" aria-hidden="true"></span>
+              <span class="companion-face" aria-hidden="true">
+                <span class="companion-eye companion-eye-left"></span>
+                <span class="companion-eye companion-eye-right"></span>
+                <span class="companion-glyph" data-companion-glyph>T</span>
+              </span>
+            </span>
+            <img class="character-doll" data-character-doll alt="" hidden>
+            <span class="companion-shadow" aria-hidden="true"></span>
+          </div>
+          <div class="companion-copy">
+            <p class="eyebrow">你的本機 AI 用量夥伴</p>
+            <h2 id="welcome-title" data-companion-title>先選一位姊妹陪你。</h2>
+            <p class="companion-line" data-companion-line aria-live="polite">
+              本機用量服務正在準備，很快就好。
+            </p>
+            <p class="updated-at" data-updated></p>
+            <p class="stale-badge" data-stale-badge hidden>顯示上次成功整理的資料</p>
+            <button class="retry-button" type="button" data-rescan disabled>
+              重新掃描
+            </button>
+          </div>
+        </div>
+
+        <div class="character-controls">
+          <div class="character-heading">
+            <div>
+              <p class="eyebrow">陪伴名單</p>
+              <p data-character-reason>連上角色名單後，你可以在這裡選擇夥伴。</p>
+            </div>
+            <div class="voice-controls" data-voice-controls hidden>
+              <button
+                class="voice-toggle"
+                type="button"
+                data-voice-toggle
+                aria-pressed="false"
+              >
+                開啟角色語音
+              </button>
+              <button class="voice-hint" type="button" data-voice-hint>
+                點一下讓她們開口
+              </button>
+            </div>
+          </div>
+          <div class="roster-rail" data-roster role="group" aria-label="選擇陪伴角色"></div>
+
+          <button
+            class="wardrobe-toggle"
+            type="button"
+            data-wardrobe-toggle
+            aria-expanded="false"
+            aria-controls="wardrobe-drawer"
+            hidden
+          >
+            打開衣櫥
+          </button>
+          <div
+            class="wardrobe-drawer"
+            id="wardrobe-drawer"
+            data-wardrobe-drawer
+            hidden
+          >
+            <p>挑一套已準備好的服裝；還在等待的款式不用急。</p>
+            <div class="wardrobe-list" data-wardrobe-list role="group" aria-label="角色衣櫥"></div>
+          </div>
+        </div>
+
+        <p class="character-disclosure">
+          這是受供應商產品啟發的虛構角色；TokenMonster 為獨立產品，未與該供應商合作、隸屬或獲其背書。
+        </p>
+        <p class="unlock-toast" data-unlock-toast role="status" aria-live="polite" hidden></p>
+        <audio data-voice-audio preload="none" hidden></audio>
       </section>
     </main>
 
