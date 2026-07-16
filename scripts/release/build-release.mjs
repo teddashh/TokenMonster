@@ -141,7 +141,11 @@ async function main() {
   const options = parseArguments(process.argv.slice(2));
 
   if (!options.skipBuild) {
-    run(process.execPath, [join(SCRIPT_ROOT, "scripts", "run-workspaces.mjs"), "build"]);
+    run(process.execPath, [
+      join(SCRIPT_ROOT, "scripts", "run-workspaces.mjs"),
+      "build",
+      "tokenmonster",
+    ]);
   }
 
   const stagingParent = join(options.outDir, "staging");
