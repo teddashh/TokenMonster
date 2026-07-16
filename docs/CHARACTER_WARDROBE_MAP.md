@@ -1,7 +1,7 @@
 # TokenMonster character and wardrobe map
 
-Status: architecture contract. Asset publication is blocked until rights and
-brand approval are recorded.
+Status: launch contract. Ten art-backed personas are release-allowlisted;
+GLM intentionally uses TokenMonster's built-in letter renderer.
 
 This document defines how TokenMonster may reuse the existing AI-Sister
 character work without copying its publishing pipeline or pretending that
@@ -48,11 +48,11 @@ is:
 - three reaction poses per cell = 600 pose slots;
 - one custom layered set per cell = 200 layered-set slots.
 
-Those numbers describe the source map and filename contract. They are not a
-claim that every external file passed review or still exists. The raw bank and
-layered files live outside the audited Git tree in AI-Sister's voice-lab
-workspace. GLM therefore has a known gap of 20 outfits, 60 poses, and 20
-layered sets relative to that bank.
+The release-embedded manifest now covers those 200 wardrobe cells and their
+pose objects for the ten art-backed personas. The raw bank and layered files
+remain outside the audited Git tree in AI-Sister's voice-lab workspace. GLM
+therefore stays in letter mode and has no downloadable wardrobe or pose
+objects.
 
 ## Stable theme map
 
@@ -142,7 +142,7 @@ persona + theme + semantic action + bundle version
 | `lively` | `supported` | `laugh`, `applause` |
 | `notice` | `outfit` | `tilt`, `lean_in` |
 | `error` | `challenged` | `frown`, `shake` |
-| `wardrobe-unlocked` | `victory` | `applause`, `laugh`; only after an explicit wardrobe action, never token volume |
+| `wardrobe-unlocked` | `victory` | `applause`, `laugh`; celebrates a locally recorded milestone without assigning power or rank |
 
 Every moving state has an `idle-static` reduced-motion fallback. Asset fallback
 order is deterministic:
@@ -150,7 +150,7 @@ order is deterministic:
 1. requested persona + theme + action;
 2. requested persona + theme + `outfit`;
 3. requested persona + approved default theme + `outfit`;
-4. bundled lightweight neutral placeholder.
+4. built-in lightweight letter renderer.
 
 Missing visual assets never change the underlying collector or metrics state.
 They only change presentation.
@@ -190,36 +190,40 @@ selection record, user identifier, or usage-derived value with it.
 
 ## Unlock and progression rules
 
-Tokens are measurements, never game currency:
+Tokens remain measurements, not spendable game currency. Progression is
+local-only, monotonic, explainable, and never purchasable:
 
-- token count, cost, model price, and provider spend never unlock an outfit;
-- token count never powers up, levels, evolves, or ranks a character;
-- high usage is never praised as stronger or better;
-- low or zero usage is never punished or depicted as neglect;
-- wardrobe availability is determined by approved bundle availability and user
-  choice, not consumption;
-- semantic `victory` is tied only to an explicit user action or system recovery,
-  never to crossing a token threshold.
+- the uniquely highest positive OpenAI/Anthropic/Google/xAI family selects and
+  unlocks its starter sister; a manual sister choice takes precedence;
+- ChatGPT, Claude, Gemini, and Grok also unlock at the first local token for
+  their corresponding family;
+- DeepSeek and Qwen use their own cumulative family totals; Mistral and
+  Perplexity use active-day streaks; Venice/Llama and GLM use lifetime totals;
+  Sakana uses distinct active-provider breadth;
+- after a character unlocks, its 20 ordered wardrobe themes unlock from that
+  character's local provider-family cumulative total. A matching local trait
+  can move a theme ahead by one tier;
+- `supported` and `challenged` pose sets are available with character unlock;
+  `victory` and allowlisted actions use active-day-streak milestones;
+- persisted unlock timestamps prevent rescans, corrections, or later quiet
+  periods from relocking an item.
 
-Explainable workflow traits may later influence optional copy or a suggested
-cosmetic facet, but they must remain local, content-blind, reversible, and
-non-competitive.
+The UI explains progress without praising high volume, shaming low/zero usage,
+assigning power or rank, or encouraging wasteful token burn.
 
 ## Publishing boundary
 
-Approved, pre-rendered, immutable bundles and their public manifest live in
-AI-Sister's existing Cloudflare R2/CDN under the dedicated prefix:
+Approved, pre-rendered, immutable objects live in AI-Sister's existing
+Cloudflare R2/CDN under the dedicated prefix:
 
 ```text
 tokenmonster/characters/v1/
 ```
 
-Recommended public layout:
+Runtime public layout:
 
 ```text
-tokenmonster/characters/v1/manifest.json
-tokenmonster/characters/v1/<persona>/<theme>/<bundle-version>/bundle.json
-tokenmonster/characters/v1/<persona>/<theme>/<bundle-version>/<rendered-file>
+tokenmonster/characters/v1/objects/<sha256>.<webp|png|wav>
 ```
 
 AI-Sister retains:
@@ -234,34 +238,26 @@ TokenMonster receives only the public, approved output. It does not mount the
 voice-lab workspace, read AI-Sister databases, deep-import AI-Sister code, or
 become a second asset publisher.
 
-## Public manifest contract
+## Release manifest contract
 
-The public manifest is an availability index, not a Cartesian-product promise.
-It lists only bundles that passed visual, rights, and brand review. Each entry
-must include at least:
+The strict manifest is embedded in the TokenMonster release rather than
+downloaded at runtime. It lists only objects that passed the release gate. Each
+object records at least its relative hash-named path, bytes, SHA-256, media
+shape, and its character/theme/pose or voice association:
 
 ```json
 {
-  "schemaVersion": 1,
-  "bundleId": "claude.tech.2026-07-15.1",
-  "persona": "claude",
-  "theme": "tech",
-  "version": "2026-07-15.1",
-  "format": "tokenmonster-rendered-raster-v1",
-  "actions": ["outfit", "supported", "challenged", "victory"],
-  "bundleManifest": "claude/tech/2026-07-15.1/bundle.json",
+  "path": "objects/<sha256>.webp",
+  "bytes": 63198,
   "sha256": "<lowercase-hex-sha256>",
-  "bytes": 123456,
-  "approval": "approved",
-  "minimumRendererVersion": 1
+  "width": 347,
+  "height": 840
 }
 ```
 
-The bundle manifest records every downloadable file's relative path, MIME
-type, byte length, SHA-256 digest, pixel dimensions, action association, and
-reduced-motion fallback. Paths must be relative and must not contain local
-filesystem locations, user identifiers, prompts, credentials, or arbitrary
-external URLs.
+Paths are relative and contain no local filesystem location, user identifier,
+prompt, credential, or arbitrary external URL. The current manifest contains
+ten characters with 20 themes each and an empty `voice` list.
 
 Published manifest and bundle versions are immutable. Correction means
 publishing a new version and updating the top-level manifest; it never means
@@ -269,23 +265,28 @@ silently replacing bytes beneath an existing hash.
 
 ## Download, cache, and integrity behavior
 
-TokenMonster downloads approved bundles on demand from the single configured
-AI-Sister CDN origin and caches them in the operating system's local application
-cache, outside the repository.
+TokenMonster downloads an approved object only after its character/theme is
+unlocked. It uses the single configured HTTPS CDN origin and caches verified
+bytes under `~/.tokenmonster/asset-cache`, outside the repository.
 
 The client must:
 
 1. fetch only fixed HTTPS URLs derived from the allowlisted CDN origin and
    validated manifest fields;
-2. enforce response size, timeout, MIME, file-count, and path bounds;
-3. verify byte length and SHA-256 before making a bundle visible;
-4. unpack into a temporary cache entry and atomically promote it after every
-   file passes validation;
-5. key cache entries by immutable bundle version and digest;
-6. retain the last verified approved bundle for offline use;
-7. fall back locally when the CDN, manifest, or integrity check fails;
+2. deny redirects and enforce a 10-second timeout and 4 MiB response cap;
+3. verify SHA-256 before making an object visible or writing it to cache;
+4. write through a mode-`0600` temporary file and atomically promote it;
+5. reverify every cache hit and delete corrupt or oversized entries;
+6. retain verified objects for offline use;
+7. return a local letter fallback when the CDN, manifest, or integrity check fails;
 8. never send token totals, provider totals, local paths, user IDs, credentials,
    or collector data in an asset request, query string, or telemetry event.
+
+`--no-character-downloads` removes the CDN origin from the gateway
+configuration. No image or future voice download is then possible; verified
+cache objects and built-in letter mode remain available. Voice objects ship in
+a later manifest revision behind this same gate, and playback defaults off in
+the UI until the user enables it.
 
 The ordinary CDN layer can observe the requested static object and client IP,
 as with any asset request. TokenMonster must add no usage-derived parameters or
@@ -307,8 +308,8 @@ same gate.
 
 ## Acceptance criteria for the first asset release
 
-- The public prefix contains a versioned top-level manifest and at least one
-  rights-approved bundle for each of the four starter sisters.
+- The release embeds an approved manifest for ten art-backed roster members,
+  each with 20 themes and pose art; GLM reliably uses letter mode.
 - Every published file is immutable and integrity-addressed.
 - A clean TokenMonster install can download, validate, cache, render, and use an
   offline fallback without access to AI-Sister source or voice-lab paths.
@@ -317,4 +318,5 @@ same gate.
 - Reduced motion works for every published bundle.
 - A missing theme, action, GLM cell, or unresolved persona degrades to a visual
   fallback without fake data or a collector failure.
-- No test or product path uses token volume as unlock, power, level, or reward.
+- Local milestones may unlock characters, themes, poses, and actions, but no
+  path treats tokens as currency, purchasable progression, power, or rank.
