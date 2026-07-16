@@ -4,9 +4,10 @@ import type { ChildProcess } from "node:child_process";
 
 import { describe, expect, it, vi } from "vitest";
 
-import type {
-  CompanionGateway,
-  CompanionGatewayOptions
+import {
+  getApprovedAssetManifest,
+  type CompanionGateway,
+  type CompanionGatewayOptions
 } from "@tokenmonster/companion-gateway";
 import {
   SUPPORTED_TOKEN_TRACKER_VERSION,
@@ -191,12 +192,7 @@ describe("CLI surface", () => {
       collector: runtime,
       assetDirectory: "/package/companion-ui/dist/public",
       characters: {
-        manifest: {
-          schemaVersion: "1",
-          generatedAt: "2026-07-16T00:00:00.000Z",
-          characters: [],
-          voice: []
-        },
+        manifest: getApprovedAssetManifest(),
         cacheDirectory: "/home/tester/.tokenmonster/asset-cache",
         cdnBaseUrl: DEFAULT_CHARACTER_CDN_BASE_URL,
         progressionStorePath: "/home/tester/.tokenmonster/progression-v1.json"
