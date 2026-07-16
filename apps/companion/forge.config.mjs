@@ -19,6 +19,14 @@ import { FuseV1Options, FuseVersion } from "@electron/fuses";
 const APP_BUNDLE_ID = "com.tokenmonster.companion";
 const RELEASE_MODE = process.env.TOKENMONSTER_RELEASE_MODE ?? "internal";
 const require = createRequire(import.meta.url);
+const packageManifest = JSON.parse(
+  readFileSync(new URL("package.json", import.meta.url), "utf8")
+);
+const APP_DESCRIPTION =
+  typeof packageManifest.description === "string" &&
+  packageManifest.description.trim().length > 0
+    ? packageManifest.description
+    : `${packageManifest.productName} local-first AI usage companion`;
 
 if (RELEASE_MODE !== "internal" && RELEASE_MODE !== "signed") {
   throw new Error("TOKENMONSTER_RELEASE_MODE must be internal or signed.");
@@ -394,22 +402,24 @@ if (
   );
 }
 
+const packagerConfig = {
+  appBundleId: APP_BUNDLE_ID,
+  appCategoryType: "public.app-category.utilities",
+  asar: true,
+  executableName: "TokenMonster",
+  ignore: ignoreOutsideRuntime,
+  name: "TokenMonster",
+  overwrite: true,
+  prune: false,
+  ...signedConfiguration
+};
+
 const config = {
   hooks: {
     packageAfterCopy: prepareRuntimeResources,
     postPackage: hardenPackagedPermissions
   },
-  packagerConfig: {
-    appBundleId: APP_BUNDLE_ID,
-    appCategoryType: "public.app-category.utilities",
-    asar: true,
-    executableName: "TokenMonster",
-    ignore: ignoreOutsideRuntime,
-    name: "TokenMonster",
-    overwrite: true,
-    prune: false,
-    ...signedConfiguration
-  },
+  packagerConfig,
   makers: [
     {
       name: "@electron-forge/maker-zip",
@@ -422,6 +432,18 @@ const config = {
         name: "TokenMonster"
       },
       platforms: ["darwin"]
+    },
+    {
+      name: "@electron-forge/maker-squirrel",
+      config: {
+        name: packagerConfig.name.replaceAll(" ", ""),
+        exe: `${packagerConfig.executableName}.exe`,
+        setupExe: `${packagerConfig.name}Setup.exe`,
+        authors: "Ted Huang",
+        description: APP_DESCRIPTION,
+        noMsi: true
+      },
+      platforms: ["win32"]
     }
   ],
   plugins: [
