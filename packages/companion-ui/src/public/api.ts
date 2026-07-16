@@ -1,21 +1,47 @@
 import {
   CHARACTER_SELECT_ENDPOINT,
   CHARACTER_WARDROBE_ENDPOINT,
+  USAGE_FAMILIES_API_ENDPOINT,
+  USAGE_MODELS_API_ENDPOINT,
   hasExactKeys,
   isCharacterId,
   isCharacterThemeId,
   isRecord,
+  parseCompanionSnapshot,
+  parseUsageFamiliesResponse,
+  parseUsageModelsResponse,
   type CharacterId,
   type CharacterSelectionResponse,
   type CharactersSnapshot,
   type CharacterThemeId,
-  type CharacterWardrobeResponse
+  type CharacterWardrobeResponse,
+  type UsageFamiliesResponse,
+  type UsageModelsResponse,
+  type UsageWindow
 } from "./dto.js";
 
 export type CharacterFetch = (
   input: RequestInfo | URL,
   init?: RequestInit
 ) => Promise<Response>;
+
+export interface UsageAnalyticsSnapshot {
+  readonly families: UsageFamiliesResponse;
+  readonly models: UsageModelsResponse;
+}
+
+export type UsageAnalyticsErrorCode =
+  | "request-rejected"
+  | "sidecar-unavailable"
+  | "sidecar-incompatible"
+  | "invalid-response";
+
+export class UsageAnalyticsError extends Error {
+  public constructor(public readonly code: UsageAnalyticsErrorCode) {
+    super(code);
+    this.name = "UsageAnalyticsError";
+  }
+}
 
 export async function readCharacterJson(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -31,6 +57,90 @@ export async function readCharacterJson(response: Response): Promise<unknown> {
     throw new TypeError("Invalid characters response");
   }
   return JSON.parse(body) as unknown;
+}
+
+async function readUsageJson(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type") ?? "";
+  const declaredLength = Number(response.headers.get("content-length") ?? "0");
+  if (
+    !contentType.toLowerCase().startsWith("application/json") ||
+    (Number.isFinite(declaredLength) && declaredLength > 65_536)
+  ) {
+    throw new UsageAnalyticsError("invalid-response");
+  }
+  const body = await response.text();
+  if (body.length > 65_536) {
+    throw new UsageAnalyticsError("invalid-response");
+  }
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    throw new UsageAnalyticsError("invalid-response");
+  }
+}
+
+function throwUsageResponseError(value: unknown): never {
+  if (
+    isRecord(value) &&
+    hasExactKeys(value, ["error"]) &&
+    value["error"] === "request-rejected"
+  ) {
+    throw new UsageAnalyticsError("request-rejected");
+  }
+  try {
+    const parsed = parseCompanionSnapshot(value);
+    if (parsed.status === "error") {
+      throw new UsageAnalyticsError(parsed.error);
+    }
+  } catch (error) {
+    if (error instanceof UsageAnalyticsError) throw error;
+  }
+  throw new UsageAnalyticsError("invalid-response");
+}
+
+export async function requestUsageAnalytics(
+  window: UsageWindow,
+  signal: AbortSignal,
+  fetcher: CharacterFetch = fetch,
+  todayUtcDate = new Date().toISOString().slice(0, 10)
+): Promise<UsageAnalyticsSnapshot> {
+  const [familiesResponse, modelsResponse] = await Promise.all([
+    fetcher(`${USAGE_FAMILIES_API_ENDPOINT}?window=${window}`, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+      redirect: "error",
+      headers: { Accept: "application/json" },
+      signal
+    }),
+    fetcher(`${USAGE_MODELS_API_ENDPOINT}?window=${window}&limit=10`, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+      redirect: "error",
+      headers: { Accept: "application/json" },
+      signal
+    })
+  ]);
+  const [familiesValue, modelsValue] = await Promise.all([
+    readUsageJson(familiesResponse),
+    readUsageJson(modelsResponse)
+  ]);
+  if (!familiesResponse.ok) throwUsageResponseError(familiesValue);
+  if (!modelsResponse.ok) throwUsageResponseError(modelsValue);
+  try {
+    return Object.freeze({
+      families: parseUsageFamiliesResponse(
+        familiesValue,
+        todayUtcDate,
+        window
+      ),
+      models: parseUsageModelsResponse(modelsValue, window, 10)
+    });
+  } catch (error) {
+    if (error instanceof UsageAnalyticsError) throw error;
+    throw new UsageAnalyticsError("invalid-response");
+  }
 }
 
 function parseSelectionResponse(value: unknown): CharacterSelectionResponse {
@@ -156,4 +266,3 @@ export function applyCharacterWardrobe(
     characters: Object.freeze(characters)
   });
 }
-
