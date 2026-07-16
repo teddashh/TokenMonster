@@ -84,6 +84,13 @@ import type {
   LocalUsageInsights
 } from "../shared/ipc.js";
 
+import { handleDefaultSquirrelStartup } from "./squirrel-startup.js";
+
+function run(): void {
+  if (handleDefaultSquirrelStartup(() => app.quit())) {
+    return;
+  }
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "tokenmonster",
@@ -660,3 +667,6 @@ app.on("window-all-closed", () => {
     app.quit();
   }
 });
+}
+
+run();
