@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 
 import { describe, expect, it, vi } from "vitest";
@@ -193,9 +194,13 @@ describe("CLI surface", () => {
       assetDirectory: "/package/companion-ui/dist/public",
       characters: {
         manifest: getApprovedAssetManifest(),
-        cacheDirectory: "/home/tester/.tokenmonster/asset-cache",
+        cacheDirectory: join("/home/tester", ".tokenmonster", "asset-cache"),
         cdnBaseUrl: DEFAULT_CHARACTER_CDN_BASE_URL,
-        progressionStorePath: "/home/tester/.tokenmonster/progression-v1.json"
+        progressionStorePath: join(
+          "/home/tester",
+          ".tokenmonster",
+          "progression-v1.json"
+        )
       }
     });
     expect(gateway.start).toHaveBeenCalledWith();
@@ -275,9 +280,13 @@ describe("CLI surface", () => {
       })
     ).resolves.toBe(0);
     expect(first.captured.gatewayOptions?.characters).toMatchObject({
-      cacheDirectory: "/home/tester/.tokenmonster/asset-cache",
+      cacheDirectory: join("/home/tester", ".tokenmonster", "asset-cache"),
       cdnBaseUrl: "https://assets.example.test/characters",
-      progressionStorePath: "/home/tester/.tokenmonster/progression-v1.json"
+      progressionStorePath: join(
+        "/home/tester",
+        ".tokenmonster",
+        "progression-v1.json"
+      )
     });
 
     const second = compositionDependencies();
