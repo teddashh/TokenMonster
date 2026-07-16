@@ -98,6 +98,14 @@ jobs:
           bwrap --version
           strace --version
 
+      # Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor by default:
+      # https://ubuntu.com/blog/ubuntu-23-10-restricted-unprivileged-user-namespaces
+      # Bubblewrap needs them to enforce the real denied-egress smoke test.
+      - name: Enable bubblewrap user namespaces
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          test "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns)" = "0"
+
       - name: Install exact dependencies
         run: npm ci
 
