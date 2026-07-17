@@ -12,10 +12,29 @@ export interface PetWindowState {
   readonly pinned: boolean;
 }
 
+const PET_WINDOW_MARGIN = 12;
+
 export const DEFAULT_PET_WINDOW_STATE: PetWindowState = Object.freeze({
-  bounds: Object.freeze({ width: 380, height: 600, x: 80, y: 80 }),
+  bounds: Object.freeze({ width: 340, height: 560, x: 0, y: 0 }),
   pinned: true
 });
+
+export function placeDefaultPetWindowState(
+  state: PetWindowState,
+  workArea: PetWindowBounds
+): PetWindowState {
+  if (state !== DEFAULT_PET_WINDOW_STATE) return state;
+  const { width, height } = DEFAULT_PET_WINDOW_STATE.bounds;
+  return Object.freeze({
+    bounds: Object.freeze({
+      x: workArea.x + workArea.width - width - PET_WINDOW_MARGIN,
+      y: workArea.y + workArea.height - height - PET_WINDOW_MARGIN,
+      width,
+      height
+    }),
+    pinned: DEFAULT_PET_WINDOW_STATE.pinned
+  });
+}
 
 function exactObject(
   value: unknown,

@@ -776,6 +776,48 @@ describe("companion gateway", () => {
     expect(adapter.getDaily).not.toHaveBeenCalled();
   });
 
+  it("serves the root page for the exact pet view query and rejects every other query", async () => {
+    const { address } = await startGateway(fakeAdapter());
+    const host = { Host: `127.0.0.1:${address.port}` };
+
+    // A query on the one-shot bootstrap path is rejected without consuming it.
+    const bootstrapWithQuery = await rawRequest(address, {
+      path: `${new URL(address.bootstrapUrl).pathname}?view=pet`,
+      headers: host
+    });
+    expect(bootstrapWithQuery.status).toBe(404);
+    const cookie = await bootstrap(address);
+
+    const petView = await rawRequest(address, {
+      path: "/?view=pet",
+      headers: { ...host, Cookie: cookie }
+    });
+    expect(petView.status).toBe(200);
+    expect(petView.headers["content-type"]).toBe("text/html; charset=utf-8");
+    expect(petView.body).toContain("<!doctype html>");
+
+    const anonymousPetView = await rawRequest(address, {
+      path: "/?view=pet",
+      headers: host
+    });
+    expect(anonymousPetView.status).toBe(404);
+
+    for (const path of [
+      "/?view=dashboard",
+      "/?view=pet&extra=1",
+      "/?View=pet",
+      "/?view=%70et",
+      "/index.html?view=pet",
+      "/api/companion?view=pet"
+    ]) {
+      const rejected = await rawRequest(address, {
+        path,
+        headers: { ...host, Cookie: cookie }
+      });
+      expect(rejected.status).toBe(404);
+    }
+  });
+
   it("returns session-gated family and model analytics for fixed UTC windows", async () => {
     const getDailyFamilySeries = vi.fn<
       TokenTrackerAdapter["getDailyFamilySeries"]

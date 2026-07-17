@@ -71,6 +71,10 @@ const UI_SCRIPT_ENTRY = "main.js";
 const UI_SCRIPT_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*\.js$/u;
 const MAX_UI_SCRIPT_FILES = 64;
 const BOOTSTRAP_PREFIX = "/__tokenmonster/bootstrap/";
+// The floating pet shell opts into its compact layout by requesting the root
+// page with exactly this query. It is the only non-analytics query accepted;
+// the one-shot bootstrap path never carries it.
+const PET_VIEW_SEARCH = "?view=pet";
 const SESSION_COOKIE_NAME = "tokenmonster_session";
 const SESSION_TOKEN_BYTES = 32;
 const OBSERVATION_DAYS = 28;
@@ -551,6 +555,7 @@ function parseFixedTarget(
     }
     if (
       parsed.search !== "" &&
+      !(parsed.pathname === "/" && parsed.search === PET_VIEW_SEARCH) &&
       parsed.pathname !== USAGE_FAMILIES_API_PATH &&
       parsed.pathname !== USAGE_MODELS_API_PATH
     ) {
