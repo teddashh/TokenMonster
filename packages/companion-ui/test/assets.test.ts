@@ -62,7 +62,11 @@ describe("companion static assets", () => {
   });
 
   it("shows the character and honest loading values before JavaScript runs", async () => {
-    const html = await readAsset("index.html");
+    const [html, css, js] = await Promise.all([
+      readAsset("index.html"),
+      readAsset("styles.css"),
+      readJavaScriptGraph()
+    ]);
 
     expect(html).toContain('lang="zh-Hant"');
     expect(html).toContain("先選一位姊妹陪你。");
@@ -89,11 +93,34 @@ describe("companion static assets", () => {
     expect(html).toContain('data-analytics-window="7"');
     expect(html).toContain('data-analytics-window="28"');
     expect(html).toContain('data-analytics-window="90"');
-    expect(html.indexOf('class="analytics-panel"')).toBeLessThan(
-      html.indexOf('class="companion-panel"')
+    expect(html).toContain(
+      '<details class="stats-disclosure" data-stats-disclosure open>'
     );
+    expect(html.indexOf('class="companion-panel"')).toBeLessThan(
+      html.indexOf('class="analytics-panel"')
+    );
+    expect(css).toMatch(/\.companion-panel\s*\{[^}]*grid-row:\s*1;/su);
+    expect(css).toMatch(/\.stats-disclosure\s*\{[^}]*grid-row:\s*2;/su);
+    expect(js).toContain('statsDisclosure.open = companionView === "dashboard"');
+    expect(js).toContain("位夥伴等待解鎖");
     expect(html).not.toContain('style="');
     expect(html).not.toMatch(/data-metric="(?:today|last7Days|last28Days)">\d/u);
+  });
+
+  it("keeps compact pet mode within the window and puts stats behind an expander", async () => {
+    const [html, css, js] = await Promise.all([
+      readAsset("index.html"),
+      readAsset("styles.css"),
+      readJavaScriptGraph()
+    ]);
+
+    expect(html).toContain("<summary>用量與模型數據</summary>");
+    expect(css).toContain('html[data-view="pet"] .page-shell');
+    expect(css).toContain("height: 100dvh");
+    expect(css).toContain("overflow: hidden");
+    expect(css).toContain('html[data-view="pet"] .stats-disclosure[open]');
+    expect(js).toContain('new URLSearchParams(search).get("view") === "pet"');
+    expect(js).toContain('document.documentElement.dataset["view"] = companionView');
   });
 
   it("contains only same-origin assets and a restrictive browser policy", async () => {
