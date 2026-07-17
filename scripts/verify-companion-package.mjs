@@ -485,11 +485,14 @@ async function verifySidecarExtraResource(asarPath) {
       `Sidecar root package top-level inventory mismatch; expected=${JSON.stringify(expectedRootTopLevelNames)}, actual=${JSON.stringify(actualRootTopLevelEntries)}.`
     );
   }
+  // Relativize before filtering: the root package itself lives under the
+  // staged sidecar's node_modules/, so an absolute-path node_modules filter
+  // would drop every file.
   const stagedRootFiles = (await walkFiles(rootPackageDirectory, {
     rejectLinks: true
   }))
-    .filter((path) => !path.includes(`${sep}node_modules${sep}`))
     .map((path) => portablePath(relative(rootPackageDirectory, path)))
+    .filter((path) => !path.startsWith("node_modules/"))
     .sort();
   if (JSON.stringify(stagedRootFiles) !== JSON.stringify(expectedRootFiles)) {
     const missing = expectedRootFiles.filter((path) => !stagedRootFiles.includes(path));
