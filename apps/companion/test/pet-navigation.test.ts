@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { originNavigationGuard } from "../src/main/pet/navigation.js";
+import {
+  originNavigationGuard,
+  petViewUrl
+} from "../src/main/pet/navigation.js";
 
 function prevented(origin: string, targetUrl: string): boolean {
   let wasPrevented = false;
@@ -16,6 +19,22 @@ function prevented(origin: string, targetUrl: string): boolean {
 }
 
 const ORIGIN = "http://127.0.0.1:7777";
+
+describe("petViewUrl", () => {
+  it("adds the pet view without losing gateway URL components", () => {
+    expect(
+      petViewUrl(
+        `${ORIGIN}/__tokenmonster/bootstrap/secret?mode=compact#character`
+      )
+    ).toBe(
+      `${ORIGIN}/__tokenmonster/bootstrap/secret?mode=compact&view=pet#character`
+    );
+  });
+
+  it("replaces an existing view parameter", () => {
+    expect(petViewUrl(`${ORIGIN}/?view=dashboard`)).toBe(`${ORIGIN}/?view=pet`);
+  });
+});
 
 describe("originNavigationGuard", () => {
   it("allows same-origin navigation", () => {
