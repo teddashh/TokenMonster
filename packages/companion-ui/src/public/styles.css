@@ -176,7 +176,8 @@ html[data-connection="error"] .status-dot {
 .companion-panel,
 .usage-section,
 .trend-panel,
-.analytics-panel {
+.analytics-panel,
+.quota-panel {
   border: 1px solid rgb(49 52 46 / 9%);
   border-radius: 1.6rem;
   background: rgb(255 253 248 / 82%);
@@ -909,7 +910,8 @@ html[data-character="grok"] .character-options button[aria-pressed="true"] span 
 
 .usage-section,
 .trend-panel,
-.analytics-panel {
+.analytics-panel,
+.quota-panel {
   padding: clamp(1.35rem, 3vw, 2rem);
 }
 
@@ -1016,6 +1018,72 @@ html[data-character="grok"] .character-options button[aria-pressed="true"] span 
 
 .analytics-panel {
   grid-column: 1 / -1;
+}
+
+.quota-panel {
+  grid-column: 1 / -1;
+}
+
+.quota-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.quota-row {
+  min-width: 0;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: #f1eee5;
+}
+
+.quota-row-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.quota-row-heading label {
+  font-weight: 850;
+}
+
+.quota-row-heading select {
+  min-width: 0;
+  max-width: 12rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgb(29 84 72 / 24%);
+  border-radius: 0.65rem;
+  color: #252722;
+  background: white;
+}
+
+.quota-status,
+.quota-disclaimer {
+  color: #64675f;
+  font-size: 0.82rem;
+}
+
+.quota-status {
+  margin: 0.8rem 0 0.4rem;
+}
+
+.quota-track {
+  height: 0.55rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #d9d5ca;
+}
+
+.quota-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #63ad92;
+}
+
+.quota-disclaimer {
+  margin: 1rem 0 0;
 }
 
 .analytics-heading {
@@ -1337,6 +1405,10 @@ html[data-character="grok"] .character-options button[aria-pressed="true"] span 
     grid-template-columns: 1fr;
   }
 
+  .quota-list {
+    grid-template-columns: 1fr;
+  }
+
   .companion-panel {
     grid-template-columns: 1fr;
     min-height: 27rem;
@@ -1616,4 +1688,8 @@ html[data-view="pet"] .stats-grid {
   gap: 0.65rem;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+html[data-view="pet"] .quota-panel {
+  display: none;
 }

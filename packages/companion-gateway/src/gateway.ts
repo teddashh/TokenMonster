@@ -46,6 +46,7 @@ import type {
   CompanionGatewayAddress,
   CompanionGatewayClock,
   CompanionGatewayOptions,
+  CompanionQuotaResponse,
   CompanionCharacterFetch,
   CompanionUiAssets,
   CompanionUsageFamiliesResponse,
@@ -54,6 +55,19 @@ import type {
   CompanionUsageModelsResponse,
   CompanionUsageWindow
 } from "./types.js";
+import {
+  QUOTA_CATALOG_FAMILIES,
+  findQuotaPlan,
+  isQuotaCatalogFamily,
+  type QuotaCatalogFamily
+} from "./quota-catalog.js";
+import { dailyEquivalentBudget } from "./quota-estimator.js";
+import {
+  loadQuotaPlanSelections,
+  quotaPlansPath,
+  saveQuotaPlanSelections,
+  withQuotaPlanSelection
+} from "./quota-store.js";
 
 const LOOPBACK_HOST = "127.0.0.1" as const;
 const COMPANION_API_PATH = "/api/companion";
@@ -62,6 +76,8 @@ const COLLECTOR_REFRESH_PATH = "/api/companion/refresh";
 const CHARACTERS_API_PATH = "/api/characters";
 const USAGE_FAMILIES_API_PATH = "/api/usage/families";
 const USAGE_MODELS_API_PATH = "/api/usage/models";
+const USAGE_QUOTA_API_PATH = "/api/usage/quota";
+const USAGE_QUOTA_PLAN_API_PATH = "/api/usage/quota/plan";
 const CHARACTER_SELECT_PATH = "/api/characters/select";
 const CHARACTER_WARDROBE_PATH = "/api/characters/wardrobe";
 const CHARACTER_ASSET_PREFIX = "/assets/characters/objects/";
@@ -787,6 +803,37 @@ function projectUsageModelsResponse(
   return Object.freeze({ window, models: Object.freeze(models) });
 }
 
+function projectCurrentDayFamilyUsage(
+  upstream: TokenMonsterDailyFamilySeries,
+  utcDate: string
+): Readonly<Record<QuotaCatalogFamily, number>> {
+  if (!isPlainRecord(upstream) || !hasExactKeys(upstream, ["days"])) {
+    throw PROJECTION_ERROR;
+  }
+  const days = ownDataValue(upstream, "days");
+  if (!Array.isArray(days) || days.length !== 1) throw PROJECTION_ERROR;
+  const day = days[0];
+  if (
+    !isPlainRecord(day) ||
+    !hasExactKeys(day, ["utcDate", "families"]) ||
+    ownDataValue(day, "utcDate") !== utcDate
+  ) {
+    throw PROJECTION_ERROR;
+  }
+  const rawFamilies = ownDataValue(day, "families");
+  if (!isPlainRecord(rawFamilies) || !hasExactKeys(rawFamilies, USAGE_FAMILY_KEYS)) {
+    throw PROJECTION_ERROR;
+  }
+  const families = Object.fromEntries(
+    QUOTA_CATALOG_FAMILIES.map((family) => {
+      const value = ownDataValue(rawFamilies, family);
+      if (!isSafeCount(value)) throw PROJECTION_ERROR;
+      return [family, value];
+    })
+  ) as Record<QuotaCatalogFamily, number>;
+  return Object.freeze(families);
+}
+
 const STARTER_PROVIDER_KEYS = [
   "openai",
   "anthropic",
@@ -995,6 +1042,9 @@ export function createCompanionGateway(
     characters: normalized.characters,
     clock: normalized.clock
   });
+  const quotaPlanFile = quotaPlansPath(
+    normalized.characters.progressionStorePath
+  );
   const bootstrapToken = randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
   const sessionToken = randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
   const bootstrapPath = `${BOOTSTRAP_PREFIX}${bootstrapToken}`;
@@ -1004,6 +1054,60 @@ export function createCompanionGateway(
   let bootstrapAvailable = true;
   let refreshRequestInFlight: Promise<CompanionCollectorStatus> | null = null;
   let lastRefreshRequestAtMs: number | null = null;
+  let quotaStoreMutation = Promise.resolve();
+
+  const serializeQuotaStore = async <T>(operation: () => Promise<T>): Promise<T> => {
+    const previous = quotaStoreMutation;
+    let release!: () => void;
+    quotaStoreMutation = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  };
+
+  const buildQuotaResponse = async (): Promise<CompanionQuotaResponse> => {
+    const instant = normalized.clock();
+    const generatedAt = instant.toISOString();
+    const utcDate = utcDateFromInstant(instant);
+    const [selections, upstream] = await Promise.all([
+      serializeQuotaStore(() => loadQuotaPlanSelections(quotaPlanFile)),
+      withTimeout(
+        normalized.adapter.getDailyFamilySeries({
+          fromUtcDate: utcDate,
+          toUtcDate: utcDate
+        }),
+        normalized.apiTimeoutMs
+      )
+    ]);
+    const usage = projectCurrentDayFamilyUsage(upstream, utcDate);
+    const families = QUOTA_CATALOG_FAMILIES.map((family) => {
+      const selectedPlanId = selections.plans[family] ?? null;
+      const plan =
+        selectedPlanId === null
+          ? undefined
+          : findQuotaPlan(family, selectedPlanId);
+      return Object.freeze({
+        family,
+        planId: plan?.planId ?? null,
+        // Daily-only upstream data makes UTC day the honest active window.
+        windowHours: 24,
+        windowKind: "utc-day" as const,
+        usedTokens: usage[family]!,
+        budgetTokens: plan === undefined ? null : dailyEquivalentBudget(plan),
+        estimate: true as const
+      });
+    });
+    return Object.freeze({
+      status: "ok",
+      generatedAt,
+      families: Object.freeze(families)
+    });
+  };
 
   const readCollectorStatus = (): CompanionCollectorStatus =>
     projectCollectorStatus(normalized.collector.getStatus());
@@ -1045,7 +1149,9 @@ export function createCompanionGateway(
         const path = target.path;
         const acceptsJsonBody =
           request.method === "POST" &&
-          (path === CHARACTER_SELECT_PATH || path === CHARACTER_WARDROBE_PATH);
+          (path === CHARACTER_SELECT_PATH ||
+            path === CHARACTER_WARDROBE_PATH ||
+            path === USAGE_QUOTA_PLAN_API_PATH);
         if (!hasAcceptedRequestHeaders(request, activeOrigin, acceptsJsonBody)) {
           sendRequestRejected(response, 403);
           return;
@@ -1190,6 +1296,69 @@ export function createCompanionGateway(
           sendBuffer(response, 200, asset.contentType, asset.body, {
             "Cache-Control": "public, max-age=31536000, immutable"
           });
+          return;
+        }
+        if (path === USAGE_QUOTA_API_PATH) {
+          if (request.method !== "GET") {
+            response.setHeader("Allow", "GET");
+            sendRequestRejected(response, 405);
+            return;
+          }
+          if (activeApiRequests >= MAX_CONCURRENT_API_REQUESTS) {
+            sendApiError(response, "sidecar-unavailable");
+            return;
+          }
+          activeApiRequests += 1;
+          try {
+            sendJson(response, 200, await buildQuotaResponse());
+          } catch (error) {
+            sendApiError(response, classifyApiError(error));
+          } finally {
+            activeApiRequests -= 1;
+          }
+          return;
+        }
+        if (path === USAGE_QUOTA_PLAN_API_PATH) {
+          if (request.method !== "POST") {
+            response.setHeader("Allow", "POST");
+            sendRequestRejected(response, 405);
+            return;
+          }
+          if (!hasAcceptedMutationHeaders(request, activeOrigin)) {
+            sendRequestRejected(response, 403);
+            return;
+          }
+          const body = await readCharacterJsonBody(request, ["family", "planId"]);
+          const family = body?.["family"];
+          const planId = body?.["planId"];
+          if (
+            !isQuotaCatalogFamily(family) ||
+            (planId !== null &&
+              (typeof planId !== "string" ||
+                findQuotaPlan(family, planId) === undefined))
+          ) {
+            sendInvalidCharacterRequest(response);
+            return;
+          }
+          if (activeApiRequests >= MAX_CONCURRENT_API_REQUESTS) {
+            sendApiError(response, "sidecar-unavailable");
+            return;
+          }
+          activeApiRequests += 1;
+          try {
+            await serializeQuotaStore(async () => {
+              const selections = await loadQuotaPlanSelections(quotaPlanFile);
+              await saveQuotaPlanSelections(
+                quotaPlanFile,
+                withQuotaPlanSelection(selections, family, planId)
+              );
+            });
+            sendJson(response, 200, await buildQuotaResponse());
+          } catch (error) {
+            sendApiError(response, classifyApiError(error));
+          } finally {
+            activeApiRequests -= 1;
+          }
           return;
         }
         if (

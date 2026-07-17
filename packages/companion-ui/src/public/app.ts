@@ -7,5 +7,6 @@ export * from "./voice.js";
 export * from "./usage-state.js";
 export * from "./usage-panel.js";
 export * from "./analytics-panel.js";
+export * from "./quota-panel.js";
 export * from "./wardrobe.js";
 export { startCompanionUi } from "./main.js";

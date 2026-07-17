@@ -369,6 +369,23 @@ async function characterPost(
   });
 }
 
+async function quotaPost(
+  address: CompanionGatewayAddress,
+  cookie: string,
+  body: string
+): Promise<Response> {
+  return fetch(`${address.origin}/api/usage/quota/plan`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Cookie: cookie,
+      Origin: address.origin,
+      "Content-Type": "application/json"
+    },
+    body
+  });
+}
+
 async function collectorStatusRequest(
   address: CompanionGatewayAddress,
   cookie: string
@@ -1443,5 +1460,125 @@ describe("companion gateway", () => {
         characters: EMPTY_CHARACTER_OPTIONS
       })
     ).toThrowError(CompanionGatewayError);
+  });
+
+  it("serves and persists session-gated daily quota estimates", async () => {
+    const adapter = fakeAdapter();
+    const { address } = await startGateway(adapter);
+    const cookie = await bootstrap(address);
+
+    const initial = await usageRequest(address, cookie, "/api/usage/quota");
+    expect(initial.status).toBe(200);
+    expect(await initial.json()).toEqual({
+      status: "ok",
+      generatedAt: "2026-07-15T12:34:56.789Z",
+      families: [
+        {
+          family: "anthropic",
+          planId: null,
+          windowHours: 24,
+          windowKind: "utc-day",
+          usedTokens: 0,
+          budgetTokens: null,
+          estimate: true
+        },
+        {
+          family: "openai",
+          planId: null,
+          windowHours: 24,
+          windowKind: "utc-day",
+          usedTokens: 11,
+          budgetTokens: null,
+          estimate: true
+        },
+        {
+          family: "google",
+          planId: null,
+          windowHours: 24,
+          windowKind: "utc-day",
+          usedTokens: 0,
+          budgetTokens: null,
+          estimate: true
+        },
+        {
+          family: "xai",
+          planId: null,
+          windowHours: 24,
+          windowKind: "utc-day",
+          usedTokens: 0,
+          budgetTokens: null,
+          estimate: true
+        }
+      ]
+    });
+
+    const selected = await quotaPost(
+      address,
+      cookie,
+      JSON.stringify({ family: "openai", planId: "chatgpt-plus" })
+    );
+    expect(selected.status).toBe(200);
+    const selectedBody = (await selected.json()) as {
+      families: Array<Record<string, unknown>>;
+    };
+    expect(selectedBody.families[1]).toMatchObject({
+      family: "openai",
+      planId: "chatgpt-plus",
+      budgetTokens: 1_920_000,
+      usedTokens: 11
+    });
+    const refreshed = await usageRequest(address, cookie, "/api/usage/quota");
+    const refreshedBody = (await refreshed.json()) as {
+      families: Array<{ planId: string | null }>;
+    };
+    expect(refreshedBody.families[1]?.planId).toBe("chatgpt-plus");
+
+    const cleared = await quotaPost(
+      address,
+      cookie,
+      JSON.stringify({ family: "openai", planId: null })
+    );
+    const clearedBody = (await cleared.json()) as {
+      families: Array<Record<string, unknown>>;
+    };
+    expect(clearedBody.families[1]).toMatchObject({
+      planId: null,
+      budgetTokens: null
+    });
+  });
+
+  it("rejects unauthenticated, query-bearing, and invalid quota requests", async () => {
+    const adapter = fakeAdapter();
+    const { address } = await startGateway(adapter);
+    expect(
+      (await usageRequest(address, null, "/api/usage/quota")).status
+    ).toBe(404);
+    expect(
+      (
+        await quotaPost(
+          address,
+          "tokenmonster_session=invalid",
+          JSON.stringify({ family: "openai", planId: null })
+        )
+      ).status
+    ).toBe(404);
+    const cookie = await bootstrap(address);
+    expect(
+      (await usageRequest(address, cookie, "/api/usage/quota?extra=1")).status
+    ).toBe(404);
+
+    for (const body of [
+      { family: "openai", planId: "private-plan" },
+      { family: "other", planId: null },
+      { family: "openai" },
+      { family: "openai", planId: null, extra: true }
+    ]) {
+      const response = await quotaPost(address, cookie, JSON.stringify(body));
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        status: "error",
+        error: "invalid-request"
+      });
+    }
   });
 });

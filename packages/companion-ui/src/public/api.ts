@@ -1,6 +1,8 @@
 import {
   CHARACTER_SELECT_ENDPOINT,
   CHARACTER_WARDROBE_ENDPOINT,
+  USAGE_QUOTA_API_ENDPOINT,
+  USAGE_QUOTA_PLAN_API_ENDPOINT,
   USAGE_FAMILIES_API_ENDPOINT,
   USAGE_MODELS_API_ENDPOINT,
   hasExactKeys,
@@ -8,6 +10,7 @@ import {
   isCharacterThemeId,
   isRecord,
   parseCompanionSnapshot,
+  parseQuotaSnapshot,
   parseUsageFamiliesResponse,
   parseUsageModelsResponse,
   type CharacterId,
@@ -15,6 +18,8 @@ import {
   type CharactersSnapshot,
   type CharacterThemeId,
   type CharacterWardrobeResponse,
+  type QuotaFamily,
+  type QuotaSnapshot,
   type UsageFamiliesResponse,
   type UsageModelsResponse,
   type UsageWindow
@@ -173,6 +178,40 @@ export async function requestUsageAnalytics(
     if (error instanceof UsageAnalyticsError) throw error;
     throw new UsageAnalyticsError("invalid-response");
   }
+}
+
+export async function requestQuotaSnapshot(
+  fetcher: CharacterFetch = fetch
+): Promise<QuotaSnapshot> {
+  const response = await fetcher(USAGE_QUOTA_API_ENDPOINT, {
+    method: "GET",
+    cache: "no-store",
+    credentials: "same-origin",
+    redirect: "error",
+    headers: { Accept: "application/json" }
+  });
+  if (!response.ok) throw new Error("Quota estimate unavailable");
+  return parseQuotaSnapshot(await readUsageJson(response));
+}
+
+export async function updateQuotaPlan(
+  family: QuotaFamily,
+  planId: string | null,
+  fetcher: CharacterFetch = fetch
+): Promise<QuotaSnapshot> {
+  const response = await fetcher(USAGE_QUOTA_PLAN_API_ENDPOINT, {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    redirect: "error",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ family, planId })
+  });
+  if (!response.ok) throw new Error("Quota plan update failed");
+  return parseQuotaSnapshot(await readUsageJson(response));
 }
 
 function parseSelectionResponse(value: unknown): CharacterSelectionResponse {
