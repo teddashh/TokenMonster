@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyCharacterSelection,
   applyCharacterWardrobe,
+  characterUnlockToastText,
+  coalesceCharacterUnlocks,
   createPortraitSwitchStateMachine,
   createCharacterImageFallbackTracker,
   createCharacterUnlockQueue,
@@ -26,6 +28,7 @@ const AUDIO_PATH = `/assets/characters/objects/${"c".repeat(64)}.wav`;
 const CHARACTER_RESPONSE = {
   status: "ok",
   generatedAt: "2026-07-16T12:00:00.000Z",
+  unlockBatchId: "2026-07-02T00:00:00.000Z",
   selection: { characterId: "chatgpt", selectedBy: "auto-starter" },
   voiceEnabled: true,
   characters: [
@@ -140,6 +143,15 @@ describe("character roster response contract", () => {
     expect(Object.isFrozen(parsed)).toBe(true);
     expect(Object.isFrozen(parsed.characters)).toBe(true);
     expect(Object.isFrozen(parsed.characters[0]?.voiceLines)).toBe(true);
+  });
+
+  it("accepts snapshots from before the optional unlock batch marker", () => {
+    const legacy = structuredClone(CHARACTER_RESPONSE) as Partial<
+      typeof CHARACTER_RESPONSE
+    >;
+    delete legacy.unlockBatchId;
+
+    expect(parseCharactersSnapshot(legacy).unlockBatchId).toBeUndefined();
   });
 
   it.each([
@@ -330,6 +342,7 @@ describe("character interaction logic", () => {
     const sakana = CHARACTER_RESPONSE.characters[2];
     const nextValue = {
       ...CHARACTER_RESPONSE,
+      unlockBatchId: "2026-07-16T12:00:00.000Z",
       characters: [
         CHARACTER_RESPONSE.characters[0],
         CHARACTER_RESPONSE.characters[1],
@@ -352,6 +365,11 @@ describe("character interaction logic", () => {
       "character",
       "theme"
     ]);
+    expect(unlocks.map((unlock) => unlock.batchId)).toEqual([
+      next.unlockBatchId,
+      next.unlockBatchId
+    ]);
+    expect(coalesceCharacterUnlocks(unlocks)).toBe(unlocks);
     const queue = createCharacterUnlockQueue();
     expect(queue.enqueue(unlocks)).toBe(unlocks[0]);
     expect(queue.current()).toBe(unlocks[0]);
@@ -360,6 +378,79 @@ describe("character interaction logic", () => {
     expect(queue.pendingCount()).toBe(1);
     expect(queue.finish()).toBe(unlocks[1]);
     expect(queue.finish()).toBeUndefined();
+  });
+
+  it("coalesces a burst into one mixed wardrobe summary", () => {
+    const previous = validSnapshot();
+    const next = parseCharactersSnapshot({
+      ...structuredClone(CHARACTER_RESPONSE),
+      generatedAt: "2026-07-16T12:01:00.000Z",
+      unlockBatchId: "2026-07-16T12:01:00.000Z",
+      characters: CHARACTER_RESPONSE.characters.map((entry) =>
+        entry.characterId === "sakana"
+          ? {
+              ...entry,
+              unlocked: true,
+              unlockedAt: "2026-07-16T12:01:00.000Z",
+              activeThemeId: "festival",
+              visual: {
+                ...entry.visual,
+                themes: [{ ...entry.visual.themes[0], unlocked: true }]
+              },
+              progress: null
+            }
+          : entry.characterId === "chatgpt" && entry.visual.mode === "doll"
+            ? {
+                ...entry,
+                visual: {
+                  ...entry.visual,
+                  themes: [
+                    ...entry.visual.themes,
+                    ...(["finance", "culture"] as const).map((themeId) => ({
+                      ...entry.visual.themes[0],
+                      themeId,
+                      unlocked: true
+                    }))
+                  ]
+                }
+              }
+            : entry
+      )
+    });
+    const unlocks = diffCharacterUnlocks(previous, next);
+    const notifications = coalesceCharacterUnlocks(unlocks);
+
+    expect(unlocks).toHaveLength(4);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]?.summary).toEqual({
+      characterCount: 1,
+      themeCount: 3
+    });
+    expect(characterUnlockToastText(notifications[0]!)).toBe(
+      "解鎖了 1 位夥伴與 3 件服裝，到衣櫃看看"
+    );
+    const queue = createCharacterUnlockQueue();
+    expect(queue.enqueue(unlocks)).toEqual(notifications[0]);
+    expect(queue.pendingCount()).toBe(0);
+  });
+
+  it("uses the wardrobe-only summary copy for a clothing burst", () => {
+    const batchId = "2026-07-16T12:02:00.000Z";
+    const unlocks = (["tech", "finance", "culture", "festival"] as const).map(
+      (themeId) => ({
+        key: `theme:chatgpt:${themeId}`,
+        batchId,
+        kind: "theme" as const,
+        characterId: "chatgpt" as const,
+        displayName: "ChatGPT",
+        themeId
+      })
+    );
+
+    const notifications = coalesceCharacterUnlocks(unlocks);
+    expect(characterUnlockToastText(notifications[0]!)).toBe(
+      "解鎖了 4 件新服裝，到衣櫃看看"
+    );
   });
 
   it("maps challenged before victory, then supported, then idle", () => {
