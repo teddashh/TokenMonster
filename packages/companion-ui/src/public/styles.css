@@ -204,13 +204,11 @@ html[data-connection="error"] .status-dot {
 }
 
 /* Character liveliness: idle, entrance, pose crossfade, switching, celebration. */
-.motion-enabled .character-idle {
-  animation: character-idle 4.8s ease-in-out infinite alternate;
-}
-
-.motion-enabled .character-letter-idle {
+.motion-enabled .companion-visual.character-idle > .character-doll:not(.character-doll-incoming):not([hidden]):not(.character-crossfade-out),
+.motion-enabled .companion-visual.character-idle > .letter-layer:not([hidden]):not(.character-entering) {
   transform-origin: 50% 85%;
-  animation: character-idle 5.4s ease-in-out infinite alternate;
+  animation: character-idle 4.6s ease-in-out infinite;
+  will-change: transform;
 }
 
 .motion-enabled .character-entering {
@@ -372,12 +370,13 @@ html[data-connection="error"] .status-dot {
 }
 
 @keyframes character-idle {
-  from {
-    transform: translateY(0) rotate(-0.35deg) scale(1);
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
   }
 
-  to {
-    transform: translateY(-1%) rotate(0.35deg) scale(1.01);
+  50% {
+    transform: translate3d(0, -0.42rem, 0) scale(1.015);
   }
 }
 
@@ -1448,6 +1447,8 @@ html[data-character="grok"] .character-options button[aria-pressed="true"] span 
 
   .character-switching > span,
   .character-effects.is-active .character-sparkle,
+  .companion-visual.character-idle > .character-doll,
+  .companion-visual.character-idle > .letter-layer,
   .character-entering,
   .character-crossfade-in,
   .character-crossfade-out,
