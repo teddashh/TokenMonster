@@ -67,3 +67,10 @@ are implementation details, not manual installation steps.
 Use TypeScript strict mode for new code. Keep domain logic in packages, not in
 framework handlers. Add contract and privacy regression tests with every data
 shape change.
+
+## Active work queue
+
+`docs/HANDOFF.md` holds the current pending-work plans, per-task acceptance
+criteria, and the execution constraints (sandbox limits, local gate parity,
+gateway contract checklist) that every implementation task inherits. Read it
+before starting any task in this repository.
