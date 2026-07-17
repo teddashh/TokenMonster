@@ -152,6 +152,11 @@ jobs:
         shell: bash
         run: node scripts/package-companion.mjs make internal
 
+      - name: Re-verify Windows Squirrel sidecar payload
+        if: matrix.os == 'windows-2025'
+        shell: bash
+        run: node scripts/verify-companion-package.mjs --mode internal --require-maker
+
       # Boot the packaged binary (not the dev tree) and require the sidecar
       # and gateway to come up — the class of bug a byte-level verifier
       # cannot see. Ubuntu 24.04 restricts unprivileged user namespaces via
