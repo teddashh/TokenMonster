@@ -245,6 +245,7 @@ export interface CharacterRosterEntry {
 export interface CharactersSnapshot {
   readonly status: "ok";
   readonly generatedAt: string;
+  readonly unlockBatchId?: string | null;
   readonly selection: Readonly<{
     characterId: CharacterId | null;
     selectedBy: "manual" | "auto-starter" | null;
@@ -269,10 +270,15 @@ export interface CharacterWardrobeResponse {
 
 export interface CharacterUnlock {
   readonly key: string;
+  readonly batchId: string;
   readonly kind: "character" | "theme";
   readonly characterId: CharacterId;
   readonly displayName: string;
   readonly themeId: CharacterThemeId | null;
+  readonly summary?: Readonly<{
+    readonly characterCount: number;
+    readonly themeCount: number;
+  }>;
 }
 
 export type CharacterConnectionState =
@@ -605,17 +611,22 @@ function parseRosterEntry(value: unknown): CharacterRosterEntry | undefined {
 
 /** Strictly validates the complete character roster DTO. */
 export function parseCharactersSnapshot(value: unknown): CharactersSnapshot {
+  const responseKeys = [
+    "status",
+    "generatedAt",
+    "selection",
+    "voiceEnabled",
+    "characters"
+  ] as const;
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, [
-      "status",
-      "generatedAt",
-      "selection",
-      "voiceEnabled",
-      "characters"
-    ]) ||
+    (!hasExactKeys(value, responseKeys) &&
+      !hasExactKeys(value, [...responseKeys, "unlockBatchId"])) ||
     value["status"] !== "ok" ||
     parseGeneratedAtWithMilliseconds(value["generatedAt"]) === undefined ||
+    ("unlockBatchId" in value &&
+      value["unlockBatchId"] !== null &&
+      parseGeneratedAt(value["unlockBatchId"]) === undefined) ||
     !isRecord(value["selection"]) ||
     !hasExactKeys(value["selection"], ["characterId", "selectedBy"]) ||
     typeof value["voiceEnabled"] !== "boolean" ||
@@ -660,6 +671,9 @@ export function parseCharactersSnapshot(value: unknown): CharactersSnapshot {
   return Object.freeze({
     status: "ok",
     generatedAt: value["generatedAt"] as string,
+    ...(Object.hasOwn(value, "unlockBatchId")
+      ? { unlockBatchId: value["unlockBatchId"] as string | null }
+      : {}),
     selection: Object.freeze({
       characterId: selectedCharacterId as CharacterId | null,
       selectedBy: selectedBy as "manual" | "auto-starter" | null
