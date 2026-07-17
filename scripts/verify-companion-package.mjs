@@ -24,6 +24,18 @@ import {
 import { extractAll, getRawHeader } from "@electron/asar";
 import yauzl from "yauzl";
 
+import { MAX_PACKAGED_COLLECTOR_RESOURCE_BYTES } from "../apps/companion/packaging/package-bounds.mjs";
+import {
+  assertSquirrelSidecarInventory,
+  declaredSidecarPackageFiles,
+  packageNameFromLockPath,
+  SIDECAR_MAX_FILE_COUNT,
+  SIDECAR_MAX_TOTAL_BYTES,
+  SIDECAR_MAX_TREE_DEPTH,
+  SIDECAR_ROOT_LOCK_PATH,
+  sidecarDependencyClosure,
+  stagedSidecarPackagePaths
+} from "./companion-packaging-policy.mjs";
 import { rootDirectory } from "./repository-files.mjs";
 
 const arguments_ = process.argv.slice(2);
@@ -44,6 +56,9 @@ const manifestPath = join(
   "runtime-bundle-manifest.json"
 );
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+const packageLock = JSON.parse(
+  await readFile(join(rootDirectory, "package-lock.json"), "utf8")
+);
 const blockedExtensions = new Set([
   ".avif",
   ".bmp",
@@ -256,7 +271,7 @@ async function verifyCollectorExtraResource(asarPath) {
       (metadata.mode & 0o777) !== Number.parseInt(specification.mode, 8) ||
       digest !== specification.sha256 ||
       metadata.size < 1 ||
-      metadata.size > 32 * 1024 * 1024
+      metadata.size > MAX_PACKAGED_COLLECTOR_RESOURCE_BYTES
     ) {
       throw new Error(
         `Collector evidence failed for ${specification.target}.`
@@ -295,7 +310,7 @@ async function walkSidecarTree(
   files = [],
   depth = 0
 ) {
-  if (depth > 32) {
+  if (depth > SIDECAR_MAX_TREE_DEPTH) {
     throw new Error("Packaged sidecar exceeded its directory depth bound.");
   }
   const metadata = await lstat(path);
@@ -318,36 +333,29 @@ async function walkSidecarTree(
   }
   budget.fileCount += 1;
   budget.totalBytes += metadata.size;
-  if (budget.fileCount > 8192 || budget.totalBytes > 256 * 1024 * 1024) {
+  if (
+    budget.fileCount > SIDECAR_MAX_FILE_COUNT ||
+    budget.totalBytes > SIDECAR_MAX_TOTAL_BYTES
+  ) {
     throw new Error("Packaged sidecar exceeded its file or byte bound.");
   }
   files.push(path);
   return files;
 }
 
-async function packageFilesWithoutDependencies(directory, depth = 0) {
-  if (depth > 16) {
-    throw new Error("Sidecar package inventory exceeded its depth bound.");
+function assertLockEntry(lockPath, lockEntry) {
+  if (
+    lockEntry === null ||
+    typeof lockEntry !== "object" ||
+    typeof lockEntry.version !== "string" ||
+    lockEntry.version.length < 1 ||
+    typeof lockEntry.resolved !== "string" ||
+    !lockEntry.resolved.startsWith("https://registry.npmjs.org/") ||
+    typeof lockEntry.integrity !== "string" ||
+    !lockEntry.integrity.startsWith("sha512-")
+  ) {
+    throw new Error(`Sidecar package-lock metadata is incomplete: ${lockPath}.`);
   }
-  const files = [];
-  for (const entry of (await readdir(directory, { withFileTypes: true })).sort(
-    (left, right) => left.name.localeCompare(right.name)
-  )) {
-    const path = join(directory, entry.name);
-    const metadata = await lstat(path);
-    if (metadata.isSymbolicLink()) {
-      throw new Error(`Sidecar package contains a symbolic link: ${path}.`);
-    }
-    if (metadata.isDirectory()) {
-      if (entry.name === "node_modules" || entry.name === ".bin") continue;
-      files.push(...(await packageFilesWithoutDependencies(path, depth + 1)));
-    } else if (metadata.isFile()) {
-      files.push(path);
-    } else {
-      throw new Error(`Sidecar package contains a non-regular entry: ${path}.`);
-    }
-  }
-  return files;
 }
 
 async function verifySidecarExtraResource(asarPath) {
@@ -377,6 +385,37 @@ async function verifySidecarExtraResource(asarPath) {
 
   const budget = { fileCount: 0, totalBytes: 0 };
   const files = await walkSidecarTree(targetDirectory, budget);
+  const expectedPackagePaths = sidecarDependencyClosure(packageLock);
+  const actualPackagePaths = await stagedSidecarPackagePaths(targetDirectory);
+  if (JSON.stringify(actualPackagePaths) !== JSON.stringify(expectedPackagePaths)) {
+    const missing = expectedPackagePaths.filter(
+      (path) => !actualPackagePaths.includes(path)
+    );
+    const unexpected = actualPackagePaths.filter(
+      (path) => !expectedPackagePaths.includes(path)
+    );
+    throw new Error(
+      `Staged sidecar production dependency closure mismatch; missing=${JSON.stringify(missing)}, unexpected=${JSON.stringify(unexpected)}.`
+    );
+  }
+  for (const lockPath of expectedPackagePaths) {
+    const lockEntry = packageLock.packages?.[lockPath];
+    assertLockEntry(lockPath, lockEntry);
+    const expectedName = packageNameFromLockPath(lockPath);
+    const stagedPackageManifest = JSON.parse(
+      await readFile(
+        resolve(targetDirectory, ...lockPath.split("/"), "package.json"),
+        "utf8"
+      )
+    );
+    if (
+      stagedPackageManifest.name !== expectedName ||
+      stagedPackageManifest.version !== lockEntry.version
+    ) {
+      throw new Error(`Staged sidecar package identity mismatch: ${lockPath}.`);
+    }
+  }
+  const sidecarInventory = new Map();
   for (const stagedPath of files) {
     const stagedRelativePath = relative(targetDirectory, stagedPath);
     const sourcePath = resolve(rootDirectory, stagedRelativePath);
@@ -399,32 +438,66 @@ async function verifySidecarExtraResource(asarPath) {
         `Sidecar workspace counterpart is not a regular file: ${portablePath(stagedRelativePath)}.`
       );
     }
-    if ((await hashFile(stagedPath)) !== (await hashFile(sourcePath))) {
+    const stagedSha256 = await hashFile(stagedPath);
+    if (stagedSha256 !== (await hashFile(sourcePath))) {
       throw new Error(
         `Packaged sidecar file differs from its workspace counterpart: ${portablePath(stagedRelativePath)}.`
       );
     }
+    sidecarInventory.set(portablePath(stagedRelativePath), {
+      bytes: (await stat(stagedPath)).size,
+      sha256: stagedSha256
+    });
   }
 
-  const rootPackageDirectory = join(
+  const rootPackageDirectory = resolve(
     targetDirectory,
-    "node_modules",
-    "tokentracker-cli"
+    ...SIDECAR_ROOT_LOCK_PATH.split("/")
   );
-  const workspaceRootPackageDirectory = join(
+  const workspaceRootPackageDirectory = resolve(
     rootDirectory,
-    "node_modules",
-    "tokentracker-cli"
+    ...SIDECAR_ROOT_LOCK_PATH.split("/")
   );
-  const stagedRootFiles = await packageFilesWithoutDependencies(
-    rootPackageDirectory
+  const workspacePackageManifest = JSON.parse(
+    await readFile(join(workspaceRootPackageDirectory, "package.json"), "utf8")
   );
-  const workspaceRootFiles = await packageFilesWithoutDependencies(
-    workspaceRootPackageDirectory
+  const expectedRootFiles = await declaredSidecarPackageFiles(
+    workspaceRootPackageDirectory,
+    workspacePackageManifest
   );
-  if (stagedRootFiles.length !== workspaceRootFiles.length) {
+  const expectedRootTopLevelEntries = new Set(
+    expectedRootFiles.map((path) => path.split("/")[0])
+  );
+  if (
+    expectedPackagePaths.some((path) =>
+      path.startsWith(`${SIDECAR_ROOT_LOCK_PATH}/node_modules/`)
+    )
+  ) {
+    expectedRootTopLevelEntries.add("node_modules");
+  }
+  const actualRootTopLevelEntries = (await readdir(rootPackageDirectory)).sort();
+  const expectedRootTopLevelNames = [...expectedRootTopLevelEntries].sort();
+  if (
+    JSON.stringify(actualRootTopLevelEntries) !==
+    JSON.stringify(expectedRootTopLevelNames)
+  ) {
     throw new Error(
-      `Sidecar root package file count differs from the workspace: staged=${stagedRootFiles.length}, workspace=${workspaceRootFiles.length}.`
+      `Sidecar root package top-level inventory mismatch; expected=${JSON.stringify(expectedRootTopLevelNames)}, actual=${JSON.stringify(actualRootTopLevelEntries)}.`
+    );
+  }
+  const stagedRootFiles = (await walkFiles(rootPackageDirectory, {
+    rejectLinks: true
+  }))
+    .filter((path) => !path.includes(`${sep}node_modules${sep}`))
+    .map((path) => portablePath(relative(rootPackageDirectory, path)))
+    .sort();
+  if (JSON.stringify(stagedRootFiles) !== JSON.stringify(expectedRootFiles)) {
+    const missing = expectedRootFiles.filter((path) => !stagedRootFiles.includes(path));
+    const unexpected = stagedRootFiles.filter(
+      (path) => !expectedRootFiles.includes(path)
+    );
+    throw new Error(
+      `Sidecar root package inventory does not match files/bin declarations; missing=${JSON.stringify(missing)}, unexpected=${JSON.stringify(unexpected)}.`
     );
   }
 
@@ -433,7 +506,11 @@ async function verifySidecarExtraResource(asarPath) {
   );
   if (
     packageManifest.name !== manifest.sidecar.package ||
-    packageManifest.version !== manifest.sidecar.version
+    packageManifest.version !== manifest.sidecar.version ||
+    workspacePackageManifest.name !== manifest.sidecar.package ||
+    workspacePackageManifest.version !== manifest.sidecar.version ||
+    packageLock.packages?.[SIDECAR_ROOT_LOCK_PATH]?.version !==
+      manifest.sidecar.version
   ) {
     throw new Error("Staged sidecar package identity is invalid.");
   }
@@ -480,7 +557,9 @@ async function verifySidecarExtraResource(asarPath) {
     sidecarVersion: manifest.sidecar.version,
     fileCount: budget.fileCount,
     totalBytes: budget.totalBytes,
-    entryBin: portablePath(relative(targetDirectory, entryBinPath))
+    entryBin: portablePath(relative(targetDirectory, entryBinPath)),
+    packageCount: expectedPackagePaths.length,
+    inventory: sidecarInventory
   };
 }
 
@@ -606,7 +685,7 @@ async function verifyPackagePermissionTree(directory, depth = 0, counter = { val
   // Runaway guard, not a tight count: macOS .app bundles carry an order of
   // magnitude more entries than the Linux/Windows layouts, and the sidecar
   // extraResource adds ~850 files on every platform.
-  if (depth > 16 || counter.value > 8192) {
+  if (depth > 16 || counter.value > SIDECAR_MAX_FILE_COUNT) {
     throw new Error("Packaged permission inventory exceeded its bound.");
   }
   counter.value += 1;
@@ -989,7 +1068,7 @@ function lenientZipEntryKind(entry) {
     !isDirectory &&
     (!Number.isSafeInteger(entry.uncompressedSize) ||
       entry.uncompressedSize < 0 ||
-      entry.uncompressedSize > 256 * 1024 * 1024)
+      entry.uncompressedSize > SIDECAR_MAX_TOTAL_BYTES)
   ) {
     throw new Error("Maker ZIP file size is outside the release bound.");
   }
@@ -1024,7 +1103,7 @@ function zipEntryKindAndMode(entry) {
   if (
     !Number.isSafeInteger(entry.uncompressedSize) ||
     entry.uncompressedSize < 0 ||
-    entry.uncompressedSize > 256 * 1024 * 1024
+    entry.uncompressedSize > SIDECAR_MAX_TOTAL_BYTES
   ) {
     throw new Error("Maker ZIP file size is outside the release bound.");
   }
@@ -1048,7 +1127,10 @@ function hashZipEntry(zip, entry) {
       let bytes = 0;
       stream.on("data", (chunk) => {
         bytes += chunk.length;
-        if (bytes > entry.uncompressedSize || bytes > 256 * 1024 * 1024) {
+        if (
+          bytes > entry.uncompressedSize ||
+          bytes > SIDECAR_MAX_TOTAL_BYTES
+        ) {
           stream.destroy(new Error("Maker ZIP entry exceeded its size bound."));
           return;
         }
@@ -1069,7 +1151,7 @@ function hashZipEntry(zip, entry) {
 async function zipInventory(path, options = {}) {
   const lenientModes = options.lenientModes === true;
   // The sidecar extraResource adds ~850 entries to every maker zip.
-  const entryBound = 8192;
+  const entryBound = SIDECAR_MAX_FILE_COUNT;
   const byteBound = (lenientModes ? 2 : 1) * 1_024 * 1_024 * 1_024;
   const zip = await openZip(path, { allowBackslashSeparators: lenientModes });
   try {
@@ -1138,7 +1220,10 @@ async function stagedPackageInventory(asarPath) {
   async function visit(path, depth = 0) {
     // The sidecar extraResource adds ~850 files; depth 32 covers its
     // nested node_modules trees.
-    if (depth > 32 || inventory.size + directories.size > 8192) {
+    if (
+      depth > SIDECAR_MAX_TREE_DEPTH ||
+      inventory.size + directories.size > SIDECAR_MAX_FILE_COUNT
+    ) {
       throw new Error("Staged maker inventory exceeded its bound.");
     }
     const metadata = await lstat(path);
@@ -1255,23 +1340,83 @@ async function verifyZipMakerArtifact(path, asarPath) {
   };
 }
 
-async function makerEvidence(asarPath) {
+async function verifySquirrelNupkg(path, expectedSidecarInventory) {
+  const zip = await zipInventory(path, { lenientModes: true });
+  const sidecarFileCount = assertSquirrelSidecarInventory(
+    zip.files,
+    expectedSidecarInventory
+  );
+  return {
+    verification: "squirrel-full-sidecar-byte-inventory",
+    fileCount: zip.files.size,
+    entryCount: zip.entries,
+    uncompressedBytes: zip.totalBytes,
+    sidecarFileCount
+  };
+}
+
+async function makerEvidence(asarPath, expectedSidecarInventory) {
   const makeDirectory = join(outDirectory, "make");
   let files;
   try {
     files = await walkFiles(makeDirectory);
   } catch (error) {
-    if (error?.code === "ENOENT" && !requireMaker) return [];
+    if (error?.code === "ENOENT" && !requireMaker) {
+      process.stdout.write(
+        "No Squirrel maker output found; skipping .nupkg sidecar verification.\n"
+      );
+      return [];
+    }
     if (error?.code === "ENOENT") {
       throw new Error("Forge maker output is required but missing.");
     }
     throw error;
   }
-  const artifacts = files.filter((path) =>
-    new Set([".dmg", ".zip"]).has(extname(path).toLowerCase())
+  const squirrelReleases = files.filter(
+    (path) => basename(path).toUpperCase() === "RELEASES"
   );
+  const squirrelPackages = files.filter(
+    (path) => extname(path).toLowerCase() === ".nupkg"
+  );
+  const squirrelSetups = files.filter((path) =>
+    /Setup\.exe$/iu.test(basename(path))
+  );
+  const hasSquirrelOutput =
+    squirrelReleases.length + squirrelPackages.length + squirrelSetups.length >
+    0;
+  if (!hasSquirrelOutput) {
+    process.stdout.write(
+      "No Squirrel maker output found; skipping .nupkg sidecar verification.\n"
+    );
+  } else if (
+    squirrelReleases.length !== 1 ||
+    squirrelSetups.length !== 1 ||
+    squirrelPackages.length < 1
+  ) {
+    throw new Error(
+      `Incomplete Squirrel maker output: RELEASES=${squirrelReleases.length}, nupkg=${squirrelPackages.length}, Setup.exe=${squirrelSetups.length}.`
+    );
+  }
+  const fullSquirrelPackages = squirrelPackages.filter((path) =>
+    /-full\.nupkg$/iu.test(basename(path))
+  );
+  if (hasSquirrelOutput && fullSquirrelPackages.length !== 1) {
+    throw new Error(
+      `Expected exactly one full Squirrel .nupkg, found ${fullSquirrelPackages.length}.`
+    );
+  }
+  const artifacts = files.filter((path) => {
+    const extension = extname(path).toLowerCase();
+    return (
+      extension === ".dmg" ||
+      extension === ".zip" ||
+      extension === ".nupkg" ||
+      basename(path).toUpperCase() === "RELEASES" ||
+      /Setup\.exe$/iu.test(basename(path))
+    );
+  });
   if (requireMaker && artifacts.length === 0) {
-    throw new Error("Forge maker produced no ZIP or DMG artifact.");
+    throw new Error("Forge maker produced no supported artifact.");
   }
   if (
     mode === "signed" &&
@@ -1285,7 +1430,13 @@ async function makerEvidence(asarPath) {
     const contentVerification =
       extension === ".zip"
         ? await verifyZipMakerArtifact(path, asarPath)
-        : { verification: "signed-dmg-native-verification-required" };
+        : extension === ".nupkg" && fullSquirrelPackages.includes(path)
+          ? await verifySquirrelNupkg(path, expectedSidecarInventory)
+          : extension === ".dmg"
+            ? { verification: "signed-dmg-native-verification-required" }
+            : extension === ".nupkg"
+              ? { verification: "squirrel-delta-package-hash-only" }
+              : { verification: "squirrel-maker-marker-hash-only" };
     if (extension === ".dmg") {
       throw new Error(
         "DMG release verification is blocked until native mount, nested app identity, and stapled-ticket verification are implemented."
@@ -1331,7 +1482,8 @@ if (appAsars.length !== 1) {
 const asarPath = appAsars[0];
 const runtimeSnapshots = await verifyPackagePathsAndSnapshots(asarPath);
 const collectorEvidence = await verifyCollectorExtraResource(asarPath);
-const sidecarEvidence = await verifySidecarExtraResource(asarPath);
+const verifiedSidecar = await verifySidecarExtraResource(asarPath);
+const { inventory: sidecarInventory, ...sidecarEvidence } = verifiedSidecar;
 
 const extractionDirectory = await mkdtemp(
   join(tmpdir(), "tokenmonster-package-verification-")
@@ -1345,7 +1497,7 @@ try {
 const binaryPath = fuseBinaryPath(asarPath);
 const fuseWires = await verifyRawFuseWires(binaryPath);
 verifySignedMacApplication(asarPath);
-const makerArtifacts = await makerEvidence(asarPath);
+const makerArtifacts = await makerEvidence(asarPath, sidecarInventory);
 
 const evidenceDirectory = join(rootDirectory, "release-evidence");
 await mkdir(evidenceDirectory, { recursive: true });

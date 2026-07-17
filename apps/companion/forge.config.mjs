@@ -17,6 +17,15 @@ import { fileURLToPath } from "node:url";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 
+import {
+  declaredSidecarPackageFiles,
+  SIDECAR_MAX_FILE_COUNT,
+  SIDECAR_MAX_TOTAL_BYTES,
+  SIDECAR_MAX_TREE_DEPTH,
+  SIDECAR_ROOT_LOCK_PATH,
+  sidecarDependencyClosure
+} from "../../scripts/companion-packaging-policy.mjs";
+
 const APP_BUNDLE_ID = "com.tokenmonster.companion";
 const RELEASE_MODE = process.env.TOKENMONSTER_RELEASE_MODE ?? "internal";
 const require = createRequire(import.meta.url);
@@ -354,59 +363,13 @@ async function prepareVerifiedCollectorExtraResource(
   }
 }
 
-function resolveLockedDependency(entryPath, dependency) {
-  const candidates = [`${entryPath}/node_modules/${dependency}`];
-  const segments = entryPath.split("/");
-  for (let index = segments.length - 1; index >= 0; index -= 1) {
-    if (segments[index] === "node_modules") {
-      candidates.push(
-        [...segments.slice(0, index + 1), ...dependency.split("/")].join("/")
-      );
-    }
-  }
-  return [...new Set(candidates)].find(
-    (candidate) => packageLock.packages?.[candidate] !== undefined
-  );
-}
-
-function sidecarDependencyClosure() {
-  const rootLockPath = "node_modules/tokentracker-cli";
-  const closure = new Set();
-  const pending = [rootLockPath];
-  while (pending.length > 0) {
-    const entryPath = pending.shift();
-    if (entryPath === undefined || closure.has(entryPath)) continue;
-    const lockEntry = packageLock.packages?.[entryPath];
-    if (lockEntry === null || typeof lockEntry !== "object") {
-      throw new Error(`Sidecar lock entry is missing: ${entryPath}.`);
-    }
-    closure.add(entryPath);
-    for (const dependency of Object.keys(lockEntry.dependencies ?? {}).sort()) {
-      const dependencyPath = resolveLockedDependency(entryPath, dependency);
-      if (dependencyPath === undefined) {
-        throw new Error(
-          `Sidecar hard dependency ${dependency} is missing from package-lock.json for ${entryPath}.`
-        );
-      }
-      pending.push(dependencyPath);
-    }
-    for (const dependency of Object.keys(
-      lockEntry.optionalDependencies ?? {}
-    ).sort()) {
-      const dependencyPath = resolveLockedDependency(entryPath, dependency);
-      if (dependencyPath !== undefined) pending.push(dependencyPath);
-    }
-  }
-  return [...closure].sort();
-}
-
 async function copySidecarPackage(
   source,
   destination,
   budget,
   depth = 0
 ) {
-  if (depth > 32) {
+  if (depth > SIDECAR_MAX_TREE_DEPTH) {
     throw new Error("Sidecar staging exceeded its directory depth bound.");
   }
   const metadata = await lstat(source);
@@ -447,11 +410,24 @@ async function copySidecarPackage(
   }
   budget.fileCount += 1;
   budget.totalBytes += metadata.size;
-  if (budget.fileCount > 8192 || budget.totalBytes > 256 * 1024 * 1024) {
+  if (
+    budget.fileCount > SIDECAR_MAX_FILE_COUNT ||
+    budget.totalBytes > SIDECAR_MAX_TOTAL_BYTES
+  ) {
     throw new Error("Sidecar staging exceeded its file or byte bound.");
   }
   await copyFile(source, destination, constants.COPYFILE_EXCL);
   await chmod(destination, metadata.mode & 0o7777);
+}
+
+async function copyDeclaredSidecarPackage(source, destination, manifest, budget) {
+  await mkdir(destination, { mode: 0o755, recursive: true });
+  for (const relativePath of await declaredSidecarPackageFiles(source, manifest)) {
+    const sourcePath = resolve(source, ...relativePath.split("/"));
+    const destinationPath = resolve(destination, ...relativePath.split("/"));
+    await mkdir(dirname(destinationPath), { mode: 0o755, recursive: true });
+    await copySidecarPackage(sourcePath, destinationPath, budget);
+  }
 }
 
 async function prepareSidecarExtraResource(resourcesAppPath) {
@@ -462,7 +438,7 @@ async function prepareSidecarExtraResource(resourcesAppPath) {
   ) {
     throw new Error("Sidecar runtime manifest does not match release policy.");
   }
-  const rootLockPath = "node_modules/tokentracker-cli";
+  const rootLockPath = SIDECAR_ROOT_LOCK_PATH;
   const rootLockEntry = packageLock.packages?.[rootLockPath];
   if (
     rootLockEntry === null ||
@@ -501,13 +477,22 @@ async function prepareSidecarExtraResource(resourcesAppPath) {
   await mkdir(targetDirectory, { mode: 0o755, recursive: true });
 
   const budget = { fileCount: 0, totalBytes: 0 };
-  for (const lockPath of sidecarDependencyClosure()) {
+  for (const lockPath of sidecarDependencyClosure(packageLock)) {
     const source = resolve(workspaceDirectory, ...lockPath.split("/"));
     const destination = resolve(targetDirectory, ...lockPath.split("/"));
     if (!destination.startsWith(`${targetDirectory}${sep}`)) {
       throw new Error("Sidecar package destination escaped its extraResource root.");
     }
-    await copySidecarPackage(source, destination, budget);
+    if (lockPath === rootLockPath) {
+      await copyDeclaredSidecarPackage(
+        source,
+        destination,
+        installedManifest,
+        budget
+      );
+    } else {
+      await copySidecarPackage(source, destination, budget);
+    }
   }
 }
 
@@ -536,7 +521,7 @@ async function removeGroupWorldWrite(path, depth = 0, counter = { value: 0 }) {
   // Linux/Windows layouts (framework lproj dirs, helper apps), and the
   // sidecar extraResource adds ~850 files on every platform, so the bound
   // is a runaway guard, not a tight inventory expectation.
-  if (depth > 16 || counter.value > 8192) {
+  if (depth > 16 || counter.value > SIDECAR_MAX_FILE_COUNT) {
     throw new Error("Packaged permission hardening exceeded its inventory bound.");
   }
   counter.value += 1;
