@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
 
+import { MAX_PACKAGED_COLLECTOR_RESOURCE_BYTES } from "../../packaging/package-bounds.mjs";
+
 const MAX_PATH_BYTES = 4_096;
 const MAX_MANIFEST_BYTES = 64 * 1_024;
-const MAX_RESOURCE_BYTES = 32 * 1_024 * 1_024;
 
 type ExpectedFile = Readonly<{
   source: string;
@@ -269,7 +270,7 @@ export async function verifiedPackagedTokscaleBinary(input: Readonly<{
         !metadata.isFile() ||
         metadata.isSymbolicLink() ||
         metadata.size < 1 ||
-        metadata.size > MAX_RESOURCE_BYTES ||
+        metadata.size > MAX_PACKAGED_COLLECTOR_RESOURCE_BYTES ||
         (metadata.mode & 0o777) !==
           Number.parseInt(value(file, "mode") as string, 8)
       ) {
