@@ -90,3 +90,65 @@ export function userPrefersReducedMotion(
 ): boolean {
   return matchMedia.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
+
+export interface CharacterIdleAnimation {
+  isRunning(): boolean;
+  start(): void;
+  stop(): void;
+  destroy(): void;
+}
+
+export interface CharacterIdleVisibilitySource {
+  readonly visibilityState: DocumentVisibilityState;
+  addEventListener(type: "visibilitychange", listener: EventListener): void;
+  removeEventListener(type: "visibilitychange", listener: EventListener): void;
+}
+
+/**
+ * Owns the idle class independently from portrait loading and interactions.
+ * CSS performs the animation; this lifecycle only pauses it for hidden views.
+ */
+export function createCharacterIdleAnimation(
+  target: Pick<Element, "classList">,
+  visibilitySource: CharacterIdleVisibilitySource = document,
+  reducedMotion = false
+): CharacterIdleAnimation {
+  let started = false;
+  let running = false;
+  let destroyed = false;
+
+  const sync = (): void => {
+    running =
+      !destroyed &&
+      started &&
+      !reducedMotion &&
+      visibilitySource.visibilityState === "visible";
+    target.classList.toggle("character-idle", running);
+  };
+  const handleVisibilityChange: EventListener = () => sync();
+  visibilitySource.addEventListener("visibilitychange", handleVisibilityChange);
+
+  return Object.freeze({
+    isRunning(): boolean {
+      return running;
+    },
+    start(): void {
+      if (destroyed) return;
+      started = true;
+      sync();
+    },
+    stop(): void {
+      started = false;
+      sync();
+    },
+    destroy(): void {
+      if (destroyed) return;
+      destroyed = true;
+      sync();
+      visibilitySource.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
+    }
+  });
+}

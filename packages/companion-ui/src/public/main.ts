@@ -40,6 +40,7 @@ import {
   resolveStageImagePath
 } from "./character-panel.js";
 import {
+  createCharacterIdleAnimation,
   createPortraitSwitchStateMachine,
   enabledCharacterAnimationClasses,
   preloadCharacterImage,
@@ -175,6 +176,12 @@ export function startCompanionUi(): void {
   let renderedLetterCharacterId: CharacterId | undefined;
   const reducedMotion = userPrefersReducedMotion();
   document.documentElement.classList.toggle("motion-enabled", !reducedMotion);
+  const characterIdleAnimation = createCharacterIdleAnimation(
+    companionVisualElement,
+    document,
+    reducedMotion
+  );
+  characterIdleAnimation.start();
   const analyticsPanel = createAnalyticsPanel({
     root: analyticsElement,
     reducedMotion,
@@ -254,17 +261,12 @@ export function startCompanionUi(): void {
           previous?.characterId === target.characterId &&
           !dollImageElement.hidden
       );
-      dollImageElement.classList.remove("character-idle");
       if (target.celebrating) playSparkles();
       const finish = (): void => {
         if (stageSwitch.current() !== target) return;
         dollImageElement.src = target.imagePath;
         dollImageElement.hidden = false;
         dollImageElement.className = "character-doll";
-        dollImageElement.classList.toggle(
-          "character-idle",
-          animationClasses.includes("character-idle")
-        );
         incomingDollImageElement.hidden = true;
         incomingDollImageElement.removeAttribute("src");
         incomingDollImageElement.className = "character-doll character-doll-incoming";
@@ -337,7 +339,6 @@ export function startCompanionUi(): void {
     if (character !== undefined) {
       commitStageMetadata(character);
       renderedLetterCharacterId = character.characterId;
-      letterLayerElement.classList.toggle("character-letter-idle", !reducedMotion);
       letterLayerElement.classList.toggle(
         "character-entering",
         !reducedMotion && entering
