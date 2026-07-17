@@ -27,8 +27,10 @@ concurrency:
 
 jobs:
   # Job-level `if` cannot read the matrix context, so platform selection is
-  # resolved once here and consumed via fromJSON. Tag and push runs always get
-  # the full matrix because `inputs` is empty outside workflow_dispatch.
+  # resolved once here and consumed via fromJSON. Pull-request pushes are
+  # iteration runs, so they drop macOS (10x billing) by default; tag and
+  # main-branch pushes always get the full matrix because `inputs` is empty
+  # outside workflow_dispatch.
   plan:
     name: Plan platforms
     runs-on: ubuntu-24.04
@@ -39,7 +41,7 @@ jobs:
       - name: Pick runner platforms
         id: pick
         env:
-          PLATFORMS: ${{ inputs.platforms || 'all' }}
+          PLATFORMS: ${{ inputs.platforms || (github.event_name == 'pull_request' && 'skip-macos') || 'all' }}
         run: |
           case "$PLATFORMS" in
             linux-only) echo 'oses=["ubuntu-24.04"]' >> "$GITHUB_OUTPUT" ;;
