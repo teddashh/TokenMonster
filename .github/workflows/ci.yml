@@ -8,6 +8,15 @@ on:
     tags:
       - "*"
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Runner platforms (macOS bills at 10x; use skip-macos for iteration runs)"
+        type: choice
+        default: all
+        options:
+          - all
+          - skip-macos
+          - linux-only
 
 permissions:
   contents: read
@@ -17,17 +26,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Job-level `if` cannot read the matrix context, so platform selection is
+  # resolved once here and consumed via fromJSON. Tag and push runs always get
+  # the full matrix because `inputs` is empty outside workflow_dispatch.
+  plan:
+    name: Plan platforms
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      oses: ${{ steps.pick.outputs.oses }}
+    steps:
+      - name: Pick runner platforms
+        id: pick
+        env:
+          PLATFORMS: ${{ inputs.platforms || 'all' }}
+        run: |
+          case "$PLATFORMS" in
+            linux-only) echo 'oses=["ubuntu-24.04"]' >> "$GITHUB_OUTPUT" ;;
+            skip-macos) echo 'oses=["ubuntu-24.04","windows-2025"]' >> "$GITHUB_OUTPUT" ;;
+            *) echo 'oses=["ubuntu-24.04","macos-15","windows-2025"]' >> "$GITHUB_OUTPUT" ;;
+          esac
   sidecar-compatibility:
     name: Sidecar compatibility (${{ matrix.os }})
+    needs: plan
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-24.04
-          - macos-15
-          - windows-2025
+        os: ${{ fromJSON(needs.plan.outputs.oses) }}
 
     steps:
       - name: Check out repository
@@ -81,15 +108,13 @@ jobs:
 
   companion-desktop:
     name: Companion desktop (${{ matrix.os }})
+    needs: plan
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-24.04
-          - macos-15
-          - windows-2025
+        os: ${{ fromJSON(needs.plan.outputs.oses) }}
 
     steps:
       - name: Check out repository
@@ -118,6 +143,7 @@ jobs:
   companion-installers:
     name: Companion installers [package] (${{ matrix.os }})
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[package]')
+    needs: plan
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
@@ -125,10 +151,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-24.04
-          - macos-15
-          - windows-2025
+        os: ${{ fromJSON(needs.plan.outputs.oses) }}
 
     steps:
       - name: Check out repository
@@ -290,14 +313,12 @@ jobs:
 
   release-smoke:
     name: Release smoke (${{ matrix.os }})
+    needs: plan
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-24.04
-          - macos-15
-          - windows-2025
+        os: ${{ fromJSON(needs.plan.outputs.oses) }}
 
     steps:
       - name: Check out repository
