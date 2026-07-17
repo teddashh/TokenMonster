@@ -148,10 +148,7 @@ describe("character roster response contract", () => {
   });
 
   it("accepts snapshots from before the optional unlock batch marker", () => {
-    const legacy = structuredClone(CHARACTER_RESPONSE) as Partial<
-      typeof CHARACTER_RESPONSE
-    >;
-    delete legacy.unlockBatchId;
+    const { unlockBatchId: _omitted, ...legacy } = CHARACTER_RESPONSE;
 
     expect(parseCharactersSnapshot(legacy).unlockBatchId).toBeUndefined();
   });
