@@ -3,6 +3,48 @@ export const COLLECTOR_STATUS_ENDPOINT = "/api/companion/status" as const;
 export const COLLECTOR_REFRESH_ENDPOINT = "/api/companion/refresh" as const;
 export const USAGE_FAMILIES_API_ENDPOINT = "/api/usage/families" as const;
 export const USAGE_MODELS_API_ENDPOINT = "/api/usage/models" as const;
+export const USAGE_QUOTA_API_ENDPOINT = "/api/usage/quota" as const;
+export const USAGE_QUOTA_PLAN_API_ENDPOINT = "/api/usage/quota/plan" as const;
+
+export const QUOTA_FAMILIES = ["anthropic", "openai", "google", "xai"] as const;
+export type QuotaFamily = (typeof QUOTA_FAMILIES)[number];
+
+export const QUOTA_PLAN_OPTIONS = Object.freeze({
+  anthropic: Object.freeze([
+    Object.freeze({ planId: "claude-pro", labelZh: "Claude Pro" }),
+    Object.freeze({ planId: "claude-max-5x", labelZh: "Claude Max 5x" }),
+    Object.freeze({ planId: "claude-max-20x", labelZh: "Claude Max 20x" })
+  ]),
+  openai: Object.freeze([
+    Object.freeze({ planId: "chatgpt-plus", labelZh: "ChatGPT Plus" }),
+    Object.freeze({ planId: "chatgpt-pro", labelZh: "ChatGPT Pro" })
+  ]),
+  google: Object.freeze([
+    Object.freeze({ planId: "gemini-free", labelZh: "Gemini 免費版" }),
+    Object.freeze({ planId: "gemini-ai-pro", labelZh: "Google AI Pro" })
+  ]),
+  xai: Object.freeze([
+    Object.freeze({ planId: "supergrok", labelZh: "SuperGrok" })
+  ])
+} as const satisfies Readonly<
+  Record<QuotaFamily, readonly Readonly<{ planId: string; labelZh: string }>[]>
+>);
+
+export interface QuotaFamilyEstimate {
+  readonly family: QuotaFamily;
+  readonly planId: string | null;
+  readonly windowHours: number;
+  readonly windowKind: "rolling" | "utc-day";
+  readonly usedTokens: number;
+  readonly budgetTokens: number | null;
+  readonly estimate: true;
+}
+
+export interface QuotaSnapshot {
+  readonly status: "ok";
+  readonly generatedAt: string;
+  readonly families: readonly QuotaFamilyEstimate[];
+}
 
 export const USAGE_WINDOWS = [7, 28, 90] as const;
 export type UsageWindow = (typeof USAGE_WINDOWS)[number];
@@ -306,6 +348,79 @@ export function hasExactKeys(
     keys.length === expectedKeys.length &&
     [...expectedKeys].sort().every((key, index) => keys[index] === key)
   );
+}
+
+function isQuotaFamily(value: unknown): value is QuotaFamily {
+  return QUOTA_FAMILIES.some((family) => family === value);
+}
+
+/** Strictly validates the complete on-device quota estimate DTO. */
+export function parseQuotaSnapshot(value: unknown): QuotaSnapshot {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["status", "generatedAt", "families"]) ||
+    value["status"] !== "ok" ||
+    parseGeneratedAtWithMilliseconds(value["generatedAt"]) === undefined ||
+    !Array.isArray(value["families"]) ||
+    value["families"].length !== QUOTA_FAMILIES.length
+  ) {
+    throw new TypeError("Invalid quota response");
+  }
+  const families: QuotaFamilyEstimate[] = [];
+  const seen = new Set<QuotaFamily>();
+  for (const candidate of value["families"]) {
+    if (
+      !isRecord(candidate) ||
+      !hasExactKeys(candidate, [
+        "family",
+        "planId",
+        "windowHours",
+        "windowKind",
+        "usedTokens",
+        "budgetTokens",
+        "estimate"
+      ]) ||
+      !isQuotaFamily(candidate["family"]) ||
+      seen.has(candidate["family"]) ||
+      candidate["windowHours"] !== 24 ||
+      candidate["windowKind"] !== "utc-day" ||
+      !isSafeTokenCount(candidate["usedTokens"]) ||
+      candidate["estimate"] !== true
+    ) {
+      throw new TypeError("Invalid quota response");
+    }
+    const family = candidate["family"];
+    const planId = candidate["planId"];
+    const budgetTokens = candidate["budgetTokens"];
+    if (
+      (planId !== null &&
+        (typeof planId !== "string" ||
+          !QUOTA_PLAN_OPTIONS[family].some((plan) => plan.planId === planId))) ||
+      (planId === null
+        ? budgetTokens !== null
+        : !isSafeTokenCount(budgetTokens) || budgetTokens === 0)
+    ) {
+      throw new TypeError("Invalid quota response");
+    }
+    seen.add(family);
+    families.push(Object.freeze({
+      family,
+      planId,
+      windowHours: 24,
+      windowKind: "utc-day",
+      usedTokens: candidate["usedTokens"],
+      budgetTokens: budgetTokens as number | null,
+      estimate: true
+    }));
+  }
+  if (QUOTA_FAMILIES.some((family) => !seen.has(family))) {
+    throw new TypeError("Invalid quota response");
+  }
+  return Object.freeze({
+    status: "ok",
+    generatedAt: value["generatedAt"] as string,
+    families: Object.freeze(families)
+  });
 }
 
 function isSafeTokenCount(value: unknown): value is number {

@@ -226,6 +226,24 @@ export interface CompanionUsageModelsResponse {
   readonly models: readonly CompanionUsageModel[];
 }
 
+export type CompanionQuotaFamily = "anthropic" | "openai" | "google" | "xai";
+
+export interface CompanionQuotaFamilyEstimate {
+  readonly family: CompanionQuotaFamily;
+  readonly planId: string | null;
+  readonly windowHours: number;
+  readonly windowKind: "rolling" | "utc-day";
+  readonly usedTokens: number;
+  readonly budgetTokens: number | null;
+  readonly estimate: true;
+}
+
+export interface CompanionQuotaResponse {
+  readonly status: "ok";
+  readonly generatedAt: string;
+  readonly families: readonly CompanionQuotaFamilyEstimate[];
+}
+
 export type CompanionGatewayErrorCode =
   | "invalid-configuration"
   | "already-started"

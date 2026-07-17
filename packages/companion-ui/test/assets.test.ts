@@ -90,6 +90,9 @@ describe("companion static assets", () => {
     expect(html).toContain("近 28 天（UTC）");
     expect(html).toContain("最近 28 個 UTC 日");
     expect(html).toContain("供應商與模型用量");
+    expect(html).toContain("剩餘額度（估算）");
+    expect(html).toContain("以本機統計估算，非官方數據，僅供參考。");
+    expect(html).toContain("data-quota-list");
     expect(html).toContain('data-analytics-window="7"');
     expect(html).toContain('data-analytics-window="28"');
     expect(html).toContain('data-analytics-window="90"');
@@ -119,6 +122,7 @@ describe("companion static assets", () => {
     expect(css).toContain("height: 100dvh");
     expect(css).toContain("overflow: hidden");
     expect(css).toContain('html[data-view="pet"] .stats-disclosure[open]');
+    expect(css).toContain('html[data-view="pet"] .quota-panel');
     expect(js).toContain('new URLSearchParams(search).get("view") === "pet"');
     expect(js).toContain('document.documentElement.dataset["view"] = companionView');
   });
@@ -165,6 +169,10 @@ describe("companion static assets", () => {
     expect(js).toContain(
       'const CHARACTER_WARDROBE_ENDPOINT = "/api/characters/wardrobe"'
     );
+    expect(js).toContain('const USAGE_QUOTA_API_ENDPOINT = "/api/usage/quota"');
+    expect(js).toContain(
+      'const USAGE_QUOTA_PLAN_API_ENDPOINT = "/api/usage/quota/plan"'
+    );
     expect(js).toContain('credentials: "same-origin"');
     expect(js).toContain("更新於本機時間");
     expect(js).toContain("依近 28 天的本機使用分布先由她陪你");
@@ -204,7 +212,6 @@ describe("companion static assets", () => {
 
     expect(html).not.toMatch(/collector|BYOK|cloud|API key|OAuth|k\s*=\s*20/iu);
     expect(html).not.toMatch(/選擇.*收集|隱私政策|安全停用|觀測日/u);
-    expect(html).not.toContain("<select");
     expect(html).not.toContain("<form");
   });
 });

@@ -27,6 +27,8 @@ import {
   readCharacterJson,
   requestCharacterSelection,
   requestCharacterWardrobe,
+  requestQuotaSnapshot,
+  updateQuotaPlan,
   requestUsageAnalytics
 } from "./api.js";
 import { createAnalyticsPanel } from "./analytics-panel.js";
@@ -56,6 +58,7 @@ import {
   shouldAutomaticallyRetry
 } from "./usage-state.js";
 import { createUsagePanel } from "./usage-panel.js";
+import { createQuotaPanel } from "./quota-panel.js";
 import {
   CHARACTER_THEME_LABELS,
   characterUnlockExplanation
@@ -160,6 +163,7 @@ export function startCompanionUi(): void {
     "[data-trend-accessible]"
   );
   const analyticsElement = requiredElement<HTMLElement>("[data-analytics]");
+  const quotaListElement = requiredElement<HTMLElement>("[data-quota-list]");
   const metricElements = {
     today: requiredElement<HTMLElement>("[data-metric='today']"),
     last7Days: requiredElement<HTMLElement>("[data-metric='last7Days']"),
@@ -195,6 +199,11 @@ export function startCompanionUi(): void {
     root: analyticsElement,
     reducedMotion,
     load: (window, signal) => requestUsageAnalytics(window, signal)
+  });
+  const quotaPanel = createQuotaPanel({
+    root: quotaListElement,
+    load: () => requestQuotaSnapshot(),
+    update: (family, planId) => updateQuotaPlan(family, planId)
   });
   const imageFallback = createCharacterImageFallbackTracker();
   const unlockQueue = createCharacterUnlockQueue();
@@ -1150,6 +1159,7 @@ async function readBoundedJson(response: Response): Promise<unknown> {
 
   showStarting();
   void pollCharacters();
+  void quotaPanel.refresh();
   void pollCollector();
 }
 
