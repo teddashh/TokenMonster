@@ -1,6 +1,7 @@
 import {
   mkdir,
   mkdtemp,
+  realpath,
   rm,
   symlink,
   writeFile
@@ -31,7 +32,11 @@ async function fixture(): Promise<Readonly<{
   manifestPath: string;
   entryPath: string;
 }>> {
-  const root = await mkdtemp(join(tmpdir(), "tokenmonster-runtime-entry-"));
+  // realpath: macOS tmpdir lives behind a symlink (/var → /private/var) and
+  // resolveTokenTrackerEntry returns canonical paths.
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "tokenmonster-runtime-entry-"))
+  );
   directories.push(root);
   const packageRoot = join(root, "package");
   const manifestPath = join(packageRoot, "package.json");
