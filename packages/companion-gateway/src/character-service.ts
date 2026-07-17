@@ -691,6 +691,7 @@ export function createCharacterService(options: CharacterServiceOptions): Charac
       return {
         status: "ok",
         generatedAt,
+        unlockBatchId: progression.unlockBatchId ?? null,
         selection,
         voiceEnabled: true,
         characters: ROSTER_IDS.map((characterId) =>

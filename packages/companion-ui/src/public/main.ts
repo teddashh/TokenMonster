@@ -33,6 +33,7 @@ import { createAnalyticsPanel } from "./analytics-panel.js";
 import {
   createCharacterImageFallbackTracker,
   createCharacterUnlockQueue,
+  characterUnlockToastText,
   diffCharacterUnlocks
 } from "./character-state.js";
 import {
@@ -652,10 +653,7 @@ export function startCompanionUi(): void {
     const character = charactersSnapshot?.characters.find(
       (candidate) => candidate.characterId === unlock.characterId
     );
-    toastElement.textContent =
-      unlock.kind === "character"
-        ? `${unlock.displayName} 來了！`
-        : `${unlock.displayName} 的${CHARACTER_THEME_LABELS[unlock.themeId!]}服裝準備好了！`;
+    toastElement.textContent = characterUnlockToastText(unlock);
     toastElement.hidden = false;
     renderCharacterPanel();
     const line =

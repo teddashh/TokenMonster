@@ -108,6 +108,7 @@ export interface CompanionCharacter {
 export interface CompanionCharactersResponse {
   readonly status: "ok";
   readonly generatedAt: string;
+  readonly unlockBatchId: string | null;
   readonly selection: Readonly<{
     characterId: CompanionCharacterId | null;
     selectedBy: "manual" | "auto-starter" | null;
