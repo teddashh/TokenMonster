@@ -9,6 +9,7 @@ import {
   WebContentsView,
   ipcMain,
   nativeImage,
+  screen,
   session,
   type IpcMainInvokeEvent,
   type NativeImage
@@ -17,11 +18,12 @@ import {
 import { installSessionGuards } from "../security.js";
 import {
   DEFAULT_PET_WINDOW_STATE,
+  placeDefaultPetWindowState,
   readPetWindowState,
   writePetWindowState,
   type PetWindowState
 } from "./bounds-store.js";
-import { originNavigationGuard } from "./navigation.js";
+import { originNavigationGuard, petViewUrl } from "./navigation.js";
 import {
   PET_STARTUP_MESSAGES,
   PetStartupError,
@@ -129,7 +131,10 @@ function closeView(
 export async function startPetCompanion(): Promise<void> {
   installSessionGuards(session.fromPartition(PET_SESSION_PARTITION));
   const statePath = join(app.getPath("userData"), PET_STATE_FILE);
-  const restored = await readPetWindowState(statePath);
+  const restored = placeDefaultPetWindowState(
+    await readPetWindowState(statePath),
+    screen.getPrimaryDisplay().workArea
+  );
   let pinned = restored.pinned;
   let services: PetServices | null = null;
   let gatewayView: WebContentsView | null = null;
@@ -333,7 +338,13 @@ export async function startPetCompanion(): Promise<void> {
 
         // This is the sole load of this gateway instance's one-shot URL. The
         // 303 response leaves the HttpOnly cookie in this persistent partition.
+        // The gateway rejects query strings on the bootstrap path, so the
+        // layout selector must not ride on it.
         await view.webContents.loadURL(started.bootstrapUrl);
+        if (services !== started) return;
+        // The bootstrap redirect targets `/`, so a second navigation gives the
+        // authenticated page its pet layout selector without replaying bootstrap.
+        await view.webContents.loadURL(petViewUrl(`${started.origin}/`));
         if (services !== started) return;
         shellStatus = Object.freeze({ kind: "ready" });
         await loadShell();
