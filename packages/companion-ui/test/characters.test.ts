@@ -13,7 +13,9 @@ import {
   parseCharactersSnapshot,
   requestCharacterSelection,
   requestCharacterWardrobe,
+  resolveCompanionView,
   resolveCharacterPose,
+  visibleCharacterRoster,
   type CharacterFetch,
   type CharactersSnapshot,
   type VoicePreferenceStorage
@@ -285,6 +287,28 @@ describe("character roster response contract", () => {
 });
 
 describe("character interaction logic", () => {
+  it("renders only unlocked roster entries and reports locked characters as a count", () => {
+    const roster = visibleCharacterRoster(validSnapshot().characters);
+
+    expect(roster.unlocked.map((character) => character.characterId)).toEqual([
+      "chatgpt",
+      "glm"
+    ]);
+    expect(roster.lockedCount).toBe(1);
+    expect(roster.unlocked.some((character) => character.characterId === "sakana")).toBe(
+      false
+    );
+    expect(Object.isFrozen(roster.unlocked)).toBe(true);
+  });
+
+  it("enables compact pet mode only for the exact view=pet query value", () => {
+    expect(resolveCompanionView("?view=pet")).toBe("pet");
+    expect(resolveCompanionView("?theme=warm&view=pet")).toBe("pet");
+    expect(resolveCompanionView("?view=dashboard")).toBe("dashboard");
+    expect(resolveCompanionView("?view=PET")).toBe("dashboard");
+    expect(resolveCompanionView("")).toBe("dashboard");
+  });
+
   it("preloads before committing a portrait switch and retains the current portrait on failure", async () => {
     const events: string[] = [];
     let finishPreload: (() => void) | undefined;

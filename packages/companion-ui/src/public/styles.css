@@ -144,6 +144,35 @@ html[data-connection="error"] .status-dot {
   padding-block: 1.25rem 3rem;
 }
 
+.stats-disclosure {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.stats-disclosure > summary {
+  width: fit-content;
+  margin: 0 auto;
+  padding: 0.48rem 0.85rem;
+  border: 1px solid rgb(29 84 72 / 18%);
+  border-radius: 999px;
+  color: #1d5448;
+  background: rgb(255 253 248 / 82%);
+  font-size: 0.78rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.stats-disclosure[open] > summary {
+  margin-bottom: 1rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 1.25rem;
+}
+
 .companion-panel,
 .usage-section,
 .trend-panel,
@@ -156,6 +185,7 @@ html[data-connection="error"] .status-dot {
 
 .companion-panel {
   position: relative;
+  grid-row: 1;
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
@@ -524,6 +554,7 @@ h2 {
 .wardrobe-toggle:focus-visible,
 .voice-toggle:focus-visible,
 .voice-hint:focus-visible,
+.stats-disclosure > summary:focus-visible,
 .window-switcher button:focus-visible {
   outline: 0.2rem solid #c37b23;
   outline-offset: 0.2rem;
@@ -636,6 +667,17 @@ h2 {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roster-locked-summary {
+  align-self: center;
+  min-width: 11rem;
+  margin: 0;
+  padding: 0.65rem;
+  color: #777971;
+  font-size: 0.72rem;
+  text-align: center;
   white-space: nowrap;
 }
 
@@ -1291,6 +1333,10 @@ html[data-character="grok"] .character-options button[aria-pressed="true"] span 
     grid-template-columns: 1fr;
   }
 
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
   .companion-panel {
     grid-template-columns: 1fr;
     min-height: 27rem;
@@ -1455,4 +1501,119 @@ html[data-character="grok"] .character-options button[aria-pressed="true"] span 
   .character-letter-idle {
     animation: none !important;
   }
+}
+
+html[data-view="pet"] {
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+html[data-view="pet"] body {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+html[data-view="pet"] .site-header,
+html[data-view="pet"] .site-footer,
+html[data-view="pet"] .skip-link,
+html[data-view="pet"] .character-controls,
+html[data-view="pet"] .character-disclosure {
+  display: none;
+}
+
+html[data-view="pet"] .page-shell {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100dvh;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.35rem;
+}
+
+html[data-view="pet"] .companion-panel {
+  display: block;
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 0.35rem;
+  border-radius: 1rem;
+}
+
+html[data-view="pet"] .character-stage {
+  display: grid;
+  height: 100%;
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0;
+  padding: 0.2rem;
+}
+
+html[data-view="pet"] .companion-visual {
+  width: min(15rem, 82vw);
+  height: min(15rem, 56vh);
+  margin-bottom: 0;
+}
+
+html[data-view="pet"] .companion-copy {
+  min-width: 0;
+  width: 100%;
+}
+
+html[data-view="pet"] .companion-copy > .eyebrow,
+html[data-view="pet"] .updated-at,
+html[data-view="pet"] .stale-badge,
+html[data-view="pet"] [data-rescan] {
+  display: none;
+}
+
+html[data-view="pet"] .companion-copy h2 {
+  font-size: 1.12rem;
+}
+
+html[data-view="pet"] .companion-line {
+  min-height: 0;
+  margin: 0.4rem 0 0;
+  overflow: hidden;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-view="pet"] .stats-disclosure {
+  flex: 0 0 auto;
+}
+
+html[data-view="pet"] .stats-disclosure > summary {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.7rem;
+}
+
+html[data-view="pet"] .stats-disclosure[open] {
+  position: fixed;
+  z-index: 9;
+  inset: 0.35rem;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: 0.5rem;
+  border-radius: 1rem;
+  background: #f6f2e8;
+  box-shadow: 0 1rem 3rem rgb(63 49 28 / 18%);
+}
+
+html[data-view="pet"] .stats-disclosure[open] > summary {
+  flex: 0 0 auto;
+  margin-bottom: 0.5rem;
+}
+
+html[data-view="pet"] .stats-grid {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
