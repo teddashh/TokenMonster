@@ -5,6 +5,31 @@ import type {
   CharacterTheme
 } from "./dto.js";
 
+export type CompanionView = "dashboard" | "pet";
+
+/** The floating pet surface opts into its compact layout with a query flag. */
+export function resolveCompanionView(search: string): CompanionView {
+  return new URLSearchParams(search).get("view") === "pet"
+    ? "pet"
+    : "dashboard";
+}
+
+export interface VisibleCharacterRoster {
+  readonly unlocked: readonly CharacterRosterEntry[];
+  readonly lockedCount: number;
+}
+
+/** Locked identities stay out of the roster while their aggregate count remains visible. */
+export function visibleCharacterRoster(
+  characters: readonly CharacterRosterEntry[]
+): VisibleCharacterRoster {
+  const unlocked = characters.filter((character) => character.unlocked);
+  return Object.freeze({
+    unlocked: Object.freeze(unlocked),
+    lockedCount: characters.length - unlocked.length
+  });
+}
+
 /** GLM is the sole roster character whose product visual is letter-based. */
 export function isGlmLetterCharacter(
   character: CharacterRosterEntry

@@ -37,6 +37,8 @@ import {
 } from "./character-state.js";
 import {
   isGlmLetterCharacter,
+  resolveCompanionView,
+  visibleCharacterRoster,
   resolveStageImagePath
 } from "./character-panel.js";
 import {
@@ -95,6 +97,12 @@ function requiredElement<T extends Element>(selector: string): T {
 }
 
 export function startCompanionUi(): void {
+  const companionView = resolveCompanionView(window.location.search);
+  document.documentElement.dataset["view"] = companionView;
+  const statsDisclosure = requiredElement<HTMLDetailsElement>(
+    "[data-stats-disclosure]"
+  );
+  statsDisclosure.open = companionView === "dashboard";
   const statusElement = requiredElement<HTMLElement>("[data-status]");
   const companionLineElement = requiredElement<HTMLElement>(
     "[data-companion-line]"
@@ -467,7 +475,8 @@ export function startCompanionUi(): void {
 
   function renderRoster(): void {
     const fragment = document.createDocumentFragment();
-    for (const character of charactersSnapshot?.characters ?? []) {
+    const roster = visibleCharacterRoster(charactersSnapshot?.characters ?? []);
+    for (const character of roster.unlocked) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "roster-chip";
@@ -485,7 +494,7 @@ export function startCompanionUi(): void {
       glyph.setAttribute("aria-hidden", "true");
       glyph.textContent = CHARACTER_VIEW[character.characterId].glyph;
       portrait.append(glyph);
-      if (character.unlocked && character.visual.mode === "doll") {
+      if (character.visual.mode === "doll") {
         const avatar = document.createElement("img");
         avatar.alt = "";
         avatar.loading = "lazy";
@@ -499,40 +508,21 @@ export function startCompanionUi(): void {
         });
         portrait.append(avatar);
       }
-      if (!character.unlocked && character.progress !== null) {
-        const ring = document.createElement("span");
-        ring.className = "progress-ring";
-        ring.style.setProperty(
-          "--progress-turn",
-          `${character.progress.value}turn`
-        );
-        ring.setAttribute("aria-hidden", "true");
-        portrait.append(ring);
-      }
       const name = document.createElement("span");
       name.className = "roster-name";
       name.textContent = character.displayName;
       button.append(portrait, name);
-      if (character.unlocked) {
-        button.setAttribute("aria-label", `選擇 ${character.displayName}`);
-        button.addEventListener("click", () => {
-          void chooseCharacter(character.characterId);
-        });
-      } else {
-        const explain = characterUnlockExplanation(character);
-        const accessibleExplain = document.createElement("span");
-        accessibleExplain.className = "visually-hidden";
-        accessibleExplain.textContent = explain;
-        button.append(accessibleExplain);
-        button.title = explain;
-        button.disabled = true;
-        button.setAttribute("aria-disabled", "true");
-        button.setAttribute(
-          "aria-label",
-          `${character.displayName} 尚未解鎖。${explain}`
-        );
-      }
+      button.setAttribute("aria-label", `選擇 ${character.displayName}`);
+      button.addEventListener("click", () => {
+        void chooseCharacter(character.characterId);
+      });
       fragment.append(button);
+    }
+    if (roster.lockedCount > 0) {
+      const lockedSummary = document.createElement("p");
+      lockedSummary.className = "roster-locked-summary";
+      lockedSummary.textContent = `還有 ${numberFormatter.format(roster.lockedCount)} 位夥伴等待解鎖`;
+      fragment.append(lockedSummary);
     }
     rosterElement.replaceChildren(fragment);
   }
