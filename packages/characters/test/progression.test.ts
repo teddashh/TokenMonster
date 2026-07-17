@@ -194,6 +194,23 @@ describe("evaluateProgression", () => {
     });
   });
 
+  it("marks unlocks from one evaluation with a shared batch id", () => {
+    const state = evaluateProgression(
+      input([bucket("2026-07-16", { openai: 5_000_000 })]),
+    );
+    const unlockTimestamps = state.characters.flatMap((entry) => [
+      entry.unlockedAt,
+      ...entry.themes.map((theme) => theme.unlockedAt),
+      ...entry.poseSets.map((pose) => pose.unlockedAt),
+      ...entry.actions.map((action) => action.unlockedAt),
+    ]);
+
+    expect(state.unlockBatchId).toBe(EVALUATED_AT);
+    expect(new Set(unlockTimestamps.filter((value) => value !== null))).toEqual(
+      new Set([EVALUATED_AT]),
+    );
+  });
+
   it("honors a manual starter at zero usage and uses its earlier timestamp", () => {
     const state = evaluateProgression(
       input([], { selection: manualSelection("claude") }),

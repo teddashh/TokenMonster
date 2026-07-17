@@ -1053,6 +1053,7 @@ describe("companion gateway", () => {
     expect(Object.keys(dto)).toEqual([
       "status",
       "generatedAt",
+      "unlockBatchId",
       "selection",
       "voiceEnabled",
       "characters"
@@ -1060,6 +1061,7 @@ describe("companion gateway", () => {
     expect(dto).toMatchObject({
       status: "ok",
       generatedAt: "2026-07-15T12:34:56.789Z",
+      unlockBatchId: null,
       selection: { characterId: null, selectedBy: null },
       voiceEnabled: true
     });
@@ -1174,9 +1176,11 @@ describe("companion gateway", () => {
       activeThemeId: "finance"
     });
     const dto = (await (await characterRequest(address, cookie)).json()) as {
+      unlockBatchId: string | null;
       selection: unknown;
       characters: Array<Record<string, unknown>>;
     };
+    expect(dto.unlockBatchId).toBe("2026-07-15T12:34:56.789Z");
     expect(dto.selection).toEqual({ characterId: "chatgpt", selectedBy: "manual" });
     expect(dto.characters[0]).toMatchObject({
       characterId: "chatgpt",

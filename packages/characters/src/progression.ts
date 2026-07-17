@@ -646,6 +646,7 @@ export const ProgressionStateSchema = z
   .object({
     schemaVersion: z.literal(PROGRESSION_SCHEMA_VERSION),
     evaluatedAt: UtcTimestampSchema,
+    unlockBatchId: UtcTimestampSchema.nullable().optional(),
     localOnly: z.literal(true),
     counters: z
       .object({
@@ -1145,11 +1146,23 @@ export function evaluateProgression(input: unknown): ProgressionState {
   const nextCandidate = [...lockedCandidates].sort(
     (left, right) => right.progress.value - left.progress.value,
   )[0];
+  const unlockBatchId = characters
+    .flatMap((character) => [
+      character.unlockedAt,
+      ...character.themes.map((theme) => theme.unlockedAt),
+      ...character.poseSets.map((pose) => pose.unlockedAt),
+      ...character.actions.map((action) => action.unlockedAt),
+    ])
+    .filter((unlockedAt): unlockedAt is string => unlockedAt !== null)
+    .sort(
+      (left, right) => Date.parse(right) - Date.parse(left),
+    )[0] ?? null;
 
   return deepFreeze(
     ProgressionStateSchema.parse({
       schemaVersion: PROGRESSION_SCHEMA_VERSION,
       evaluatedAt: parsed.evaluatedAt,
+      unlockBatchId,
       localOnly: true,
       counters,
       selection,

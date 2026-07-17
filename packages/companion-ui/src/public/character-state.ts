@@ -5,12 +5,16 @@ import type {
   CharactersSnapshot,
   CharacterUnlock
 } from "./dto.js";
+import { CHARACTER_THEME_LABELS } from "./wardrobe.js";
+
+const INDIVIDUAL_UNLOCK_TOAST_LIMIT = 3;
 
 export function diffCharacterUnlocks(
   previous: CharactersSnapshot | undefined,
   current: CharactersSnapshot
 ): readonly CharacterUnlock[] {
   if (previous === undefined) return Object.freeze([]);
+  const batchId = current.unlockBatchId ?? current.generatedAt;
   const previousById = new Map(
     previous.characters.map((character) => [character.characterId, character])
   );
@@ -25,6 +29,7 @@ export function diffCharacterUnlocks(
       unlocks.push(
         Object.freeze({
           key: `character:${character.characterId}:${character.unlockedAt}`,
+          batchId,
           kind: "character",
           characterId: character.characterId,
           displayName: character.displayName,
@@ -43,6 +48,7 @@ export function diffCharacterUnlocks(
         unlocks.push(
           Object.freeze({
             key: `theme:${character.characterId}:${theme.themeId}`,
+            batchId,
             kind: "theme",
             characterId: character.characterId,
             displayName: character.displayName,
@@ -53,6 +59,40 @@ export function diffCharacterUnlocks(
     }
   }
   return Object.freeze(unlocks);
+}
+
+export function coalesceCharacterUnlocks(
+  unlocks: readonly CharacterUnlock[]
+): readonly CharacterUnlock[] {
+  if (unlocks.length <= INDIVIDUAL_UNLOCK_TOAST_LIMIT) return unlocks;
+  const first = unlocks[0]!;
+  const characterCount = unlocks.filter(
+    (unlock) => unlock.kind === "character"
+  ).length;
+  const themeCount = unlocks.length - characterCount;
+  return Object.freeze([
+    Object.freeze({
+      ...first,
+      key: `summary:${first.batchId}`,
+      summary: Object.freeze({ characterCount, themeCount })
+    })
+  ]);
+}
+
+export function characterUnlockToastText(unlock: CharacterUnlock): string {
+  if (unlock.summary !== undefined) {
+    const { characterCount, themeCount } = unlock.summary;
+    if (characterCount > 0 && themeCount > 0) {
+      return `解鎖了 ${characterCount} 位夥伴與 ${themeCount} 件服裝，到衣櫃看看`;
+    }
+    if (themeCount > 0) {
+      return `解鎖了 ${themeCount} 件新服裝，到衣櫃看看`;
+    }
+    return `解鎖了 ${characterCount} 位新夥伴，到衣櫃看看`;
+  }
+  return unlock.kind === "character"
+    ? `${unlock.displayName} 來了！`
+    : `${unlock.displayName} 的${CHARACTER_THEME_LABELS[unlock.themeId!]}服裝準備好了！`;
 }
 
 export interface CharacterUnlockQueue {
@@ -68,7 +108,7 @@ export function createCharacterUnlockQueue(): CharacterUnlockQueue {
   let active: CharacterUnlock | undefined;
   return Object.freeze({
     enqueue(unlocks: readonly CharacterUnlock[]): CharacterUnlock | undefined {
-      for (const unlock of unlocks) {
+      for (const unlock of coalesceCharacterUnlocks(unlocks)) {
         if (!seen.has(unlock.key)) {
           seen.add(unlock.key);
           queued.push(unlock);
@@ -144,5 +184,4 @@ export function createCharacterImageFallbackTracker(): CharacterImageFallbackTra
     }
   });
 }
-
 
