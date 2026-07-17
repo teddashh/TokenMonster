@@ -4,6 +4,7 @@ import { basename, dirname, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildSquirrelEnvironment,
   classifySquirrelArgv,
   handleSquirrelStartup,
   type SquirrelStartupDependencies
@@ -34,6 +35,12 @@ function dependencies(
       execPath,
       spawn: spawn as unknown as SquirrelStartupDependencies["spawn"],
       quit,
+      environment: {
+        LOCALAPPDATA: "C:\\Users\\example\\AppData\\Local",
+        PATH: "C:\\Windows\\System32",
+        HTTP_PROXY: "http://proxy.invalid",
+        npm_config_https_proxy: "http://npm-proxy.invalid"
+      },
       timeoutMs: 50
     },
     child,
@@ -72,6 +79,44 @@ describe("classifySquirrelArgv", () => {
   });
 });
 
+describe("buildSquirrelEnvironment", () => {
+  it("keeps Windows launch essentials and drops proxies and unrelated input", () => {
+    const environment = buildSquirrelEnvironment({
+      USERPROFILE: "C:\\Users\\example",
+      LOCALAPPDATA: "C:\\Users\\example\\AppData\\Local",
+      PATH: "C:\\Windows\\System32",
+      SystemRoot: "C:\\Windows",
+      HTTP_PROXY: "http://proxy.invalid",
+      HTTPS_PROXY: "https://proxy.invalid",
+      ALL_PROXY: "socks5://proxy.invalid",
+      NO_PROXY: "localhost",
+      npm_config_proxy: "http://npm-proxy.invalid",
+      npm_config_https_proxy: "http://npm-proxy.invalid",
+      OPENAI_API_KEY: "secret"
+    });
+
+    expect(environment).toEqual({
+      USERPROFILE: "C:\\Users\\example",
+      LOCALAPPDATA: "C:\\Users\\example\\AppData\\Local",
+      PATH: "C:\\Windows\\System32",
+      SystemRoot: "C:\\Windows"
+    });
+    expect(Object.isFrozen(environment)).toBe(true);
+  });
+
+  it("rejects malformed environment values without invoking getters", () => {
+    const source = Object.create(null) as NodeJS.ProcessEnv;
+    Object.defineProperty(source, "PATH", {
+      enumerable: true,
+      get: () => {
+        throw new Error("getter must not run");
+      }
+    });
+    source["TEMP"] = "bad\0value";
+    expect(buildSquirrelEnvironment(source)).toEqual({});
+  });
+});
+
 describe("handleSquirrelStartup", () => {
   it("creates the executable shortcut on install, then quits", () => {
     const { deps, child, spawn, quit } = dependencies([
@@ -82,7 +127,15 @@ describe("handleSquirrelStartup", () => {
     expect(spawn).toHaveBeenCalledWith(
       resolve(dirname(execPath), "..", "Update.exe"),
       [`--createShortcut=${basename(execPath)}`],
-      { detached: true, windowsHide: true, stdio: "ignore" }
+      {
+        detached: true,
+        env: {
+          LOCALAPPDATA: "C:\\Users\\example\\AppData\\Local",
+          PATH: "C:\\Windows\\System32"
+        },
+        windowsHide: true,
+        stdio: "ignore"
+      }
     );
     expect(quit).not.toHaveBeenCalled();
     child.emit("close");
