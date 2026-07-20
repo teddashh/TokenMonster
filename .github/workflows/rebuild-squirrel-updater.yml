@@ -177,6 +177,10 @@ jobs:
           )) {
             Remove-Item "Env:$credentialVariable" -ErrorAction SilentlyContinue
           }
+          # Nerdbank.GitVersioning 3.0.50 predates GitHub's environment-file
+          # protocol. Keep its normal MSBuild versioning while preventing it
+          # from emitting the retired workflow-command form of set-env.
+          Remove-Item Env:GITHUB_ACTIONS -ErrorAction SilentlyContinue
 
           $nuget = Join-Path $env:RUNNER_TEMP "nuget-4.9.4.exe"
           if (Test-Path -LiteralPath $nuget) {
@@ -256,7 +260,10 @@ jobs:
             New-Item -ItemType Directory -Path $dependencyCache | Out-Null
             New-Item -ItemType Directory -Path $httpCache | Out-Null
             New-Item -ItemType Directory -Path $scratch | Out-Null
-            $env:NUGET_PACKAGES = $dependencyCache
+            # Upstream's legacy PostBuild target concatenates this property
+            # directly with "ilrepack", so the terminal separator is required.
+            $nugetPackageRoot = $dependencyCache + [IO.Path]::DirectorySeparatorChar
+            $env:NUGET_PACKAGES = $nugetPackageRoot
             $env:NUGET_HTTP_CACHE_PATH = $httpCache
             $env:NUGET_SCRATCH = $scratch
             $env:NUGET_CREDENTIALPROVIDERS_PATH = ""
@@ -275,7 +282,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) {
               throw "The exact upstream updater dependency restore failed."
             }
-            & $msbuild (Join-Path $source "src/Update/Update.csproj") "/p:Configuration=Release" "/p:Platform=Any CPU" "/p:TargetFrameworkRootPath=$referenceBuildRoot" "/p:DirectoryBuildTargetsPath=$referenceTargets" "/m:1" "/nr:false" "/v:minimal"
+            & $msbuild (Join-Path $source "src/Update/Update.csproj") "/p:Configuration=Release" "/p:Platform=Any CPU" "/p:TargetFrameworkRootPath=$referenceBuildRoot" "/p:DirectoryBuildTargetsPath=$referenceTargets" "/p:NuGetPackageRoot=$nugetPackageRoot" "/m:1" "/nr:false" "/v:minimal"
             if ($LASTEXITCODE -ne 0) {
               throw "The exact upstream updater build failed."
             }
