@@ -1,12 +1,23 @@
-import { chmod, lstat, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { fstatSync } from "node:fs";
+import {
+  chmod,
+  lstat,
+  mkdtemp,
+  open,
+  readFile,
+  symlink,
+  writeFile,
+  type FileHandle
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   SecretVaultError,
   createEncryptedSecretSlot,
+  createMemorySecretSlot,
   type AsyncSafeStoragePort
 } from "../src/index.js";
 
@@ -35,8 +46,12 @@ class FakeSafeStorage implements AsyncSafeStoragePort {
   public encryptCalls = 0;
   public decryptCalls = 0;
   public shouldReEncrypt = false;
+  public throwOnAvailabilityProbe = false;
+  public throwOnBackendProbe = false;
   public throwOnEncrypt = false;
   public throwOnDecrypt = false;
+  public encryptBarrier: Promise<void> | null = null;
+  public decryptBarrier: Promise<void> | null = null;
 
   public constructor(
     public backend = "unknown",
@@ -44,15 +59,18 @@ class FakeSafeStorage implements AsyncSafeStoragePort {
   ) {}
 
   public async isAsyncEncryptionAvailable(): Promise<boolean> {
+    if (this.throwOnAvailabilityProbe) throw new Error(SECRET_CANARY);
     return this.available;
   }
 
   public getSelectedStorageBackend(): string {
+    if (this.throwOnBackendProbe) throw new Error(SECRET_CANARY);
     return this.backend;
   }
 
   public async encryptStringAsync(plainText: string): Promise<Uint8Array> {
     this.encryptCalls += 1;
+    if (this.encryptBarrier !== null) await this.encryptBarrier;
     if (this.throwOnEncrypt) throw new Error(SECRET_CANARY);
     return Buffer.from(`cipher:${[...plainText].reverse().join("")}`, "utf8");
   }
@@ -61,6 +79,7 @@ class FakeSafeStorage implements AsyncSafeStoragePort {
     encrypted: Uint8Array
   ): Promise<Readonly<{ result: string; shouldReEncrypt: boolean }>> {
     this.decryptCalls += 1;
+    if (this.decryptBarrier !== null) await this.decryptBarrier;
     if (this.throwOnDecrypt) throw new Error(SECRET_CANARY);
     const serialized = Buffer.from(encrypted).toString("utf8");
     if (!serialized.startsWith("cipher:")) throw new Error(SECRET_CANARY);
@@ -86,6 +105,65 @@ async function captureError(operation: Promise<unknown>): Promise<unknown> {
   }
 }
 
+async function spyOnDirectorySync(
+  filePath: string,
+  failureCode?: string
+): Promise<Readonly<{
+  count: () => number;
+  restore: () => void;
+}>> {
+  const probe = await open(dirname(filePath), "r");
+  const prototype = Object.getPrototypeOf(probe) as FileHandle;
+  const originalSync = prototype.sync;
+  await probe.close();
+  let directorySyncCount = 0;
+  const spy = vi
+    .spyOn(prototype, "sync")
+    .mockImplementation(async function (this: FileHandle): Promise<void> {
+      if (fstatSync(this.fd).isDirectory()) {
+        directorySyncCount += 1;
+        if (failureCode !== undefined) {
+          throw Object.assign(new Error("directory sync failed"), {
+            code: failureCode
+          });
+        }
+      }
+      await Reflect.apply(originalSync, this, []);
+    });
+  return Object.freeze({
+    count: () => directorySyncCount,
+    restore: () => spy.mockRestore()
+  });
+}
+
+async function abortOnFirstDirectorySync(
+  filePath: string,
+  controller: AbortController
+): Promise<Readonly<{
+  count: () => number;
+  restore: () => void;
+}>> {
+  const probe = await open(dirname(filePath), "r");
+  const prototype = Object.getPrototypeOf(probe) as FileHandle;
+  const originalSync = prototype.sync;
+  await probe.close();
+  let directorySyncCount = 0;
+  const spy = vi
+    .spyOn(prototype, "sync")
+    .mockImplementation(async function (this: FileHandle): Promise<void> {
+      const isDirectory = fstatSync(this.fd).isDirectory();
+      await Reflect.apply(originalSync, this, []);
+      if (isDirectory) {
+        directorySyncCount += 1;
+        if (directorySyncCount === 1) controller.abort();
+      }
+    });
+  return Object.freeze({
+    count: () => directorySyncCount,
+    restore: () => spy.mockRestore()
+  });
+}
+
 describe("OS-backed encrypted secret slot", () => {
   it.each<[NodeJS.Platform, string]>([
     ["darwin", "unknown"],
@@ -103,6 +181,7 @@ describe("OS-backed encrypted secret slot", () => {
     expect(status).toEqual({
       configured: true,
       persistence: "os-backed",
+      activePersistence: "os-backed",
       backend
     });
     expect(slot.get()).toBe(SECRET_CANARY);
@@ -135,6 +214,7 @@ describe("OS-backed encrypted secret slot", () => {
     expect(await reopened.initialize()).toEqual({
       configured: true,
       persistence: "os-backed",
+      activePersistence: "os-backed",
       backend: "unknown"
     });
     expect(reopened.get()).toBe(SECRET_CANARY);
@@ -162,6 +242,77 @@ describe("OS-backed encrypted secret slot", () => {
     expect(safeStorage.decryptCalls).toBe(1);
     expect(safeStorage.encryptCalls).toBe(2);
     expect(reopened.get()).toBe(SECRET_CANARY);
+  });
+
+  it("keeps old ciphertext but clears plaintext state when key rotation fails", async () => {
+    const filePath = await temporaryPath();
+    const safeStorage = new FakeSafeStorage();
+    await createEncryptedSecretSlot({
+      safeStorage,
+      platform: "win32",
+      filePath
+    }).set(SECRET_CANARY);
+    const oldCiphertext = await readFile(filePath, "utf8");
+    safeStorage.shouldReEncrypt = true;
+    safeStorage.throwOnEncrypt = true;
+    const reopened = createEncryptedSecretSlot({
+      safeStorage,
+      platform: "win32",
+      filePath
+    });
+
+    await expect(reopened.initialize()).rejects.toMatchObject({
+      code: "storage-failed"
+    });
+    expect(reopened.get()).toBeNull();
+    expect(reopened.status()).toMatchObject({
+      configured: false,
+      activePersistence: "memory-only"
+    });
+    expect(await readFile(filePath, "utf8")).toBe(oldCiphertext);
+
+    safeStorage.throwOnEncrypt = false;
+    await expect(reopened.initialize()).resolves.toMatchObject({
+      configured: true,
+      activePersistence: "os-backed"
+    });
+    expect(reopened.get()).toBe(SECRET_CANARY);
+  });
+
+  it("fences an aborted initialization before plaintext or rotation can commit", async () => {
+    const filePath = await temporaryPath();
+    const safeStorage = new FakeSafeStorage();
+    await createEncryptedSecretSlot({
+      safeStorage,
+      platform: "win32",
+      filePath
+    }).set(SECRET_CANARY);
+    const oldCiphertext = await readFile(filePath, "utf8");
+    safeStorage.shouldReEncrypt = true;
+    let releaseDecryption!: () => void;
+    safeStorage.decryptBarrier = new Promise<void>((resolve) => {
+      releaseDecryption = resolve;
+    });
+    const reopened = createEncryptedSecretSlot({
+      safeStorage,
+      platform: "win32",
+      filePath
+    });
+    const controller = new AbortController();
+    const initializing = reopened.initialize({ signal: controller.signal });
+    await vi.waitFor(() => expect(safeStorage.decryptCalls).toBe(1));
+
+    controller.abort();
+    releaseDecryption();
+
+    await expect(initializing).rejects.toMatchObject({ code: "storage-failed" });
+    expect(reopened.get()).toBeNull();
+    expect(reopened.status()).toMatchObject({
+      configured: false,
+      activePersistence: "memory-only"
+    });
+    expect(safeStorage.encryptCalls).toBe(1);
+    expect(await readFile(filePath, "utf8")).toBe(oldCiphertext);
   });
 
   it("clears memory and the independent encrypted file", async () => {
@@ -192,6 +343,7 @@ describe("fail-closed platform policy", () => {
     expect(await slot.set(SECRET_CANARY)).toEqual({
       configured: true,
       persistence: "memory-only",
+      activePersistence: "memory-only",
       backend
     });
     expect(slot.get()).toBe(SECRET_CANARY);
@@ -207,12 +359,16 @@ describe("fail-closed platform policy", () => {
       filePath
     });
     const status = await slot.set(SECRET_CANARY, { persist: false });
-    expect(status.configured).toBe(true);
+    expect(status).toMatchObject({
+      configured: true,
+      persistence: "os-backed",
+      activePersistence: "memory-only"
+    });
     expect(slot.get()).toBe(SECRET_CANARY);
     await expect(lstat(filePath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("removes old ciphertext when the current backend is not OS-backed", async () => {
+  it("preserves old ciphertext when the current backend is not OS-backed", async () => {
     const filePath = await temporaryPath();
     const safeStorage = new FakeSafeStorage("unknown");
     await createEncryptedSecretSlot({
@@ -220,6 +376,7 @@ describe("fail-closed platform policy", () => {
       platform: "darwin",
       filePath
     }).set(SECRET_CANARY);
+    const ciphertextBeforeProbe = await readFile(filePath);
     const downgradedStorage = new FakeSafeStorage("basic_text");
     const downgraded = createEncryptedSecretSlot({
       safeStorage: downgradedStorage,
@@ -232,8 +389,493 @@ describe("fail-closed platform policy", () => {
       backend: "basic_text"
     });
     expect(downgradedStorage.decryptCalls).toBe(0);
+    expect(await readFile(filePath)).toEqual(ciphertextBeforeProbe);
+  });
+
+  it.each(["unavailable", "availability-throws", "backend-throws"] as const)(
+    "does not erase ciphertext when the backend probe is temporarily %s",
+    async (failureMode) => {
+      const filePath = await temporaryPath();
+      await createEncryptedSecretSlot({
+        safeStorage: new FakeSafeStorage(),
+        platform: "darwin",
+        filePath
+      }).set(SECRET_CANARY);
+      const ciphertextBeforeProbe = await readFile(filePath);
+      const unavailable = new FakeSafeStorage("gnome_libsecret");
+      if (failureMode === "unavailable") unavailable.available = false;
+      if (failureMode === "availability-throws") {
+        unavailable.throwOnAvailabilityProbe = true;
+      }
+      if (failureMode === "backend-throws") {
+        unavailable.throwOnBackendProbe = true;
+      }
+      const slot = createEncryptedSecretSlot({
+        safeStorage: unavailable,
+        platform: "linux",
+        filePath
+      });
+
+      expect(await slot.initialize()).toEqual({
+        configured: false,
+        persistence: "memory-only",
+        activePersistence: "memory-only",
+        backend:
+          failureMode === "unavailable" ? "gnome_libsecret" : "unknown"
+      });
+      expect(slot.get()).toBeNull();
+      expect(unavailable.decryptCalls).toBe(0);
+      expect(await readFile(filePath)).toEqual(ciphertextBeforeProbe);
+    }
+  );
+
+  it("keeps old ciphertext when a requested persistent set falls back to RAM", async () => {
+    const filePath = await temporaryPath();
+    await createEncryptedSecretSlot({
+      safeStorage: new FakeSafeStorage(),
+      platform: "darwin",
+      filePath
+    }).set("old-secret");
+    const ciphertextBeforeFallback = await readFile(filePath);
+    const slot = createEncryptedSecretSlot({
+      safeStorage: new FakeSafeStorage("basic_text"),
+      platform: "linux",
+      filePath
+    });
+    await slot.initialize();
+
+    expect(await slot.set("new-memory-secret")).toEqual({
+      configured: true,
+      persistence: "memory-only",
+      activePersistence: "memory-only",
+      backend: "basic_text"
+    });
+    expect(slot.get()).toBe("new-memory-secret");
+    expect(await readFile(filePath)).toEqual(ciphertextBeforeFallback);
+  });
+
+  it("durably removes old ciphertext for an explicit RAM-only replacement", async () => {
+    const filePath = await temporaryPath();
+    const slot = createEncryptedSecretSlot({
+      safeStorage: new FakeSafeStorage(),
+      platform: "darwin",
+      filePath
+    });
+    await slot.set("old-secret");
+
+    expect(await slot.set("new-memory-secret", { persist: false })).toMatchObject({
+      configured: true,
+      persistence: "os-backed",
+      activePersistence: "memory-only"
+    });
+    expect(slot.get()).toBe("new-memory-secret");
     await expect(lstat(filePath)).rejects.toMatchObject({ code: "ENOENT" });
   });
+});
+
+describe("explicit memory-only slot", () => {
+  it("retains a bounded secret only in memory and cannot claim persistence", async () => {
+    const slot = createMemorySecretSlot();
+
+    expect(await slot.initialize()).toEqual({
+      configured: false,
+      persistence: "memory-only",
+      activePersistence: "memory-only",
+      backend: "memory-only"
+    });
+    expect(
+      await slot.set(SECRET_CANARY, { persist: true })
+    ).toEqual({
+      configured: true,
+      persistence: "memory-only",
+      activePersistence: "memory-only",
+      backend: "memory-only"
+    });
+    expect(slot.get()).toBe(SECRET_CANARY);
+    expect(JSON.stringify(slot.status())).not.toContain(SECRET_CANARY);
+
+    expect(await slot.clear()).toMatchObject({ configured: false });
+    expect(slot.get()).toBeNull();
+    await expect(slot.clear()).resolves.toMatchObject({ configured: false });
+  });
+
+  it("enforces the 4096-byte UTF-8 boundary and rejects NULs", async () => {
+    const slot = createMemorySecretSlot();
+    const exactBoundary = "é".repeat(2_048);
+
+    await expect(slot.set(exactBoundary)).resolves.toMatchObject({
+      configured: true
+    });
+    expect(slot.get()).toBe(exactBoundary);
+    await expect(slot.set(`${exactBoundary}a`)).rejects.toMatchObject({
+      code: "invalid-secret"
+    });
+    await expect(slot.set("valid\0suffix")).rejects.toMatchObject({
+      code: "invalid-secret"
+    });
+    await expect(slot.set("x".repeat(4_097))).rejects.toMatchObject({
+      code: "invalid-secret"
+    });
+    expect(slot.get()).toBe(exactBoundary);
+  });
+
+  it("replaces a configured value without retaining the previous secret", async () => {
+    const slot = createMemorySecretSlot();
+    await slot.set("first-secret");
+    await slot.set("replacement-secret");
+    expect(slot.get()).toBe("replacement-secret");
+    expect(JSON.stringify(slot.status())).not.toContain("first-secret");
+  });
+
+  it("retains its value when clear is already aborted", async () => {
+    const slot = createMemorySecretSlot();
+    await slot.set(SECRET_CANARY);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(slot.clear({ signal: controller.signal })).rejects.toMatchObject({
+      code: "storage-failed"
+    });
+    expect(slot.get()).toBe(SECRET_CANARY);
+    expect(slot.status().configured).toBe(true);
+  });
+
+  it("rejects invalid secrets and accessor-backed options without retaining data", async () => {
+    const slot = createMemorySecretSlot();
+    const accessor = {};
+    Object.defineProperty(accessor, "persist", {
+      enumerable: true,
+      get() {
+        throw new Error(SECRET_CANARY);
+      }
+    });
+    const signalAccessor = {};
+    Object.defineProperty(signalAccessor, "signal", {
+      enumerable: true,
+      get() {
+        throw new Error(SECRET_CANARY);
+      }
+    });
+
+    await expect(slot.set("", {})).rejects.toMatchObject({
+      code: "invalid-secret"
+    });
+    await expect(
+      slot.set(SECRET_CANARY, accessor as never)
+    ).rejects.toMatchObject({ code: "invalid-configuration" });
+    await expect(
+      slot.set(SECRET_CANARY, signalAccessor as never)
+    ).rejects.toMatchObject({ code: "invalid-configuration" });
+    await expect(
+      slot.set(SECRET_CANARY, new (class SetOptions {})() as never)
+    ).rejects.toMatchObject({ code: "invalid-configuration" });
+    expect(slot.get()).toBeNull();
+  });
+});
+
+describe("transactional durability", () => {
+  it("keeps prior ciphertext authoritative when encryption fails", async () => {
+    const filePath = await temporaryPath();
+    const safeStorage = new FakeSafeStorage();
+    const slot = createEncryptedSecretSlot({
+      safeStorage,
+      platform: "darwin",
+      filePath
+    });
+    await slot.set("old-secret");
+    const ciphertextBeforeFailure = await readFile(filePath);
+    safeStorage.throwOnEncrypt = true;
+
+    await expect(slot.set("new-secret")).rejects.toMatchObject({
+      code: "storage-failed"
+    });
+    expect(slot.get()).toBeNull();
+    expect(slot.status()).toMatchObject({
+      configured: false,
+      activePersistence: "memory-only"
+    });
+    expect(await readFile(filePath)).toEqual(ciphertextBeforeFailure);
+  });
+
+  it("keeps prior authority when cancellation arrives before rename", async () => {
+    const filePath = await temporaryPath();
+    const slot = createEncryptedSecretSlot({
+      safeStorage: new FakeSafeStorage(),
+      platform: "darwin",
+      filePath
+    });
+    await slot.set("old-secret");
+    const ciphertextBeforeAbort = await readFile(filePath);
+    const controller = new AbortController();
+    const probe = await open(dirname(filePath), "r");
+    const prototype = Object.getPrototypeOf(probe) as FileHandle;
+    const originalSync = prototype.sync;
+    await probe.close();
+    let aborted = false;
+    const spy = vi
+      .spyOn(prototype, "sync")
+      .mockImplementation(async function (this: FileHandle): Promise<void> {
+        await Reflect.apply(originalSync, this, []);
+        if (!fstatSync(this.fd).isDirectory() && !aborted) {
+          aborted = true;
+          controller.abort();
+        }
+      });
+    try {
+      await expect(
+        slot.set("new-secret", { signal: controller.signal })
+      ).rejects.toMatchObject({ code: "storage-failed" });
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(slot.get()).toBeNull();
+    expect(slot.status()).toMatchObject({
+      configured: false,
+      activePersistence: "memory-only"
+    });
+    expect(await readFile(filePath)).toEqual(ciphertextBeforeAbort);
+  });
+
+  it("retains RAM/status/ciphertext when clear is already aborted", async () => {
+    const filePath = await temporaryPath();
+    const slot = createEncryptedSecretSlot({
+      safeStorage: new FakeSafeStorage(),
+      platform: "darwin",
+      filePath
+    });
+    await slot.set(SECRET_CANARY);
+    const ciphertextBeforeAbort = await readFile(filePath);
+    const statusBeforeAbort = slot.status();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(slot.clear({ signal: controller.signal })).rejects.toMatchObject({
+      code: "storage-failed"
+    });
+    expect(slot.get()).toBe(SECRET_CANARY);
+    expect(slot.status()).toEqual(statusBeforeAbort);
+    expect(await readFile(filePath)).toEqual(ciphertextBeforeAbort);
+  });
+
+  it("rolls back a replacement when directory fsync really fails", async () => {
+    const filePath = await temporaryPath();
+    const slot = createEncryptedSecretSlot({
+      safeStorage: new FakeSafeStorage(),
+      platform: "darwin",
+      filePath
+    });
+    await slot.set("old-secret");
+    const ciphertextBeforeFailure = await readFile(filePath);
+    const directorySync = await spyOnDirectorySync(filePath, "EIO");
+    try {
+      await expect(slot.set("new-secret")).rejects.toMatchObject({
+        code: "storage-failed"
+      });
+      expect(slot.get()).toBeNull();
+      expect(slot.status()).toMatchObject({
+        configured: false,
+        activePersistence: "memory-only"
+      });
+      expect(await readFile(filePath)).toEqual(ciphertextBeforeFailure);
+      expect(directorySync.count()).toBeGreaterThanOrEqual(2);
+    } finally {
+      directorySync.restore();
+    }
+  });
+
+  it("rolls back clear and retains status when directory fsync really fails", async () => {
+    const filePath = await temporaryPath();
+    const slot = createEncryptedSecretSlot({
+      safeStorage: new FakeSafeStorage(),
+      platform: "darwin",
+      filePath
+    });
+    await slot.set(SECRET_CANARY);
+    const ciphertextBeforeFailure = await readFile(filePath);
+    const statusBeforeFailure = slot.status();
+    const directorySync = await spyOnDirectorySync(filePath, "EIO");
+    try {
+      await expect(slot.clear()).rejects.toMatchObject({
+        code: "storage-failed"
+      });
+      expect(slot.get()).toBe(SECRET_CANARY);
+      expect(slot.status()).toEqual(statusBeforeFailure);
+      expect(await readFile(filePath)).toEqual(ciphertextBeforeFailure);
+      expect(directorySync.count()).toBeGreaterThanOrEqual(2);
+    } finally {
+      directorySync.restore();
+    }
+  });
+
+  it("rolls back a replacement aborted during directory fsync before a queued writer", async () => {
+    const filePath = await temporaryPath();
+    const slot = createEncryptedSecretSlot({
+      safeStorage: new FakeSafeStorage(),
+      platform: "darwin",
+      filePath
+    });
+    await slot.set("old-secret");
+    const ciphertextBeforeAbort = await readFile(filePath);
+    const controller = new AbortController();
+    const directorySync = await abortOnFirstDirectorySync(
+      filePath,
+      controller
+    );
+    const queuedStorage = new FakeSafeStorage();
+    let releaseQueuedEncryption!: () => void;
+    queuedStorage.encryptBarrier = new Promise<void>((resolve) => {
+      releaseQueuedEncryption = resolve;
+    });
+    const queuedSlot = createEncryptedSecretSlot({
+      safeStorage: queuedStorage,
+      platform: "darwin",
+      filePath
+    });
+    const abortedWrite = slot.set("aborted-secret", {
+      signal: controller.signal
+    });
+    const queuedWrite = queuedSlot.set("queued-secret");
+
+    try {
+      await expect(abortedWrite).rejects.toMatchObject({
+        code: "storage-failed"
+      });
+      await vi.waitFor(() => expect(queuedStorage.encryptCalls).toBe(1));
+      expect(directorySync.count()).toBe(2);
+      expect(await readFile(filePath)).toEqual(ciphertextBeforeAbort);
+      expect(slot.get()).toBeNull();
+      expect(slot.status()).toEqual({
+        configured: false,
+        persistence: "os-backed",
+        activePersistence: "memory-only",
+        backend: "unknown"
+      });
+
+      releaseQueuedEncryption();
+      await expect(queuedWrite).resolves.toMatchObject({
+        configured: true,
+        activePersistence: "os-backed"
+      });
+      expect(directorySync.count()).toBe(3);
+      const reopened = createEncryptedSecretSlot({
+        safeStorage: queuedStorage,
+        platform: "darwin",
+        filePath
+      });
+      await reopened.initialize();
+      expect(reopened.get()).toBe("queued-secret");
+    } finally {
+      releaseQueuedEncryption();
+      await queuedWrite.catch(() => undefined);
+      directorySync.restore();
+    }
+  });
+
+  it("rolls back clear aborted during directory fsync before a queued writer", async () => {
+    const filePath = await temporaryPath();
+    const slot = createEncryptedSecretSlot({
+      safeStorage: new FakeSafeStorage(),
+      platform: "darwin",
+      filePath
+    });
+    await slot.set(SECRET_CANARY);
+    const ciphertextBeforeAbort = await readFile(filePath);
+    const statusBeforeAbort = slot.status();
+    const controller = new AbortController();
+    const directorySync = await abortOnFirstDirectorySync(
+      filePath,
+      controller
+    );
+    const queuedStorage = new FakeSafeStorage();
+    let releaseQueuedEncryption!: () => void;
+    queuedStorage.encryptBarrier = new Promise<void>((resolve) => {
+      releaseQueuedEncryption = resolve;
+    });
+    const queuedSlot = createEncryptedSecretSlot({
+      safeStorage: queuedStorage,
+      platform: "darwin",
+      filePath
+    });
+    const abortedClear = slot.clear({ signal: controller.signal });
+    const queuedWrite = queuedSlot.set("queued-after-clear");
+
+    try {
+      await expect(abortedClear).rejects.toMatchObject({
+        code: "storage-failed"
+      });
+      await vi.waitFor(() => expect(queuedStorage.encryptCalls).toBe(1));
+      expect(directorySync.count()).toBe(2);
+      expect(await readFile(filePath)).toEqual(ciphertextBeforeAbort);
+      expect(slot.get()).toBe(SECRET_CANARY);
+      expect(slot.status()).toEqual(statusBeforeAbort);
+
+      releaseQueuedEncryption();
+      await expect(queuedWrite).resolves.toMatchObject({
+        configured: true,
+        activePersistence: "os-backed"
+      });
+      expect(directorySync.count()).toBe(3);
+      const reopened = createEncryptedSecretSlot({
+        safeStorage: queuedStorage,
+        platform: "darwin",
+        filePath
+      });
+      await reopened.initialize();
+      expect(reopened.get()).toBe("queued-after-clear");
+    } finally {
+      releaseQueuedEncryption();
+      await queuedWrite.catch(() => undefined);
+      directorySync.restore();
+    }
+  });
+
+  it("fsyncs the parent directory after rename and unlink", async () => {
+    const filePath = await temporaryPath();
+    const directorySync = await spyOnDirectorySync(filePath);
+    try {
+      const slot = createEncryptedSecretSlot({
+        safeStorage: new FakeSafeStorage(),
+        platform: "darwin",
+        filePath
+      });
+      await slot.set(SECRET_CANARY);
+      await slot.clear();
+      expect(directorySync.count()).toBe(2);
+    } finally {
+      directorySync.restore();
+    }
+  });
+
+  it.each<[NodeJS.Platform, string]>([
+    ["darwin", "EINVAL"],
+    ["darwin", "ENOTSUP"],
+    ["darwin", "EOPNOTSUPP"],
+    ["darwin", "ENOSYS"],
+    ["win32", "EISDIR"],
+    ["win32", "EPERM"]
+  ])(
+    "uses the explicit %s directory-fsync fallback for %s",
+    async (platform, failureCode) => {
+      const filePath = await temporaryPath();
+      const directorySync = await spyOnDirectorySync(filePath, failureCode);
+      try {
+        const slot = createEncryptedSecretSlot({
+          safeStorage: new FakeSafeStorage(),
+          platform,
+          filePath
+        });
+        await expect(slot.set(SECRET_CANARY)).resolves.toMatchObject({
+          configured: true,
+          activePersistence: "os-backed"
+        });
+        await expect(slot.clear()).resolves.toMatchObject({ configured: false });
+        expect(directorySync.count()).toBe(2);
+      } finally {
+        directorySync.restore();
+      }
+    }
+  );
 });
 
 describe("corruption and leakage resistance", () => {
@@ -359,5 +1001,99 @@ describe("corruption and leakage resistance", () => {
     await slot.set("second-secret");
     expect((await lstat(filePath)).mode & 0o777).toBe(0o600);
     expect((await lstat(join(filePath, ".."))).mode & 0o777).toBe(0o700);
+  });
+
+  it("does not commit an encrypted replacement after its signal aborts", async () => {
+    const filePath = await temporaryPath();
+    const safeStorage = new FakeSafeStorage();
+    const slot = createEncryptedSecretSlot({
+      safeStorage,
+      platform: "darwin",
+      filePath
+    });
+    await slot.set("first-secret");
+    const ciphertextBeforeAbort = await readFile(filePath);
+
+    let releaseEncryption!: () => void;
+    safeStorage.encryptBarrier = new Promise<void>((resolve) => {
+      releaseEncryption = resolve;
+    });
+    const controller = new AbortController();
+    const replacement = slot.set("replacement-secret", {
+      signal: controller.signal
+    });
+    await vi.waitFor(() => expect(safeStorage.encryptCalls).toBe(2));
+    controller.abort();
+    releaseEncryption();
+
+    await expect(replacement).rejects.toMatchObject({ code: "storage-failed" });
+    expect(slot.get()).toBeNull();
+    expect(slot.status()).toMatchObject({
+      configured: false,
+      activePersistence: "memory-only"
+    });
+    expect(await readFile(filePath)).toEqual(ciphertextBeforeAbort);
+
+    const reopened = createEncryptedSecretSlot({
+      safeStorage,
+      platform: "darwin",
+      filePath
+    });
+    await expect(reopened.initialize()).resolves.toMatchObject({
+      configured: true,
+      activePersistence: "os-backed"
+    });
+    expect(reopened.get()).toBe("first-secret");
+  });
+
+  it("serializes independent slots so aborted cleanup cannot delete a newer authority", async () => {
+    const filePath = await temporaryPath();
+    const oldStorage = new FakeSafeStorage();
+    const newStorage = new FakeSafeStorage();
+    let releaseOldEncryption!: () => void;
+    oldStorage.encryptBarrier = new Promise<void>((resolve) => {
+      releaseOldEncryption = resolve;
+    });
+    const oldSlot = createEncryptedSecretSlot({
+      safeStorage: oldStorage,
+      platform: "darwin",
+      filePath
+    });
+    const newSlot = createEncryptedSecretSlot({
+      safeStorage: newStorage,
+      platform: "darwin",
+      filePath: `${dirname(filePath)}${sep}.${sep}secret.json`
+    });
+    const controller = new AbortController();
+    const oldWrite = oldSlot.set("old-credential", {
+      signal: controller.signal
+    });
+    await vi.waitFor(() => expect(oldStorage.encryptCalls).toBe(1));
+    controller.abort();
+
+    const newWrite = newSlot.set("new-credential");
+    await Promise.resolve();
+    expect(newStorage.encryptCalls).toBe(0);
+    releaseOldEncryption();
+
+    await expect(oldWrite).rejects.toMatchObject({ code: "storage-failed" });
+    await expect(newWrite).resolves.toMatchObject({
+      configured: true,
+      activePersistence: "os-backed"
+    });
+    expect(oldSlot.get()).toBeNull();
+    expect(newSlot.get()).toBe("new-credential");
+    await expect(lstat(filePath)).resolves.toMatchObject({});
+
+    const reopened = createEncryptedSecretSlot({
+      safeStorage: newStorage,
+      platform: "darwin",
+      filePath
+    });
+    await expect(reopened.initialize()).resolves.toMatchObject({
+      configured: true,
+      activePersistence: "os-backed"
+    });
+    expect(reopened.get()).toBe("new-credential");
   });
 });
