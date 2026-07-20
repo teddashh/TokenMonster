@@ -18,6 +18,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@tokenmonster/monster-engine": "0.1.0",
     "zod": "4.4.3"
   }
 }

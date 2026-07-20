@@ -7,6 +7,8 @@ import {
 } from "@tokenmonster/monster-engine";
 import { describe, expect, it } from "vitest";
 
+import { PROGRESSION_CHARACTER_IDS } from "../src/index.js";
+
 const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
 const SOURCE_MAP_PATH = join(PACKAGE_ROOT, "ai-sister-source-map.json");
 const SOURCE_MAP_SCHEMA_PATH = join(
@@ -63,11 +65,13 @@ interface AiSisterSourceMap {
     storage: string;
     publicDelivery: string;
     objectPrefix: string;
-    manifestObject: string;
+    manifestObjectPattern: string;
+    packObjectPattern: string;
     manifestTrust: string;
     publisherRunsIn: string;
     tokenMonsterRole: string;
     downloadMode: string;
+    requestCardinality: string;
     objectImmutability: string;
     cachePolicy: string;
     integrity: string;
@@ -412,7 +416,7 @@ describe("AI-Sister repository-only source map", () => {
     ).not.toEqual([]);
 
     const wrongInventory = structuredClone(sourceMap);
-    wrongInventory.wardrobe.externalCandidateBank.observedCounts.personas = 11;
+    wrongInventory.wardrobe.externalCandidateBank.observedCounts.personas = 10;
     expect(
       validateJsonSchema(wrongInventory, sourceMapSchema, sourceMapSchema),
     ).not.toEqual([]);
@@ -451,12 +455,14 @@ describe("AI-Sister repository-only source map", () => {
     for (const character of sourceMap.characters) {
       expect(character.externalWardrobe.sourceKey).toBe(character.sourceId);
       expect(character.displayName.length).toBeGreaterThan(0);
-      if (character.kind === "sister") {
-        expect(character.tokenMonsterCharacterId).toBe(character.sourceId);
-      } else {
-        expect(character.tokenMonsterCharacterId).toBeNull();
-      }
+      expect(character.tokenMonsterCharacterId).toBe(character.sourceId);
     }
+
+    expect(
+      sourceMap.characters.map(
+        ({ tokenMonsterCharacterId }) => tokenMonsterCharacterId,
+      ),
+    ).toEqual(PROGRESSION_CHARACTER_IDS.filter((id) => id !== "reserved"));
 
     expect(
       sourceMap.characters
@@ -464,10 +470,10 @@ describe("AI-Sister repository-only source map", () => {
           ({ externalWardrobe }) => externalWardrobe.coverage === "missing",
         )
         .map(({ sourceId }) => sourceId),
-    ).toEqual(["glm"]);
+    ).toEqual([]);
   });
 
-  it("keeps starter selection local, explainable, overridable, and non-progressive", () => {
+  it("keeps first-run starter selection explicit, local, and progression-safe", () => {
     expect(sorted(sourceMap.starterSelection.availableCharacterIds)).toEqual(
       sorted(MONSTER_CHARACTER_IDS_V1),
     );
@@ -478,16 +484,16 @@ describe("AI-Sister repository-only source map", () => {
       xai: "grok",
     });
     expect(sourceMap.starterSelection).toMatchObject({
-      window: "latest-28-utc-days",
-      signal: "local-provider-total-tokens",
-      rule: "unique-highest-positive-total",
+      window: "not-applicable",
+      signal: "explicit-player-choice",
+      rule: "choose-one-of-four",
       tieOutcome: "explicit-user-choice",
       noDataOutcome: "explicit-user-choice",
       manualOverride: "always",
       persistence: "local-preference-only",
       usedForProgression: true,
       leavesDevice: false,
-      adapterReadiness: "implemented-safe-provider-breakdown-projection",
+      adapterReadiness: "not-required-for-choice",
     });
   });
 
@@ -528,17 +534,17 @@ describe("AI-Sister repository-only source map", () => {
     );
   });
 
-  it("records the observed 10/20/200/600/200 bank without inventing GLM coverage", () => {
+  it("records the observed complete 11/20/220/660/220 bank including GLM", () => {
     const bank = sourceMap.wardrobe.externalCandidateBank;
     expect(bank.observedCounts).toEqual({
-      personas: 10,
+      personas: 11,
       themesPerPersona: 20,
-      outfits: 200,
-      reactionPoses: 600,
-      layeredPartSets: 200,
+      outfits: 220,
+      reactionPoses: 660,
+      layeredPartSets: 220,
     });
-    expect(new Set(bank.coveredPersonaIds).size).toBe(10);
-    expect(bank.coveredPersonaIds).not.toContain("glm");
+    expect(new Set(bank.coveredPersonaIds).size).toBe(11);
+    expect(bank.coveredPersonaIds).toContain("glm");
     expect(sorted(bank.coveredPersonaIds)).toEqual(
       sorted(
         sourceMap.characters
@@ -558,7 +564,8 @@ describe("AI-Sister repository-only source map", () => {
     const references = [
       sourceMap.source.externalCandidateLibrary.logicalRoot,
       sourceMap.cloudDelivery.objectPrefix,
-      sourceMap.cloudDelivery.manifestObject,
+      sourceMap.cloudDelivery.manifestObjectPattern,
+      sourceMap.cloudDelivery.packObjectPattern,
       ...sourceMap.characters.flatMap(({ trackedArt }) => [
         trackedArt.avatar,
         trackedArt.hero,
@@ -657,7 +664,8 @@ describe("AI-Sister repository-only source map", () => {
       manifestTrust: "release-embedded-approved-copy",
       publisherRunsIn: "ai-sister",
       tokenMonsterRole: "manifest-consumer-and-local-cache",
-      downloadMode: "on-demand",
+      downloadMode: "explicit-consent-single-fixed-pack",
+      requestCardinality: "one-get-independent-of-local-state",
       objectImmutability: "versioned-path-no-overwrite",
       cachePolicy: "content-addressed-local-cache",
       integrity: "sha256-per-object",
@@ -665,8 +673,11 @@ describe("AI-Sister repository-only source map", () => {
       networkFailureFallback: "tokenmonster-letter-avatar-v1",
       status: "planned-release-blocked",
     });
-    expect(sourceMap.cloudDelivery.manifestObject).toBe(
-      `${sourceMap.cloudDelivery.objectPrefix}/manifest.json`,
+    expect(sourceMap.cloudDelivery.manifestObjectPattern).toBe(
+      `${sourceMap.cloudDelivery.objectPrefix}/releases/{releaseId}/asset-release-manifest-v2.json`,
+    );
+    expect(sourceMap.cloudDelivery.packObjectPattern).toBe(
+      `${sourceMap.cloudDelivery.objectPrefix}/packs/{releaseId}/{packSha256}.zip`,
     );
     expect(sorted(sourceMap.cloudDelivery.initialRenderedAssetStates)).toEqual(
       sorted(sourceMap.wardrobe.externalCandidateBank.candidateAssetStates),
@@ -689,7 +700,7 @@ describe("AI-Sister repository-only source map", () => {
         "provider-brand-review",
         "content-rating-review",
         "reviewed-browser-renderer",
-        "optimized-lazy-asset-delivery",
+        "explicit-consent-fixed-pack-delivery",
       ]),
     );
 

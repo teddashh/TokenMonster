@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   PROGRESSION_ACTION_IDS,
   PROGRESSION_CHARACTER_IDS,
+  GLM_WARDROBE_LIFETIME_THRESHOLDS,
   PROGRESSION_MANIFEST,
   PROGRESSION_POSE_SET_IDS,
   PROGRESSION_PROVIDER_IDS,
@@ -35,7 +36,7 @@ function input(
   overrides: Partial<ProgressionInput> = {},
 ): ProgressionInput {
   return {
-    schemaVersion: "1",
+    schemaVersion: "2",
     evaluatedAt: EVALUATED_AT,
     dailyProviderBuckets,
     traitIds: [],
@@ -70,7 +71,7 @@ describe("progression manifest", () => {
   it("is versioned, local-only, non-purchasable, and schema-valid", () => {
     expect(ProgressionManifestSchema.parse(PROGRESSION_MANIFEST)).toBeDefined();
     expect(PROGRESSION_MANIFEST).toMatchObject({
-      schemaVersion: "1",
+      schemaVersion: "2",
       localOnly: true,
       monotonicUnlocks: true,
       purchasable: false,
@@ -116,6 +117,44 @@ describe("progression manifest", () => {
     expect(
       PROGRESSION_MANIFEST.characters.find(({ id }) => id === "venice")?.displayName,
     ).toBe("Llama");
+  });
+
+  it("keeps every non-GLM wardrobe on its exact provider and gives only GLM the v2 lifetime ladder", () => {
+    for (const definition of PROGRESSION_MANIFEST.characters) {
+      if (definition.id === "glm") {
+        expect(definition.wardrobeRule).toEqual({
+          signal: "lifetime-total",
+          thresholds: GLM_WARDROBE_LIFETIME_THRESHOLDS,
+        });
+      } else {
+        expect(definition.wardrobeRule).toEqual({
+          signal: "provider-cumulative-total",
+          providerId: definition.providerId,
+        });
+      }
+    }
+    expect(GLM_WARDROBE_LIFETIME_THRESHOLDS).toEqual([
+      5_000_000,
+      5_250_000,
+      5_500_000,
+      5_750_000,
+      6_000_000,
+      6_500_000,
+      7_000_000,
+      7_500_000,
+      8_000_000,
+      9_000_000,
+      10_000_000,
+      11_000_000,
+      12_000_000,
+      13_500_000,
+      15_000_000,
+      17_000_000,
+      19_000_000,
+      22_000_000,
+      25_000_000,
+      30_000_000,
+    ]);
   });
 
   it("rejects non-allowlisted content-bearing inputs", () => {
@@ -179,15 +218,11 @@ describe("evaluateProgression", () => {
     expect(character(state, "claude").unlocked).toBe(true);
   });
 
-  it("auto-selects and unlocks the unique highest positive sister", () => {
+  it("unlocks from historical use without choosing a starter for the player", () => {
     const state = evaluateProgression(
       input([bucket("2026-07-16", { google: 25, openai: 10 })]),
     );
-    expect(state.selection).toEqual({
-      characterId: "gemini",
-      selectedBy: "unique-provider-total",
-      selectedAt: EVALUATED_AT,
-    });
+    expect(state.selection).toBeNull();
     expect(character(state, "gemini")).toMatchObject({
       unlocked: true,
       unlockedAt: EVALUATED_AT,
@@ -321,6 +356,111 @@ describe("evaluateProgression", () => {
     expect(politics).toMatchObject({
       fastTrackedByTrait: false,
       unlocked: false,
+    });
+  });
+
+  it("preserves the existing provider-cumulative wardrobe thresholds exactly", () => {
+    const beforeFinance = character(
+      evaluateProgression(input([bucket("2026-07-16", { openai: 4_999 })])),
+      "chatgpt",
+    );
+    expect(beforeFinance.themes.filter(({ unlocked }) => unlocked).map(({ themeId }) => themeId)).toEqual([
+      "tech",
+    ]);
+
+    const atFinance = character(
+      evaluateProgression(input([bucket("2026-07-16", { openai: 5_000 })])),
+      "chatgpt",
+    );
+    expect(atFinance.themes.filter(({ unlocked }) => unlocked).map(({ themeId }) => themeId)).toEqual([
+      "tech",
+      "finance",
+    ]);
+    expect(atFinance.themes[1]!.progress.explanation).toBe(
+      "本機 openai 已達第 2 階，解鎖 finance 主題。",
+    );
+  });
+
+  it("unlocks GLM and only its first lifetime theme at exactly five million", () => {
+    const before = character(
+      evaluateProgression(
+        input([bucket("2026-07-16", { openai: 4_999_999 })]),
+      ),
+      "glm",
+    );
+    expect(before.unlocked).toBe(false);
+    expect(before.themes.every(({ unlocked }) => !unlocked)).toBe(true);
+
+    const atUnlock = character(
+      evaluateProgression(input([bucket("2026-07-16", { openai: 5_000_000 })])),
+      "glm",
+    );
+    expect(atUnlock.unlocked).toBe(true);
+    expect(atUnlock.themes.filter(({ unlocked }) => unlocked).map(({ themeId }) => themeId)).toEqual([
+      "tech",
+    ]);
+    expect(atUnlock.themes[1]!.progress).toEqual({
+      value: 5_000_000 / 5_250_000,
+      explanation:
+        "本機累積總用量已達 5,000,000 tokens，再 250,000 tokens 即可解鎖 GLM 的 finance 主題。",
+    });
+  });
+
+  it("advances GLM through the explicit next lifetime thresholds without mass unlock", () => {
+    for (const [index, threshold] of GLM_WARDROBE_LIFETIME_THRESHOLDS.entries()) {
+      const glm = character(
+        evaluateProgression(
+          input([bucket("2026-07-16", { openai: threshold })]),
+        ),
+        "glm",
+      );
+      expect(glm.themes.filter(({ unlocked }) => unlocked).map(({ themeId }) => themeId)).toEqual(
+        WARDROBE_THEME_IDS.slice(0, index + 1),
+      );
+    }
+  });
+
+  it("never fast-tracks a GLM theme below character unlock or more than one tier", () => {
+    const beforeUnlock = character(
+      evaluateProgression(
+        input([bucket("2026-07-16", { openai: 4_999_999 })], {
+          traitIds: ["cache-savvy"],
+        }),
+      ),
+      "glm",
+    );
+    expect(beforeUnlock.themes.every(({ unlocked }) => !unlocked)).toBe(true);
+
+    const atUnlock = character(
+      evaluateProgression(
+        input([bucket("2026-07-16", { openai: 5_000_000 })], {
+          traitIds: ["cache-savvy"],
+        }),
+      ),
+      "glm",
+    );
+    expect(atUnlock.themes.filter(({ unlocked }) => unlocked).map(({ themeId }) => themeId)).toEqual([
+      "tech",
+      "finance",
+    ]);
+  });
+
+  it("preserves a previously persisted GLM theme and its original timestamp after v2", () => {
+    const persistedAt = "2026-07-15T08:00:00.000Z";
+    const state = evaluateProgression(
+      input([], {
+        persistedUnlockedAt: { "theme:glm:festival": persistedAt },
+      }),
+    );
+    expect(
+      character(state, "glm").themes.find(({ themeId }) => themeId === "festival"),
+    ).toMatchObject({
+      unlocked: true,
+      unlockedAt: persistedAt,
+      progress: {
+        value: 1,
+        explanation: "GLM 的 festival 主題 已解鎖；本機解鎖不會倒退。",
+      },
     });
   });
 

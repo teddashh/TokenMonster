@@ -62,7 +62,8 @@ function makeLegacyManifest(
         mediaType: "image/webp",
         dimensions: { width: 208, height: 208 },
         contentRating: "sfw-character-portrait",
-        licenseStatus: status === "approved" ? "approved" : "pending-owner-grant",
+        licenseStatus:
+          status === "approved" ? "approved" : "pending-owner-grant",
         brandReview: status === "approved" ? "approved" : "required",
         releaseStatus: status,
       },
@@ -80,8 +81,11 @@ function makeDerivation(): MonsterDerivationV1 {
       to: "2026-07-15",
       timezone: "America/New_York",
     },
+    latestDayCompleteness: "complete",
     days: Array.from({ length: 28 }, (_, index) => ({
-      localDate: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+      localDate: new Date(start + index * 86_400_000)
+        .toISOString()
+        .slice(0, 10),
       coverage: "observed" as const,
       aggregates: [
         {
@@ -120,6 +124,43 @@ describe("character catalog", () => {
     expect(CHARACTER_IDS).toEqual(["chatgpt", "claude", "gemini", "grok"]);
     expect(listCharacters().map(({ id }) => id)).toEqual(CHARACTER_IDS);
     expect(new Set(listCharacters().map(({ id }) => id)).size).toBe(4);
+  });
+
+  it("owns the four starter aliases and provider-neutral zh-TW personality taglines", () => {
+    expect(
+      listCharacters().map(({ id, alias, tagline }) => ({
+        id,
+        alias,
+        taglineZhTw: tagline["zh-TW"],
+      })),
+    ).toEqual([
+      {
+        id: "chatgpt",
+        alias: "Aster",
+        taglineZhTw: "沉著務實，會把選項整理清楚，陪你照自己的步調決定。",
+      },
+      {
+        id: "claude",
+        alias: "Cedar",
+        taglineZhTw: "溫柔細膩，願意留白，也陪你慢慢想清楚每個細節。",
+      },
+      {
+        id: "gemini",
+        alias: "Mira",
+        taglineZhTw: "好奇敏銳，喜歡發現日常模式，從不替你的節奏打分。",
+      },
+      {
+        id: "grok",
+        alias: "Rook",
+        taglineZhTw: "直率活潑，帶點玩心，給你輕快但不催促的陪伴。",
+      },
+    ]);
+    for (const character of listCharacters()) {
+      expect(Object.isFrozen(character.tagline)).toBe(true);
+      expect(character.tagline["zh-TW"]).not.toMatch(
+        /OpenAI|ChatGPT|Anthropic|Claude|Google|Gemini|xAI|Grok/iu,
+      );
+    }
   });
 
   it("describes every persona as provider-inspired and independent", () => {
@@ -223,7 +264,10 @@ describe("offline fixed-line engine", () => {
   it("has versioned copy for every character, locale, trigger, and tone variant", () => {
     const lines = listFixedLineDefinitions();
     expect(lines).toHaveLength(
-      CHARACTER_IDS.length * FIXED_LINE_LOCALES.length * FIXED_LINE_TRIGGERS.length * 3,
+      CHARACTER_IDS.length *
+        FIXED_LINE_LOCALES.length *
+        FIXED_LINE_TRIGGERS.length *
+        3,
     );
     for (const characterId of CHARACTER_IDS) {
       for (const locale of FIXED_LINE_LOCALES) {
@@ -242,7 +286,9 @@ describe("offline fixed-line engine", () => {
           for (const line of matching) {
             expect(line.schemaVersion).toBe(FIXED_LINE_SCHEMA_VERSION);
             expect(line.contentVersion).toBe(FIXED_LINE_CONTENT_VERSION);
-            expect(FixedLineDefinitionSchema.safeParse(line).success).toBe(true);
+            expect(FixedLineDefinitionSchema.safeParse(line).success).toBe(
+              true,
+            );
             expect(line.contentRating).toBe(FIXED_LINE_CONTENT_RATING);
             expect(line.provenance).toEqual({
               kind: "tokenmonster-original-copy",
@@ -300,7 +346,9 @@ describe("offline fixed-line engine", () => {
     expect(resolveFixedLineLocale("zh_TW")).toBe("zh-TW");
     expect(resolveFixedLineLocale("en-US")).toBe("en");
     expect(resolveFixedLineLocale("fr-CA")).toBe("en");
-    expect(selectFixedLine({ ...BASE_SELECTION_INPUT, locale: "fr-CA" }).locale).toBe("en");
+    expect(
+      selectFixedLine({ ...BASE_SELECTION_INPUT, locale: "fr-CA" }).locale,
+    ).toBe("en");
   });
 
   it("returns the declared trigger cooldown metadata", () => {
@@ -329,11 +377,15 @@ describe("offline fixed-line engine", () => {
   );
 
   it("rejects non-engine moods, traits, and unsafe triggers", () => {
-    expect(() => selectFixedLine({ ...BASE_SELECTION_INPUT, mood: "active" })).toThrow();
+    expect(() =>
+      selectFixedLine({ ...BASE_SELECTION_INPUT, mood: "active" }),
+    ).toThrow();
     expect(() =>
       selectFixedLine({ ...BASE_SELECTION_INPUT, traits: ["focused"] }),
     ).toThrow();
-    expect(() => selectFixedLine({ ...BASE_SELECTION_INPUT, trigger: "buy-more" })).toThrow();
+    expect(() =>
+      selectFixedLine({ ...BASE_SELECTION_INPUT, trigger: "buy-more" }),
+    ).toThrow();
   });
 
   it("contains no shame, billing claim, or consumption incentive canaries", () => {
@@ -360,9 +412,12 @@ describe("monster-engine composition", () => {
       traits: derivation.state.traits.map((trait) => trait.id),
     };
 
-    expect(readonlyTraitViewFromMonsterDerivation(derivation)).toEqual(expectedView);
+    expect(readonlyTraitViewFromMonsterDerivation(derivation)).toEqual(
+      expectedView,
+    );
     expect(
-      createCharacterPresentationFromMonsterDerivation("gemini", derivation).traitView,
+      createCharacterPresentationFromMonsterDerivation("gemini", derivation)
+        .traitView,
     ).toEqual(expectedView);
     expect(
       selectFixedLineFromMonsterDerivation(

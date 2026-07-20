@@ -49,11 +49,13 @@
         "storage",
         "publicDelivery",
         "objectPrefix",
-        "manifestObject",
+        "manifestObjectPattern",
+        "packObjectPattern",
         "manifestTrust",
         "publisherRunsIn",
         "tokenMonsterRole",
         "downloadMode",
+        "requestCardinality",
         "objectImmutability",
         "cachePolicy",
         "integrity",
@@ -67,13 +69,21 @@
         "storage": { "const": "cloudflare-r2" },
         "publicDelivery": { "const": "ai-sister-cdn" },
         "objectPrefix": { "$ref": "#/$defs/relativeReference" },
-        "manifestObject": { "$ref": "#/$defs/relativeReference" },
+        "manifestObjectPattern": {
+          "const": "tokenmonster/characters/v1/releases/{releaseId}/asset-release-manifest-v2.json"
+        },
+        "packObjectPattern": {
+          "const": "tokenmonster/characters/v1/packs/{releaseId}/{packSha256}.zip"
+        },
         "manifestTrust": { "const": "release-embedded-approved-copy" },
         "publisherRunsIn": { "const": "ai-sister" },
         "tokenMonsterRole": {
           "const": "manifest-consumer-and-local-cache"
         },
-        "downloadMode": { "const": "on-demand" },
+        "downloadMode": { "const": "explicit-consent-single-fixed-pack" },
+        "requestCardinality": {
+          "const": "one-get-independent-of-local-state"
+        },
         "objectImmutability": { "const": "versioned-path-no-overwrite" },
         "cachePolicy": { "const": "content-addressed-local-cache" },
         "integrity": { "const": "sha256-per-object" },
@@ -167,9 +177,9 @@
             "xai": { "const": "grok" }
           }
         },
-        "window": { "const": "latest-28-utc-days" },
-        "signal": { "const": "local-provider-total-tokens" },
-        "rule": { "const": "unique-highest-positive-total" },
+        "window": { "const": "not-applicable" },
+        "signal": { "const": "explicit-player-choice" },
+        "rule": { "const": "choose-one-of-four" },
         "tieOutcome": { "const": "explicit-user-choice" },
         "noDataOutcome": { "const": "explicit-user-choice" },
         "manualOverride": { "const": "always" },
@@ -177,7 +187,7 @@
         "usedForProgression": { "const": true },
         "leavesDevice": { "const": false },
         "adapterReadiness": {
-          "const": "implemented-safe-provider-breakdown-projection"
+          "const": "not-required-for-choice"
         }
       }
     },
@@ -269,8 +279,8 @@
             },
             "coveredPersonaIds": {
               "type": "array",
-              "minItems": 10,
-              "maxItems": 10,
+              "minItems": 11,
+              "maxItems": 11,
               "uniqueItems": true,
               "items": { "$ref": "#/$defs/sourceId" }
             },
@@ -292,11 +302,11 @@
                 "layeredPartSets"
               ],
               "properties": {
-                "personas": { "const": 10 },
+                "personas": { "const": 11 },
                 "themesPerPersona": { "const": 20 },
-                "outfits": { "const": 200 },
-                "reactionPoses": { "const": 600 },
-                "layeredPartSets": { "const": 200 }
+                "outfits": { "const": 220 },
+                "reactionPoses": { "const": 660 },
+                "layeredPartSets": { "const": 220 }
               }
             },
             "relativePathTemplates": {
@@ -398,7 +408,7 @@
               "provider-brand-review",
               "content-rating-review",
               "reviewed-browser-renderer",
-              "optimized-lazy-asset-delivery",
+              "explicit-consent-fixed-pack-delivery",
               "ai-sister-r2-publisher-and-cache-smoke"
             ]
           }
@@ -499,7 +509,19 @@
         "displayName": { "type": "string", "minLength": 1 },
         "kind": { "enum": ["sister", "friend"] },
         "tokenMonsterCharacterId": {
-          "enum": ["chatgpt", "claude", "gemini", "grok", null]
+          "enum": [
+            "chatgpt",
+            "claude",
+            "gemini",
+            "grok",
+            "deepseek",
+            "qwen",
+            "mistral",
+            "venice",
+            "sakana",
+            "perplexity",
+            "glm"
+          ]
         },
         "heroThemeId": {
           "enum": [
@@ -535,7 +557,7 @@
               "uniqueItems": true,
               "items": {
                 "type": "string",
-                "pattern": "^server/persona-refs/[A-Za-z0-9.-]+\\.png$"
+                "pattern": "^server/persona-refs/[A-Za-z0-9._-]+\\.png$"
               }
             }
           }

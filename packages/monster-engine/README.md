@@ -15,6 +15,7 @@ The runtime schema accepts only:
 - observed/unavailable day coverage;
 - allowlisted provider, coarse model-family, and tool dimensions;
 - canonical decimal token components; and
+- an engine-only `latestDayCompleteness` authority; and
 - optional `localHourlyRhythm` totals with explicit wall-clock/DST quality.
 
 All Zod objects are strict. Prompts, responses, filenames, paths, projects,
@@ -23,8 +24,12 @@ field in this contract and are rejected if present. Model families are a closed
 registry matching the normalized tokscale adapter outputs; raw model strings
 are rejected. Provider/model-family combinations are also checked.
 
-`DailyContentBlindFootprintV1` deliberately has no hourly member. The extended
-`ContentBlindFootprintV1` adds `localHourlyRhythm` for the local companion only.
+`DailyContentBlindFootprintV1` deliberately has neither an hourly member nor
+authority to claim that the queried UTC day has ended. The extended
+`ContentBlindFootprintV1` requires `latestDayCompleteness` and may add
+`localHourlyRhythm` for the local companion only. The gateway supplies
+`partial` for its current-UTC-day window; the adapter cannot promote a missing
+or zero row into a complete zero-use observation.
 Neither type is the cloud upload wire format: cloud code must use the strict
 `IngestSnapshotV1` contract from `@tokenmonster/contracts`, which never contains
 hour, timezone, or character data.
@@ -48,8 +53,11 @@ A ready identity requires at least 14 observed days and 7 active days. Below
 either gate, the engine returns `identityStatus: "learning"`, no asserted
 traits, and banded explanations.
 
-Ready identities contain two or three allowlisted traits. The base dimensions
-describe tool surface and provider concentration/diversity. At most one
+Ready identities contain one to three allowlisted traits. Tool shape is eligible
+when its dimensions are attested; catch-all `other` tool data cannot invent a
+specific tool trait. Provider concentration/diversity is included only when
+every token in the footprint has a non-`other`, attested provider; partial or
+wholly unavailable provider evidence emits no new provider trait. At most one
 additional cache, output, or local-night pattern is selected by deterministic
 threshold margin. The v0.1 families include:
 
@@ -59,19 +67,33 @@ threshold margin. The v0.1 families include:
 - `balanced` as the provider-distribution fallback.
 
 The first ready profile and a learning-to-ready transition may establish the
-complete two-or-three-trait identity. After that, a contiguous next-local-day
+complete one-to-three-trait identity. After that, a contiguous next-local-day
 derivation changes at most one ordered trait slot. Remaining candidate changes
 are held with allowlisted explanations and
 `identityContinuity.provisional: true`; successive daily windows converge one
-slot at a time. A correction or recomputation for the same 28-day window keeps
-the prior identity exactly and emits `no-change`, never a weekly review.
-If a ready profile temporarily falls below the rolling coverage gate, its main
-traits are likewise held provisionally instead of disappearing all at once;
-the coverage band and explanations still disclose that the current evidence is
-insufficient.
+slot at a time. Convergence compares the full prior unique trait list with the
+candidate list. If the desired trait already exists in a later slot, the engine
+removes the obsolete current slot as the one daily edit instead of creating a
+duplicate or silently compacting several traits. Partial tool/provider evidence
+loss therefore converges deterministically and emits an identity shift whenever
+the visible list changes. A correction or recomputation for the same 28-day
+window keeps the prior identity exactly and emits `no-change`, never a weekly
+review.
+
+If a ready profile has no currently supportable trait candidate, its main traits
+are held provisionally instead of disappearing all at once; the coverage band
+and explanations still disclose the available evidence quality. This complete
+evidence-loss grace lasts for at most seven consecutive local calendar dates,
+including the first insufficient date. If evidence has not recovered on the
+eighth date, the profile returns to `learning` with no asserted traits.
+Recovering any supportable candidate clears the complete-loss grace immediately
+and resumes one-edit-per-day convergence; a later complete evidence loss starts
+a new grace period.
 
 State carries versioned continuity metadata with the provisional flag and the
-last identity review date. A previous state is accepted only for the same
+last identity review date. While evidence-loss grace is active,
+`evidenceLossStartedDate` records its first local date and does not move forward
+on successive daily windows. A previous state is accepted only for the same
 timezone and either the same window or its immediately preceding contiguous
 local-day window. Future, gapped, differently zoned, wrong-version, and
 otherwise malformed prior states fail closed instead of influencing identity.
@@ -90,11 +112,13 @@ does not alter identity, mood, evolution, or explanations. Selecting a different
 
 ## Mood, evolution, and explanations
 
-Mood compares the latest observed local day with the user's own observed prior
-days. Unavailable days do not become zero-usage days and do not enter the
-baseline. If the latest day is unavailable, mood is `unknown`. Cosmetic energy
-is one of `dormant`, `low`, `medium`, or `high`; it is capped and never grants
-power, rarity, levels, unlocks, permissions, or ranking.
+Mood compares the latest complete local day with the user's own observed prior
+days. When the newest bucket is explicitly `partial`, that bucket is excluded
+from both the reference and baseline, so the immediately preceding complete
+day drives mood. Unavailable days do not become zero-usage days and do not
+enter the baseline. If that reference day is unavailable, mood is `unknown`.
+Cosmetic energy is one of `dormant`, `low`, `medium`, or `high`; it is capped
+and never grants power, rarity, levels, unlocks, permissions, or ranking.
 
 Evolution uses event cadence for initial coverage, coverage completion, or a
 trait-structure change. Unchanged daily and same-window results use explicit
@@ -111,7 +135,7 @@ or inferred task labels such as debug or research.
 
 ```ts
 deriveMonsterState(footprint, previousStateOrNull, {
-  engineVersion: "0.1.0"
+  engineVersion: "0.1.5",
 });
 ```
 

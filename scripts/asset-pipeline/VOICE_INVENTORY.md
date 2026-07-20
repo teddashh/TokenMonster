@@ -3,7 +3,8 @@
 Inventory date: 2026-07-16. This was a read-only scan of
 `/home/ted-h/voice-lab/video-mvp/`. Counts describe candidates, not approved
 TokenMonster voice assets. No audio was copied and no spoken text was recorded
-here.
+here. It is a historical source-bank inventory, not a statement about the
+current runtime integrity manifest or public rights approval.
 
 ## Structured reaction bank
 
@@ -23,7 +24,8 @@ here.
 
 This is the closest format match for the planned TokenMonster voice manifest,
 but its row schema is not directly compatible: TokenMonster still needs stable
-line IDs, one of the three state triggers, and integer `durationMs` values.
+line IDs, one of the five triggers (`greeting`, `unlock`, `quiet`, `active`,
+`error`), and integer `durationMs` values.
 
 ## Persona-named audio banks
 
@@ -41,13 +43,28 @@ line IDs, one of the three state triggers, and integer `durationMs` values.
   workspaces and should be excluded.
 
 The scan found no persona-named voice candidates for DeepSeek, Qwen, Mistral,
-Venice, Sakana, or Perplexity at these top levels. Generic host, music, SFX,
+Venice, Sakana, Perplexity, or GLM at these top levels. Generic host, music, SFX,
 slow-audio, probe, and reel output directories exist but are not mapped to the
 ten-character roster and were not counted as v1 character lines.
+
+## Current runtime integrity snapshot
+
+`packages/characters/src/approved-manifest.json` currently references 10 voice
+groups with five WAV lines each (50 unique WAV objects, 6,107,964 bytes total,
+manifest durations 1,347–4,319 ms). GLM has no voice entry. Those schema-v1
+rows contain object integrity, trigger, and duration fields only; they do not
+carry locale, spoken-content review, speaker/clone provenance, consent, grant,
+license scope, brand review, or release status. Repository metadata about
+listening or loudness is not enforced by the schema or pipeline. Presence in
+this runtime integrity manifest must not be read as public rights approval.
+
+The optional `--voice-dir` builder path accepts only reviewed
+`<persona>__<trigger>.wav` staging files that satisfy its strict PCM contract.
+It no longer always emits `voice: []`, but it also does not perform the missing
+rights/content review.
 
 ## Selection notes
 
 Before any voice line is adopted, the owner should confirm voice and content
 rights, brand review, state-trigger semantics, the intended current object for
 each row, and whether unreferenced or generated-workspace files are rejects.
-The v1 asset builder therefore emits `voice: []`.

@@ -36,6 +36,7 @@ const PERSONAS = [
   "venice",
   "sakana",
   "perplexity",
+  "glm",
 ];
 const THEMES = [
   "tech",
@@ -71,6 +72,7 @@ const VOICE_PERSONAS = [
   "venice",
   "sakana",
   "perplexity",
+  "glm",
 ];
 const VOICE_CHARACTER_IDS = {
   openai: "chatgpt",
@@ -83,6 +85,7 @@ const VOICE_CHARACTER_IDS = {
   venice: "venice",
   sakana: "sakana",
   perplexity: "perplexity",
+  glm: "glm",
 };
 const VOICE_FILENAME_PATTERN = /^([a-z0-9]+)__([a-z0-9]+)\.wav$/u;
 const MAX_VOICE_FILE_BYTES = 400_000;
@@ -211,9 +214,17 @@ function probeEncoder(allowPngPassthrough) {
   const output = `${encoders.stdout ?? ""}\n${encoders.stderr ?? ""}`;
   if (encoders.status === 0 && /\blibwebp\b/u.test(output)) {
     const version = run("ffmpeg", ["-hide_banner", "-version"]);
+    const versionLine = (version.stdout ?? "").split("\n", 1)[0] ?? "";
+    const versionMatch = /^ffmpeg version ([A-Za-z0-9][A-Za-z0-9._+-]*)/u.exec(
+      versionLine,
+    );
+    if (version.status !== 0 || versionMatch === null) {
+      throw new Error("Could not determine the exact ffmpeg tool version");
+    }
     return {
       encoder: "webp",
-      ffmpegVersion: (version.stdout ?? "").split("\n", 1)[0] || "ffmpeg-unknown",
+      ffmpegVersion: versionLine,
+      ffmpegToolVersion: versionMatch[1],
       warning: null,
     };
   }
@@ -225,6 +236,7 @@ function probeEncoder(allowPngPassthrough) {
   return {
     encoder: "png-passthrough",
     ffmpegVersion: null,
+    ffmpegToolVersion: null,
     warning:
       "ffmpeg with the libwebp encoder was not found; using PNG passthrough objects.",
   };
@@ -997,6 +1009,7 @@ async function main() {
     schemaVersion: "1",
     builtAt: new Date().toISOString(),
     encoder: encoderProbe.encoder,
+    encoderVersion: encoderProbe.ffmpegToolVersion,
     warnings,
     selection: {
       personas: options.personas,

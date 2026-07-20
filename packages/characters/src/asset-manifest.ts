@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  WARDROBE_THEME_IDS,
+  WardrobeThemeIdSchema,
+} from "./progression.js";
+
 export const ASSET_MANIFEST_SCHEMA_VERSION = "1" as const;
 
 export const ASSET_CHARACTER_IDS = [
@@ -13,6 +18,7 @@ export const ASSET_CHARACTER_IDS = [
   "venice",
   "sakana",
   "perplexity",
+  "glm",
 ] as const;
 
 export const ASSET_STATE_TRIGGERS = [
@@ -90,7 +96,7 @@ const ImageObjectRefSchema = ObjectRefSchema.refine(
 
 const ThemeSchema = z
   .object({
-    themeId: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u),
+    themeId: WardrobeThemeIdSchema,
     outfit: ImageObjectRefSchema,
     poses: z
       .object({
@@ -106,7 +112,7 @@ const CharacterAssetsSchema = z
   .object({
     characterId: AssetCharacterIdSchema,
     avatar: ImageObjectRefSchema,
-    themes: z.array(ThemeSchema).max(32),
+    themes: z.array(ThemeSchema).max(WARDROBE_THEME_IDS.length),
   })
   .strict()
   .superRefine((character, context) => {
@@ -122,7 +128,7 @@ const CharacterAssetsSchema = z
 
 const VoiceLineSchema = z
   .object({
-    id: z.string().regex(/^[a-z0-9]+(?:[/-][a-z0-9]+)*$/u),
+    id: z.string().max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u),
     trigger: AssetVoiceTriggerSchema,
     object: ObjectRefSchema,
     durationMs: z.number().int().min(1).max(30_000),
