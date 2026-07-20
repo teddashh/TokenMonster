@@ -9,6 +9,12 @@ export {
   TokenMonsterCliError,
   type TokenMonsterCliErrorCode
 } from "./errors.js";
+export {
+  TOKENMONSTER_CONTRIBUTION_API_ORIGIN,
+  createCliContributionRuntime,
+  type CliContributionRuntime,
+  type CliContributionRuntimeOptions,
+} from "./contribution-host.js";
 export type {
   RunTokenMonsterOptions,
   TokenMonsterCliDependencies,
