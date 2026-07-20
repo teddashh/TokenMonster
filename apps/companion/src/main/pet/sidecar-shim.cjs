@@ -39,7 +39,17 @@ function exitWhenFlushed(code) {
   );
 }
 
-async function runVerifiedVersion(run, cliArguments) {
+function loadCliRun(entry) {
+  // Same resolution the pinned bin/tracker.js performs (`../src/cli`),
+  // anchored to the entry path the runtime already validated.
+  const { run } = createRequire(entry)("../src/cli");
+  if (typeof run !== "function") {
+    throw new Error("sidecar-shim: tokentracker-cli did not export run()");
+  }
+  return run;
+}
+
+async function runVerifiedVersion(guardPath, entry, cliArguments) {
   const expected = Buffer.from(`v${PINNED_TRACKER_VERSION}\n`, "utf8");
   const chunks = [];
   let observedBytes = 0;
@@ -84,10 +94,14 @@ async function runVerifiedVersion(run, cliArguments) {
     return true;
   };
   process.exit = function rejectNestedExit() {
+    invalid = true;
     throw new Error("sidecar-shim: version command attempted direct exit");
   };
 
   try {
+    require(guardPath);
+    const run = loadCliRun(entry);
+    debug("cli resolved, invoking verified version run()");
     await run(cliArguments);
   } finally {
     process.stdout.write = originalWrite;
@@ -107,22 +121,17 @@ async function main() {
   if (typeof guardPath !== "string" || guardPath.length === 0) {
     throw new Error("sidecar-shim: missing network guard path");
   }
-  require(guardPath);
   const entry = process.argv[3];
   if (typeof entry !== "string" || entry.length === 0) {
     throw new Error("sidecar-shim: missing tracker entry path");
   }
-  // Same resolution the pinned bin/tracker.js performs (`../src/cli`),
-  // anchored to the entry path the runtime already validated.
-  const { run } = createRequire(entry)("../src/cli");
-  if (typeof run !== "function") {
-    throw new Error("sidecar-shim: tokentracker-cli did not export run()");
-  }
   const cliArguments = process.argv.slice(4);
-  debug("cli resolved, invoking run()");
   if (cliArguments.length === 1 && cliArguments[0] === "--version") {
-    return runVerifiedVersion(run, cliArguments);
+    return runVerifiedVersion(guardPath, entry, cliArguments);
   }
+  require(guardPath);
+  const run = loadCliRun(entry);
+  debug("cli resolved, invoking run()");
   await run(cliArguments);
   return 0;
 }

@@ -8,6 +8,8 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PINNED_TOKEN_TRACKER_VERSION } from "@tokenmonster/token-tracker-runtime";
 
+import { UTILITY_VERSION_VERIFIED_EXIT_CODE } from "../src/main/pet/sidecar.js";
+
 const execFileAsync = promisify(execFile);
 
 const shimPath = fileURLToPath(
@@ -80,7 +82,7 @@ describe("sidecar shim", () => {
         "      return;",
         "    }",
         "    if (args.length === 1 && args[0] === '--version') {",
-        "      if (process.env.TOKENMONSTER_TEST_DIRECT_VERSION_EXIT === '1') process.exit(42);",
+        `      if (process.env.TOKENMONSTER_TEST_DIRECT_VERSION_EXIT === '1') process.exit(${UTILITY_VERSION_VERIFIED_EXIT_CODE});`,
         `      console.log('v' + (process.env.TOKENMONSTER_TEST_VERSION ?? '${PINNED_TOKEN_TRACKER_VERSION}'));`,
         "      return;",
         "    }",
@@ -123,7 +125,11 @@ describe("sidecar shim", () => {
       trackerEntry,
       "--version"
     ]);
-    expect(result).toEqual({ code: 42, stdout: "", stderr: "" });
+    expect(result).toEqual({
+      code: UTILITY_VERSION_VERIFIED_EXIT_CODE,
+      stdout: "",
+      stderr: ""
+    });
   });
 
   it("rejects drift, overflow, and a nested direct exit during the version probe", async () => {
