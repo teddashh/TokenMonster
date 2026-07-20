@@ -41,17 +41,13 @@ async function sha256File(path) {
   return hash.digest("hex");
 }
 
-function verifyPublicTarballInventory(path) {
-  const result = spawnSync("tar", ["-tzf", path], {
-    encoding: "utf8",
-    maxBuffer: MAX_TAR_LISTING_BYTES,
-    windowsHide: true,
-  });
-  if (result.status !== 0 || typeof result.stdout !== "string") {
+export function verifyPublicTarballEntries(entries) {
+  if (
+    !Array.isArray(entries) ||
+    entries.some((entry) => typeof entry !== "string")
+  ) {
     fail("release tarball inventory could not be read");
   }
-  const entries = result.stdout.split(/\r?\n/u);
-  if (entries.at(-1) === "") entries.pop();
   if (entries.length < 2 || entries.length > MAX_TAR_ENTRIES) {
     fail("release tarball inventory has an invalid size");
   }
@@ -92,6 +88,20 @@ function verifyPublicTarballInventory(path) {
   if (!seen.has("package/"))
     fail("release tarball has no canonical package root");
   return Object.freeze({ entryCount: entries.length, entries: seen });
+}
+
+function verifyPublicTarballInventory(path) {
+  const result = spawnSync("tar", ["-tzf", path], {
+    encoding: "utf8",
+    maxBuffer: MAX_TAR_LISTING_BYTES,
+    windowsHide: true,
+  });
+  if (result.status !== 0 || typeof result.stdout !== "string") {
+    fail("release tarball inventory could not be read");
+  }
+  const entries = result.stdout.split(/\r?\n/u);
+  if (entries.at(-1) === "") entries.pop();
+  return verifyPublicTarballEntries(entries);
 }
 
 function verifyReleaseZstdAuthority(path, inventory) {

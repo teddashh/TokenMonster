@@ -215,6 +215,12 @@ export function buildTokenTrackerEnvironment(
   environment["TOKENTRACKER_SKIP_FIRST_SYNC"] = "1";
   environment["TOKENTRACKER_AUTO_RETRY_NO_SPAWN"] = "1";
   environment["TOKENTRACKER_NO_STAR_PROMPT"] = "1";
+  // The managed sidecar must not discover or inherit a system proxy. On
+  // macOS the public bin otherwise invokes `scutil --proxy`; the installed
+  // child-process guard correctly blocks that command, so startup would fail
+  // before the loopback server announces its URL. Mark discovery complete
+  // while still dropping every proxy variable.
+  environment["TOKENTRACKER_PROXY_ENV_APPLIED"] = "1";
   environment["NO_COLOR"] = "1";
   environment["PATH"] = NO_EXTERNAL_COMMAND_PATH;
   delete environment["PATHEXT"];
