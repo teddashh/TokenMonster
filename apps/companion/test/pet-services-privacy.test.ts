@@ -1,15 +1,30 @@
 import { join } from "node:path";
 
 import { createMemorySecretSlot } from "@tokenmonster/secret-vault";
+import { TokenTrackerRuntimeError } from "@tokenmonster/token-tracker-runtime";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   PET_CHARACTER_CDN_BASE_URL,
+  PetStartupError,
   createPetCharacterOptions,
   createPetGatewayOptions
 } from "../src/main/pet/services.js";
 
 describe("pet character transport privacy", () => {
+  it("retains only a bounded sidecar startup diagnostic", () => {
+    expect(
+      new PetStartupError("sidecar", {
+        cause: new TokenTrackerRuntimeError("version-mismatch")
+      }).sidecarCode
+    ).toBe("version-mismatch");
+    expect(
+      new PetStartupError("sidecar", { cause: new Error("private detail") })
+        .sidecarCode
+    ).toBe("unknown");
+    expect(new PetStartupError("gateway").sidecarCode).toBeNull();
+  });
+
   it("keeps the retired Electron entry point cache-only", () => {
     expect(PET_CHARACTER_CDN_BASE_URL).toBeNull();
     expect(createPetCharacterOptions("/home/tester")).toMatchObject({

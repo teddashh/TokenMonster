@@ -18,8 +18,10 @@ import {
 } from "@tokenmonster/token-tracker-adapter";
 import {
   PINNED_TOKEN_TRACKER_VERSION,
+  TokenTrackerRuntimeError,
   startManagedTokenTracker,
-  type ManagedTokenTracker
+  type ManagedTokenTracker,
+  type TokenTrackerRuntimeErrorCode
 } from "@tokenmonster/token-tracker-runtime";
 
 import { resolveSidecarExecutable, utilityProcessSpawn } from "./sidecar.js";
@@ -53,10 +55,17 @@ function trailingUtcRange(): TokenTrackerAggregateRange {
 export class PetStartupError extends Error {
   public override readonly name = "PetStartupError";
   public readonly kind: "gateway" | "sidecar";
+  public readonly sidecarCode: TokenTrackerRuntimeErrorCode | "unknown" | null;
 
   public constructor(kind: "gateway" | "sidecar", options?: ErrorOptions) {
     super(PET_STARTUP_MESSAGES[kind], options);
     this.kind = kind;
+    this.sidecarCode =
+      kind !== "sidecar"
+        ? null
+        : options?.cause instanceof TokenTrackerRuntimeError
+          ? options.cause.code
+          : "unknown";
   }
 }
 
