@@ -207,6 +207,24 @@ describe("release script physical-byte gates", () => {
     expect(tampered.stderr).toContain(
       "Installed companion bytes differ from the full Squirrel package"
     );
+
+    await Promise.all([
+      writeFile(installedApplicationFile, "application-bytes"),
+      writeFile(join(installedApplication, "unexpected.bin"), "unexpected")
+    ]);
+    const unexpected = verify();
+    expect(unexpected.status).not.toBe(0);
+    expect(unexpected.stderr).toContain("expected 1, installed 2");
+    expect(unexpected.stderr).toContain('unexpected ["unexpected.bin"]');
+
+    await Promise.all([
+      rm(join(installedApplication, "unexpected.bin")),
+      rm(installedApplicationFile)
+    ]);
+    const missing = verify();
+    expect(missing.status).not.toBe(0);
+    expect(missing.stderr).toContain("expected 1, installed 0");
+    expect(missing.stderr).toContain('missing ["application.bin"]');
   });
 
   it("rejects maker artifacts outside one physical directory and oversized input", async () => {

@@ -17,6 +17,7 @@ const MAX_TREE_DEPTH = 24;
 const SQUIRREL_PAYLOAD_PREFIX = "lib/net45/";
 const EXECUTION_STUB_PAYLOAD_PATH = "TokenMonster_ExecutionStub.exe";
 const INSTALLED_ENTRY_POINT = "TokenMonster.exe";
+const INVENTORY_DIAGNOSTIC_PATH_LIMIT = 20;
 
 /** @typedef {{ bytes: number; sha256: string }} FileDigest */
 /** @typedef {{ dev: string; ino: string; mtimeNs: string; ctimeNs: string }} FileIdentity */
@@ -685,6 +686,16 @@ async function inventoryDirectory(root, label) {
   return Object.freeze({ entryCount, fileCount, inventory, totalBytes });
 }
 
+/** @param {string[]} paths */
+function summarizeInventoryPaths(paths) {
+  const sorted = [...paths].sort((left, right) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  );
+  const visible = sorted.slice(0, INVENTORY_DIAGNOSTIC_PATH_LIMIT);
+  const remainder = sorted.length - visible.length;
+  return `${JSON.stringify(visible)}${remainder > 0 ? ` (+${remainder} more)` : ""}`;
+}
+
 /** @param {string[]} input */
 async function snapshotMakerArtifacts(input) {
   const [
@@ -815,8 +826,14 @@ async function verifyInstalledCompanion(input) {
   const expected = expectedPayload.inventory;
   const installed = installedResult.inventory;
   if (expected.size !== installed.size) {
+    const missing = [...expected]
+      .filter(([key]) => !installed.has(key))
+      .map(([, file]) => file.relativePath);
+    const unexpected = [...installed]
+      .filter(([key]) => !expected.has(key))
+      .map(([, file]) => file.relativePath);
     throw new Error(
-      "Installed companion file inventory differs from the full Squirrel package.",
+      `Installed companion file inventory differs from the full Squirrel package: expected ${expected.size}, installed ${installed.size}; missing ${summarizeInventoryPaths(missing)}; unexpected ${summarizeInventoryPaths(unexpected)}.`,
     );
   }
   for (const [key, expectedFile] of expected) {
