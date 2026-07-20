@@ -132,6 +132,10 @@ export const EnrollmentResponseV1Schema = z.strictObject({
   contractVersion: z.literal(CONTRIBUTION_API_CONTRACT_VERSION),
   credentials: ContributionCredentialPairV1Schema,
   consentReceipt: ContributionConsentReceiptV1Schema,
+  // This is an already-published one-time-credential response. Keep its exact
+  // V1 wire shape stable so an older companion never rejects and loses the
+  // credentials after the server has durably created an enrollment. Current
+  // ingest support is advertised by the compatibility endpoint instead.
   acceptedSnapshotSchemaVersions: z.tuple([z.literal("1")])
 });
 

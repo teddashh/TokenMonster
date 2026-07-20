@@ -1,5 +1,8 @@
 import type { ContributionPolicy } from "@tokenmonster/api-domain";
-import type { CollectorIdentityV1 } from "@tokenmonster/contracts";
+import type {
+  SupportedCollectorIdentity,
+  SupportedCollectorKind
+} from "@tokenmonster/contracts";
 
 import { asStrictRecord } from "./config.js";
 import {
@@ -13,7 +16,7 @@ const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 export interface SupportedCollectorConfig {
-  readonly kind: CollectorIdentityV1["kind"];
+  readonly kind: SupportedCollectorKind;
   readonly adapterVersion: string;
   readonly sourceVersion: string;
 }
@@ -65,7 +68,9 @@ function parsePolicyConfig(input: unknown): CloudflareContributionPolicyConfig {
     const adapterVersion = entry["adapterVersion"];
     const sourceVersion = entry["sourceVersion"];
     if (
-      (kind !== "tokscale" && kind !== "tokentracker-bridge") ||
+      (kind !== "tokscale" &&
+        kind !== "tokentracker-bridge" &&
+        kind !== "tokentracker-sidecar") ||
       typeof adapterVersion !== "string" ||
       !SEMVER_PATTERN.test(adapterVersion) ||
       typeof sourceVersion !== "string" ||
@@ -96,14 +101,15 @@ class WorkerContributionPolicy implements ContributionPolicy {
     );
   }
 
-  isCollectorSupported(collector: CollectorIdentityV1): boolean {
+  isCollectorSupported(collector: SupportedCollectorIdentity): boolean {
     try {
       if (
         typeof collector !== "object" ||
         collector === null ||
         Reflect.ownKeys(collector).length !== 3 ||
         (collector.kind !== "tokscale" &&
-          collector.kind !== "tokentracker-bridge") ||
+          collector.kind !== "tokentracker-bridge" &&
+          collector.kind !== "tokentracker-sidecar") ||
         typeof collector.adapterVersion !== "string" ||
         typeof collector.sourceVersion !== "string"
       ) {

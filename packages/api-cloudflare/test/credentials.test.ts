@@ -129,6 +129,61 @@ describe("Cloudflare credential service", () => {
     );
   });
 
+  it("accepts canonical client-owned V2 credentials and binds role plus version into each verifier", async () => {
+    const pepperV1 = key("credential-v1", 1);
+    const pepperV2 = key("credential-v2", 2);
+    const first = await createCloudflareCredentialService(
+      credentialConfig(pepperV1)
+    );
+    const uploadToken = `tm_u2_${"u".repeat(24)}.${"U".repeat(43)}`;
+    const deletionToken = `tm_d2_${"d".repeat(24)}.${"D".repeat(42)}E`;
+    const recoveryToken = `tm_r2_${"r".repeat(24)}.${"R".repeat(42)}I`;
+    const [upload, deletion, recovery] = await Promise.all([
+      first.acceptPresentedV2("upload", uploadToken),
+      first.acceptPresentedV2("deletion", deletionToken),
+      first.acceptPresentedV2("enrollment-recovery", recoveryToken)
+    ]);
+
+    expect(JSON.stringify({ upload, deletion, recovery })).not.toContain(
+      uploadToken.split(".")[1]
+    );
+    expect(await first.verify(uploadToken, upload)).toBe(true);
+    expect(await first.verify(deletionToken, deletion)).toBe(true);
+    expect(await first.verify(recoveryToken, recovery)).toBe(true);
+    expect(
+      await first.verify(uploadToken.replace("tm_u2_", "tm_u1_"), upload)
+    ).toBe(false);
+    expect(
+      await first.verify(uploadToken.replace("tm_u2_", "tm_d2_"), deletion)
+    ).toBe(false);
+
+    const rotating = await createCloudflareCredentialService(
+      credentialConfig(pepperV2, pepperV1)
+    );
+    expect(await rotating.verify(uploadToken, upload)).toBe(true);
+    expect(await rotating.verify(deletionToken, deletion)).toBe(true);
+    expect(await rotating.verify(recoveryToken, recovery)).toBe(true);
+    expect(
+      (await rotating.acceptPresentedV2("upload", uploadToken)).hmacKeyId
+    ).toBe("credential-v2");
+  });
+
+  it("rejects non-canonical or role-substituted V2 bearer encodings", async () => {
+    const service = await createCloudflareCredentialService(credentialConfig());
+    await expect(
+      service.acceptPresentedV2(
+        "upload",
+        `tm_u2_${"u".repeat(24)}.${"A".repeat(42)}B`
+      )
+    ).rejects.toMatchObject({ code: "INPUT_INVALID" });
+    await expect(
+      service.acceptPresentedV2(
+        "enrollment-recovery",
+        `tm_u2_${"u".repeat(24)}.${"A".repeat(43)}`
+      )
+    ).rejects.toMatchObject({ code: "INPUT_INVALID" });
+  });
+
   it("rejects a verifier created under a wrong pepper even when the key ID matches", async () => {
     const correct = await createCloudflareCredentialService(
       credentialConfig(key("credential-v1", 1))

@@ -1,4 +1,4 @@
-export const LOCAL_STORE_SCHEMA_VERSION = 4;
+export const LOCAL_STORE_SCHEMA_VERSION = 5;
 
 export interface LocalStoreMigration {
   readonly version: number;
@@ -19,6 +19,8 @@ const VERSION_2_TABLES = [...BASE_TABLES, "cloud_outbox"] as const;
 const VERSION_3_TABLES = [...VERSION_2_TABLES, "cloud_mirror"] as const;
 
 const VERSION_4_TABLES = [...VERSION_3_TABLES, "complete_scan_ledger"] as const;
+
+const VERSION_5_TABLES = VERSION_4_TABLES;
 
 const TOKEN_CHECKS = `
   CHECK (input_tokens BETWEEN 0 AND 9007199254740991),
@@ -193,6 +195,100 @@ export const LOCAL_STORE_MIGRATIONS: readonly LocalStoreMigration[] = [
         completed_at TEXT NOT NULL CHECK (length(completed_at) = 24),
         PRIMARY KEY (utc_date, client)
       ) STRICT, WITHOUT ROWID;
+    `,
+  },
+  {
+    version: 5,
+    tablesAfterMigration: VERSION_5_TABLES,
+    sql: `
+      CREATE TABLE usage_daily_v5 (
+        bucket_start TEXT NOT NULL CHECK (length(bucket_start) = 24),
+        provider TEXT NOT NULL CHECK (
+          provider IN ('anthropic', 'google', 'openai', 'openrouter', 'xai', 'other')
+        ),
+        model_family TEXT NOT NULL CHECK (length(model_family) BETWEEN 1 AND 64),
+        tool TEXT NOT NULL CHECK (length(tool) BETWEEN 1 AND 64),
+        value_quality TEXT NOT NULL CHECK (value_quality IN ('exact', 'estimated')),
+        revision INTEGER NOT NULL CHECK (revision BETWEEN 1 AND 9007199254740991),
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        cache_read_tokens INTEGER NOT NULL,
+        cache_write_tokens INTEGER NOT NULL,
+        reasoning_tokens INTEGER NOT NULL,
+        other_tokens INTEGER NOT NULL,
+        total_tokens INTEGER NOT NULL,
+        local_coverage TEXT NOT NULL CHECK (
+          local_coverage IN ('complete', 'partial', 'unknown')
+        ),
+        collector_kind TEXT NOT NULL CHECK (
+          collector_kind IN ('tokscale', 'tokentracker-bridge', 'tokentracker-sidecar')
+        ),
+        adapter_version TEXT NOT NULL CHECK (length(adapter_version) BETWEEN 5 AND 64),
+        source_version TEXT NOT NULL CHECK (length(source_version) BETWEEN 5 AND 64),
+        updated_at TEXT NOT NULL CHECK (length(updated_at) = 24),
+        PRIMARY KEY (bucket_start, provider, model_family, tool),
+        ${TOKEN_CHECKS}
+      ) STRICT, WITHOUT ROWID;
+
+      INSERT INTO usage_daily_v5
+      SELECT * FROM usage_daily;
+      DROP TABLE usage_daily;
+      ALTER TABLE usage_daily_v5 RENAME TO usage_daily;
+      CREATE INDEX usage_daily_bucket_start_idx
+        ON usage_daily (bucket_start);
+
+      CREATE TABLE collector_authority_v5 (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        kind TEXT NOT NULL CHECK (
+          kind IN ('tokscale', 'tokentracker-bridge', 'tokentracker-sidecar')
+        ),
+        state TEXT NOT NULL CHECK (
+          state IN ('stopped', 'starting', 'running', 'stopping', 'degraded', 'switch-preview')
+        ),
+        adapter_version TEXT NOT NULL CHECK (length(adapter_version) BETWEEN 5 AND 64),
+        source_version TEXT NOT NULL CHECK (length(source_version) BETWEEN 5 AND 64),
+        updated_at TEXT NOT NULL CHECK (length(updated_at) = 24)
+      ) STRICT, WITHOUT ROWID;
+
+      INSERT INTO collector_authority_v5
+      SELECT * FROM collector_authority;
+      DROP TABLE collector_authority;
+      ALTER TABLE collector_authority_v5 RENAME TO collector_authority;
+
+      CREATE TABLE cloud_mirror_v5 (
+        bucket_start TEXT NOT NULL CHECK (length(bucket_start) = 24),
+        provider TEXT NOT NULL CHECK (
+          provider IN ('anthropic', 'google', 'openai', 'openrouter', 'xai', 'other')
+        ),
+        model_family TEXT NOT NULL CHECK (length(model_family) BETWEEN 1 AND 64),
+        tool TEXT NOT NULL CHECK (length(tool) BETWEEN 1 AND 64),
+        value_quality TEXT NOT NULL CHECK (value_quality IN ('exact', 'estimated')),
+        revision INTEGER NOT NULL CHECK (revision BETWEEN 1 AND 9007199254740991),
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        cache_read_tokens INTEGER NOT NULL,
+        cache_write_tokens INTEGER NOT NULL,
+        reasoning_tokens INTEGER NOT NULL,
+        other_tokens INTEGER NOT NULL,
+        total_tokens INTEGER NOT NULL,
+        collector_kind TEXT NOT NULL CHECK (
+          collector_kind IN ('tokscale', 'tokentracker-bridge', 'tokentracker-sidecar')
+        ),
+        adapter_version TEXT NOT NULL CHECK (length(adapter_version) BETWEEN 5 AND 64),
+        source_version TEXT NOT NULL CHECK (length(source_version) BETWEEN 5 AND 64),
+        receipt_batch_id TEXT NOT NULL CHECK (length(receipt_batch_id) = 36),
+        receipt_received_at TEXT NOT NULL CHECK (length(receipt_received_at) = 24),
+        updated_at TEXT NOT NULL CHECK (length(updated_at) = 24),
+        PRIMARY KEY (bucket_start, provider, model_family, tool),
+        ${TOKEN_CHECKS}
+      ) STRICT, WITHOUT ROWID;
+
+      INSERT INTO cloud_mirror_v5
+      SELECT * FROM cloud_mirror;
+      DROP TABLE cloud_mirror;
+      ALTER TABLE cloud_mirror_v5 RENAME TO cloud_mirror;
+      CREATE INDEX cloud_mirror_bucket_start_idx
+        ON cloud_mirror (bucket_start);
     `,
   },
 ] as const;

@@ -18,21 +18,26 @@ import type {
   IngestTransactionPort,
   InstallationRecord,
   IssuedCredential,
+  LifecycleStoragePort,
+  LifecycleTransactionPort,
   OpaqueIdGenerator,
   OpaqueIdKind,
   PresentedCredential,
   RateLimitDecision,
   RateLimitPort,
   RateLimitRequest,
+  RecoverableEnrollmentRecord,
+  RecoverableEnrollmentStoragePort,
   StoredCredential,
   SuppressionLedgerEntry,
   SuppressionLedgerPort
 } from "../src/index.js";
 
-const SCOPE_PREFIX: Readonly<Record<CredentialScope, "u" | "d" | "s">> = {
+const SCOPE_PREFIX: Readonly<Record<CredentialScope, "u" | "d" | "s" | "r">> = {
   upload: "u",
   deletion: "d",
-  "deletion-status": "s"
+  "deletion-status": "s",
+  "enrollment-recovery": "r"
 };
 
 function cloneMap<K, V>(source: ReadonlyMap<K, V>): Map<K, V> {
@@ -86,6 +91,28 @@ export class MockCredentialService implements CredentialService {
     return Object.freeze({ bearerToken, entropyBits: 256 as const, stored });
   }
 
+  async acceptPresentedV2(
+    scope: "upload" | "deletion" | "enrollment-recovery",
+    bearerToken: string
+  ): Promise<StoredCredential> {
+    if (this.failWith !== null) throw this.failWith;
+    const prefix = SCOPE_PREFIX[scope];
+    const match = new RegExp(
+      `^tm_${prefix}2_([A-Za-z0-9_-]{24})\\.([A-Za-z0-9_-]{42}[AEIMQUYcgkosw048])$`
+    ).exec(bearerToken);
+    if (match?.[1] === undefined || match[2] === undefined) {
+      throw new Error("invalid presented credential");
+    }
+    const stored: StoredCredential = Object.freeze({
+      scope,
+      publicTokenId: match[1],
+      hmacDigest: `${prefix}${match[2].slice(1)}`,
+      hmacKeyId: "pepper-v2"
+    });
+    this.issuedByToken.set(bearerToken, stored);
+    return stored;
+  }
+
   async issueDeletionStatus(jobId: string): Promise<IssuedCredential> {
     if (this.failWith !== null) throw this.failWith;
     const previousCount = this.statusIssueCounts.get(jobId) ?? 0;
@@ -114,7 +141,9 @@ export class MockCredentialService implements CredentialService {
   }
 
   async inspect(bearerToken: string): Promise<PresentedCredential | null> {
-    const match = /^tm_[uds]1_([A-Za-z0-9_-]{16,32})\./.exec(bearerToken);
+    const match = /^tm_(?:[uds]1|[udr]2)_([A-Za-z0-9_-]{16,32})\./.exec(
+      bearerToken
+    );
     return match?.[1] === undefined
       ? null
       : Object.freeze({ publicTokenId: match[1] });
@@ -144,7 +173,10 @@ export class MutablePolicy implements ContributionPolicy {
   currentConsentDocumentRevision = "contribution-2026-07-15";
 
   isCollectorSupported(collector: {
-    readonly kind: "tokscale" | "tokentracker-bridge";
+    readonly kind:
+      | "tokscale"
+      | "tokentracker-bridge"
+      | "tokentracker-sidecar";
     readonly adapterVersion: string;
     readonly sourceVersion: string;
   }): boolean {
@@ -152,7 +184,9 @@ export class MutablePolicy implements ContributionPolicy {
       collector.adapterVersion === "0.1.0" &&
       ((collector.kind === "tokscale" && collector.sourceVersion === "4.5.2") ||
         (collector.kind === "tokentracker-bridge" &&
-          collector.sourceVersion === "0.79.8"))
+          collector.sourceVersion === "0.79.8") ||
+        (collector.kind === "tokentracker-sidecar" &&
+          collector.sourceVersion === "0.80.0"))
     );
   }
 }
@@ -175,6 +209,7 @@ type Backup = Readonly<{
   batches: Map<string, IngestBatchReceiptRecord>;
   deletionRequests: Map<string, DeletionRequestRecord>;
   jobs: Map<string, DeletionRequestRecord>;
+  recoverableEnrollments: Map<string, RecoverableEnrollmentRecord>;
 }>;
 
 export class MemoryMutationStore
@@ -182,7 +217,9 @@ export class MemoryMutationStore
     EnrollmentStoragePort,
     IngestStoragePort,
     DeletionStoragePort,
-    DeletionStatusStoragePort
+    DeletionStatusStoragePort,
+    LifecycleStoragePort,
+    RecoverableEnrollmentStoragePort
 {
   installations = new Map<string, InstallationRecord>();
   consentReceipts = new Map<string, ConsentReceiptRecord>();
@@ -191,6 +228,7 @@ export class MemoryMutationStore
   batches = new Map<string, IngestBatchReceiptRecord>();
   deletionRequests = new Map<string, DeletionRequestRecord>();
   jobs = new Map<string, DeletionRequestRecord>();
+  recoverableEnrollments = new Map<string, RecoverableEnrollmentRecord>();
   dirtyCount = 0;
   failCreateWith: Error | null = null;
 
@@ -204,6 +242,50 @@ export class MemoryMutationStore
     }
     this.installations.set(input.installation.installationId, input.installation);
     this.consentReceipts.set(input.consentReceipt.eventId, input.consentReceipt);
+  }
+
+  async findRecoverableEnrollment(
+    recoveryPublicTokenId: string
+  ): Promise<RecoverableEnrollmentRecord | null> {
+    return this.recoverableEnrollments.get(recoveryPublicTokenId) ?? null;
+  }
+
+  async createRecoverableEnrollmentAtomically(input: {
+    readonly installation: InstallationRecord;
+    readonly consentReceipt: ConsentReceiptRecord;
+    readonly recoveryCredential: StoredCredential;
+  }): Promise<void> {
+    if (this.failCreateWith !== null) throw this.failCreateWith;
+    const allCredentialIds = [
+      ...[...this.installations.values()].flatMap((installation) => [
+        installation.uploadCredential?.publicTokenId,
+        installation.deletionCredential?.publicTokenId
+      ]),
+      ...this.recoverableEnrollments.keys()
+    ];
+    if (
+      this.installations.has(input.installation.installationId) ||
+      allCredentialIds.includes(
+        input.installation.uploadCredential?.publicTokenId
+      ) ||
+      allCredentialIds.includes(
+        input.installation.deletionCredential?.publicTokenId
+      ) ||
+      allCredentialIds.includes(input.recoveryCredential.publicTokenId)
+    ) {
+      throw new Error("collision");
+    }
+    const record: RecoverableEnrollmentRecord = Object.freeze({
+      installation: input.installation,
+      consentReceipt: input.consentReceipt,
+      recoveryCredential: input.recoveryCredential
+    });
+    this.installations.set(input.installation.installationId, input.installation);
+    this.consentReceipts.set(input.consentReceipt.eventId, input.consentReceipt);
+    this.recoverableEnrollments.set(
+      input.recoveryCredential.publicTokenId,
+      record
+    );
   }
 
   async findCredentialCandidate(
@@ -336,6 +418,63 @@ export class MemoryMutationStore
     }
   }
 
+  async withLifecycleTransaction<T>(
+    installationId: string,
+    operation: (transaction: LifecycleTransactionPort) => Promise<T>
+  ): Promise<T> {
+    const backup = this.backup();
+    const transaction: LifecycleTransactionPort = {
+      findCredentialCandidate: async (scope, publicTokenId) =>
+        this.findCredentialCandidate(scope, publicTokenId),
+      getInstallation: async () =>
+        this.installations.get(installationId) ?? null,
+      getLatestGrantedConsentReceipt: async (documentRevision) =>
+        [...this.consentReceipts.values()]
+          .filter(
+            (receipt) =>
+              receipt.installationId === installationId &&
+              receipt.documentRevision === documentRevision
+          )
+          .sort((left, right) =>
+            left.recordedAt === right.recordedAt
+              ? right.eventId.localeCompare(left.eventId)
+              : right.recordedAt.localeCompare(left.recordedAt)
+          )[0] ?? null,
+      pause: async (at) => {
+        const installation = this.installations.get(installationId);
+        if (installation === undefined) throw new Error("missing installation");
+        this.installations.set(
+          installationId,
+          Object.freeze({
+            ...installation,
+            status: "paused" as const,
+            pausedAt: at
+          })
+        );
+      },
+      resume: async ({ consentReceipt }) => {
+        const installation = this.installations.get(installationId);
+        if (installation === undefined) throw new Error("missing installation");
+        this.installations.set(
+          installationId,
+          Object.freeze({
+            ...installation,
+            status: "active" as const,
+            consentDocumentRevision: consentReceipt.documentRevision,
+            pausedAt: null
+          })
+        );
+        this.consentReceipts.set(consentReceipt.eventId, consentReceipt);
+      }
+    };
+    try {
+      return await operation(transaction);
+    } catch (error: unknown) {
+      this.restore(backup);
+      throw error;
+    }
+  }
+
   async completeDeletionAtomically(input: {
     readonly jobId: string;
     readonly completedAt: string;
@@ -369,6 +508,11 @@ export class MemoryMutationStore
     for (const [key, receipt] of this.consentReceipts) {
       if (receipt.installationId === existing.installationId) {
         this.consentReceipts.delete(key);
+      }
+    }
+    for (const [key, record] of this.recoverableEnrollments) {
+      if (record.installation.installationId === existing.installationId) {
+        this.recoverableEnrollments.delete(key);
       }
     }
     const installation = this.installations.get(existing.installationId);
@@ -415,6 +559,11 @@ export class MemoryMutationStore
         this.consentReceipts.delete(key);
       }
     }
+    for (const [key, record] of this.recoverableEnrollments) {
+      if (record.installation.installationId === installationId) {
+        this.recoverableEnrollments.delete(key);
+      }
+    }
     this.dirtyCount += 1;
     return true;
   }
@@ -436,7 +585,8 @@ export class MemoryMutationStore
       authorities: cloneMap(this.authorities),
       batches: cloneMap(this.batches),
       deletionRequests: cloneMap(this.deletionRequests),
-      jobs: cloneMap(this.jobs)
+      jobs: cloneMap(this.jobs),
+      recoverableEnrollments: cloneMap(this.recoverableEnrollments)
     });
   }
 
@@ -448,6 +598,7 @@ export class MemoryMutationStore
     this.batches = cloneMap(backup.batches);
     this.deletionRequests = cloneMap(backup.deletionRequests);
     this.jobs = cloneMap(backup.jobs);
+    this.recoverableEnrollments = cloneMap(backup.recoverableEnrollments);
   }
 }
 
@@ -513,6 +664,20 @@ export function snapshot(
     ],
     ...overrides
   };
+}
+
+export function sidecarSnapshot(
+  overrides: Readonly<Record<string, unknown>> = {}
+): unknown {
+  return snapshot({
+    schemaVersion: "2",
+    collector: {
+      kind: "tokentracker-sidecar",
+      adapterVersion: "0.1.0",
+      sourceVersion: "0.80.0"
+    },
+    ...overrides
+  });
 }
 
 export const RATE_KEY = "rate_key_AAAAAAAA";

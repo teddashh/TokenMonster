@@ -1,6 +1,6 @@
 import type {
   DailyAggregateBucketV1,
-  IngestSnapshotV1
+  SupportedIngestSnapshot
 } from "@tokenmonster/contracts";
 import {
   UsageDomainError,
@@ -81,7 +81,7 @@ function assertInstallationCanIngest(
 
 function assertAuthorityCompatible(
   existing: AuthorityBindingRecord,
-  snapshot: IngestSnapshotV1
+  snapshot: SupportedIngestSnapshot
 ): void {
   if (
     existing.collectorKind !== snapshot.collector.kind ||
@@ -107,7 +107,7 @@ function summarize(decisions: readonly BucketDecision[]): IngestBatchSummary {
 
 async function createIncomingRow(
   installationId: string,
-  snapshot: IngestSnapshotV1,
+  snapshot: SupportedIngestSnapshot,
   bucket: DailyAggregateBucketV1,
   receivedAt: string,
   hasher: IngestDependencies["hasher"]
@@ -177,7 +177,7 @@ async function executeTransaction(
     readonly installationId: string;
     readonly publicTokenId: string;
     readonly bearerToken: string;
-    readonly snapshot: IngestSnapshotV1;
+    readonly snapshot: SupportedIngestSnapshot;
     readonly payloadHash: string;
     readonly receivedAt: string;
   },

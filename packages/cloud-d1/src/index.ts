@@ -42,6 +42,18 @@ export {
   type D1PublicProjectionRebuilder
 } from "./public-projection-rebuilder.js";
 export {
+  checksumD1RestoreProjection,
+  createD1SuppressionAwareRestoreDrill,
+  D1RestoreDrillError,
+  type D1RestoreDrillDependencies,
+  type D1RestoreDrillErrorCode,
+  type D1RestoreDrillEvidence,
+  type D1RestoreDrillExpectations,
+  type D1RestoreDrillOptions,
+  type D1RestoreDrillRunner,
+  type D1RestoreProjectionCounts
+} from "./restore-drill.js";
+export {
   createD1RetentionMaintenanceProcessor,
   createD1RetentionMaintenanceStorage,
   D1RetentionMaintenanceError,

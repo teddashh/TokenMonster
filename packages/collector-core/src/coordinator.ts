@@ -1,6 +1,7 @@
 import {
   CollectorIdentityV1Schema,
   DailyAggregateBucketV1Schema,
+  IngestSnapshotV1Schema,
   MAX_INGEST_BUCKETS_V1,
   type CollectorIdentityV1,
   type DailyAggregateBucketV1,
@@ -15,10 +16,7 @@ import type {
   StoredCloudMirrorRow,
   StoredDailyAggregate
 } from "@tokenmonster/local-store";
-import {
-  canonicalSerializeIngestBatch,
-  parseStrictIngestSnapshot
-} from "@tokenmonster/usage-domain";
+import { canonicalSerializeIngestBatch } from "@tokenmonster/usage-domain";
 
 import {
   CollectorCoreError,
@@ -206,6 +204,8 @@ function validateApplyResults(
       }
       const bucket = storedRowToBucket(result.row);
       if (
+        result.row.collector.kind === "tokentracker-sidecar" ||
+        expectedRow.collector.kind === "tokentracker-sidecar" ||
         !sameBucketProjection(bucket, expectedRow) ||
         result.row.localCoverage !== expectedRow.localCoverage ||
         !sameCollectorIdentity(result.row.collector, expectedRow.collector)
@@ -336,7 +336,7 @@ export class LocalScanCoordinator {
 
     let snapshot: IngestSnapshotV1;
     try {
-      snapshot = parseStrictIngestSnapshot(outcome.snapshot);
+      snapshot = IngestSnapshotV1Schema.parse(outcome.snapshot);
     } catch {
       return collectorCoreFailure("COLLECTOR_OUTPUT_INVALID");
     }
@@ -387,7 +387,10 @@ export class LocalScanCoordinator {
     for (const stored of existing) {
       const bucket = storedRowToBucket(stored);
       if (bucket.tool !== tool) continue;
-      if (!sameCollectorIdentity(stored.collector, this.#identity)) {
+      if (
+        stored.collector.kind === "tokentracker-sidecar" ||
+        !sameCollectorIdentity(stored.collector, this.#identity)
+      ) {
         return collectorCoreFailure("AUTHORITY_MISMATCH");
       }
       if (presentKeys.has(bucketKey(bucket))) continue;
@@ -657,7 +660,7 @@ export class LocalScanCoordinator {
     let snapshot: IngestSnapshotV1;
     let payloadBytes: number;
     try {
-      snapshot = parseStrictIngestSnapshot({
+      snapshot = IngestSnapshotV1Schema.parse({
         schemaVersion: "1",
         batchId,
         generatedAt,
@@ -763,7 +766,7 @@ export class LocalScanCoordinator {
       }
       return Object.freeze(
         queued.map((entry) => {
-          const snapshot = parseStrictIngestSnapshot(entry.snapshot);
+          const snapshot = IngestSnapshotV1Schema.parse(entry.snapshot);
           if (!sameCollectorIdentity(snapshot.collector, this.#identity)) {
             return collectorCoreFailure("OUTBOX_READ_FAILED");
           }

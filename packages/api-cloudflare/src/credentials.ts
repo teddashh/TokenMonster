@@ -40,13 +40,16 @@ const TOKEN_PATTERN_BY_SCOPE: Readonly<Record<CredentialScope, RegExp>> =
     upload: /^tm_u1_([A-Za-z0-9_-]{16,32})\.([A-Za-z0-9_-]{43})$/,
     deletion: /^tm_d1_([A-Za-z0-9_-]{16,32})\.([A-Za-z0-9_-]{43})$/,
     "deletion-status":
-      /^tm_s1_([A-Za-z0-9_-]{16,32})\.([A-Za-z0-9_-]{43})$/
+      /^tm_s1_([A-Za-z0-9_-]{16,32})\.([A-Za-z0-9_-]{43})$/,
+    "enrollment-recovery":
+      /^tm_r2_([A-Za-z0-9_-]{24})\.([A-Za-z0-9_-]{43})$/
   });
 const PREFIX_BY_SCOPE: Readonly<Record<CredentialScope, string>> =
   Object.freeze({
     upload: "tm_u1_",
     deletion: "tm_d1_",
-    "deletion-status": "tm_s1_"
+    "deletion-status": "tm_s1_",
+    "enrollment-recovery": "tm_r2_"
   });
 
 export interface CloudflareCredentialServiceConfig {
@@ -61,6 +64,7 @@ export interface CloudflareCredentialServiceConfig {
 type ParsedToken = Readonly<{
   publicTokenId: string;
   secret: Uint8Array<ArrayBuffer>;
+  version: 1 | 2;
 }>;
 
 function parseCredentialConfig(input: unknown): CloudflareCredentialServiceConfig {
@@ -148,9 +152,12 @@ function tokenFromParts(
 
 function credentialVerifierInput(
   scope: CredentialScope,
+  version: 1 | 2,
   secret: Uint8Array<ArrayBuffer>
 ): Uint8Array<ArrayBuffer> {
-  const domain = encodeUtf8(`tokenmonster:credential:${scope}:v1\u0000`);
+  const domain = encodeUtf8(
+    `tokenmonster:credential:${scope}:v${version}\u0000`
+  );
   try {
     const input = new Uint8Array(domain.length + secret.length);
     input.set(domain);
@@ -200,12 +207,54 @@ function parseTokenForScope(
   scope: CredentialScope
 ): ParsedToken | null {
   if (typeof bearerToken !== "string" || bearerToken.length > 96) return null;
-  const match = TOKEN_PATTERN_BY_SCOPE[scope].exec(bearerToken);
-  const publicTokenId = match?.[1];
-  const encodedSecret = match?.[2];
-  if (publicTokenId === undefined || encodedSecret === undefined) return null;
-  const secret = decodeCanonicalBase64Url(encodedSecret, SECRET_BYTES);
-  return secret === null ? null : Object.freeze({ publicTokenId, secret });
+  const patterns: readonly Readonly<{ version: 1 | 2; pattern: RegExp }>[] =
+    scope === "upload"
+      ? [
+          { version: 1, pattern: TOKEN_PATTERN_BY_SCOPE.upload },
+          {
+            version: 2,
+            pattern:
+              /^tm_u2_([A-Za-z0-9_-]{24})\.([A-Za-z0-9_-]{43})$/
+          }
+        ]
+      : scope === "deletion"
+        ? [
+            { version: 1, pattern: TOKEN_PATTERN_BY_SCOPE.deletion },
+            {
+              version: 2,
+              pattern:
+                /^tm_d2_([A-Za-z0-9_-]{24})\.([A-Za-z0-9_-]{43})$/
+            }
+          ]
+        : scope === "deletion-status"
+          ? [
+              {
+                version: 1,
+                pattern: TOKEN_PATTERN_BY_SCOPE["deletion-status"]
+              }
+            ]
+          : [
+              {
+                version: 2,
+                pattern:
+                  /^tm_r2_([A-Za-z0-9_-]{24})\.([A-Za-z0-9_-]{43})$/
+              }
+            ];
+  for (const candidate of patterns) {
+    const match = candidate.pattern.exec(bearerToken);
+    const publicTokenId = match?.[1];
+    const encodedSecret = match?.[2];
+    if (publicTokenId === undefined || encodedSecret === undefined) continue;
+    const secret = decodeCanonicalBase64Url(encodedSecret, SECRET_BYTES);
+    if (secret !== null) {
+      return Object.freeze({
+        publicTokenId,
+        secret,
+        version: candidate.version
+      });
+    }
+  }
+  return null;
 }
 
 function parseExpectedCredential(input: unknown): StoredCredential | null {
@@ -232,7 +281,8 @@ function parseExpectedCredential(input: unknown): StoredCredential | null {
     if (
       (scope !== "upload" &&
         scope !== "deletion" &&
-        scope !== "deletion-status") ||
+        scope !== "deletion-status" &&
+        scope !== "enrollment-recovery") ||
       typeof publicTokenId !== "string" ||
       !PUBLIC_ID_PATTERN.test(publicTokenId) ||
       typeof hmacDigest !== "string" ||
@@ -288,6 +338,34 @@ class WorkerCredentialService implements CredentialService {
     }
   }
 
+  async acceptPresentedV2(
+    scope: "upload" | "deletion" | "enrollment-recovery",
+    bearerToken: string
+  ): Promise<StoredCredential> {
+    if (
+      scope !== "upload" &&
+      scope !== "deletion" &&
+      scope !== "enrollment-recovery"
+    ) {
+      throw new CloudflareAdapterError("INPUT_INVALID");
+    }
+    const parsed = parseTokenForScope(bearerToken, scope);
+    if (parsed === null || parsed.version !== 2) {
+      throw new CloudflareAdapterError("INPUT_INVALID");
+    }
+    try {
+      return await this.#storedFromSecret(
+        scope,
+        2,
+        parsed.publicTokenId,
+        parsed.secret,
+        this.#currentPepper
+      );
+    } finally {
+      parsed.secret.fill(0);
+    }
+  }
+
   async issueDeletionStatus(jobId: string): Promise<IssuedCredential> {
     if (
       typeof jobId !== "string" ||
@@ -328,12 +406,16 @@ class WorkerCredentialService implements CredentialService {
     for (const scope of [
       "upload",
       "deletion",
-      "deletion-status"
+      "deletion-status",
+      "enrollment-recovery"
     ] as const) {
-      const match = TOKEN_PATTERN_BY_SCOPE[scope].exec(bearerToken);
-      const publicTokenId = match?.[1];
-      if (publicTokenId !== undefined) {
-        return Object.freeze({ publicTokenId });
+      const parsed = parseTokenForScope(bearerToken, scope);
+      if (parsed !== null) {
+        try {
+          return Object.freeze({ publicTokenId: parsed.publicTokenId });
+        } finally {
+          parsed.secret.fill(0);
+        }
       }
     }
     return null;
@@ -363,6 +445,7 @@ class WorkerCredentialService implements CredentialService {
       try {
         const verifierInput = credentialVerifierInput(
           expected.scope,
+          parsed.version,
           parsed.secret
         );
         try {
@@ -419,7 +502,24 @@ class WorkerCredentialService implements CredentialService {
   ): Promise<IssuedCredential> {
     const publicTokenId = encodeBase64Url(publicBytes);
     const bearerToken = tokenFromParts(scope, publicTokenId, secret);
-    const verifierInput = credentialVerifierInput(scope, secret);
+    const stored = await this.#storedFromSecret(
+      scope,
+      1,
+      publicTokenId,
+      secret,
+      verifier
+    );
+    return transientIssuedCredential(bearerToken, stored);
+  }
+
+  async #storedFromSecret(
+    scope: CredentialScope,
+    version: 1 | 2,
+    publicTokenId: string,
+    secret: Uint8Array<ArrayBuffer>,
+    verifier: ImportedHmacKey
+  ): Promise<StoredCredential> {
+    const verifierInput = credentialVerifierInput(scope, version, secret);
     let digest: Uint8Array<ArrayBuffer>;
     try {
       digest = await hmacSign(this.#crypto, verifier.key, verifierInput);
@@ -433,7 +533,7 @@ class WorkerCredentialService implements CredentialService {
         hmacDigest: encodeBase64Url(digest),
         hmacKeyId: verifier.keyId
       });
-      return transientIssuedCredential(bearerToken, stored);
+      return stored;
     } finally {
       digest.fill(0);
     }

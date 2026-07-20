@@ -1,9 +1,10 @@
 import type {
-  CollectorIdentityV1,
   DailyAggregateBucketV1,
   IngestReceiptV1,
-  IngestSnapshotV1,
   ProviderKindV1,
+  SupportedCollectorIdentity,
+  SupportedCollectorKind,
+  SupportedIngestSnapshot,
   TokenCountsV1,
   ValueQualityV1,
 } from "@tokenmonster/contracts";
@@ -50,7 +51,7 @@ export interface ProjectedDailyAggregate {
   readonly valueQuality: ValueQualityV1;
   readonly tokens: TokenCountsV1;
   readonly localCoverage: LocalCoverage;
-  readonly collector: CollectorIdentityV1;
+  readonly collector: SupportedCollectorIdentity;
 }
 
 export interface StoredDailyAggregate extends ProjectedDailyAggregate {
@@ -125,7 +126,7 @@ export interface CloudMirrorReceiptReference {
 
 export interface StoredCloudMirrorRow {
   readonly bucket: DailyAggregateBucketV1;
-  readonly collector: CollectorIdentityV1;
+  readonly collector: SupportedCollectorIdentity;
   readonly receipt: CloudMirrorReceiptReference;
   readonly updatedAt: string;
 }
@@ -163,14 +164,14 @@ export interface MissingCloudZeroCorrectionQuery {
   readonly bucketStart: string;
   /** Caller attests presentKeys came from one complete authoritative scan. */
   readonly completeScan: true;
-  readonly collector: CollectorIdentityV1;
+  readonly collector: SupportedCollectorIdentity;
   readonly presentKeys: readonly CloudMirrorPresenceKey[];
   readonly limit: number;
 }
 
 export interface PlannedCloudZeroCorrection {
   readonly bucket: DailyAggregateBucketV1;
-  readonly collector: CollectorIdentityV1;
+  readonly collector: SupportedCollectorIdentity;
 }
 
 export interface MissingCloudZeroCorrectionPlan {
@@ -190,13 +191,11 @@ export const COLLECTOR_AUTHORITY_STATES = [
 export type CollectorAuthorityState =
   (typeof COLLECTOR_AUTHORITY_STATES)[number];
 
-export interface CollectorAuthorityInput extends CollectorIdentityV1 {
-  readonly state: CollectorAuthorityState;
-}
+export type CollectorAuthorityInput = SupportedCollectorIdentity &
+  Readonly<{ state: CollectorAuthorityState }>;
 
-export interface StoredCollectorAuthority extends CollectorAuthorityInput {
-  readonly updatedAt: string;
-}
+export type StoredCollectorAuthority = CollectorAuthorityInput &
+  Readonly<{ updatedAt: string }>;
 
 export interface LocalCompanionConfigV1 {
   readonly schemaVersion: "1";
@@ -231,7 +230,7 @@ export interface EnqueueCloudSnapshotOptions {
 }
 
 export interface QueuedCloudSnapshot {
-  readonly snapshot: IngestSnapshotV1;
+  readonly snapshot: SupportedIngestSnapshot;
   readonly attempts: number;
   readonly nextAttemptAt: string;
   readonly expiresAt: string;
@@ -282,7 +281,7 @@ export interface LocalStoreDiagnosticSummary {
       }
     | {
         readonly configured: true;
-        readonly kind: CollectorIdentityV1["kind"];
+        readonly kind: SupportedCollectorKind;
         readonly state: CollectorAuthorityState;
         readonly adapterVersion: string;
         readonly sourceVersion: string;

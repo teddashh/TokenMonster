@@ -11,6 +11,7 @@ const RATE_KEY_PATTERN_BY_ROUTE: Readonly<Record<RateLimitRoute, RegExp>> =
   Object.freeze({
     enrollment: /^rl_e1_[A-Za-z0-9_-]{43}$/u,
     ingest: /^rl_i1_[A-Za-z0-9_-]{43}$/u,
+    lifecycle: /^rl_i1_[A-Za-z0-9_-]{43}$/u,
     delete: /^rl_d1_[A-Za-z0-9_-]{43}$/u
   });
 const HMAC_BASE64URL_PATTERN = /^[A-Za-z0-9_-]{43}$/u;
@@ -30,6 +31,7 @@ export const CLOUDFLARE_RATE_LIMIT_POLICIES: Readonly<
 > = Object.freeze({
   enrollment: Object.freeze({ limit: 10, windowSeconds: 15 * 60 }),
   ingest: Object.freeze({ limit: 120, windowSeconds: 60 * 60 }),
+  lifecycle: Object.freeze({ limit: 10, windowSeconds: 60 }),
   delete: Object.freeze({ limit: 5, windowSeconds: 60 * 60 })
 });
 
@@ -132,7 +134,12 @@ function canonicalInstant(input: unknown): Readonly<{
 }
 
 function rateRoute(input: unknown): RateLimitRoute {
-  if (input !== "enrollment" && input !== "ingest" && input !== "delete") {
+  if (
+    input !== "enrollment" &&
+    input !== "ingest" &&
+    input !== "lifecycle" &&
+    input !== "delete"
+  ) {
     throw durableFailure();
   }
   return input;
