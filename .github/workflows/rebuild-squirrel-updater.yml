@@ -445,7 +445,8 @@ jobs:
 
             # Core.csproj predates SourceRoot items. Disable MSBuild's inferred
             # source mapping and supply the same explicit compiler PathMap for
-            # both otherwise independent source trees.
+            # both otherwise independent source trees. Symbols are neither
+            # merged nor shipped, so do not embed a path-sensitive PDB identity.
             $buildArguments = @(
               "/p:Configuration=Release"
               "/p:Platform=Any CPU"
@@ -462,6 +463,8 @@ jobs:
               "/p:ContinuousIntegrationBuild=true"
               "/p:DeterministicSourcePaths=false"
               "/p:PathMap=$source=/_/squirrel"
+              "/p:DebugSymbols=false"
+              "/p:DebugType=None"
               "/p:PostBuildEvent="
               "/m:1"
               "/nr:false"
@@ -655,6 +658,10 @@ jobs:
             upstreamDeclaredMergeTool = "ILRepack 1.26.0 restored but not executed; PostBuildEvent is disabled"
             dependencyInventorySha256 = $dependencyInventorySha256
             mergeInputInventorySha256 = $mergeInputInventorySha256
+            compilerDeterministic = $true
+            compilerPathMap = "source checkout root => /_/squirrel"
+            compilerDebugSymbols = $false
+            compilerDebugType = "None"
             binaryBytes = $sizes[0]
             binarySha256 = $hashes[0]
             productVersion = $versionInfo.ProductVersion
