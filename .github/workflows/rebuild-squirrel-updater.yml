@@ -195,6 +195,7 @@ jobs:
           ILREPACK_PACKAGE_SHA256: 4354440d0b1ad531ef2dfd9f112fde80018b9d1534c25d10afe728146a6f67be
           ILREPACK_TOOL_SHA256: adc25f9933da1e9d660ba41d2f6ae8181b7383bc2c08b869a03b10aac2dd9ab5
           ILREPACK_RUNTIMECONFIG_SHA256: f528ed48a5ea5a5dafc7460a4db46c0a95823a806c523ec914250aa1e5798782
+          ILREPACK_RUNTIME_VERSION: 6.0.43
           ILREPACK_SOURCE_COMMIT: 5b55fa2f4d7c7b18ffb104e2fade2f794f4ccedf
           ILREPACK_SOURCE_TREE: 4c7e73b48c55a535790f9d3f56687258efc525d0
           ILREPACK_RELEASE_TAG_COMMIT: 92843eace06c4eff3d6296a6fc4470ba725c57aa
@@ -203,6 +204,10 @@ jobs:
           FIX_TREE: 0a1ebfa90cea6f8037907134d53562a26c6bb4c3
           UPSTREAM_MERGE_COMMIT: 45834cbfeae84d20ef2bed24ac863f02d0abec66
           NUGET_SUBMODULE_COMMIT: 50f8d9e438fe948d7109501bd10f6024d0585b70
+          REVIEWED_DEPENDENCY_INVENTORY_SHA256: fb9199730812ca5c569d0c44f8d79d910665651dba7b3fa4cf498996c17aac15
+          REVIEWED_MERGE_INPUT_INVENTORY_SHA256: abddfa18198a408cd1b1d3983ce6afdd4eab4a1f4dcec5cbd4b2a0437104c419
+          REVIEWED_UPDATER_SHA256: 1673161fd4e64d1123fb828a5e5f1580cbe3c3f6b3f0893f50bb920dada473fd
+          REVIEWED_UPDATER_BYTES: 1840640
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
@@ -225,6 +230,13 @@ jobs:
           $dotnetInfo = @(& dotnet --info)
           if ($LASTEXITCODE -ne 0 -or $dotnetInfo.Count -lt 1) {
             throw "The reviewed Windows runner did not report its .NET SDK inventory."
+          }
+          $dotnetRuntimes = @(& dotnet --list-runtimes)
+          if (
+            $LASTEXITCODE -ne 0 -or
+            @($dotnetRuntimes | Where-Object { $_ -match "^Microsoft\.NETCore\.App $([regex]::Escape($env:ILREPACK_RUNTIME_VERSION)) \[" }).Count -ne 1
+          ) {
+            throw "The reviewed Windows runner lacks the exact ILRepack runtime."
           }
 
           foreach ($credentialVariable in @(
@@ -398,6 +410,67 @@ jobs:
             "/p:DirectoryBuildTargetsPath=$referenceTargets"
           ) -join " "
 
+          # This is the human-reviewed inventory from the first quarantined
+          # byte-identical build. Each isolated restore must match it before
+          # any package-provided targets are allowed into the compile.
+          $reviewedDependencyInventory = @(
+            "global/deltacompressiondotnet/1.1.0/deltacompressiondotnet.1.1.0.nupkg.sha512`t2lAyh3f9BvodfRmw8kKFxrWIKD6FcLdKv4dSHOfEgbkmNhOARFJ8TItyr76XsumEPJ53ORPLS3twRDIWnO4XnA=="
+            "global/ilrepack/1.26.0/ilrepack.1.26.0.nupkg.sha512`t3Taj5hDZkDK8SlOVmoOkI0R6JpQAbCLEP3Rs1nbS3RhqjuKdsH1PvbNFTAtLMhsBNVnGahY3mJD8BmfZjnIj3Q=="
+            "global/microsoft.build.tasks.git/1.0.0-beta2-18618-05/microsoft.build.tasks.git.1.0.0-beta2-18618-05.nupkg.sha512`tkcnqXhm6lxU8UFtpVO8enW7L8Gisw05bI46B3cWlW7K1dgGPb4hAyfiGyGczYOU6n4RtHO9CCfh0Lk74qkbF6w=="
+            "global/microsoft.sourcelink.common/1.0.0-beta2-18618-05/microsoft.sourcelink.common.1.0.0-beta2-18618-05.nupkg.sha512`teJP4JUDOiiWPBvwN+/0v1otoT8VPFOm6upABUAS6TwFbLfjRiLI2Ko44gyxF0nW+uMQHx186tnTDt+fg7je97Q=="
+            "global/microsoft.sourcelink.github/1.0.0-beta2-18618-05/microsoft.sourcelink.github.1.0.0-beta2-18618-05.nupkg.sha512`t7cQMyVdud/ritrYqgc99LecTC0g9rA2QhO1QFi6OBubsA++gMXRiXx/ct1rmycxM9EvHJSNZ9DHbZHu42RLMLQ=="
+            "global/microsoft.web.xdt/2.1.1/microsoft.web.xdt.2.1.1.nupkg.sha512`t8aCgaay6cgnrSwSeIDCU0qG6gi5VdR/LZuHSyyNH/dmtOMq89nSYKEXiscvQNPTNm2CL7s9JRVU0Wl24f6p4kg=="
+            "global/mono.cecil/0.11.2/mono.cecil.0.11.2.nupkg.sha512`tBTpKT6mzbvLgXKWSilfGOn0we1JeJb7VWu2f1lJ3ABJqCqoZlNCdi90BMiTJl+9DdJ5MqH3pokN873IjM3vi/Q=="
+            "global/nerdbank.gitversioning/3.0.50/nerdbank.gitversioning.3.0.50.nupkg.sha512`tNiT6vLHcTP8VM244+rfmoVHuWh7bPsG9XnKMm4rAEc2QmPFGQfruUBaqxgbsqz4z7yuEZlhjP1UURdhfz04wXg=="
+            "global/sharpcompress/0.17.1/sharpcompress.0.17.1.nupkg.sha512`twLRtmFrUhhF6ljyYCWWcwfGRZ9pX1gNZDSF6+Rj5uxS85Rq497HvhP7CYLNXCyIP1s065D3ebHcRA6uK1NFtcQ=="
+            "global/wpfanimatedgif/1.4.15/wpfanimatedgif.1.4.15.nupkg.sha512`tzuh1qY8DkJOXM/SIMGDtfNMrIUiPsOzr9ZLWoxFqo2GQBoU7QuZpdQE/yQDxrZS3AuNx8gdX753BxT42xfJLbA=="
+            "legacy/ilrepack.1.26.0/ilrepack.1.26.0.nupkg`tsha256:fe49fd5aa140c1f4e99b24fbe34311289a4ee97ab0989df2b9f4f5288fa95471"
+            "legacy/microsoft.data.edm.5.6.1/microsoft.data.edm.5.6.1.nupkg`tsha256:2372dda0dbbc7c01a09883fbeb4ba245ac0913bce346795fd66f11db96945510"
+            "legacy/microsoft.data.odata.5.6.1/microsoft.data.odata.5.6.1.nupkg`tsha256:82454bc4c599f79682130e30cd44cb6588dcd75661c3cbd637c9ae321ba84a8c"
+            "legacy/microsoft.data.services.client.5.6.1/microsoft.data.services.client.5.6.1.nupkg`tsha256:a6405fb929a99739c3079024a4d1003dc1a4629ff6f40b95c454498d8e545ed8"
+            "legacy/system.spatial.5.6.1/system.spatial.5.6.1.nupkg`tsha256:0d6efec3c6097edaa50d02cc713a0bc80d3a1441992081d21104831a7e4f4d06"
+          )
+          $reviewedMergeInputInventory = @(
+            "Update.exe`tsha256:c7cd37af0958928bb362d33824847966ec2f1efa3a9fe43c39b0aa071ed77d12`tbytes:86528"
+            "WpfAnimatedGif.dll`tsha256:ce8ef825fc10e5a3265bd3a4c418e7012ade1f61bbeb7ed9459c1311e4e6b917`tbytes:39936"
+            "SharpCompress.dll`tsha256:21d9b05a5c703f6754b8fbd6e3d0d58fc6dd31215d1118af64d4305f7d92d585`tbytes:454144"
+            "Microsoft.Web.XmlTransform.dll`tsha256:13dcf5066e00152238191314d4a46605204ffabdbb830bdd0c97df3027d1261d`tbytes:81600"
+            "DeltaCompressionDotNet.dll`tsha256:13950b911243e13269ef2487a00147c824e2223a7fb9103eb21f765c795be45e`tbytes:4608"
+            "DeltaCompressionDotNet.MsDelta.dll`tsha256:1ce872ed466a8a3466c808a7babf3b597ec12e1cb84870e7a0cf00b2f5ef6df4`tbytes:5632"
+            "Squirrel.dll`tsha256:661fa2a994b92ae8b84509de200ad0b7274c25e0be542bfedc41ff37e98ed7a0`tbytes:267264"
+            "NuGet.Squirrel.dll`tsha256:96e7297db309b556bfc56b0cbaf31546c7c954e7dac09b967ab31776c90120ca`tbytes:513536"
+            "Mono.Cecil.dll`tsha256:7744c9c84c28033bc3606f4dfce2adcd6f632e2be7827893c3e2257100f1cf9e`tbytes:345088"
+          )
+
+          function Get-DependencyInventory {
+            param(
+              [Parameter(Mandatory)] [string] $GlobalPackages,
+              [Parameter(Mandatory)] [string] $LegacyPackages
+            )
+
+            $globalInventory = @(
+              Get-ChildItem -LiteralPath $GlobalPackages -Recurse -File -Filter "*.nupkg.sha512" |
+                ForEach-Object {
+                  $relative = [IO.Path]::GetRelativePath($GlobalPackages, $_.FullName).Replace("\", "/").ToLowerInvariant()
+                  "$relative`t$((Get-Content -LiteralPath $_.FullName -Raw).Trim())"
+                } |
+                Sort-Object -CaseSensitive
+            )
+            $legacyInventory = @(
+              Get-ChildItem -LiteralPath $LegacyPackages -Recurse -File -Filter "*.nupkg" |
+                ForEach-Object {
+                  $relative = [IO.Path]::GetRelativePath($LegacyPackages, $_.FullName).Replace("\", "/").ToLowerInvariant()
+                  $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                  "legacy/$relative`tsha256:$hash"
+                } |
+                Sort-Object -CaseSensitive
+            )
+            return @(
+              $globalInventory | ForEach-Object { "global/$_" }
+              $legacyInventory
+            )
+          }
+
           $outputs = @()
           $dependencyInventories = @()
           $mergeInputInventories = @()
@@ -442,6 +515,19 @@ jobs:
               throw "The exact upstream updater dependency restore failed."
             }
             Assert-IsolatedProjectAssets -AssetsPath (Join-Path $source "build/obj/Update/project.assets.json") -PackageRoot $nugetPackageRoot -ConfigPath $nugetConfig
+
+            $inventory = @(
+              Get-DependencyInventory -GlobalPackages $dependencyCache -LegacyPackages $legacyPackages
+            )
+            $dependencyDifferences = @(
+              Compare-Object $reviewedDependencyInventory $inventory -CaseSensitive
+            )
+            if ($inventory.Count -lt 1 -or $dependencyDifferences.Count -ne 0) {
+              Write-Output "Resolved dependency inventory for rejected $sourceName restore:"
+              $inventory | ForEach-Object { Write-Output $_ }
+              throw "The upstream restore does not match the committed reviewed dependency inventory."
+            }
+            $dependencyInventories += ,$inventory
 
             # Core.csproj predates SourceRoot items. Disable MSBuild's inferred
             # source mapping and supply the same explicit compiler PathMap for
@@ -501,6 +587,12 @@ jobs:
             )
             Write-Output "Reviewed pre-merge input inventory for $sourceName (fixed public filenames only):"
             $mergeInputInventory | ForEach-Object { Write-Output $_ }
+            $mergeInputReceiptDifferences = @(
+              Compare-Object $reviewedMergeInputInventory $mergeInputInventory -CaseSensitive
+            )
+            if ($mergeInputReceiptDifferences.Count -ne 0) {
+              throw "The compiler outputs do not match the committed reviewed merge-input inventory."
+            }
             $mergeInputInventories += ,$mergeInputInventory
 
             $mergedTemporaryOutput = Join-Path $outputDirectory "Update.exe.tmp"
@@ -510,7 +602,7 @@ jobs:
             $mergeExitCode = $null
             Push-Location $outputDirectory
             try {
-              & dotnet $ilrepackTool "/ndebug" "/internalize" "/out:Update.exe.tmp" @mergeInputNames
+              & dotnet exec --fx-version $env:ILREPACK_RUNTIME_VERSION --roll-forward Disable $ilrepackTool "/ndebug" "/internalize" "/out:Update.exe.tmp" @mergeInputNames
               $mergeExitCode = $LASTEXITCODE
             } finally {
               Pop-Location
@@ -521,35 +613,6 @@ jobs:
             $output = Join-Path $outputDirectory "Update.exe"
             Move-Item -LiteralPath $mergedTemporaryOutput -Destination $output -Force
             $outputs += $output
-
-            $globalInventory = @(
-              Get-ChildItem -LiteralPath $dependencyCache -Recurse -File -Filter "*.nupkg.sha512" |
-                ForEach-Object {
-                  $relative = [IO.Path]::GetRelativePath($dependencyCache, $_.FullName).Replace("\", "/").ToLowerInvariant()
-                  "$relative`t$((Get-Content -LiteralPath $_.FullName -Raw).Trim())"
-                } |
-                Sort-Object -CaseSensitive
-            )
-            $legacyInventory = @()
-            if (Test-Path -LiteralPath $legacyPackages -PathType Container) {
-              $legacyInventory = @(
-                Get-ChildItem -LiteralPath $legacyPackages -Recurse -File -Filter "*.nupkg" |
-                  ForEach-Object {
-                    $relative = [IO.Path]::GetRelativePath($legacyPackages, $_.FullName).Replace("\", "/").ToLowerInvariant()
-                    $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-                    "legacy/$relative`tsha256:$hash"
-                  } |
-                  Sort-Object -CaseSensitive
-              )
-            }
-            $inventory = @(
-              $globalInventory | ForEach-Object { "global/$_" }
-              $legacyInventory
-            )
-            if ($inventory.Count -lt 1) {
-              throw "The upstream dependency restore produced no content-hash inventory."
-            }
-            $dependencyInventories += ,$inventory
           }
 
           if (Compare-Object $dependencyInventories[0] $dependencyInventories[1] -CaseSensitive) {
@@ -571,7 +634,9 @@ jobs:
             $hashes.Count -ne 2 -or
             $hashes[0] -cne $hashes[1] -or
             $hashes[0] -ceq $env:BROKEN_UPDATER_SHA256 -or
+            $hashes[0] -cne $env:REVIEWED_UPDATER_SHA256 -or
             $sizes[0] -ne $sizes[1] -or
+            $sizes[0] -ne [int64]$env:REVIEWED_UPDATER_BYTES -or
             $sizes[0] -lt 1 -or
             $sizes[0] -gt 10485760
           ) {
@@ -606,6 +671,12 @@ jobs:
           $mergeInputInventoryPath = Join-Path $artifactDirectory "merge-input-hashes.txt"
           [IO.File]::WriteAllLines($mergeInputInventoryPath, $mergeInputInventories[0], [Text.UTF8Encoding]::new($false))
           $mergeInputInventorySha256 = (Get-FileHash -LiteralPath $mergeInputInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (
+            $dependencyInventorySha256 -cne $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256 -or
+            $mergeInputInventorySha256 -cne $env:REVIEWED_MERGE_INPUT_INVENTORY_SHA256
+          ) {
+            throw "The staged review inventories do not match their committed receipts."
+          }
           $dotnetInfoPath = Join-Path $artifactDirectory "dotnet-info.txt"
           [IO.File]::WriteAllLines($dotnetInfoPath, $dotnetInfo, [Text.UTF8Encoding]::new($false))
           $dotnetInfoSha256 = (Get-FileHash -LiteralPath $dotnetInfoPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -640,7 +711,7 @@ jobs:
             mergeToolPackageSha256 = $ilrepackPackageSha256
             mergeToolExecutableSha256 = $env:ILREPACK_TOOL_SHA256
             mergeToolRuntimeConfigSha256 = $env:ILREPACK_RUNTIMECONFIG_SHA256
-            mergeToolRuntimePolicy = "Microsoft.NETCore.App 6.0.0 with major roll-forward; exact runner inventory is hashed in dotnet-info.txt"
+            mergeToolRuntime = "Microsoft.NETCore.App $($env:ILREPACK_RUNTIME_VERSION) selected with dotnet exec --fx-version and --roll-forward Disable"
             mergeArguments = @(
               "/ndebug"
               "/internalize"
@@ -657,13 +728,17 @@ jobs:
             )
             upstreamDeclaredMergeTool = "ILRepack 1.26.0 restored but not executed; PostBuildEvent is disabled"
             dependencyInventorySha256 = $dependencyInventorySha256
+            reviewedDependencyInventorySha256 = $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256
             mergeInputInventorySha256 = $mergeInputInventorySha256
+            reviewedMergeInputInventorySha256 = $env:REVIEWED_MERGE_INPUT_INVENTORY_SHA256
             compilerDeterministic = $true
             compilerPathMap = "source checkout root => /_/squirrel"
             compilerDebugSymbols = $false
             compilerDebugType = "None"
             binaryBytes = $sizes[0]
             binarySha256 = $hashes[0]
+            reviewedBinaryBytes = [int64]$env:REVIEWED_UPDATER_BYTES
+            reviewedBinarySha256 = $env:REVIEWED_UPDATER_SHA256
             productVersion = $versionInfo.ProductVersion
             fileVersion = $versionInfo.FileVersion
             repeatability = "same-job byte equality across two path-mapped source trees, isolated NuGet caches, deterministic compiler inputs, and the reviewed deterministic merge tool"
