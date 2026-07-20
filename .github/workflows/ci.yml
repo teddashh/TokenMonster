@@ -17,6 +17,10 @@ on:
           - all
           - skip-macos
           - linux-only
+      rebuild_squirrel_updater:
+        description: "Rebuild the reviewed one-commit Squirrel updater fix"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,6 +32,13 @@ concurrency:
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
+  rebuild-reviewed-squirrel-updater:
+    name: Rebuild reviewed Squirrel updater
+    if: github.event_name == 'workflow_dispatch' && inputs.rebuild_squirrel_updater
+    uses: ./.github/workflows/rebuild-squirrel-updater.yml
+    permissions:
+      contents: read
+
   # Job-level `if` cannot read the matrix context, so platform selection is
   # resolved once here and consumed via fromJSON. Pull-request pushes are
   # iteration runs, so they drop macOS (10x billing) by default; tag and
