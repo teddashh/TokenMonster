@@ -6,7 +6,10 @@ import { dirname, join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { verifyReleaseDigest } from "../../../scripts/release/verify-release-digest.mjs";
+import {
+  verifyPublicTarballEntries,
+  verifyReleaseDigest,
+} from "../../../scripts/release/verify-release-digest.mjs";
 import {
   portablePublicTarEntryKey,
   PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY,
@@ -144,10 +147,13 @@ describe("cross-platform release digest verifier", () => {
   });
 
   it("rejects ASCII case collisions and non-portable Windows names", async () => {
-    const caseCollision = await fixture("index.js", {
-      additionalEntries: ["Index.js"],
-    });
-    await expect(verifyReleaseDigest(caseCollision.directory)).rejects.toThrow(
+    expect(() =>
+      verifyPublicTarballEntries([
+        "package/",
+        "package/index.js",
+        "package/Index.js",
+      ]),
+    ).toThrow(
       /portable path collision/u,
     );
 

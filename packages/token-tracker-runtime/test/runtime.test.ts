@@ -178,6 +178,7 @@ describe("managed environment", () => {
       OPENCODE_GO_AUTH_COOKIE: "secret-cookie",
       ZCODE_CREDENTIAL_SECRET: "secret-zcode",
       TOKENTRACKER_DEVICE_TOKEN: "secret-device",
+      TOKENTRACKER_PROXY_ENV_APPLIED: "0",
       PORT: "4321"
     });
 
@@ -189,7 +190,8 @@ describe("managed environment", () => {
       DO_NOT_TRACK: "1",
       TOKENTRACKER_SKIP_FIRST_SYNC: "1",
       TOKENTRACKER_AUTO_RETRY_NO_SPAWN: "1",
-      TOKENTRACKER_NO_STAR_PROMPT: "1"
+      TOKENTRACKER_NO_STAR_PROMPT: "1",
+      TOKENTRACKER_PROXY_ENV_APPLIED: "1"
     });
     expect(environment).not.toHaveProperty("HTTP_PROXY");
     expect(environment).not.toHaveProperty("HTTPS_PROXY");

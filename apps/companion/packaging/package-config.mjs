@@ -171,6 +171,7 @@ import {
  * }>} PackagingConfiguration
  */
 
+const APP_AUTHOR = "Ted Huang";
 const APP_BUNDLE_ID = "com.tokenmonster.companion";
 const execFileAsync = promisify(execFile);
 const RELEASE_MODE = process.env["TOKENMONSTER_RELEASE_MODE"] ?? "internal";
@@ -1030,6 +1031,7 @@ export const packagerConfig = Object.freeze({
   name: "TokenMonster",
   overwrite: true,
   prune: false,
+  win32metadata: Object.freeze({ CompanyName: APP_AUTHOR }),
   afterCopy: [packageAfterCopyHook],
   ...signedConfiguration.packager,
 });
@@ -1051,7 +1053,7 @@ export const packagingConfiguration = Object.freeze({
     exe: `${packagerConfig.executableName}.exe`,
     setupExe: `${packagerConfig.name}Setup.exe`,
     title: packagerConfig.name,
-    authors: "Ted Huang",
+    authors: APP_AUTHOR,
     description: APP_DESCRIPTION,
     noDelta: true,
     noMsi: true,
