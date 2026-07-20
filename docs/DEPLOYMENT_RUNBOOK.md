@@ -11,7 +11,8 @@
 > Worker按`deletion → compactor → preserving retention → projection`排程且每次最多
 > compaction一個完整到期UTC日。Companion background sync已有本機scheduler／service
 > tests，但cloud-off packet capture與wake soak、Cloudflare account/remote D1/domain/secrets/rehearsal/staging E2E、備份還原與suppression replay、macOS
-> 簽章/DMG與native smoke、license／法律、raster rights及release owner gate仍未完成。
+> 簽章/DMG與native smoke、license／法律、可選 raster 圖包的證據轉錄及release owner gate仍未完成；
+> raster 圖包不阻擋只使用 code-native letter fallback 的主程式發布。
 > 此文件不授權部署，也不能取代
 > [Alpha release checklist](ALPHA_RELEASE_CHECKLIST.md) 的 GO 簽核。
 
@@ -44,14 +45,16 @@ staging／production deploy 都是 **STOP**；dry-run成功不等於可遠端部
 - `GET /v1/public/totals`，無新鮮投影時可靠地回 `503 /
   PUBLIC_TOTALS_UNAVAILABLE`；
 - `POST /v1/enrollments`、`POST /v1/me/ingest-snapshots`、
-  `DELETE /v1/me/data` 與 `GET /v1/deletions/:jobId`。前三個 mutation 需要
+  `POST /v1/me/pause`、`POST /v1/me/resume`、`DELETE /v1/me/data` 與
+  `GET /v1/deletions/:jobId`。mutation 需要
   D1、exact enable flag、strict secret config 與兩個 Durable Object namespace
   同時存在，少任一項都回 sanitized `503`。
 
 `packages/cloud-d1` 已提供固定 prepared query 的 public projection reader；Worker
 也會在有 `TOKENMONSTER_DB` binding 時使用它，但目前 Wrangler config 沒有該
 binding，因此仍會
-fail closed。Pause/resume、share 與受保護的 `/readyz` 仍只是
+fail closed。Pause/resume 已有 upload-scope auth、獨立 lifecycle rate bucket、
+atomic D1 transition 與 paused-ingest regression；share 與受保護的 `/readyz` 仍只是
 [技術規格第 9 節](TECHNICAL_SPEC.md#9-http-api-contracts)的 target contract，
 不可對外宣稱可用。Companion目前已有preview/enrollment/background sync與冪等retry/
 local stop/delete/status的source slice；沒有due payload時scheduler不發request，
@@ -76,11 +79,20 @@ Release operator 在執行遠端命令前逐項取得證據：
    通知責任已有 owner 書面決策。
 5. External Alpha 需要可驗證簽章的 companion；Apple/Windows signing identities、
    notarization/updater 與 Electron hardening 現在未完成。
-6. AI-Sister 四張 raster 仍為 `blocked`。只有 manifest schema v2、可稽核的書面
-   public/commercial/modify/redistribute grant 與 rights/brand review 都核准後才可
-   發布；否則只准 code-native letter placeholders。詳見
+6. Legacy `asset-manifest.json` 的四張 raster candidate 仍為 `blocked`；另有
+   runtime schema-v1 integrity manifest 含 810 image 與 50 voice refs，但它缺少
+   normative structured rights evidence。全部既有與新增 image/voice association
+   都只有在 manifest schema v2、可稽核的書面 public/commercial/modify/
+   redistribute grant、voice consent/content evidence，以及 rights/brand review
+   核准後才可公開發布；在可執行的 strict rights verifier 落地前此 gate 是 STOP，
+   不能把 v1 檔名或 runtime 可載入性當核准。否則只准 code-native letter
+   placeholders。詳見
    [資料清冊](DATA_INVENTORY.md)與[產品規格 10.6](PRODUCT_SPEC.md#106-ai-sister-raster-角色呈現)。
-7. Production 前已完成 staging restore/rebuild drill、incident drill、容量與安全
+7. Asset transport 是獨立 STOP：CLI 與 legacy Electron 必須固定 cache-only，不能
+   接受舊 CDN 環境變數；default-mode artifact／packet capture須證明零 AI-Sister GET。
+   未來只能在明確同意後下載 request set/order 與本機用量、角色、解鎖、theme、pose、
+   voice trigger 全無關的 fixed pack。Schema-v2 rights核准本身不會開啟 transport。
+8. Production 前已完成 staging restore/rebuild drill、incident drill、容量與安全
    gate；任何缺證據都視為未通過，不能口頭豁免。
 
 ## 3. Clean verification 與 release artifact
@@ -106,12 +118,22 @@ npm run verify:packaging-toolchain
 npm audit --audit-level=high
 npm ls --depth=0
 test -f apps/web/dist/client/index.html
+node scripts/release/build-release.mjs --skip-build
+release_install_dir="$(mktemp -d)"
+npm install --prefix "$release_install_dir" dist-release/tokenmonster-0.1.0.tgz
+node scripts/release/smoke-installed.mjs "$release_install_dir"
 ```
+
+Public CLI assembler 必須從 repository `package-lock.json` 產生可發布的
+`npm-shrinkwrap.json`，把 exact sidecar 的完整 npm registry closure 固定到
+`resolved` + SHA-512 integrity。Installed smoke 在啟動前會把 consumer lock 與實體
+package name/version逐筆對回該 shrinkwrap；缺 entry、版本漂移、非 registry來源或
+integrity替換都必須 fail closed。
 
 Internal companion bundle review可另外執行：
 
 ```sh
-npm run make:companion:internal
+TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.8 npm run make:companion:internal
 test -f release-evidence/companion-package.json
 ```
 
@@ -120,8 +142,9 @@ Verifier 會確認 ASAR exact inventory與header/block integrity、無 runtime
 `node_modules`／source／source map／blocked media／secret、bare imports只剩
 `electron` 與 `node:*`，直接核對 Electron 43 的 9 個 fuse wire及browser V8
 snapshot，並驗證 exact Tokscale package-lock identity、SHA-256、mode、version及
-`process.resourcesPath` inventory。最終 ZIP 的每個 file/directory byte與mode也必須
-與 staged app一致。這仍是 unsigned internal artifact；signed macOS／DMG因 nested
+`process.resourcesPath` inventory。它也拒絕舊角色 CDN literal、
+`TOKENMONSTER_CHARACTER_CDN` override marker與已移除 downloader 的能力簽章。最終 ZIP 的每個 file/directory byte與mode
+也必須與 staged app一致。這仍是 unsigned internal artifact；signed macOS／DMG因 nested
 Mach-O re-sign、Team ID、ticket與mounted-image verifier未完成而fail closed。完整決策
 見[ADR 0004](adr/0004-electron-packaging-and-signing.md)。
 
@@ -209,11 +232,66 @@ Production 使用獨立值。Pepper rotation 需 current/previous 雙 key window
 記錄與 verifier migration；不可覆寫唯一 pepper 後才發現舊 credential 全失效。
 列出 binding 名稱可以，任何檢查不得輸出 secret value。
 
+### 4.4 Windows release CDN 與下載 CTA promotion
+
+下載 CTA 只讀一個 Worker binding：`TOKENMONSTER_PUBLIC_RELEASE_JSON`。不可手填
+version、URL、hash、bytes 四個欄位，也不可直接以 Wrangler 開啟 CTA。Tag workflow
+在 protected `release-promotion` environment 中從已通過 Authenticode/Squirrel gate
+的 exact `TokenMonsterSetup.exe` 生成 canonical JSON，將安裝檔寫入不可變 key
+`tokenmonster/releases/windows/v<version>/TokenMonsterSetup.exe`，再由公開 CDN 做
+完整 GET 回讀並核對 SHA-256 與 bytes。只有回讀成功後，workflow 才會用 repo-pinned
+Wrangler 將該 JSON 寫入指定 Worker，並從公開 `/v1/releases/current` 回讀 exact JSON。
+
+同一個 signed artifact 的 `RELEASES` 與唯一 full `.nupkg` 會先在無 credential
+階段由 `prepare-windows-promotion.mjs`／
+`verify-windows-squirrel-candidate.mjs` 嚴格驗證。stable 與 prerelease 分別只可產生
+`tokenmonster/releases/windows/squirrel/latest/` 與 `.../next/`，另有
+`.../squirrel/v<version>/` 不可變 keys；full package 必須先於 `RELEASES` 切換。
+`plan-windows-squirrel-promotion.mjs` 對 authoritative current candidate 產生
+monotonic plan：相同 version／bytes 為 idempotent、相同 version 不同 bytes、降版或
+channel drift 一律失敗。protected tag workflow 的 credential-scoped executor 會先從
+R2 authoritative GET current `RELEASES`；只有 pinned Wrangler 的 exact missing
+diagnostic 可判定不存在，其他錯誤都是 unknown 並停止。present 時還必須 GET 並驗證
+其引用的 full package，且在 channel write 前後重新確認 current state 未變。
+
+promotion 順序固定為 create-or-verify exact immutable full package、immutable
+`RELEASES`、channel full package，最後才 commit channel `RELEASES`。每個 candidate
+object 都要從 R2 與公開 CDN 以 bytes／SHA-256 exact 回讀；mutable `RELEASES` 必須是
+`no-store, no-cache, must-revalidate`，version-named package 必須是 immutable。若
+metadata commit 後公開回讀持續 stale，executor 只以 exact prior `RELEASES` rollback；
+first publish 則刪除 candidate metadata 並等公開 CDN 收斂為 missing。candidate full
+package 始終保留。正常 advance 也保留 prior full package，避免已取得舊 `RELEASES`
+的 client 隨即失去下載；清理必須由未來另行核准、有 retention window 的 GC policy
+處理，promotion 不立即刪除。
+
+每個 Wrangler child 有 180 秒 kill fence，executor 有 60 分鐘 aggregate deadline；
+剩餘少於 30 分鐘時不得進入 mutable metadata commit。promotion job timeout 為 90
+分鐘，保留 recovery headroom。repo-pinned Wrangler 4.111.0 的本機 help／version 已
+確認：put 支援 `--file --cache-control --force --remote`，delete 支援
+`--force --remote`，version stdout 必須 exact `4.111.0`；substring 不算通過。
+
+只宣告下列 environment 設定名稱；值由 Cloudflare/release owner 在 GitHub protected
+environment 設定，不能提交到 Wrangler config、文件、PR 或 log：
+
+- secret：`TOKENMONSTER_CLOUDFLARE_RELEASE_API_TOKEN`；
+- variables：`TOKENMONSTER_CLOUDFLARE_ACCOUNT_ID`、
+  `TOKENMONSTER_WINDOWS_RELEASE_R2_BUCKET`、`TOKENMONSTER_WEB_WORKER_NAME`、
+  `TOKENMONSTER_PUBLIC_RELEASE_ENDPOINT_URL`。
+
+API token 必須只允許目標 account 的 release R2 object 與目標 Worker secret
+binding。只能由 protected tag workflow 執行遠端 `r2 object put`／rollback delete 或
+`secret put`；本 runbook 不授權人工執行。實際 promotion 還受 rights、signing、npm
+與 GO checklist gate 約束。相同版本重跑只接受已存在且 hash/bytes 完全一致的 CDN
+object；只有 bytes 已 exact、公開 cache metadata 不符時，single-writer executor 可用
+相同 bytes 修復 metadata，任何 byte drift 都停止且不可覆寫。
+
 ## 5. D1 migration：expand、verify、forward-fix
 
-`packages/cloud-d1/migrations/0001_initial.sql`與
-`0002_compaction_audit.sql`已通過Node SQLite與fake-D1 adapter tests；後者鎖定
-`day-all-v1` output形狀、completed run audit與closed-day immutable/late-input邊界。
+`packages/cloud-d1/migrations/0001_initial.sql`、
+`0002_compaction_audit.sql`與additive `0003_lifecycle.sql`已通過Node SQLite與
+fake-D1 adapter tests；`0002`鎖定`day-all-v1` output形狀、completed run audit與
+closed-day immutable/late-input邊界，`0003`鎖定consent replay index、pause-state
+triggers及既有guard enum相容性。
 但尚未完成真實`wrangler d1 migrations apply --local` rehearsal，也未配置或套用任何
 staging／production D1。Runtime writers、compactor與rebuild已實作；環境、restore及
 staging evidence仍缺，因此狀態必須保持STOP。
@@ -421,10 +499,10 @@ projection 不可信，安全狀態是讓 `/v1/public/totals` 回 `503`，local 
 
 ## 8. Daily encrypted export 與 monthly restore/rebuild drill
 
-此流程目前 **不可執行**：Durable suppression、projection rebuild、bounded deletion、
-`day-all-v1` anonymous compaction與hard-retention source paths已實作，但backup
-bucket、加密key custody、可驗證的suppression replay/export tool與真實restore drill
-尚未完成。
+此流程目前仍 **不可在遠端執行**：Durable suppression、projection rebuild、bounded
+deletion、`day-all-v1` anonymous compaction、hard-retention與本機隔離
+suppression-aware restore runner source paths已實作，但backup bucket、加密key custody、
+suppression ledger安全export、owner-owned無route隔離D1 binding與真實restore drill尚未完成。
 Initial D1 schema與單元測試不能取代這些營運能力，因此仍是 production STOP gate。
 完成後由隔離的 ops identity 每日：
 
@@ -463,13 +541,27 @@ cd ../..
 
 - schema/migration version、table row counts 與 checksum；
 - 已刪 current rows、credentials、shares 沒有復活；
+- queued/running deletion-job verifier與`mutation_guard_*` credential shadow
+  已清空；隔離restore不可能有合法in-flight writer；
 - `anonymous_rollups + usage_daily_current` 重建值與預期相符，counter 可下降；
 - projection 刪除後可完整 rebuild，且沒有 contributor mapping 進 anonymous rollup；
 - backup、logs 與 drill evidence 沒有 forbidden field/secret；
 - RTO、RPO 與失敗原因已記錄。
 
-目前 repository 有 scheduled rebuild，但沒有 suppression replay／backup restore
-orchestrator；禁止用臨時 SQL 猜測取代。
+Repository現在有`createD1SuppressionAwareRestoreDrill`，會先鎖定active suppression
+snapshot與count manifest、bounded replay/purge、驗證credential/attributable row/share
+皆無殘留（含未過期queued/running deletion-job status/replay verifier與 abandoned
+`mutation_guard_*` token/deletion shadow），清除所有離線guard後再rebuild並核對
+count-only checksum；本機真SQLite fixture命令為：
+
+```sh
+npm run test:restore-drill --workspace @tokenmonster/cloud-d1
+```
+
+這不是遠端成功證據。真實drill仍須owner提供新建且無public route的restore D1
+binding、獨立suppression Durable Object reader、suppression-key derivation binding與核准的
+counts/checksum manifest；任何一步失敗都要銷毀該隔離DB，絕不可掛route或移作
+staging。未提供前不得新增公開admin endpoint或以臨時SQL取代。
 
 ## 9. Incident gates
 

@@ -56,17 +56,22 @@
   成 `openai`／`anthropic`／`google`／`xai` 四個 28-day totals；gateway只回 starter
   decision，不回 numeric totals、model IDs或raw source metadata。Breakdown／projection
   failure必須顯示manual choice且不影響aggregate metrics與daily series。
-- [ ] Manual starter choice目前只存在UI session memory；reload／restart會清除，且
-  persistence、diagnostic、analytics、cloud wire與asset request均找不到該值。
+- [ ] Manual character choice只持久化在本機 strict
+  `character-preferences-v1.json`／progression selection，reload／restart後保留；
+  diagnostic、analytics、cloud wire與asset request均找不到該值或本機路徑。
 - [ ] Monster engine deterministic/coverage/DST/explanation tests通過；無 volume
   strength ladder、rank 或核心功能同意誘因。
-- [ ] Character catalog與 release-artifact scan 證明目前只出現 code-native
-  placeholders；blocked `.webp`、candidate marker、secret/source map 不在 artifact，
-  且目前runtime與packet capture沒有任何AI-Sister cloud asset GET。
-- [ ] 若未來asset runtime進入scope：release內嵌approved manifest是唯一authority，
-  GET只到一個exact allowlisted AI-Sister HTTPS CDN origin與immutable public key；
-  SHA-256／bytes／MIME、content-addressed cache corruption、offline fallback與no-query
-  packet-capture tests全部通過。此項runtime目前**尚未實作**。
+- [ ] Character catalog與 release-artifact scan 證明 binaries、blocked candidate、
+  secret/source map 不在 artifact；schema-v1 integrity manifest 不被當成 public rights
+  approval；default-mode（不靠 compatibility flag）CLI／Electron packet capture沒有
+  AI-Sister asset GET，artifact 也不含舊 CDN origin／override marker／downloader
+  capability signature或symbolic link。
+- [ ] Public asset runtime只能以release內嵌schema-v2 rights-approved manifest為唯一
+  authority。目前 gateway 只接受null origin、拒絕transport hook且沒有逐物件
+  downloader；SHA-256／bytes／MIME、content-addressed cache corruption與offline
+  fallback通過。未來網路 enablement 必須改為明確同意的
+  fixed pack，並證明 request set/order 不隨 character、unlock、theme、pose、trigger 或
+  usage 改變。Rights migration與 fixed-pack transport都未完成，因此public enablement為STOP。
 - [ ] Public API tests驗證 fail-closed `503`、fixed contributor wording、decimal strings、
   ETag/304、narrow CORS、Problem Details 與 security headers。
 - [ ] Web tests驗證 API unavailable 時不 fake counter、download 不冒充可用、zh-TW
@@ -82,7 +87,8 @@
   adapter、bounded deletion worker與Durable rate/suppression ports，以及Companion實際
   payload preview、enrollment、OS-backed scoped secrets、非重疊background sync、
   no-due zero-egress、手動retry、local stop/delete/status已有unit/SQLite/dry-run tests；
-  **仍 PENDING：** server pause/resume、cloud-off packet-capture與sleep/wake E2E、
+  server pause/resume 已有domain/HTTP/D1/Worker整合、冪等與paused-ingest tests；
+  **仍 PENDING：** cloud-off packet-capture與sleep/wake E2E、
   backup/restore/suppression replay與
   staging E2E。Checked-in mutation gate不得在上述完成前開啟。
 - [ ] Electron sandbox/CSP/main-frame IPC/navigation/download denial、single-instance、
@@ -116,9 +122,9 @@
   written public/commercial/modify/redistribute grant、rights/brand review與 unofficial/
   unaffiliated disclosure全部核准。
 - [ ] 若未來AI-Sister CDN delivery進入scope：release owner與privacy owner核准唯一
-  exact origin、`tokenmonster/characters/v1` immutable prefix、release-embedded manifest、
-  cache/eviction/fallback policy與edge-log retention；使用者disclosure明示CDN可看見
-  requested public object及client IP，但request沒有token/user/local-path資料或query。
+  exact origin、immutable fixed-pack version、release-embedded manifest、使用者明確
+  同意、cache/eviction/fallback policy與edge-log retention；packet capture證明完整
+  request set/order與所有本機 usage／selection／progression／pose／voice trigger無關。
 - [ ] 若上項未核准，release owner 確認 artifact **只有** TokenMonster code-native
   letter placeholders；lack of raster rights 不得以「之後補」豁免二進位掃描。
 - [ ] Alpha research owner 核准 30 位參與者招募、7 天 protocol、同意文案、support/
@@ -161,8 +167,9 @@
 - [ ] Collector detection與修復訊息可支援 cohort；support與incident on-call已排班。
 - [ ] Alpha build只含核准素材；目前 AI-Sister rasters未核准，因此只能 placeholders。
 - [ ] Cloud-off／asset packet capture證明目前沒有AI-Sister asset GET；未來若啟用，
-  capture只能看見approved public object request，不得含query string、token/provider
-  totals、starter rationale、user/install ID或filesystem/project path。
+  capture只能看見固定 pack/version及client IP，不得含或由 object set推得
+  token/provider totals、starter rationale、character/theme/unlock/pose/trigger、
+  user/install ID或filesystem/project path。
 - [ ] 招募名單、consent revision、退出/刪除流程與每日 safety review已確認。
 
 ## 6. Alpha exit metrics 與決策
@@ -198,9 +205,10 @@ trait/copy主要迭代與等規模復驗；D7未達標不進 Beta。Opt-in未達
   或model-breakdown失敗連帶讓aggregate metrics不可用。
 - Blocked/unlicensed raster、secret、provider-branded asset未通過 rights/brand gate卻
   進 artifact。
-- AI-Sister cloud asset runtime在沒有release-embedded approved manifest、exact-origin
-  allowlist、SHA-256/bytes/MIME/cache/fallback驗證、no-query packet capture與CDN
-  object/IP disclosure前被啟用。
+- AI-Sister cloud asset runtime在沒有release-embedded schema-v2 rights-approved
+  manifest、使用者明確同意、fixed pack/version、exact-origin與
+  SHA-256/bytes/MIME/extraction/cache/fallback驗證前被啟用；packet capture還必須證明
+  request set/order不隨character、unlock、theme、pose、trigger或usage改變。
 - Release commit不乾淨、CI/audit/security evidence缺失、環境或 rollback target不明。
 
 ### `GO-STAGING-WEB-PREVIEW`

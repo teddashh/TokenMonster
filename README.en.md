@@ -21,8 +21,10 @@ counter.
 > cross-platform collection; TokenMonster consumes only its loopback aggregate
 > API. The target experience is one command, `npx tokenmonster`, with no
 > repository clone, separate Electron install, or manually started collector.
-> The sidecar source path now passes a real isolated-HOME Linux smoke. npm
-> publication, Windows/macOS CI smoke, and legacy cutover remain incomplete.
+> The sidecar source path now passes a real isolated-HOME Linux smoke from the
+> source tree; that is not clean installed-package evidence for the current
+> bytes. npm publication, Windows/macOS CI smoke, and legacy cutover remain
+> incomplete.
 > The current Tokscale/Electron collection path is a legacy source slice to be
 > removed; see [ADR 0005](docs/adr/0005-permanent-tokentracker-sidecar-adapter.md).
 
@@ -57,6 +59,13 @@ See the [data inventory](docs/DATA_INVENTORY.md) and
 
 ## Local companion experience
 
+- The companion can switch between Traditional Chinese and English. It stores
+  only a content-free locale/revision beside `progressionStorePath`, so the
+  choice survives changing loopback ports without cloud storage or reliance on
+  browser localStorage. If private storage is unavailable, it fails closed to
+  Traditional Chinese while allowing a session-only switch through fixed,
+  authenticated local document routes. That route change performs a complete
+  render, including already-visible chart and number formatting.
 - First run exposes the collector's `starting` → `syncing` → `ready`
   phases. A successful scan without supported data is `ready-no-data`; a first
   failed scan is `refresh-failed`; a failure after a successful scan is
@@ -65,46 +74,49 @@ See the [data inventory](docs/DATA_INVENTORY.md) and
   request no more often than every five seconds.
 - The roster has eleven companions: the ChatGPT, Claude, Gemini, and Grok
   sisters, plus the DeepSeek, Qwen, Mistral, Venice (displayed as Llama),
-  Sakana, Perplexity, and GLM friends. The uniquely most-used OpenAI,
-  Anthropic, Google, or xAI family over the latest 28 UTC days selects its
-  sister as the automatic starter (元祖). A tie or no data asks the user to
-  choose.
+  Sakana, Perplexity, and GLM friends. First run always asks the player to
+  choose one of the four sisters; historical provider usage never chooses on
+  the player's behalf. Existing usage can still unlock companions through
+  explicit milestones, and selections saved by older releases are preserved.
 - Characters unlock through explicit local milestones based on provider-family
   totals, lifetime total, active-day streak, or provider breadth. Every
   art-backed character has 20 wardrobe themes with `supported`, `challenged`,
   and `victory` pose art; GLM currently uses the built-in letter mode. Unlocks
   are local-only, monotonic, and never purchasable.
-- Doll art and future voice files are not bundled in the npm package. Only a
-  hash-named object needed after unlock is fetched on demand from the fixed
-  HTTPS CDN, verified with SHA-256, and stored under
-  `~/.tokenmonster/asset-cache`. Requests carry no query string, usage value,
-  character-selection record, or user ID; the CDN still sees the public object
-  key and client IP. `--no-character-downloads` disables every character image
-  and voice download and uses only verified cache entries plus built-in letter
-  mode. Voice assets will ship later through the same manifest gate; the UI
-  defaults voice off until the user enables it.
+- Doll art and prerecorded voice files are not bundled in the npm package. The
+  embedded fixed-pack authority, descriptor, and allowlist remain `null`, so
+  CLI and Electron only verify the local cache, fall back to letter mode or
+  silence, and issue zero character-asset requests. The
+  `--no-character-downloads` flag remains a backward-compatible alias. This
+  worktree implements explicit consent, one state-independent immutable pack,
+  complete verification, offline restart, repair, and removal; the control can
+  appear only after a rights-approved schema-v2 authority is embedded.
+  State-selected per-object downloads remain disabled because a public object
+  key could reveal the local character or wardrobe state. The schema-v1
+  runtime integrity manifest already references 50 voice
+  lines and the UI defaults voice off. Those rows are not public approval;
+  every image and voice association still needs the schema-v2 rights gate.
 
-With anonymous contribution left at its default off setting, those queryless
-static asset GETs are the companion's only automatic traffic to
-TokenMonster-operated infrastructure, and `--no-character-downloads` disables
-even that. Anonymous UTC daily aggregates travel only after separate explicit
-opt-in; BYOK requests go directly from the device to the selected provider.
+With anonymous contribution left at its default off setting, the companion
+does not automatically contact TokenMonster-operated infrastructure. Anonymous
+UTC daily aggregates travel only after separate explicit opt-in; BYOK requests
+go directly from the device to the selected provider.
 
 ## Implemented surface and release status
 
 | Area | Current source slice | Release status |
 | --- | --- | --- |
-| Local companion (sidecar path) | Lightweight localhost UI, an immediately visible character, real UTC today/7/28 totals, and a daily trend | Source CLI and isolated Linux smoke pass; safe workflow-trait aggregates, registry publication, and cross-platform smoke remain |
-| Collector | Exact-pinned `tokentracker-cli@0.80.0` child, local-only refresh, strict loopback adapter/gateway; the legacy slice still contains `tokscale@4.5.2` | Sidecar source slice and isolated Linux smoke pass; registry publication, Windows/macOS CI smoke, and cutover remain |
+| Local companion (sidecar path) | Lightweight localhost UI, four-choice onboarding inside the compact pet, real UTC today/7/28 totals, and a daily trend | Source CLI and source-tree isolated-HOME Linux smoke pass for this post-rc.11 worktree; installed-package smoke has not been refreshed for the current bytes, and registry publication plus native Windows smoke of a fresh candidate remain |
+| Collector | Exact-pinned `tokentracker-cli@0.80.0` child, local-only refresh, strict loopback adapter/gateway; the legacy slice still contains `tokscale@4.5.2` | The sidecar source slice and source-tree Linux smoke pass; a clean installed package, registry publication, Windows/macOS CI smoke, and cutover remain |
 | Legacy Electron companion | Local SQLite, old 7/28-day trends, traits/fixed lines, share card, and export/reset | Migration-only; no longer the supported install or collection path, and removed or reduced to a thin shell after cutover |
-| Characters | Eleven switchable letter characters; local starter selection and monotonic unlocks, 20 themes plus pose art for ten characters, and GLM letter mode | Image downloading, SHA-256 verification, local cache, and the offline flag are wired; the voice manifest is currently empty and the UI defaults voice off |
+| Characters | Eleven switchable characters; local starter selection and monotonic unlocks, 20 themes plus pose art and 50 prerecorded voice refs for ten characters, and GLM letter mode | Fixed-pack consent/verification/repair/removal and letter fallback are complete; the user reports GLM approval is granted, while formal evidence transcription, a non-null authority, and optional art-pack publication remain pending and do not block the letter-mode application release |
 | BYOK | Companion main process calls OpenAI Responses directly with `store: false`, `background: false`, and no tools/files/conversation IDs | Implemented; a manual real-key network smoke on a safe release host remains |
-| Anonymous contribution | Off by default, exact payload preview, accountless enrollment, background sync/idempotent retry, stop, delete/status | Implemented and locally tested; staging and cloud-off packet-capture E2E remain |
+| Anonymous contribution | Off by default, exact payload preview, accountless enrollment, background sync/idempotent retry, stop, delete/status/recovery | Protocol, runtime, gateway/UI controls, and conditional CLI composition are locally tested; the normal pure-Node launch remains unavailable and zero-cloud until it has an audited native OS credential host, and staging/cloud-off packet-capture E2E remain |
 | Web/API | zh-TW-first React/Vite SPA, Hono Worker API, public totals, enrollment/ingest/delete/status | Implemented, built, and fail-closed in dry-run; no remote environment is configured |
 | Cloud data | Guarded D1 mutations, deletion, projection, retention, Durable Object rate limits/suppression | Implemented and locally tested; real D1 migrations, capacity, and failure rehearsals remain |
 | Anonymous compaction | Complete UTC-day `day-all-v1`, `k = 20` gate, mapping-free rollups, commit-time race guards | Implemented and locally tested; no staging/production E2E yet |
 | Scheduled maintenance | Deletion → compaction → retention → projection; retention preserves compaction-owned input to prevent partial-day loss | Implemented and locally tested; not yet verified against real Cron Triggers/D1 |
-| Installers | Internal unsigned Linux/macOS ASAR/ZIP can be produced and inspected, including the pinned Tokscale MIT notice | Not a public installer; signing, notarization, DMG/updater verification, and native smoke are STOP gates |
+| Installers/update feed | Internal unsigned Linux/macOS ASAR/ZIP can be produced and inspected; Windows release tooling strictly binds `RELEASES` to one full `.nupkg` and emits a deterministic `latest`/`next` promotion plan | Not a public installer; signing, notarization, DMG, Squirrel current-channel retrieval/credentialed deployment/public readback, and native install-update smoke remain STOP gates |
 
 ## Accepted target architecture
 
@@ -137,7 +149,7 @@ flowchart LR
   Rollups --> Projection
   Projection --> Public[public contributor counter]
   BYOK -->|transient prompt; direct request| Provider[selected AI provider]
-  CDN[fixed HTTPS CDN\nstatic hash-named assets] -->|on-demand GET after unlock| Cache
+  Pack[explicitly consented fixed asset pack] -.-> Cache[verified local asset cache]
 ```
 
 TokenTracker is the sole collection and deduplication authority; TokenMonster
@@ -149,13 +161,14 @@ upstream store, a provider key, or conversation content.
 
 ```text
 apps/
-  companion/        Legacy Electron/Tokscale UI and BYOK/contribution flow
+  companion/        Retiring legacy Electron UI and local host composition
   web/              React/Vite public UI and Cloudflare Worker entry
   api/              Portable HTTP and fail-closed Cloudflare compositions
 packages/
   cli/              `tokenmonster` entry point and lifecycle composition
   companion-ui/     Lightweight localhost character, real totals, daily trend
   companion-gateway/ Loopback session, fixed assets/API, DTO projection
+  contribution-runtime/ Opt-in lifecycle, outbox, pause/delete, daily projection
   token-tracker-runtime/ Exact-pinned child and local-only refresh lifecycle
   token-tracker-adapter/ Sole upstream aggregate API boundary
   contracts/        Versioned strict schemas shared by local and cloud code
@@ -184,8 +197,8 @@ packages must not import Electron, Hono, D1, or UI frameworks.
 - Node.js `24.15.0`
 - npm `11.12.1`
 - Git
-- The public CLI targets Node.js `>=20`; repository gates remain fixed to the
-  toolchain above for now
+- The public CLI and repository gates both require Node.js `24.15.0` exactly;
+  release smoke rejects other versions to prevent unreviewed runtime drift
 - Only legacy Tokscale/Electron packaging tests still require `bubblewrap`,
   `strace`, or `sandbox-exec`
 - Cloudflare remote operations: Wrangler and an owner-approved
@@ -220,11 +233,12 @@ the matching `ssh -L` command. Omit it on a local desktop. This path uses the
 TokenTracker collector bundled as an exact dependency; users do not clone or
 start the TokenTracker repository separately.
 
-Add `--no-character-downloads` when the companion must not contact the
-character CDN. This mode downloads neither images nor future voice files. It
-revalidates and reads only `~/.tokenmonster/asset-cache`, falling back to the
-built-in letter renderer when an object is absent; collection, charts, and
-local unlock progress are unaffected.
+Character assets are unconditionally cache-only: the gateway accepts only a
+null CDN origin and exposes no network fetch hook or per-object downloader.
+`--no-character-downloads` is retained for backward compatibility. The
+companion revalidates and reads only `~/.tokenmonster/asset-cache`, falling back
+to the built-in letter renderer or silence when an object is absent;
+collection, charts, and local unlock progress are unaffected.
 
 The Web/Electron commands below belong to the public site or legacy migration
 slice; they are not the new companion launch path.
@@ -329,6 +343,13 @@ not constitute an Alpha release.
    written. Below-threshold expired attributable rows are deleted as a whole
    day and never exposed as a small cohort.
 
+The permanent loopback controls and CLI runtime composition are implemented,
+but the normal pure-Node entry point intentionally injects no contribution
+credential authority yet. Its status is therefore unavailable/default-off and
+it performs zero contribution-cloud work. A platform release must provide and
+audit a native OS credential host before those controls can enable sharing;
+plaintext, memory-only, or environment-variable fallback is forbidden.
+
 Important limitation: the scheduler currently has local fake-timer and service
 tests only. Staging packet capture, retry/out-of-order E2E, and real-D1
 compaction/retention race rehearsals remain pending.
@@ -378,8 +399,8 @@ Production and staging are both **STOP**. At minimum, the following gates remain
   and rollback drills;
 - privacy/terms/legal review, a project-license decision, and third-party
   redistribution review;
-- a separate rights/brand gate for future voice packs; the current release
-  manifest contains no voice files.
+- a separate schema-v2 rights/brand/content gate for the existing 50 voice refs
+  and any future voice packs; schema-v1 runtime rows are not public approval.
 
 Until every gate has reproducible evidence, do not create production D1 state,
 enable mutations, publish a download link, or call this project live.
@@ -400,13 +421,12 @@ the two sources must never cover or be summed for the same time window during
 migration.
 
 AI-Sister/`multi-ai-chat-app` is the design and persona source, but it is not a
-TokenMonster runtime dependency. The release-embedded strict manifest lists
-immutable hash-named output for ten approved characters, each with 20 themes
-and poses. GLM has no matching art bundle and therefore stays in
-TokenMonster-owned letter mode. Only after unlock does the companion fetch a
-manifest-listed object from the fixed CDN, verify its SHA-256, display it, and
-cache it locally. Raw parts, generation tools, prompts, and publisher
-credentials never enter TokenMonster. See the
+TokenMonster runtime dependency. The release-embedded schema-v1 integrity
+manifest lists immutable hash-named output for ten characters, each with 20
+themes and poses. GLM has no matching art bundle and therefore stays in
+TokenMonster-owned letter mode. Release entry points display only reverified
+local-cache objects; usage-selected lazy fetch is disabled. Raw parts,
+generation tools, prompts, and publisher credentials never enter TokenMonster. See the
 [character wardrobe map](docs/CHARACTER_WARDROBE_MAP.md).
 
 ## Documentation

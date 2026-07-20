@@ -92,9 +92,21 @@ Trust-boundary rules:
 - Numeric starter provider totals and upstream model/source metadata stop
   before the gateway. The UI receives only the starter decision, and its manual
   override is stored only in app-private local progression/preferences state.
-- The character-asset runtime trusts a release-embedded strict manifest, not a
-  mutable live manifest or URL supplied by upstream data. It fetches only
-  hash-named objects from the fixed HTTPS CDN origin after local unlock.
+- The UI locale store contains only schema version, monotonic revision, and
+  `zh-TW`/`en`. It is derived beside the private progression store and never
+  contains a path, content, browser origin, account, or usage value. Loopback
+  reads require the session; mutations additionally require the exact Origin
+  and CAS revision. Reads and post-rename validation compare path and opened
+  handle identity (with POSIX no-follow); noncanonical, linked, or non-private
+  bytes fail closed without being overwritten or returned to the renderer.
+  Session-only fallback uses two exact authenticated document paths, reflects no
+  arbitrary URL input, and may preserve only the exact `?view=pet` query.
+- The character-asset runtime trusts a release-embedded strict schema-v1
+  integrity manifest (not rights approval), not a mutable live manifest or URL
+  supplied by upstream data. The gateway accepts
+  only a null CDN origin and has no asset fetch hook or downloader. Future
+  network acquisition must be an explicit fixed-pack operation whose request
+  set is independent of local usage and progression.
 
 ## 3. Threat actors and assumptions
 
@@ -131,6 +143,8 @@ The product removes incentives to inflate and discloses these limits.
 | LOC-03 | Secret stored as plaintext on Linux | Async safeStorage check; disable persistence on `basic_text`; never use localStorage/SQLite | Linux backend test | Blocker |
 | BYO-01 | Key exfiltrated through proxy/custom URL | Main-process direct HTTPS to fixed OpenAI origin; no custom base URL; renderer never gets reusable key | Mock origin/redirect/IPC tests | Blocker |
 | BYO-02 | Prompt/response retained or logged | `store: false`; in-memory bounded history; body/header redaction; crash bundle allowlist | Mock request plus persistence/log scan | Blocker |
+| ENR-01 | First-enrollment response loss or crash orphans server-issued authority, duplicates consent, or silently consents a replacement | Client-generated u2/d2/r2 persisted atomically before request; exact replay verifies all three verifiers plus accepted consent; pending clears last; definitive expiry requires a new preview | Response-loss, concurrent replay, policy/freshness drift, pepper rotation, and every pending-to-active crash boundary | Blocker on regression |
+| ENR-02 | Recovery token is substituted for deletion/status authority or raw enrollment secrets enter D1/logs | Scope/version-separated canonical credentials; r2 accepted only on strict V2 enrollment; verifier-only D1 table; strict response omits credentials and installation ID | Alias/scope substitution, schema privacy, D1 bind/column, delete-cascade, and log-surface tests | Blocker on regression |
 | ING-01 | Replay/retry/rescan doubles public total | Server canonical key/hash, absolute snapshot, monotonic revision, transactional replace | 100x replay and reorder suite | Blocker |
 | ING-02 | Same revision carries different data | Server-computed canonical hash; return 409 and security event | Conflict test | Blocker |
 | ING-03 | Client spoofs contributor/bucket/hash | Bearer-derived enrollment; strict body excludes all three | Unknown-field contract tests | Blocker |
@@ -145,10 +159,11 @@ The product removes incentives to inflate and discloses these limits.
 | PRI-02 | User expects old anonymous totals to be individually deletable | 30-day attributable window, irreversible coarse compaction, explicit pre-consent wording | Retention/delete UX test | Blocker |
 | OPS-01 | D1/cache loss makes counter unrecoverable | Anonymous rollups + current canonical rows; daily logical exports; rebuild/restore drill | Scheduled restore drill | Blocker for GA |
 | OPS-02 | Logs/backups retain secrets or forbidden bodies | Body/header logging disabled, structured redaction, access control, retention policy | Canary scan and access review | Blocker |
+| OPS-03 | Restoring an older backup resurrects deleted current rows, upload/deletion or deletion-job credentials, abandoned mutation-guard credential shadows, consent, or shares | Replay the independent active-suppression ledger before a bounded purge; clear all offline guard shadows; run residue audit before projection rebuild; evidence contains counts/checksums only | Real SQLite restored fixture with queued/running job and mutation-guard credentials, ledger-drift/bound/residue/rollback failure injection, owner-run isolated remote drill | Local runner implemented; remote owner drill remains a blocker |
 | SUP-01 | npm/GitHub Action/update supply-chain compromise | Exact pins/lockfile, action commit SHAs, audit/SBOM, reviewed update PR, signed/checksummed desktop artifacts | CI/release attestation | Blocker for GA |
 | AST-01 | Unlicensed or provider-branded art ships | Release-embedded allowlist, immutable source hash, rights/brand review, build inventory | Release artifact inventory | Blocker for every asset update |
-| AST-02 | Asset runtime accepts a substituted origin/object or displays tampered content | Release-embedded strict manifest; fixed HTTPS CDN origin; immutable hash-named keys; SHA-256 and response-size verification; verified cache; letter fallback | Redirect/origin, hash/size, cache-corruption, and offline-fallback tests | Implemented; regression blocker |
-| AST-03 | Asset GET leaks usage or is described as anonymous even though the CDN sees object/IP | Fixed public object key with no query parameters; never attach token/provider totals, starter rationale, user/install ID, or local path; explicit disclosure; `--no-character-downloads` | Packet capture plus CDN configuration/privacy review | Implemented; regression blocker |
+| AST-02 | Asset runtime accepts a substituted object or displays tampered content | Release-embedded strict manifest; immutable hash-named cache entries; SHA-256/size/media verification; letter fallback. Future fixed-pack transport also needs exact origin, redirect, transfer, and extraction bounds | Cache-corruption/offline tests now; pack integrity/origin tests before enablement | Cache path implemented; network enablement blocked |
+| AST-03 | Asset request reveals usage-derived character, unlock, pose, or voice state through a public hash key | Gateway accepts only a null origin and has no transport hook/downloader; CLI/Electron ignore legacy overrides. Future transport requires explicit consent plus a fixed pack whose request set/order is independent of all local state | Strict configuration rejection, cache-only image/WAV regressions, artifact marker/symlink scan, and packet capture | Current release mitigated; fixed-pack flow not implemented |
 
 ## 5. Collector process policy
 
@@ -241,9 +256,12 @@ Required automated suites:
 - deletion across current bucket, share, cache, consent, and credential;
 - clean build, audit, SBOM, secret scan, signed artifact inventory, and restore
   drill before GA.
-- Character-asset egress: exact-origin/redirect denial, embedded-manifest,
-  SHA-256/size/MIME, cache-corruption, no-query packet
-  capture, CDN disclosure/logging, and local-fallback tests.
+- Character-asset egress: default-mode CLI/Electron packet capture with zero
+  AI-Sister requests, release-artifact marker scan, embedded-manifest,
+  SHA-256/size/MIME cache-corruption, strict transport-config rejection,
+  cache-only image/WAV miss, and local-fallback tests.
+  A future fixed pack additionally needs exact-origin/redirect/size/extraction
+  tests and proof that request set/order is usage-independent.
 
 If a forbidden field or secret reaches cloud wire, persistence, logs,
 analytics, diagnostics, crash reports, or a share:
@@ -266,10 +284,10 @@ The following are accepted for MVP only when prominently documented:
   continue;
 - approved provider-inspired characters remain unofficial and must carry an
   unaffiliated disclosure after brand review.
-- no AI-Sister cloud asset GET occurs in the current implementation. If the
-  future approved runtime is enabled, the AI-Sister CDN will observe the
-  requested public object and client IP even though no token, user, or local
-  path data is attached.
+- no AI-Sister cloud asset GET occurs in the current implementation. If a
+  future explicit fixed-pack flow is enabled, the AI-Sister CDN will observe
+  only the pack version and client IP; it must not observe a character-,
+  theme-, pose-, trigger-, or unlock-specific request set.
 
 Any change that adds raw events, hours/timezones to cloud, provider proxying,
 file/tool execution in BYOK chat, public per-user profiles, voice cloning, or
