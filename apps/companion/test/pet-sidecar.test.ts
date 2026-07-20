@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   UTILITY_PROCESS_COMMAND,
+  UTILITY_VERSION_VERIFIED_EXIT_CODE,
   createUtilityChildProcess,
   createUtilityProcessSpawn,
   utilityProcessSpawn,
@@ -47,7 +48,7 @@ function spawnOptions(
 }
 
 describe("Electron utility-process facade", () => {
-  it("delivers version stdout before exit and close", async () => {
+  it("translates the shim's verified-version exit into stdout before close", async () => {
     const utility = new FakeUtility();
     let forkCall:
       | Readonly<{
@@ -82,9 +83,7 @@ describe("Electron utility-process facade", () => {
     child.on("close", () => events.push("close"));
     const closed = once(child, "close");
 
-    utility.stdout.end("v0.80.0\n");
-    utility.stderr.end();
-    utility.emitExit(0);
+    utility.emitExit(UTILITY_VERSION_VERIFIED_EXIT_CODE);
     await closed;
 
     expect(events).toEqual(["data:v0.80.0\n", "exit", "close"]);
@@ -99,11 +98,42 @@ describe("Electron utility-process facade", () => {
         "--version"
       ],
       options: {
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: "ignore",
         env: { KEEP: "present" },
         serviceName: "tokentracker-sidecar"
       }
     });
+  });
+
+  it("fails closed when a version probe exits without the verified transport", async () => {
+    const utility = new FakeUtility();
+    const spawn = createUtilityProcessSpawn(
+      () => utility.asUtilityProcess(),
+      () => "/app/dist/main/main/sidecar-shim.cjs"
+    );
+    const child = spawn(
+      UTILITY_PROCESS_COMMAND,
+      [
+        "--require",
+        "/app/dist/main/main/network-deny.cjs",
+        "/sidecar/bin/tracker.js",
+        "--version"
+      ],
+      spawnOptions(["ignore", "pipe", "pipe"])
+    );
+    const chunks: string[] = [];
+    child.stdout?.on("data", (chunk: Buffer) => {
+      chunks.push(chunk.toString("utf8"));
+    });
+    child.stderr?.resume();
+    const closed = once(child, "close");
+
+    utility.stdout.write("v0.80.0\n");
+    utility.emitExit(0);
+
+    expect(await closed).toEqual([1, null]);
+    expect(chunks).toEqual([]);
+    expect(child.exitCode).toBe(1);
   });
 
   it("reports an unknown exit code as failure, not success", async () => {
@@ -175,33 +205,6 @@ describe("Electron utility-process facade", () => {
     expect(child.exitCode).toBe(0);
   });
 
-  it("drains a Windows-style stdout chunk delivered after exit", async () => {
-    const utility = new FakeUtility();
-    const child = createUtilityChildProcess(
-      utility.asUtilityProcess(),
-      utility.stdout,
-      utility.stderr
-    );
-    const chunks: string[] = [];
-    child.stdout?.on("data", (chunk: Buffer) => {
-      chunks.push(chunk.toString("utf8"));
-    });
-    child.stderr?.resume();
-    const close = vi.fn();
-    child.on("close", close);
-    const closed = once(child, "close");
-
-    utility.emitExit(0);
-    expect(close).not.toHaveBeenCalled();
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    utility.stdout.write("v0.80.0\n");
-
-    expect(await closed).toEqual([0, null]);
-    expect(chunks).toEqual(["v0.80.0\n"]);
-    expect(utility.stdout.destroyed).toBe(true);
-    expect(utility.stderr.destroyed).toBe(true);
-  });
-
   it("closes immediately after exit when stdio is ignored", () => {
     const utility = new FakeUtility();
     const spawn = createUtilityProcessSpawn(
@@ -227,6 +230,30 @@ describe("Electron utility-process facade", () => {
     expect(child.stdout).toBeNull();
     expect(child.stderr).toBeNull();
     expect(events).toEqual(["exit", "close"]);
+  });
+
+  it("never accepts the version sentinel for a non-version command", async () => {
+    const utility = new FakeUtility();
+    const spawn = createUtilityProcessSpawn(
+      () => utility.asUtilityProcess(),
+      () => "/app/dist/main/main/sidecar-shim.cjs"
+    );
+    const child = spawn(
+      UTILITY_PROCESS_COMMAND,
+      [
+        "--require",
+        "/app/dist/main/main/network-deny.cjs",
+        "/sidecar/bin/tracker.js",
+        "sync"
+      ],
+      spawnOptions("ignore")
+    );
+    const closed = once(child, "close");
+
+    utility.emitExit(UTILITY_VERSION_VERIFIED_EXIT_CODE);
+
+    expect(await closed).toEqual([UTILITY_VERSION_VERIFIED_EXIT_CODE, null]);
+    expect(child.exitCode).toBe(UTILITY_VERSION_VERIFIED_EXIT_CODE);
   });
 
   it("kills gracefully for SIGTERM and escalates SIGKILL past utility.kill", () => {

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { PINNED_TOKEN_TRACKER_VERSION } from "@tokenmonster/token-tracker-runtime";
 
 const execFileAsync = promisify(execFile);
 
@@ -25,12 +26,15 @@ interface ShimRun {
   readonly stderr: string;
 }
 
-async function runShim(args: readonly string[]): Promise<ShimRun> {
+async function runShim(
+  args: readonly string[],
+  environment: Readonly<NodeJS.ProcessEnv> = {}
+): Promise<ShimRun> {
   try {
     const { stdout, stderr } = await execFileAsync(
       process.execPath,
       [shimPath, ...args],
-      { timeout: 15_000 }
+      { env: { ...process.env, ...environment }, timeout: 15_000 }
     );
     return { code: 0, stdout, stderr };
   } catch (error) {
@@ -75,6 +79,11 @@ describe("sidecar shim", () => {
         "      }",
         "      return;",
         "    }",
+        "    if (args.length === 1 && args[0] === '--version') {",
+        "      if (process.env.TOKENMONSTER_TEST_DIRECT_VERSION_EXIT === '1') process.exit(42);",
+        `      console.log('v' + (process.env.TOKENMONSTER_TEST_VERSION ?? '${PINNED_TOKEN_TRACKER_VERSION}'));`,
+        "      return;",
+        "    }",
         "    console.log(JSON.stringify(args));",
         "    // Large payload: proves the shim flushes stdout before exiting.",
         "    process.stdout.write('x'.repeat(100000) + '\\n');",
@@ -99,13 +108,46 @@ describe("sidecar shim", () => {
     const result = await runShim([
       guardPath,
       trackerEntry,
-      "--version",
+      "--echo",
       "extra"
     ]);
     expect(result.code).toBe(0);
     const [argsLine, payload] = result.stdout.split("\n");
-    expect(JSON.parse(argsLine ?? "")).toEqual(["--version", "extra"]);
+    expect(JSON.parse(argsLine ?? "")).toEqual(["--echo", "extra"]);
     expect(payload).toHaveLength(100000);
+  });
+
+  it("captures and reports the exact pinned version through its exit code", async () => {
+    const result = await runShim([
+      guardPath,
+      trackerEntry,
+      "--version"
+    ]);
+    expect(result).toEqual({ code: 42, stdout: "", stderr: "" });
+  });
+
+  it("rejects drift, overflow, and a nested direct exit during the version probe", async () => {
+    const versionArgs = [guardPath, trackerEntry, "--version"];
+    const drift = await runShim(versionArgs, {
+      TOKENMONSTER_TEST_VERSION: "0.80.1"
+    });
+    expect(drift.code).toBe(1);
+    expect(drift.stdout).toBe("");
+    expect(drift.stderr).toContain("exact version output mismatch");
+
+    const overflow = await runShim(versionArgs, {
+      TOKENMONSTER_TEST_VERSION: "x".repeat(100)
+    });
+    expect(overflow.code).toBe(1);
+    expect(overflow.stdout).toBe("");
+    expect(overflow.stderr).toContain("exact version output mismatch");
+
+    const nestedExit = await runShim(versionArgs, {
+      TOKENMONSTER_TEST_DIRECT_VERSION_EXIT: "1"
+    });
+    expect(nestedExit.code).toBe(1);
+    expect(nestedExit.stdout).toBe("");
+    expect(nestedExit.stderr).toContain("version command attempted direct exit");
   });
 
   it("exits 1 and reports the error when run() rejects", async () => {
