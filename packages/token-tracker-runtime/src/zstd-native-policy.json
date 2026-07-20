@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1",
+  "dependency": {
+    "sidecarPackage": "tokentracker-cli",
+    "sidecarVersion": "0.80.0",
+    "nativePackage": "@mongodb-js/zstd",
+    "nativeVersion": "2.0.1",
+    "sidecarDependencySpecifier": "^2.0.1"
+  },
+  "source": {
+    "repositoryUrl": "https://github.com/mongodb-js/zstd",
+    "releaseTag": "v2.0.1",
+    "releaseAssetBaseUrl": "https://github.com/mongodb-js/zstd/releases/download/v2.0.1",
+    "signingKeyUrl": "https://pgp.mongodb.com/node-driver.asc",
+    "signingKeyFingerprint": "9CABA99E47FA20E21F8409E5C6666E424A119C64",
+    "napiVersion": 4
+  },
+  "runtimeVerifier": {
+    "archiveEntry": "node_modules/@tokenmonster/token-tracker-runtime/dist/zstd-native-verifier.js",
+    "sha256": "36c117e8ade4c63ba7fd4843df9589450799eee117d3c86367073547a7286734"
+  },
+  "platforms": {
+    "linux-x64": {
+      "platform": "linux",
+      "arch": "x64",
+      "archiveName": "zstd-v2.0.1-napi-v4-linux-x64.tar.gz",
+      "archiveBytes": 399393,
+      "archiveSha256": "92c56d6e7b2cdd3614c98e08e7c28caef208977a943f44b3ddeca690ed25da4b",
+      "bindingPath": "build/Release/zstd.node",
+      "bindingBytes": 955312,
+      "bindingSha256": "5dcaf25b03359d2786b3cb39ae5f305739e65e627f30236585ceece1ab896c94"
+    },
+    "darwin-arm64": {
+      "platform": "darwin",
+      "arch": "arm64",
+      "archiveName": "zstd-v2.0.1-napi-v4-darwin-arm64.tar.gz",
+      "archiveBytes": 579039,
+      "archiveSha256": "1ce2361053c84792c29d4fa0bcea0242d7c7ce4c0c2867d8529f6175bb2a253c",
+      "bindingPath": "build/Release/zstd.node",
+      "bindingBytes": 1469032,
+      "bindingSha256": "3aebbdd58549b5d43dfc424129b6e572912612d9d65490dade37c22aebeb1872"
+    },
+    "win32-x64": {
+      "platform": "win32",
+      "arch": "x64",
+      "archiveName": "zstd-v2.0.1-napi-v4-win32-x64.tar.gz",
+      "archiveBytes": 240073,
+      "archiveSha256": "10aa97840eaf7449806c4e600cb8f48f7926dc89bf08fdc5d99295fa7e21729e",
+      "bindingPath": "build/Release/zstd.node",
+      "bindingBytes": 611840,
+      "bindingSha256": "a9a5067d0363dba5299f4072ae1525fed633029ddbc8d943dd1dd77a6342cf93"
+    }
+  }
+}
