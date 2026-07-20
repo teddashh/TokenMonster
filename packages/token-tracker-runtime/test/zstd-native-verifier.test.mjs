@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   copyFile,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -14,7 +15,9 @@ import { gzipSync, gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 
 import {
+  auditZstdNativePrebuild,
   inspectZstdPrebuildArchive,
+  isRetryableZstdDownloadStatus,
   validateGpgVerificationStatus,
 } from "../../../scripts/release/audit-zstd-native-prebuild.mjs";
 import {
@@ -351,5 +354,102 @@ describe("authenticated @mongodb-js/zstd native prebuild policy", () => {
         fingerprint,
       ),
     ).toThrow(/one valid/u);
+  });
+
+  it("retries only transport, timeout, 408, 429, and server failures", async () => {
+    expect(
+      [408, 429, 500, 503, 599].every((status) =>
+        isRetryableZstdDownloadStatus(status),
+      ),
+    ).toBe(true);
+    expect(
+      [0, 200, 301, 302, 400, 401, 404, 600].every(
+        (status) => !isRetryableZstdDownloadStatus(status),
+      ),
+    ).toBe(true);
+
+    const waits = [];
+    let attempts = 0;
+    await expect(
+      auditZstdNativePrebuild({
+        platformKeys: [zstdNativePlatformKey()],
+        fetchImpl: async () => {
+          attempts += 1;
+          if (attempts === 1) throw new Error("transient transport fixture");
+          if (attempts === 2) return new Response(null, { status: 503 });
+          return new Response("fixture signing key", { status: 200 });
+        },
+        gpgCommand: "tokenmonster-deliberately-missing-gpg-command",
+        retryWait: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      }),
+    ).rejects.toThrow(/gpg is not installed/u);
+    expect(attempts).toBe(3);
+    expect(waits).toEqual([100, 250]);
+
+    attempts = 0;
+    waits.length = 0;
+    await expect(
+      auditZstdNativePrebuild({
+        platformKeys: [zstdNativePlatformKey()],
+        fetchImpl: async () => {
+          attempts += 1;
+          return new Response(null, { status: 404 });
+        },
+        retryWait: async (milliseconds) => {
+          waits.push(milliseconds);
+        },
+      }),
+    ).rejects.toThrow(/ineligible HTTP status/u);
+    expect(attempts).toBe(1);
+    expect(waits).toEqual([]);
+  });
+
+  it("allows authenticated output only for all platforms in a fresh directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tokenmonster-zstd-output-test-"));
+    const freshOutput = join(root, "fresh-output");
+    const existingOutput = join(root, "existing-output");
+    await mkdir(existingOutput);
+    let fetchCalls = 0;
+    const fetchImpl = async () => {
+      fetchCalls += 1;
+      return new Response(null, { status: 404 });
+    };
+    try {
+      await expect(
+        auditZstdNativePrebuild({
+          platformKeys: Object.keys((await loadZstdNativePolicy()).platforms),
+          fetchImpl,
+          outputDirectory: existingOutput,
+          retryWait: async () => undefined,
+        }),
+      ).rejects.toThrow(/must not already exist/u);
+      expect(fetchCalls).toBe(0);
+
+      await expect(
+        auditZstdNativePrebuild({
+          platformKeys: [zstdNativePlatformKey()],
+          fetchImpl,
+          outputDirectory: freshOutput,
+          retryWait: async () => undefined,
+        }),
+      ).rejects.toThrow(/exactly every policy platform/u);
+      expect(fetchCalls).toBe(0);
+      expect(await lstat(freshOutput).catch(() => null)).toBeNull();
+
+      await expect(
+        auditZstdNativePrebuild({
+          platformKeys: Object.keys((await loadZstdNativePolicy()).platforms),
+          fetchImpl,
+          outputDirectory: freshOutput,
+          retryWait: async () => undefined,
+        }),
+      ).rejects.toThrow(/ineligible HTTP status/u);
+      expect(fetchCalls).toBe(1);
+      expect(await lstat(freshOutput).catch(() => null)).toBeNull();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

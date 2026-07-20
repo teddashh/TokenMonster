@@ -47,6 +47,32 @@ before any public release. It is not a license for TokenMonster itself.
   continue to bind their exact names, versions, resolved registries, integrity,
   dependency identities, and physical package bytes.
 
+## @mongodb-js/zstd and Zstandard
+
+- Sources: <https://github.com/mongodb-js/zstd> and
+  <https://github.com/facebook/zstd>
+- Pinned production closure: `tokentracker-cli@0.80.0` ->
+  `@mongodb-js/zstd@2.0.1`, with the native implementation built against
+  Zstandard `1.5.6`
+- Licenses: Apache-2.0 for `@mongodb-js/zstd`; BSD for the statically linked
+  Zstandard implementation
+- Intended use: the exact native compression dependency already required by
+  the reviewed TokenTracker sidecar. TokenMonster does not add a second usage
+  collector or import TokenTracker parser/hook code.
+- Native source authority: the three release archives come from the official
+  `mongodb-js/zstd` GitHub release and must pass the pinned MongoDB signer,
+  redirect, detached-signature, archive SHA-256, single-entry layout, and native
+  binding SHA-256 policy before candidate assembly. They are generated only in
+  runner temporary/staging storage and are never committed to this repository.
+- Packaged notices: the exact Apache-2.0 `LICENSE.md` from
+  `@mongodb-js/zstd@2.0.1` remains inside the bundled dependency. The exact
+  Zstandard `v1.5.6` BSD text is packaged at
+  `packages/cli/THIRD_PARTY_LICENSES/Zstandard-1.5.6-BSD.txt`.
+- Required action before public release: release owner/legal must approve
+  redistribution of this exact native binary set and retention of both notices.
+  This technical provenance and notice work does not choose TokenMonster's own
+  license or replace that approval.
+
 ## token-monitor
 
 - Source: <https://github.com/Javis603/token-monitor>

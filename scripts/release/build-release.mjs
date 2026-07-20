@@ -25,6 +25,7 @@ import {
   requirePublicStagedFile,
 } from "./public-artifact-policy.mjs";
 import { resolveCliReleaseVersion } from "./cli-release-version.mjs";
+import { stageZstdNativeReleaseBundle } from "./zstd-native-release-bundle.mjs";
 
 const SCRIPT_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "../..");
 
@@ -53,6 +54,18 @@ const VENDORED_REGISTRY_ROOTS = [
   { name: "yauzl", ownerPackage: "packages/characters" },
   { name: "zod", ownerPackage: "packages/characters" },
 ];
+const ZSTD_NATIVE_PACKAGE = Object.freeze({
+  name: "@mongodb-js/zstd",
+  version: "2.0.1",
+});
+const ZSTD_PREINSTALL_AUTHORITY = join(
+  SCRIPT_ROOT,
+  "packages",
+  "cli",
+  "release",
+  "preinstall-zstd.cjs",
+);
+const ZSTD_PREINSTALL_COMMAND = "node preinstall-zstd.cjs";
 const FORBIDDEN_ASSET_TRANSPORT_MARKERS = [
   "https://cdn.ted-h.com/tokenmonster/characters/v1",
   "TOKENMONSTER_CHARACTER_CDN",
@@ -68,6 +81,7 @@ Options:
   --out <dir>            Output directory (default: dist-release)
   --version <v>          Use one exact release version, e.g. 0.1.0-rc.11
   --version-suffix <s>   Append a prerelease suffix, e.g. rc.1
+  --zstd-prebuilds <dir> Authenticated @mongodb-js/zstd native archives (required)
   --skip-build           Skip the workspace build step
   --help                 Show this help`;
 }
@@ -76,6 +90,7 @@ function parseArguments(argv) {
   let outDir = join(SCRIPT_ROOT, "dist-release");
   let exactVersion = null;
   let versionSuffix = null;
+  let zstdPrebuildsDirectory = null;
   let skipBuild = false;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -90,7 +105,8 @@ function parseArguments(argv) {
     if (
       argument === "--out" ||
       argument === "--version" ||
-      argument === "--version-suffix"
+      argument === "--version-suffix" ||
+      argument === "--zstd-prebuilds"
     ) {
       const value = argv[index + 1];
       if (value === undefined || value.startsWith("--")) {
@@ -101,6 +117,8 @@ function parseArguments(argv) {
         outDir = resolve(value);
       } else if (argument === "--version") {
         exactVersion = value;
+      } else if (argument === "--zstd-prebuilds") {
+        zstdPrebuildsDirectory = resolve(value);
       } else {
         versionSuffix = value;
       }
@@ -111,7 +129,16 @@ function parseArguments(argv) {
   if (exactVersion !== null && versionSuffix !== null) {
     throw new Error("--version and --version-suffix are mutually exclusive");
   }
-  return { exactVersion, outDir, versionSuffix, skipBuild };
+  if (zstdPrebuildsDirectory === null) {
+    throw new Error("--zstd-prebuilds is required");
+  }
+  return {
+    exactVersion,
+    outDir,
+    versionSuffix,
+    zstdPrebuildsDirectory,
+    skipBuild,
+  };
 }
 
 function run(command, args, options = {}) {
@@ -128,6 +155,43 @@ function run(command, args, options = {}) {
 
 async function readJson(path) {
   return JSON.parse(await readFile(path, "utf8"));
+}
+
+async function stageZstdPreinstallAuthority(stagingDir) {
+  const before = await lstat(ZSTD_PREINSTALL_AUTHORITY);
+  if (
+    !before.isFile() ||
+    before.isSymbolicLink() ||
+    before.nlink !== 1
+  ) {
+    throw new Error("Zstd preinstall authority must be one physical file");
+  }
+  const authorityBytes = await readFile(ZSTD_PREINSTALL_AUTHORITY);
+  const after = await lstat(ZSTD_PREINSTALL_AUTHORITY);
+  if (
+    before.dev !== after.dev ||
+    before.ino !== after.ino ||
+    before.nlink !== after.nlink ||
+    before.size !== after.size ||
+    before.mtimeMs !== after.mtimeMs ||
+    before.ctimeMs !== after.ctimeMs ||
+    authorityBytes.length !== before.size
+  ) {
+    throw new Error("Zstd preinstall authority changed while staging");
+  }
+
+  const stagedPath = join(stagingDir, "preinstall-zstd.cjs");
+  await writeFile(stagedPath, authorityBytes, { flag: "wx", mode: 0o644 });
+  const stagedMetadata = await lstat(stagedPath);
+  const stagedBytes = await readFile(stagedPath);
+  if (
+    !stagedMetadata.isFile() ||
+    stagedMetadata.isSymbolicLink() ||
+    stagedMetadata.nlink !== 1 ||
+    !stagedBytes.equals(authorityBytes)
+  ) {
+    throw new Error("Staged zstd preinstall authority is not byte-exact");
+  }
 }
 
 // Walk up from the repo root so this also works from a git worktree whose
@@ -395,6 +459,10 @@ async function main() {
     join(SCRIPT_ROOT, CLI_PACKAGE),
     () => stagingDir,
   );
+  if (cliManifest.scripts?.preinstall !== undefined) {
+    throw new Error("Source CLI manifest must not declare preinstall");
+  }
+  await stageZstdPreinstallAuthority(stagingDir);
 
   const bundledNames = [];
   const bundledManifests = [];
@@ -418,7 +486,7 @@ async function main() {
       packageDirectory,
       join(stagingDir, "node_modules", ...packageNameSegments(name)),
       {
-      recursive: true,
+        recursive: true,
         dereference: false,
       },
     );
@@ -426,6 +494,32 @@ async function main() {
     bundledNames.push(`${name}@${manifest.version}`);
     bundledManifests.push(manifest);
   }
+  const zstdPackageDirectory = await findInstalledPackage(
+    ZSTD_NATIVE_PACKAGE.name,
+    SCRIPT_ROOT,
+  );
+  const { manifest: zstdManifest } = await stageZstdNativeReleaseBundle({
+    installedPackageDirectory: zstdPackageDirectory,
+    prebuildsDirectory: options.zstdPrebuildsDirectory,
+    destinationPackageDirectory: join(
+      stagingDir,
+      "node_modules",
+      ...packageNameSegments(ZSTD_NATIVE_PACKAGE.name),
+    ),
+  });
+  if (
+    zstdManifest.name !== ZSTD_NATIVE_PACKAGE.name ||
+    zstdManifest.version !== ZSTD_NATIVE_PACKAGE.version
+  ) {
+    throw new Error(
+      `Native release bundle must be ${ZSTD_NATIVE_PACKAGE.name}@${ZSTD_NATIVE_PACKAGE.version}`,
+    );
+  }
+  registryVersions.set(ZSTD_NATIVE_PACKAGE.name, ZSTD_NATIVE_PACKAGE.version);
+  bundledNames.push(
+    `${ZSTD_NATIVE_PACKAGE.name}@${ZSTD_NATIVE_PACKAGE.version}`,
+  );
+  bundledManifests.push(zstdManifest);
   if (sidecarPin === null) {
     throw new Error("Could not derive the tokentracker-cli pin");
   }
@@ -442,6 +536,9 @@ async function main() {
     type: cliManifest.type,
     bin: cliManifest.bin,
     engines: cliManifest.engines,
+    scripts: {
+      preinstall: ZSTD_PREINSTALL_COMMAND,
+    },
     dependencies: {
       "@tokenmonster/byok-openai": cliManifest.version,
       "@tokenmonster/companion-gateway": cliManifest.version,
@@ -482,7 +579,21 @@ async function main() {
     releaseManifest,
     bundledManifests,
   });
-  const sidecarClosure = collectSidecarClosure(rootLock, sidecarPin);
+  const sidecarClosure = collectSidecarClosure(shrinkwrap, sidecarPin);
+  const bundledSidecarPackages = sidecarClosure.filter(
+    ({ entry }) => entry.inBundle === true,
+  );
+  if (
+    !bundledSidecarPackages.some(
+      ({ name, version }) =>
+        name === ZSTD_NATIVE_PACKAGE.name &&
+        version === ZSTD_NATIVE_PACKAGE.version,
+    )
+  ) {
+    throw new Error(
+      `${ZSTD_NATIVE_PACKAGE.name}@${ZSTD_NATIVE_PACKAGE.version} is not bundled in the sidecar closure`,
+    );
+  }
   await writeFile(
     join(stagingDir, "npm-shrinkwrap.json"),
     `${JSON.stringify(shrinkwrap, null, 2)}\n`,
@@ -511,7 +622,7 @@ async function main() {
   console.log(`SHA256:  ${digest}`);
   console.log(`Bundled: ${bundledNames.join(", ")}`);
   console.log(
-    `Sidecar: tokentracker-cli@${sidecarPin} (${sidecarClosure.length} registry packages locked by npm-shrinkwrap.json; fetched at install)`,
+    `Sidecar: tokentracker-cli@${sidecarPin} (${sidecarClosure.length} exact registry package records locked by npm-shrinkwrap.json; authenticated zstd archives bundled for dependency preinstall)`,
   );
 }
 

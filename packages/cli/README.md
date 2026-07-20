@@ -52,6 +52,16 @@ The package remains private during the source-slice migration. Publishing is
 blocked until TokenMonster's own license and release gates are decided; users
 should not yet expect the registry command to exist.
 
+Release candidates bundle the exact authenticated native prebuilds for
+`@mongodb-js/zstd@2.0.1` on the three supported release platforms. Candidate
+assembly verifies the official MongoDB detached signatures, pinned signer,
+archive hashes, and single native entry before copying those archives into the
+package; installed smoke tests then use a fresh cache and an unreachable binary
+host to prove that installation does not depend on a second GitHub download.
+The bundled MongoDB Apache-2.0 notice remains inside that dependency, and the
+statically linked Zstandard 1.5.6 BSD notice is shipped in
+`THIRD_PARTY_LICENSES/`.
+
 The CLI does not accept a collector executable, upstream URL, port, or storage
 path. Ctrl+C/SIGTERM closes the gateway and only the child processes started by
 this invocation.
