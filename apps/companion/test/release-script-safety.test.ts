@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import {
   access,
   chmod,
+  copyFile,
   mkdtemp,
   mkdir,
   readFile,
@@ -36,6 +37,13 @@ const installedSmoke = join(
   "scripts",
   "release",
   "smoke-installed.mjs"
+);
+const squirrelAwareFixture = join(
+  rootDirectory,
+  "node_modules",
+  "electron-winstaller",
+  "vendor",
+  "Setup.exe"
 );
 
 const temporaryDirectories: string[] = [];
@@ -156,12 +164,12 @@ describe("release script physical-byte gates", () => {
       mkdir(net45, { recursive: true }),
       mkdir(installedApplication, { recursive: true })
     ]);
-    const packagedApplication = join(net45, "application.bin");
+    const packagedApplication = join(net45, "TokenMonster.exe");
     const packagedUpdater = join(net45, "squirrel.exe");
     const packagedStub = join(net45, "TokenMonster_ExecutionStub.exe");
     const installedApplicationFile = join(
       installedApplication,
-      "application.bin"
+      "TokenMonster.exe"
     );
     const installedUpdater = join(installedApplication, "squirrel.exe");
     const installedStub = join(installRoot, "TokenMonster.exe");
@@ -172,10 +180,10 @@ describe("release script physical-byte gates", () => {
       ".tokenmonster-squirrel-update-self.verifying"
     );
     await Promise.all([
-      writeFile(packagedApplication, "application-bytes"),
+      copyFile(squirrelAwareFixture, packagedApplication),
       writeFile(packagedUpdater, "squirrel-updater-bytes"),
       writeFile(packagedStub, "execution-stub-bytes"),
-      writeFile(installedApplicationFile, "application-bytes"),
+      copyFile(squirrelAwareFixture, installedApplicationFile),
       writeFile(installedUpdater, "squirrel-updater-bytes"),
       writeFile(installedStub, "execution-stub-bytes"),
       writeFile(installedRootUpdater, "squirrel-updater-bytes")
@@ -241,6 +249,9 @@ describe("release script physical-byte gates", () => {
     expect(exact.stdout).toContain(
       "installed companion, updater, and entry-point files against exact full-nupkg payload bytes"
     );
+    expect(exact.stdout).toContain(
+      "exact Squirrel awareness metadata in the installed application executable"
+    );
     expect(exact.stderr).toBe("");
     await expect(access(updateLog)).rejects.toThrow();
     await expect(access(updateLogQuarantine)).rejects.toThrow();
@@ -258,7 +269,7 @@ describe("release script physical-byte gates", () => {
     );
 
     await Promise.all([
-      writeFile(installedApplicationFile, "application-bytes"),
+      copyFile(squirrelAwareFixture, installedApplicationFile),
       writeFile(join(installedApplication, "unexpected.bin"), "unexpected")
     ]);
     const unexpected = await verify();
@@ -275,7 +286,7 @@ describe("release script physical-byte gates", () => {
     expect(missing.stderr).toContain("expected 2, installed 1");
 
     await Promise.all([
-      writeFile(installedApplicationFile, "application-bytes"),
+      copyFile(squirrelAwareFixture, installedApplicationFile),
       writeFile(installedRootUpdater, "tampered-updater-bytes")
     ]);
     const tamperedUpdater = await verify();

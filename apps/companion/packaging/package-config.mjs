@@ -35,6 +35,7 @@ import {
   prepareWindowsSigningEnvironment,
   requireReleaseVersion,
 } from "./release-policy.mjs";
+import { markSquirrelAwareExecutable } from "./squirrel-awareness.mjs";
 
 /** @typedef {import("node:crypto").BinaryLike} BinaryLike */
 /** @typedef {import("@electron/packager").HookFunctionErrorCallback} HookFunctionErrorCallback */
@@ -929,6 +930,11 @@ export async function preparePackagedApplication(
     arch,
   );
   await flipPackagedFuses(resourcesAppPath, platform, arch);
+  if (platform === "win32") {
+    await markSquirrelAwareExecutable(
+      stagedElectronExecutable(resourcesAppPath, platform),
+    );
+  }
   await writeReleasePackageJson(resourcesAppPath);
 }
 
