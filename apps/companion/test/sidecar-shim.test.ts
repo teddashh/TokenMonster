@@ -12,6 +12,12 @@ const execFileAsync = promisify(execFile);
 const shimPath = fileURLToPath(
   new URL("../src/main/pet/sidecar-shim.cjs", import.meta.url)
 );
+const guardPath = fileURLToPath(
+  new URL(
+    "../../../packages/token-tracker-runtime/src/network-deny.cjs",
+    import.meta.url
+  )
+);
 
 interface ShimRun {
   readonly code: number;
@@ -59,6 +65,16 @@ describe("sidecar shim", () => {
         "module.exports = {",
         "  async run(args) {",
         "    if (args[0] === '--fail') throw new Error('fixture boom');",
+        "    if (args[0] === '--probe-child') {",
+        "      const cp = require('node:child_process');",
+        "      try {",
+        "        new cp.ChildProcess().spawn({ file: process.execPath, args: [process.execPath, '--version'], envPairs: [], stdio: 'ignore', detached: false, windowsHide: true, windowsVerbatimArguments: false });",
+        "        console.log('allowed');",
+        "      } catch (error) {",
+        "        console.log(error && error.code);",
+        "      }",
+        "      return;",
+        "    }",
         "    console.log(JSON.stringify(args));",
         "    // Large payload: proves the shim flushes stdout before exiting.",
         "    process.stdout.write('x'.repeat(100000) + '\\n');",
@@ -80,7 +96,12 @@ describe("sidecar shim", () => {
   });
 
   it("runs the CLI entry, flushes stdout, and exits 0 when run() resolves", async () => {
-    const result = await runShim([trackerEntry, "--version", "extra"]);
+    const result = await runShim([
+      guardPath,
+      trackerEntry,
+      "--version",
+      "extra"
+    ]);
     expect(result.code).toBe(0);
     const [argsLine, payload] = result.stdout.split("\n");
     expect(JSON.parse(argsLine ?? "")).toEqual(["--version", "extra"]);
@@ -88,7 +109,7 @@ describe("sidecar shim", () => {
   });
 
   it("exits 1 and reports the error when run() rejects", async () => {
-    const result = await runShim([trackerEntry, "--fail"]);
+    const result = await runShim([guardPath, trackerEntry, "--fail"]);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("fixture boom");
   });
@@ -96,12 +117,27 @@ describe("sidecar shim", () => {
   it("exits 1 when the entry path argument is missing", async () => {
     const result = await runShim([]);
     expect(result.code).toBe(1);
+    expect(result.stderr).toContain("missing network guard path");
+  });
+
+  it("exits 1 when the tracker entry path argument is missing", async () => {
+    const result = await runShim([guardPath]);
+    expect(result.code).toBe(1);
     expect(result.stderr).toContain("missing tracker entry path");
   });
 
   it("exits 1 when the CLI does not export run()", async () => {
-    const result = await runShim([runlessEntry]);
+    const result = await runShim([guardPath, runlessEntry]);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("did not export run()");
+  });
+
+  it("loads the guard before the CLI can use the low-level child launcher", async () => {
+    const result = await runShim([guardPath, trackerEntry, "--probe-child"]);
+    expect(result).toEqual({
+      code: 0,
+      stdout: "TOKENMONSTER_SIDECAR_EGRESS_BLOCKED\n",
+      stderr: ""
+    });
   });
 });

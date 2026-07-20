@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizePreloadGuardSource } from "../vite.runtime.js";
+import {
+  normalizePreloadGuardSource,
+  runtimeExternal
+} from "../vite.runtime.js";
 
 const EXPECTED_EXPORT = `export = Object.freeze({
   chatRequest,
@@ -39,5 +42,23 @@ describe("preload guard export normalization", () => {
     expect(() => normalizePreloadGuardSource(mutated)).toThrow(
       "Preload guard export shape changed; packaging review required."
     );
+  });
+});
+
+describe("Electron runtime externals", () => {
+  it("keeps both canonical and legacy Node builtin specifiers out of browser transforms", () => {
+    for (const source of [
+      "electron",
+      "node:fs",
+      "fs",
+      "fs/promises",
+      "stream",
+      "util",
+      "zlib"
+    ]) {
+      expect(runtimeExternal(source), source).toBe(true);
+    }
+    expect(runtimeExternal("@tokenmonster/characters")).toBe(false);
+    expect(runtimeExternal("yauzl")).toBe(false);
   });
 });

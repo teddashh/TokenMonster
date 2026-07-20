@@ -25,6 +25,11 @@ import {
   SIDECAR_ROOT_LOCK_PATH,
   sidecarDependencyClosure
 } from "../../scripts/companion-packaging-policy.mjs";
+import {
+  packageJsonWithReleaseVersion,
+  prepareWindowsSigningEnvironment,
+  requireReleaseVersion
+} from "./packaging/release-policy.mjs";
 
 const APP_BUNDLE_ID = "com.tokenmonster.companion";
 const RELEASE_MODE = process.env.TOKENMONSTER_RELEASE_MODE ?? "internal";
@@ -41,6 +46,7 @@ const APP_DESCRIPTION =
 if (RELEASE_MODE !== "internal" && RELEASE_MODE !== "signed") {
   throw new Error("TOKENMONSTER_RELEASE_MODE must be internal or signed.");
 }
+const RELEASE_VERSION = requireReleaseVersion(process.env);
 
 function requiredEnvironment(name) {
   const value = process.env[name];
@@ -54,11 +60,6 @@ function requiredEnvironment(name) {
 }
 
 function signedMacConfiguration() {
-  if (RELEASE_MODE !== "signed") return {};
-  if (process.platform !== "darwin") {
-    throw new Error("Signed companion releases must be produced on macOS.");
-  }
-
   const identity = requiredEnvironment("TOKENMONSTER_MAC_DEVELOPER_ID");
   const appleApiKey = requiredEnvironment("TOKENMONSTER_APPLE_API_KEY_PATH");
   const appleApiKeyId = requiredEnvironment("TOKENMONSTER_APPLE_API_KEY_ID");
@@ -114,6 +115,25 @@ function signedMacConfiguration() {
   };
 }
 
+function signedPlatformConfiguration() {
+  if (RELEASE_MODE !== "signed") {
+    return { makerWindowsSign: undefined, packager: {} };
+  }
+  if (process.platform === "darwin") {
+    return { makerWindowsSign: undefined, packager: signedMacConfiguration() };
+  }
+  if (process.platform === "win32") {
+    const { windowsSign } = prepareWindowsSigningEnvironment(process.env);
+    return {
+      makerWindowsSign: windowsSign,
+      packager: { windowsSign }
+    };
+  }
+  throw new Error(
+    "Signed companion releases require a native macOS or Windows host."
+  );
+}
+
 function ignoreOutsideRuntime(path) {
   const normalized = path.replaceAll("\\", "/");
   return !(
@@ -131,7 +151,9 @@ function ignoreOutsideRuntime(path) {
 
 async function findRuntimeSnapshots(directory, depth = 0) {
   if (depth > 8) {
-    throw new Error("Electron runtime snapshot search exceeded its depth bound.");
+    throw new Error(
+      "Electron runtime snapshot search exceeded its depth bound."
+    );
   }
   const snapshots = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -170,10 +192,15 @@ async function prepareBrowserProcessSnapshots(
   for (const source of sources) {
     // The LoadBrowserProcessSpecificV8Snapshot fuse reads this literal name
     // on every platform, without the macOS arch infix.
-    const destination = join(dirname(source), "browser_v8_context_snapshot.bin");
+    const destination = join(
+      dirname(source),
+      "browser_v8_context_snapshot.bin"
+    );
     try {
       await lstat(destination);
-      throw new Error("Electron browser V8 snapshot already exists unexpectedly.");
+      throw new Error(
+        "Electron browser V8 snapshot already exists unexpectedly."
+      );
     } catch (error) {
       if (error?.code !== "ENOENT") throw error;
     }
@@ -207,7 +234,9 @@ function collectorTargetKey(platform, arch) {
   if (platform === "win32" && (arch === "x64" || arch === "arm64")) {
     return `${platform}-${arch}-msvc`;
   }
-  throw new Error(`No audited collector package target exists for ${platform}-${arch}.`);
+  throw new Error(
+    `No audited collector package target exists for ${platform}-${arch}.`
+  );
 }
 
 function safeManifestTarget(targetKey) {
@@ -228,7 +257,9 @@ function safeManifestTarget(targetKey) {
       typeof target?.blockedReason === "string"
         ? ` ${target.blockedReason}`
         : "";
-    throw new Error(`Collector target ${targetKey} is not release-enabled.${reason}`);
+    throw new Error(
+      `Collector target ${targetKey} is not release-enabled.${reason}`
+    );
   }
   return target;
 }
@@ -260,7 +291,9 @@ async function verifiedPackageFile(packageDirectory, specification) {
     (specification.mode !== "0755" && specification.mode !== "0644") ||
     typeof specification.executable !== "boolean"
   ) {
-    throw new Error("Collector runtime manifest contains an unsafe file entry.");
+    throw new Error(
+      "Collector runtime manifest contains an unsafe file entry."
+    );
   }
   const packageRoot = await realpath(packageDirectory);
   const source = resolve(packageDirectory, specification.source);
@@ -344,7 +377,9 @@ async function prepareVerifiedCollectorExtraResource(
     ...runtimeManifest.collector.extraResourceTarget.split("/")
   );
   if (!targetDirectory.startsWith(`${resourcesDirectory}${sep}`)) {
-    throw new Error("Collector extraResource target escaped the app resources.");
+    throw new Error(
+      "Collector extraResource target escaped the app resources."
+    );
   }
   await rm(targetDirectory, { force: true, recursive: true });
   await mkdir(targetDirectory, { mode: 0o755, recursive: true });
@@ -354,7 +389,9 @@ async function prepareVerifiedCollectorExtraResource(
     await chmod(destination, Number.parseInt(specification.mode, 8));
     const copied = readFileSync(destination);
     if (sha256(copied) !== specification.sha256) {
-      throw new Error("Copied collector resource failed checksum verification.");
+      throw new Error(
+        "Copied collector resource failed checksum verification."
+      );
     }
   }
 
@@ -363,12 +400,7 @@ async function prepareVerifiedCollectorExtraResource(
   }
 }
 
-async function copySidecarPackage(
-  source,
-  destination,
-  budget,
-  depth = 0
-) {
+async function copySidecarPackage(source, destination, budget, depth = 0) {
   if (depth > SIDECAR_MAX_TREE_DEPTH) {
     throw new Error("Sidecar staging exceeded its directory depth bound.");
   }
@@ -420,9 +452,17 @@ async function copySidecarPackage(
   await chmod(destination, metadata.mode & 0o7777);
 }
 
-async function copyDeclaredSidecarPackage(source, destination, manifest, budget) {
+async function copyDeclaredSidecarPackage(
+  source,
+  destination,
+  manifest,
+  budget
+) {
   await mkdir(destination, { mode: 0o755, recursive: true });
-  for (const relativePath of await declaredSidecarPackageFiles(source, manifest)) {
+  for (const relativePath of await declaredSidecarPackageFiles(
+    source,
+    manifest
+  )) {
     const sourcePath = resolve(source, ...relativePath.split("/"));
     const destinationPath = resolve(destination, ...relativePath.split("/"));
     await mkdir(dirname(destinationPath), { mode: 0o755, recursive: true });
@@ -445,7 +485,9 @@ async function prepareSidecarExtraResource(resourcesAppPath) {
     typeof rootLockEntry !== "object" ||
     rootLockEntry.version !== runtimeManifest.sidecar.version
   ) {
-    throw new Error("Sidecar package-lock version does not match the manifest.");
+    throw new Error(
+      "Sidecar package-lock version does not match the manifest."
+    );
   }
   const installedManifestPath = resolve(
     dirname(fileURLToPath(import.meta.url)),
@@ -464,7 +506,11 @@ async function prepareSidecarExtraResource(resourcesAppPath) {
     throw new Error("Installed sidecar package identity is invalid.");
   }
 
-  const workspaceDirectory = resolve(dirname(installedManifestPath), "..", "..");
+  const workspaceDirectory = resolve(
+    dirname(installedManifestPath),
+    "..",
+    ".."
+  );
   const resourcesDirectory = resolve(resourcesAppPath, "..");
   const targetDirectory = resolve(
     resourcesDirectory,
@@ -481,7 +527,9 @@ async function prepareSidecarExtraResource(resourcesAppPath) {
     const source = resolve(workspaceDirectory, ...lockPath.split("/"));
     const destination = resolve(targetDirectory, ...lockPath.split("/"));
     if (!destination.startsWith(`${targetDirectory}${sep}`)) {
-      throw new Error("Sidecar package destination escaped its extraResource root.");
+      throw new Error(
+        "Sidecar package destination escaped its extraResource root."
+      );
     }
     if (lockPath === rootLockPath) {
       await copyDeclaredSidecarPackage(
@@ -508,11 +556,7 @@ async function prepareRuntimeResources(
     resourcesAppPath,
     electronVersion
   );
-  await prepareVerifiedCollectorExtraResource(
-    resourcesAppPath,
-    platform,
-    arch
-  );
+  await prepareVerifiedCollectorExtraResource(resourcesAppPath, platform, arch);
   await prepareSidecarExtraResource(resourcesAppPath);
 }
 
@@ -522,7 +566,9 @@ async function removeGroupWorldWrite(path, depth = 0, counter = { value: 0 }) {
   // sidecar extraResource adds ~850 files on every platform, so the bound
   // is a runaway guard, not a tight inventory expectation.
   if (depth > 16 || counter.value > SIDECAR_MAX_FILE_COUNT) {
-    throw new Error("Packaged permission hardening exceeded its inventory bound.");
+    throw new Error(
+      "Packaged permission hardening exceeded its inventory bound."
+    );
   }
   counter.value += 1;
   const metadata = await lstat(path);
@@ -542,15 +588,20 @@ async function removeGroupWorldWrite(path, depth = 0, counter = { value: 0 }) {
 }
 
 async function hardenPackagedPermissions(_forgeConfig, packageResult) {
-  if (!Array.isArray(packageResult?.outputPaths) || packageResult.outputPaths.length < 1) {
-    throw new Error("Forge returned no package output for permission hardening.");
+  if (
+    !Array.isArray(packageResult?.outputPaths) ||
+    packageResult.outputPaths.length < 1
+  ) {
+    throw new Error(
+      "Forge returned no package output for permission hardening."
+    );
   }
   for (const outputPath of packageResult.outputPaths) {
     await removeGroupWorldWrite(outputPath);
   }
 }
 
-const signedConfiguration = signedMacConfiguration();
+const signedConfiguration = signedPlatformConfiguration();
 const runtimeManifest = JSON.parse(
   readFileSync(
     new URL("packaging/runtime-bundle-manifest.json", import.meta.url),
@@ -562,6 +613,7 @@ const packageLock = JSON.parse(
 );
 if (
   RELEASE_MODE === "signed" &&
+  process.platform === "darwin" &&
   (runtimeManifest.collector?.status !== "ready" ||
     runtimeManifest.collector?.signedReleaseStatus !== "ready")
 ) {
@@ -573,19 +625,22 @@ if (
 const packagerConfig = {
   appBundleId: APP_BUNDLE_ID,
   appCategoryType: "public.app-category.utilities",
+  appVersion: RELEASE_VERSION,
   asar: true,
   executableName: "TokenMonster",
   ignore: ignoreOutsideRuntime,
   name: "TokenMonster",
   overwrite: true,
   prune: false,
-  ...signedConfiguration
+  ...signedConfiguration.packager
 };
 
 const config = {
   hooks: {
     packageAfterCopy: prepareRuntimeResources,
-    postPackage: hardenPackagedPermissions
+    postPackage: hardenPackagedPermissions,
+    readPackageJson: (_forgeConfig, input) =>
+      packageJsonWithReleaseVersion(input, RELEASE_VERSION)
   },
   packagerConfig,
   makers: [
@@ -609,7 +664,12 @@ const config = {
         setupExe: `${packagerConfig.name}Setup.exe`,
         authors: "Ted Huang",
         description: APP_DESCRIPTION,
-        noMsi: true
+        noDelta: true,
+        noMsi: true,
+        version: RELEASE_VERSION,
+        ...(signedConfiguration.makerWindowsSign === undefined
+          ? {}
+          : { windowsSign: signedConfiguration.makerWindowsSign })
       },
       platforms: ["win32"]
     }

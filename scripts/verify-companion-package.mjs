@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { createReadStream, createWriteStream } from "node:fs";
 import {
   lstat,
   mkdir,
@@ -20,11 +21,23 @@ import {
   resolve,
   sep
 } from "node:path";
+import { pipeline } from "node:stream/promises";
 
 import { extractAll, getRawHeader } from "@electron/asar";
 import yauzl from "yauzl";
 
 import { MAX_PACKAGED_COLLECTOR_RESOURCE_BYTES } from "../apps/companion/packaging/package-bounds.mjs";
+import {
+  authenticodeEvidenceFromInspection,
+  isWindowsSignablePath,
+  packageJsonWithReleaseVersion,
+  requireReleaseVersion,
+  requireSignedWindowsSquirrelInventory,
+  requireSquirrelReleaseEntry,
+  requireWindowsSignerSubject,
+  SOURCE_COMPANION_VERSION,
+  squirrelVersionFor
+} from "../apps/companion/packaging/release-policy.mjs";
 import {
   assertSquirrelSidecarInventory,
   declaredSidecarPackageFiles,
@@ -47,6 +60,20 @@ if (mode !== "internal" && mode !== "signed") {
     "Usage: verify-companion-package.mjs --mode internal|signed [--require-maker]"
   );
 }
+const releaseVersion = requireReleaseVersion(process.env);
+if (
+  mode === "signed" &&
+  process.platform !== "darwin" &&
+  process.platform !== "win32"
+) {
+  throw new Error(
+    "Signed companion verification requires native macOS or Windows."
+  );
+}
+const expectedWindowsSignerSubject =
+  mode === "signed" && process.platform === "win32"
+    ? requireWindowsSignerSubject(process.env)
+    : null;
 
 const companionDirectory = join(rootDirectory, "apps", "companion");
 const outDirectory = join(companionDirectory, "out");
@@ -81,7 +108,17 @@ const blockedExtensions = new Set([
 ]);
 const sourceExtensions = new Set([".cts", ".mts", ".ts", ".tsx"]);
 const allowedBareImports = ["electron", "node:*"];
-const expectedFuseStates = [false, true, false, false, true, true, true, false, true];
+const expectedFuseStates = [
+  false,
+  true,
+  false,
+  false,
+  true,
+  true,
+  true,
+  false,
+  true
+];
 const fuseSentinel = Buffer.from("dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX", "ascii");
 const secretPatterns = [
   /-----BEGIN (?:EC |OPENSSH |RSA )?PRIVATE KEY-----/u,
@@ -95,6 +132,21 @@ const secretPatterns = [
   /\bnpm_[A-Za-z0-9]{36}\b/u,
   /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/u,
   /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/u
+];
+const forbiddenAssetTransportMarkers = [
+  "https://cdn.ted-h.com/tokenmonster/characters/v1",
+  "TOKENMONSTER_CHARACTER_CDN",
+  "CompanionCharacterFetch",
+  "DownloadSemaphore",
+  "asset fetch failed"
+];
+const requiredDefaultPetByokMarkers = [
+  "createPetByokSecretSlot",
+  "createElectronAsyncSafeStoragePort",
+  'PET_BYOK_SECRET_FILE = "openai-byok.json"',
+  "startPetServices(petByokSecretSlot)",
+  'var BYOK_STATUS_PATH = "/api/byok/status"',
+  "store: false"
 ];
 
 function portablePath(path) {
@@ -111,7 +163,9 @@ async function walkFiles(directory, options = {}) {
     const metadata = await lstat(path);
     if (metadata.isSymbolicLink()) {
       if (options.rejectLinks === true) {
-        throw new Error(`Packaged ASAR contains a symbolic link: ${entry.name}`);
+        throw new Error(
+          `Packaged ASAR contains a symbolic link: ${entry.name}`
+        );
       }
       continue;
     }
@@ -120,7 +174,9 @@ async function walkFiles(directory, options = {}) {
     } else if (metadata.isFile()) {
       files.push(path);
     } else if (options.rejectLinks === true) {
-      throw new Error(`Packaged ASAR contains a non-regular entry: ${entry.name}`);
+      throw new Error(
+        `Packaged ASAR contains a non-regular entry: ${entry.name}`
+      );
     }
   }
   return files;
@@ -130,8 +186,10 @@ function sha256(contents) {
   return createHash("sha256").update(contents).digest("hex");
 }
 
-async function hashFile(path) {
-  return sha256(await readFile(path));
+async function hashFile(path, algorithm = "sha256") {
+  const hash = createHash(algorithm);
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
 }
 
 function linuxLibcSuffix() {
@@ -235,9 +293,7 @@ async function verifyCollectorExtraResource(asarPath) {
     throw new Error("Collector extraResource root is not a regular directory.");
   }
   const files = await walkFiles(targetDirectory, { rejectLinks: true });
-  const expectedNames = target.files
-    .map(({ target: name }) => name)
-    .sort();
+  const expectedNames = target.files.map(({ target: name }) => name).sort();
   const actualNames = files
     .map((path) => portablePath(relative(targetDirectory, path)))
     .sort();
@@ -273,9 +329,7 @@ async function verifyCollectorExtraResource(asarPath) {
       metadata.size < 1 ||
       metadata.size > MAX_PACKAGED_COLLECTOR_RESOURCE_BYTES
     ) {
-      throw new Error(
-        `Collector evidence failed for ${specification.target}.`
-      );
+      throw new Error(`Collector evidence failed for ${specification.target}.`);
     }
     inventory.push({
       path: portablePath(relative(rootDirectory, path)),
@@ -304,12 +358,7 @@ async function verifyCollectorExtraResource(asarPath) {
   };
 }
 
-async function walkSidecarTree(
-  path,
-  budget,
-  files = [],
-  depth = 0
-) {
+async function walkSidecarTree(path, budget, files = [], depth = 0) {
   if (depth > SIDECAR_MAX_TREE_DEPTH) {
     throw new Error("Packaged sidecar exceeded its directory depth bound.");
   }
@@ -354,7 +403,9 @@ function assertLockEntry(lockPath, lockEntry) {
     typeof lockEntry.integrity !== "string" ||
     !lockEntry.integrity.startsWith("sha512-")
   ) {
-    throw new Error(`Sidecar package-lock metadata is incomplete: ${lockPath}.`);
+    throw new Error(
+      `Sidecar package-lock metadata is incomplete: ${lockPath}.`
+    );
   }
 }
 
@@ -387,7 +438,9 @@ async function verifySidecarExtraResource(asarPath) {
   const files = await walkSidecarTree(targetDirectory, budget);
   const expectedPackagePaths = sidecarDependencyClosure(packageLock);
   const actualPackagePaths = await stagedSidecarPackagePaths(targetDirectory);
-  if (JSON.stringify(actualPackagePaths) !== JSON.stringify(expectedPackagePaths)) {
+  if (
+    JSON.stringify(actualPackagePaths) !== JSON.stringify(expectedPackagePaths)
+  ) {
     const missing = expectedPackagePaths.filter(
       (path) => !actualPackagePaths.includes(path)
     );
@@ -475,7 +528,9 @@ async function verifySidecarExtraResource(asarPath) {
   ) {
     expectedRootTopLevelEntries.add("node_modules");
   }
-  const actualRootTopLevelEntries = (await readdir(rootPackageDirectory)).sort();
+  const actualRootTopLevelEntries = (
+    await readdir(rootPackageDirectory)
+  ).sort();
   const expectedRootTopLevelNames = [...expectedRootTopLevelEntries].sort();
   if (
     JSON.stringify(actualRootTopLevelEntries) !==
@@ -488,14 +543,18 @@ async function verifySidecarExtraResource(asarPath) {
   // Relativize before filtering: the root package itself lives under the
   // staged sidecar's node_modules/, so an absolute-path node_modules filter
   // would drop every file.
-  const stagedRootFiles = (await walkFiles(rootPackageDirectory, {
-    rejectLinks: true
-  }))
+  const stagedRootFiles = (
+    await walkFiles(rootPackageDirectory, {
+      rejectLinks: true
+    })
+  )
     .map((path) => portablePath(relative(rootPackageDirectory, path)))
     .filter((path) => !path.startsWith("node_modules/"))
     .sort();
   if (JSON.stringify(stagedRootFiles) !== JSON.stringify(expectedRootFiles)) {
-    const missing = expectedRootFiles.filter((path) => !stagedRootFiles.includes(path));
+    const missing = expectedRootFiles.filter(
+      (path) => !stagedRootFiles.includes(path)
+    );
     const unexpected = stagedRootFiles.filter(
       (path) => !expectedRootFiles.includes(path)
     );
@@ -519,7 +578,9 @@ async function verifySidecarExtraResource(asarPath) {
   }
   const entryDeclaration = packageManifest.bin?.["tokentracker-cli"];
   if (typeof entryDeclaration !== "string") {
-    throw new Error("Staged sidecar package has no tokentracker-cli bin entry.");
+    throw new Error(
+      "Staged sidecar package has no tokentracker-cli bin entry."
+    );
   }
   const entryBinPath = resolve(rootPackageDirectory, entryDeclaration);
   if (!entryBinPath.startsWith(`${rootPackageDirectory}${sep}`)) {
@@ -536,9 +597,11 @@ async function verifySidecarExtraResource(asarPath) {
     "@mongodb-js",
     "zstd"
   );
-  const nativeBindings = (await walkFiles(workspaceZstdDirectory, {
-    rejectLinks: true
-  })).filter((path) => extname(path) === ".node");
+  const nativeBindings = (
+    await walkFiles(workspaceZstdDirectory, {
+      rejectLinks: true
+    })
+  ).filter((path) => extname(path) === ".node");
   if (nativeBindings.length === 0) {
     throw new Error(
       "The workspace @mongodb-js/zstd package has no native .node binding; the sidecar cannot run."
@@ -551,8 +614,12 @@ async function verifySidecarExtraResource(asarPath) {
     if (!stagedMetadata.isFile() || stagedMetadata.isSymbolicLink()) {
       throw new Error("A staged @mongodb-js/zstd native binding is missing.");
     }
-    if ((await hashFile(stagedBinding)) !== (await hashFile(workspaceBinding))) {
-      throw new Error("A staged @mongodb-js/zstd native binding differs from source.");
+    if (
+      (await hashFile(stagedBinding)) !== (await hashFile(workspaceBinding))
+    ) {
+      throw new Error(
+        "A staged @mongodb-js/zstd native binding differs from source."
+      );
     }
   }
 
@@ -601,19 +668,32 @@ async function expectedAsarFiles() {
   files.push(
     ...(await walkFiles(join(companionDirectory, manifest.asar.generatedRoot)))
   );
-  // The utilityProcess sidecar shim must ship inside the ASAR. It reaches
-  // dist via a vite copy step, so a silently skipped copy would drop it from
-  // both sides of the staged-vs-workspace comparison and pass unnoticed —
-  // while the packaged app boots without a working sidecar.
-  const shimFile = join(
+  // The utilityProcess shim and its egress guard must both ship inside the
+  // ASAR. They reach dist via a Vite copy step, so a silently skipped copy
+  // would otherwise disappear from both sides of the staged comparison.
+  for (const requiredSidecarFile of ["sidecar-shim.cjs", "network-deny.cjs"]) {
+    const path = join(
+      companionDirectory,
+      "dist",
+      "main",
+      "main",
+      requiredSidecarFile
+    );
+    if (!files.includes(path)) {
+      throw new Error(
+        `Packaged ASAR staging is missing ${requiredSidecarFile}.`
+      );
+    }
+  }
+  const companionPreload = join(
     companionDirectory,
     "dist",
     "main",
-    "main",
-    "sidecar-shim.cjs"
+    "preload",
+    "companion.cjs"
   );
-  if (!files.includes(shimFile)) {
-    throw new Error("Packaged ASAR staging is missing the sidecar shim.");
+  if (!files.includes(companionPreload)) {
+    throw new Error("Packaged ASAR staging is missing companion.cjs.");
   }
   return files.sort();
 }
@@ -684,7 +764,11 @@ function packageRootForAsar(asarPath) {
   return dirname(dirname(asarPath));
 }
 
-async function verifyPackagePermissionTree(directory, depth = 0, counter = { value: 0 }) {
+async function verifyPackagePermissionTree(
+  directory,
+  depth = 0,
+  counter = { value: 0 }
+) {
   // Runaway guard, not a tight count: macOS .app bundles carry an order of
   // magnitude more entries than the Linux/Windows layouts, and the sidecar
   // extraResource adds ~850 files on every platform.
@@ -695,7 +779,9 @@ async function verifyPackagePermissionTree(directory, depth = 0, counter = { val
   const metadata = await lstat(directory);
   if (metadata.isSymbolicLink()) {
     if (process.platform !== "darwin") {
-      throw new Error("Packaged application contains an unexpected symbolic link.");
+      throw new Error(
+        "Packaged application contains an unexpected symbolic link."
+      );
     }
     return;
   }
@@ -709,7 +795,11 @@ async function verifyPackagePermissionTree(directory, depth = 0, counter = { val
   }
   if (metadata.isDirectory()) {
     for (const entry of await readdir(directory)) {
-      await verifyPackagePermissionTree(join(directory, entry), depth + 1, counter);
+      await verifyPackagePermissionTree(
+        join(directory, entry),
+        depth + 1,
+        counter
+      );
     }
   }
 }
@@ -732,7 +822,9 @@ async function verifyPackagePathsAndSnapshots(asarPath) {
       blockedExtensions.has(extension) ||
       sourceExtensions.has(extension) ||
       segments.includes("node_modules") ||
-      segments.some((segment) => segment === ".env" || segment.startsWith(".env."))
+      segments.some(
+        (segment) => segment === ".env" || segment.startsWith(".env.")
+      )
     ) {
       throw new Error(`Forbidden packaged application path: ${relativePath}`);
     }
@@ -757,14 +849,21 @@ async function verifyPackagePathsAndSnapshots(asarPath) {
 
   const evidence = [];
   for (const sharedPath of sharedSnapshots.sort()) {
-    const browserPath = join(dirname(sharedPath), "browser_v8_context_snapshot.bin");
+    const browserPath = join(
+      dirname(sharedPath),
+      "browser_v8_context_snapshot.bin"
+    );
     if (!browserSnapshots.includes(browserPath)) {
-      throw new Error("Electron browser snapshot is not beside its shared snapshot.");
+      throw new Error(
+        "Electron browser snapshot is not beside its shared snapshot."
+      );
     }
     const shared = await readFile(sharedPath);
     const browser = await readFile(browserPath);
     if (!shared.equals(browser)) {
-      throw new Error("Electron browser and shared snapshots are not byte-identical.");
+      throw new Error(
+        "Electron browser and shared snapshots are not byte-identical."
+      );
     }
     evidence.push({
       sharedPath: portablePath(relative(rootDirectory, sharedPath)),
@@ -808,6 +907,19 @@ async function assertAsarInventory(asarPath, extractedDirectory) {
       `ASAR inventory mismatch; unexpected=${JSON.stringify(unexpected)}, missing=${JSON.stringify(missing)}`
     );
   }
+  const packagedMainSource = await readFile(
+    join(extractedDirectory, manifest.application.main),
+    "utf8"
+  );
+  if (
+    requiredDefaultPetByokMarkers.some(
+      (marker) => !packagedMainSource.includes(marker)
+    )
+  ) {
+    throw new Error(
+      "Packaged Electron main process lost the default pet BYOK composition."
+    );
+  }
   if (extractedFiles.length > 64) {
     throw new Error("ASAR inventory exceeds the 64-file release bound.");
   }
@@ -824,14 +936,25 @@ async function assertAsarInventory(asarPath, extractedDirectory) {
     if (expectedPath === undefined) {
       throw new Error("ASAR inventory comparison lost an expected path.");
     }
-    const relativePath = portablePath(relative(extractedDirectory, extractedPath));
+    const relativePath = portablePath(
+      relative(extractedDirectory, extractedPath)
+    );
     const contents = await readFile(extractedPath);
     const expectedContents = await readFile(expectedPath);
     totalBytes += contents.byteLength;
     if (contents.byteLength > 8 * 1024 * 1024) {
       throw new Error(`ASAR file exceeds the 8 MiB bound: ${relativePath}`);
     }
-    if (!contents.equals(expectedContents)) {
+    const packageManifestMatchesRelease =
+      relativePath === "package.json" &&
+      JSON.stringify(JSON.parse(contents.toString("utf8"))) ===
+        JSON.stringify(
+          packageJsonWithReleaseVersion(
+            JSON.parse(expectedContents.toString("utf8")),
+            releaseVersion
+          )
+        );
+    if (!contents.equals(expectedContents) && !packageManifestMatchesRelease) {
       const bound = Math.min(contents.byteLength, expectedContents.byteLength);
       let difference = 0;
       while (
@@ -859,7 +982,9 @@ async function assertAsarInventory(asarPath, extractedDirectory) {
       segments.includes("tests") ||
       sourceExtensions.has(extension) ||
       blockedExtensions.has(extension) ||
-      segments.some((segment) => segment === ".env" || segment.startsWith(".env."))
+      segments.some(
+        (segment) => segment === ".env" || segment.startsWith(".env.")
+      )
     ) {
       throw new Error(`Forbidden packaged path: ${relativePath}`);
     }
@@ -869,6 +994,13 @@ async function assertAsarInventory(asarPath, extractedDirectory) {
     const text = contents.toString("utf8");
     if (text.includes("data:image/")) {
       throw new Error(`Embedded image data is forbidden: ${relativePath}`);
+    }
+    for (const marker of forbiddenAssetTransportMarkers) {
+      if (text.includes(marker)) {
+        throw new Error(
+          `State-selected asset transport is forbidden: ${relativePath}`
+        );
+      }
     }
     for (const pattern of secretPatterns) {
       if (pattern.test(text)) {
@@ -895,10 +1027,16 @@ async function assertAsarInventory(asarPath, extractedDirectory) {
       integrity.blockSize > 4 * 1024 * 1024 ||
       !Array.isArray(integrity.blocks)
     ) {
-      throw new Error(`ASAR header integrity metadata is invalid: ${relativePath}`);
+      throw new Error(
+        `ASAR header integrity metadata is invalid: ${relativePath}`
+      );
     }
     const expectedBlocks = [];
-    for (let offset = 0; offset < contents.byteLength; offset += integrity.blockSize) {
+    for (
+      let offset = 0;
+      offset < contents.byteLength;
+      offset += integrity.blockSize
+    ) {
       expectedBlocks.push(
         sha256(contents.subarray(offset, offset + integrity.blockSize))
       );
@@ -929,21 +1067,27 @@ async function assertAsarInventory(asarPath, extractedDirectory) {
     join(extractedDirectory, manifest.collector.licenseFile)
   );
   if (sha256(collectorLicense) !== manifest.collector.licenseSha256) {
-    throw new Error("Packaged collector license differs from the pinned notice.");
+    throw new Error(
+      "Packaged collector license differs from the pinned notice."
+    );
   }
   const packageManifest = JSON.parse(
     await readFile(join(extractedDirectory, "package.json"), "utf8")
   );
   if (
     packageManifest.main !== manifest.application.main ||
-    packageManifest.productName !== manifest.application.productName
+    packageManifest.productName !== manifest.application.productName ||
+    packageManifest.version !== releaseVersion
   ) {
-    throw new Error("Packaged package.json has an unexpected entry point.");
+    throw new Error(
+      "Packaged package.json has an unexpected entry point or release version."
+    );
   }
   for (const entry of [
     manifest.application.main,
     manifest.application.preload,
-    manifest.application.renderer
+    manifest.application.renderer,
+    "dist/main/preload/companion.cjs"
   ]) {
     if (!extractedNames.includes(entry)) {
       throw new Error(`Declared runtime entry is absent from ASAR: ${entry}`);
@@ -984,7 +1128,9 @@ async function verifyRawFuseWires(binaryPath) {
         `Unexpected Electron fuse wire version/length: ${version}/${length}`
       );
     }
-    const rawStates = [...executable.subarray(wirePosition + 2, wirePosition + 2 + length)];
+    const rawStates = [
+      ...executable.subarray(wirePosition + 2, wirePosition + 2 + length)
+    ];
     const expectedRawStates = expectedFuseStates.map((enabled) =>
       enabled ? "1".charCodeAt(0) : "0".charCodeAt(0)
     );
@@ -997,7 +1143,9 @@ async function verifyRawFuseWires(binaryPath) {
     offset = wirePosition + 2 + length;
   }
   if (wires.length === 0 || wires.length > 2) {
-    throw new Error(`Expected one or two Electron fuse wires, found ${wires.length}.`);
+    throw new Error(
+      `Expected one or two Electron fuse wires, found ${wires.length}.`
+    );
   }
   return wires;
 }
@@ -1085,8 +1233,10 @@ function zipEntryKindAndMode(entry) {
   if ((entry.generalPurposeBitFlag & 0x1) !== 0) {
     throw new Error("Encrypted maker ZIP entries are forbidden.");
   }
-  if ((entry.versionMadeBy >>> 8) !== 3) {
-    throw new Error("Maker ZIP entries must preserve Unix file types and modes.");
+  if (entry.versionMadeBy >>> 8 !== 3) {
+    throw new Error(
+      "Maker ZIP entries must preserve Unix file types and modes."
+    );
   }
   const unixMode = entry.externalFileAttributes >>> 16;
   const fileType = unixMode & 0o170000;
@@ -1130,10 +1280,7 @@ function hashZipEntry(zip, entry) {
       let bytes = 0;
       stream.on("data", (chunk) => {
         bytes += chunk.length;
-        if (
-          bytes > entry.uncompressedSize ||
-          bytes > SIDECAR_MAX_TOTAL_BYTES
-        ) {
+        if (bytes > entry.uncompressedSize || bytes > SIDECAR_MAX_TOTAL_BYTES) {
           stream.destroy(new Error("Maker ZIP entry exceeded its size bound."));
           return;
         }
@@ -1187,7 +1334,9 @@ async function zipInventory(path, options = {}) {
           }
           const folded = entry.fileName.toLocaleLowerCase("en-US");
           if (names.has(entry.fileName) || caseFoldedNames.has(folded)) {
-            throw new Error("Maker ZIP contains duplicate or case-colliding paths.");
+            throw new Error(
+              "Maker ZIP contains duplicate or case-colliding paths."
+            );
           }
           names.add(entry.fileName);
           caseFoldedNames.add(folded);
@@ -1205,6 +1354,149 @@ async function zipInventory(path, options = {}) {
               ...(await hashZipEntry(zip, entry)),
               mode: metadata.mode
             });
+          }
+          if (!settled) zip.readEntry();
+        })().catch(fail);
+      });
+      zip.readEntry();
+    });
+  } finally {
+    zip.close();
+  }
+}
+
+function readZipEntryBuffer(zip, entry, maximumBytes) {
+  return new Promise((resolvePromise, reject) => {
+    if (entry.uncompressedSize > maximumBytes) {
+      reject(new Error("Selected ZIP entry exceeds its inspection bound."));
+      return;
+    }
+    zip.openReadStream(entry, (error, stream) => {
+      if (error !== null) {
+        reject(error);
+        return;
+      }
+      if (stream === undefined) {
+        reject(new Error("ZIP reader returned no selected entry stream."));
+        return;
+      }
+      const chunks = [];
+      let bytes = 0;
+      stream.on("data", (chunk) => {
+        bytes += chunk.length;
+        if (bytes > entry.uncompressedSize || bytes > maximumBytes) {
+          stream.destroy(
+            new Error("Selected ZIP entry exceeded its size bound.")
+          );
+          return;
+        }
+        chunks.push(chunk);
+      });
+      stream.once("error", reject);
+      stream.once("end", () => {
+        if (bytes !== entry.uncompressedSize) {
+          reject(new Error("Selected ZIP entry size changed while reading."));
+          return;
+        }
+        resolvePromise(Buffer.concat(chunks, bytes));
+      });
+    });
+  });
+}
+
+async function inspectSquirrelArchive(path, extractionDirectory) {
+  const zip = await openZip(path, { allowBackslashSeparators: true });
+  try {
+    return await new Promise((resolvePromise, reject) => {
+      const names = new Set();
+      const caseFoldedNames = new Set();
+      const nuspecs = [];
+      const portableExecutables = [];
+      let entries = 0;
+      let extractedBytes = 0;
+      let settled = false;
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+      zip.once("error", fail);
+      zip.once("end", () => {
+        if (settled) return;
+        settled = true;
+        resolvePromise({ nuspecs, portableExecutables });
+      });
+      zip.on("entry", (entry) => {
+        void (async () => {
+          entries += 1;
+          if (entries > SIDECAR_MAX_FILE_COUNT) {
+            throw new Error(
+              "Squirrel archive inspection exceeded its entry bound."
+            );
+          }
+          const folded = entry.fileName.toLocaleLowerCase("en-US");
+          if (names.has(entry.fileName) || caseFoldedNames.has(folded)) {
+            throw new Error(
+              "Squirrel archive contains duplicate or case-colliding paths."
+            );
+          }
+          names.add(entry.fileName);
+          caseFoldedNames.add(folded);
+          const metadata = lenientZipEntryKind(entry);
+          if (metadata.kind === "file") {
+            if (extname(entry.fileName).toLowerCase() === ".nuspec") {
+              nuspecs.push({
+                archivePath: entry.fileName,
+                contents: await readZipEntryBuffer(zip, entry, 1_024 * 1_024)
+              });
+            } else if (
+              extractionDirectory !== null &&
+              isWindowsSignablePath(entry.fileName)
+            ) {
+              if (portableExecutables.length >= 512) {
+                throw new Error(
+                  "Squirrel archive contains too many signable PE payloads."
+                );
+              }
+              extractedBytes += entry.uncompressedSize;
+              if (extractedBytes > 512 * 1_024 * 1_024) {
+                throw new Error(
+                  "Squirrel signable PE payload exceeds its extraction bound."
+                );
+              }
+              const extractedPath = join(
+                extractionDirectory,
+                `${String(portableExecutables.length).padStart(4, "0")}${extname(entry.fileName).toLowerCase()}`
+              );
+              await new Promise((resolveStream, rejectStream) => {
+                zip.openReadStream(entry, (error, stream) => {
+                  if (error !== null) {
+                    rejectStream(error);
+                    return;
+                  }
+                  if (stream === undefined) {
+                    rejectStream(
+                      new Error("ZIP reader returned no PE payload stream.")
+                    );
+                    return;
+                  }
+                  pipeline(
+                    stream,
+                    createWriteStream(extractedPath, {
+                      flags: "wx",
+                      mode: 0o600
+                    })
+                  ).then(resolveStream, rejectStream);
+                });
+              });
+              if ((await stat(extractedPath)).size !== entry.uncompressedSize) {
+                throw new Error("Extracted Squirrel PE payload size mismatch.");
+              }
+              portableExecutables.push({
+                archivePath: entry.fileName,
+                extractedPath
+              });
+            }
           }
           if (!settled) zip.readEntry();
         })().catch(fail);
@@ -1264,6 +1556,235 @@ function sameInventory(left, right) {
   );
 }
 
+const authenticodeInspectionScript = String.raw`
+$ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.Security
+
+function Add-CmsDigestOids {
+  param(
+    [byte[]] $EncodedCms,
+    [System.Collections.Generic.List[string]] $Digests,
+    [System.Collections.Generic.List[string]] $TimestampAttributes,
+    [int] $Depth
+  )
+  if ($Depth -gt 4) {
+    throw "Nested Authenticode signature depth exceeded."
+  }
+  $cms = New-Object System.Security.Cryptography.Pkcs.SignedCms
+  $cms.Decode($EncodedCms)
+  if ($cms.SignerInfos.Count -lt 1) {
+    throw "Authenticode CMS has no signer."
+  }
+  foreach ($signer in $cms.SignerInfos) {
+    [void] $Digests.Add($signer.DigestAlgorithm.Value)
+    foreach ($attribute in $signer.UnsignedAttributes) {
+      if (
+        $attribute.Oid.Value -eq "1.3.6.1.4.1.311.3.3.1" -or
+        $attribute.Oid.Value -eq "1.2.840.113549.1.9.6"
+      ) {
+        [void] $TimestampAttributes.Add($attribute.Oid.Value)
+      }
+      if ($attribute.Oid.Value -eq "1.3.6.1.4.1.311.2.4.1") {
+        foreach ($value in $attribute.Values) {
+          Add-CmsDigestOids -EncodedCms $value.RawData -Digests $Digests -TimestampAttributes $TimestampAttributes -Depth ($Depth + 1)
+        }
+      }
+    }
+  }
+}
+
+$target = $env:TOKENMONSTER_AUTHENTICODE_TARGET
+if ([string]::IsNullOrWhiteSpace($target)) {
+  throw "Missing verification target."
+}
+$signature = Get-AuthenticodeSignature -LiteralPath $target
+$versionInfo = (Get-Item -LiteralPath $target).VersionInfo
+$bytes = [System.IO.File]::ReadAllBytes($target)
+if ($bytes.Length -lt 256 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) {
+  throw "Target is not a bounded PE image."
+}
+$peOffset = [System.BitConverter]::ToInt32($bytes, 0x3c)
+if (
+  $peOffset -lt 0x40 -or
+  $peOffset + 152 -gt $bytes.Length -or
+  $bytes[$peOffset] -ne 0x50 -or
+  $bytes[$peOffset + 1] -ne 0x45 -or
+  $bytes[$peOffset + 2] -ne 0 -or
+  $bytes[$peOffset + 3] -ne 0
+) {
+  throw "Target has an invalid PE header."
+}
+$optionalHeader = $peOffset + 24
+$magic = [System.BitConverter]::ToUInt16($bytes, $optionalHeader)
+if ($magic -eq 0x10b) {
+  $dataDirectories = $optionalHeader + 96
+} elseif ($magic -eq 0x20b) {
+  $dataDirectories = $optionalHeader + 112
+} else {
+  throw "Target has an unsupported PE optional header."
+}
+$securityDirectory = $dataDirectories + 32
+if ($securityDirectory + 8 -gt $bytes.Length) {
+  throw "Target has no PE security directory."
+}
+$certificateOffset = [System.BitConverter]::ToUInt32($bytes, $securityDirectory)
+$certificateBytes = [System.BitConverter]::ToUInt32($bytes, $securityDirectory + 4)
+if (
+  $certificateOffset -eq 0 -or
+  $certificateBytes -lt 8 -or
+  [uint64]$certificateOffset + [uint64]$certificateBytes -gt [uint64]$bytes.Length
+) {
+  throw "Target has no bounded Authenticode certificate table."
+}
+
+$digests = New-Object "System.Collections.Generic.List[string]"
+$timestampAttributes = New-Object "System.Collections.Generic.List[string]"
+$cursor = [uint64]$certificateOffset
+$certificateEnd = [uint64]$certificateOffset + [uint64]$certificateBytes
+$containerCount = 0
+while ($cursor -lt $certificateEnd) {
+  if ($cursor + 8 -gt $certificateEnd) {
+    throw "Truncated WIN_CERTIFICATE header."
+  }
+  $length = [System.BitConverter]::ToUInt32($bytes, [int]$cursor)
+  $revision = [System.BitConverter]::ToUInt16($bytes, [int]$cursor + 4)
+  $certificateType = [System.BitConverter]::ToUInt16($bytes, [int]$cursor + 6)
+  if (
+    $length -lt 8 -or
+    $cursor + $length -gt $certificateEnd -or
+    $revision -ne 0x200 -or
+    $certificateType -ne 2
+  ) {
+    throw "Invalid WIN_CERTIFICATE entry."
+  }
+  $encodedCms = New-Object byte[] ($length - 8)
+  [System.Buffer]::BlockCopy($bytes, [int]$cursor + 8, $encodedCms, 0, $length - 8)
+  Add-CmsDigestOids -EncodedCms $encodedCms -Digests $digests -TimestampAttributes $timestampAttributes -Depth 0
+  $containerCount += 1
+  $alignedLength = [uint64](($length + 7) -band (-bnot 7))
+  $cursor += $alignedLength
+}
+if ($cursor -ne $certificateEnd) {
+  throw "WIN_CERTIFICATE alignment did not consume the security directory."
+}
+
+$result = [ordered]@{
+  status = [string]$signature.Status
+  signerSubject = if ($null -eq $signature.SignerCertificate) { $null } else { $signature.SignerCertificate.Subject }
+  signerThumbprint = if ($null -eq $signature.SignerCertificate) { $null } else { $signature.SignerCertificate.Thumbprint }
+  timestampSubject = if ($null -eq $signature.TimeStamperCertificate) { $null } else { $signature.TimeStamperCertificate.Subject }
+  timestampThumbprint = if ($null -eq $signature.TimeStamperCertificate) { $null } else { $signature.TimeStamperCertificate.Thumbprint }
+  signatureContainerCount = $containerCount
+  digestOids = @($digests.ToArray())
+  timestampAttributeOids = @($timestampAttributes.ToArray())
+  productVersion = $versionInfo.ProductVersion
+  fileVersion = $versionInfo.FileVersion
+}
+$result | ConvertTo-Json -Compress
+`;
+
+async function verifyWindowsAuthenticode(path, expectedSignerSubject) {
+  if (process.platform !== "win32") {
+    throw new Error("Authenticode verification requires native Windows.");
+  }
+  const systemRoot = process.env.SystemRoot;
+  if (
+    typeof systemRoot !== "string" ||
+    systemRoot.length < 3 ||
+    systemRoot.length > 260 ||
+    /[\0\r\n]/u.test(systemRoot) ||
+    !isAbsolute(systemRoot)
+  ) {
+    throw new Error(
+      "Windows SystemRoot is unavailable for signature verification."
+    );
+  }
+  const powerShell = join(
+    systemRoot,
+    "System32",
+    "WindowsPowerShell",
+    "v1.0",
+    "powershell.exe"
+  );
+  const powerShellMetadata = await stat(powerShell);
+  if (!powerShellMetadata.isFile()) {
+    throw new Error("Native Windows PowerShell is unavailable.");
+  }
+
+  let rawResult;
+  try {
+    rawResult = execFileSync(
+      powerShell,
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-EncodedCommand",
+        Buffer.from(authenticodeInspectionScript, "utf16le").toString("base64")
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          TOKENMONSTER_AUTHENTICODE_TARGET: path
+        },
+        maxBuffer: 1_024 * 1_024,
+        stdio: ["ignore", "pipe", "pipe"]
+      }
+    );
+  } catch {
+    throw new Error("Native Authenticode verification failed closed.");
+  }
+
+  let result;
+  try {
+    result = JSON.parse(rawResult.replace(/^\uFEFF/u, "").trim());
+  } catch {
+    throw new Error(
+      "Native Authenticode verification returned invalid evidence."
+    );
+  }
+  return authenticodeEvidenceFromInspection(result, expectedSignerSubject);
+}
+
+async function stagedWindowsAuthenticodeEvidence(asarPath) {
+  if (mode !== "signed" || process.platform !== "win32") return [];
+  const packageRoot = packageRootForAsar(asarPath);
+  const signablePaths = (await walkFiles(packageRoot))
+    .filter(isWindowsSignablePath)
+    .sort();
+  const mainExecutable = join(packageRoot, "TokenMonster.exe");
+  if (
+    signablePaths.length < 1 ||
+    !signablePaths.includes(mainExecutable) ||
+    expectedWindowsSignerSubject === null
+  ) {
+    throw new Error("Signed Windows staging has no main executable inventory.");
+  }
+  const evidence = [];
+  for (const path of signablePaths) {
+    const authenticode = await verifyWindowsAuthenticode(
+      path,
+      expectedWindowsSignerSubject
+    );
+    if (
+      path === mainExecutable &&
+      authenticode.productVersion !== releaseVersion
+    ) {
+      throw new Error(
+        "Staged Windows executable ProductVersion differs from the release version."
+      );
+    }
+    evidence.push({
+      path: portablePath(relative(rootDirectory, path)),
+      ...authenticode
+    });
+  }
+  return evidence;
+}
+
 // Foreign-platform zips cannot support the linux byte/mode inventory diff
 // (PowerShell zips drop unix modes; .app staging trees contain framework
 // symlinks), so they get bounded structural checks plus proof that the
@@ -1299,15 +1820,22 @@ async function verifyZipMakerArtifact(path, asarPath) {
     const expectedNames = [...staged.inventory.keys()]
       .map((name) => `${candidate}${name}`)
       .sort();
-    return JSON.stringify([...zip.files.keys()].sort()) === JSON.stringify(expectedNames);
+    return (
+      JSON.stringify([...zip.files.keys()].sort()) ===
+      JSON.stringify(expectedNames)
+    );
   });
   if (prefix === undefined) {
-    throw new Error("Maker ZIP file inventory differs from the verified package.");
+    throw new Error(
+      "Maker ZIP file inventory differs from the verified package."
+    );
   }
   for (const [name, expected] of staged.inventory) {
     const actual = zip.files.get(`${prefix}${name}`);
     if (actual === undefined || !sameInventory(actual, expected)) {
-      throw new Error(`Maker ZIP content differs from the verified package: ${name}`);
+      throw new Error(
+        `Maker ZIP content differs from the verified package: ${name}`
+      );
     }
   }
   const expectedDirectories = new Map(
@@ -1322,7 +1850,9 @@ async function verifyZipMakerArtifact(path, asarPath) {
       ([name, mode]) => zip.directories.get(name) !== mode
     )
   ) {
-    throw new Error("Maker ZIP directory inventory or mode differs from staging.");
+    throw new Error(
+      "Maker ZIP directory inventory or mode differs from staging."
+    );
   }
   for (const directory of zip.directories.keys()) {
     if (!expectedDirectories.has(directory)) {
@@ -1343,28 +1873,134 @@ async function verifyZipMakerArtifact(path, asarPath) {
   };
 }
 
-async function verifySquirrelNupkg(path, expectedSidecarInventory) {
+async function verifySquirrelNupkg(
+  path,
+  expectedSidecarInventory,
+  stagedAsarPath
+) {
   const zip = await zipInventory(path, { lenientModes: true });
   const sidecarFileCount = assertSquirrelSidecarInventory(
     zip.files,
     expectedSidecarInventory
   );
+  const squirrelVersion = squirrelVersionFor(releaseVersion);
+  if (basename(path) !== `TokenMonster-${squirrelVersion}-full.nupkg`) {
+    throw new Error(
+      "Full Squirrel package name does not match the release version."
+    );
+  }
+  const embeddedAsars = [...zip.files].filter(([archivePath]) =>
+    /(?:^|\/)resources\/app\.asar$/iu.test(archivePath)
+  );
+  const stagedAsarMetadata = await stat(stagedAsarPath);
+  if (
+    embeddedAsars.length !== 1 ||
+    embeddedAsars[0][1].bytes !== stagedAsarMetadata.size ||
+    embeddedAsars[0][1].sha256 !== (await hashFile(stagedAsarPath))
+  ) {
+    throw new Error(
+      "Full Squirrel package does not embed the verified application ASAR."
+    );
+  }
+
+  const extractionDirectory =
+    mode === "signed" && process.platform === "win32"
+      ? await mkdtemp(join(tmpdir(), "tokenmonster-squirrel-signatures-"))
+      : null;
+  let versionEvidence;
+  try {
+    const archiveInspection = await inspectSquirrelArchive(
+      path,
+      extractionDirectory
+    );
+    if (archiveInspection.nuspecs.length !== 1) {
+      throw new Error(
+        "Full Squirrel package must contain exactly one .nuspec."
+      );
+    }
+    const nuspecText = archiveInspection.nuspecs[0].contents.toString("utf8");
+    const versionMatches = [
+      ...nuspecText.matchAll(/<version>([^<]+)<\/version>/giu)
+    ];
+    if (
+      nuspecText.includes("\0") ||
+      versionMatches.length !== 1 ||
+      versionMatches[0][1] !== squirrelVersion
+    ) {
+      throw new Error(
+        "Squirrel .nuspec version does not match the release version."
+      );
+    }
+
+    const payloadAuthenticode = [];
+    if (extractionDirectory !== null) {
+      if (
+        archiveInspection.portableExecutables.length < 1 ||
+        expectedWindowsSignerSubject === null
+      ) {
+        throw new Error(
+          "Signed Squirrel package has no signable PE payload inventory."
+        );
+      }
+      let mainExecutableCount = 0;
+      for (const payload of archiveInspection.portableExecutables) {
+        const authenticode = await verifyWindowsAuthenticode(
+          payload.extractedPath,
+          expectedWindowsSignerSubject
+        );
+        if (/(?:^|\/)TokenMonster\.exe$/iu.test(payload.archivePath)) {
+          mainExecutableCount += 1;
+          if (authenticode.productVersion !== releaseVersion) {
+            throw new Error(
+              "Squirrel application ProductVersion differs from the release version."
+            );
+          }
+        }
+        payloadAuthenticode.push({
+          archivePath: payload.archivePath,
+          ...authenticode
+        });
+      }
+      if (mainExecutableCount !== 1) {
+        throw new Error(
+          "Full Squirrel package must contain exactly one TokenMonster executable."
+        );
+      }
+    }
+    versionEvidence = {
+      nuspecPath: archiveInspection.nuspecs[0].archivePath,
+      payloadAuthenticode
+    };
+  } finally {
+    if (extractionDirectory !== null) {
+      await rm(extractionDirectory, { force: true, recursive: true });
+    }
+  }
   return {
     verification: "squirrel-full-sidecar-byte-inventory",
     fileCount: zip.files.size,
     entryCount: zip.entries,
     uncompressedBytes: zip.totalBytes,
-    sidecarFileCount
+    sidecarFileCount,
+    releaseVersion,
+    squirrelVersion,
+    nuspecPath: versionEvidence.nuspecPath,
+    embeddedAsarSha256: embeddedAsars[0][1].sha256,
+    containerAuthenticode: "not-applicable-zip-container",
+    payloadAuthenticode: versionEvidence.payloadAuthenticode
   };
 }
 
 async function makerEvidence(asarPath, expectedSidecarInventory) {
   const makeDirectory = join(outDirectory, "make");
+  const signedMakerRequired = mode === "signed";
   let files;
   try {
-    files = await walkFiles(makeDirectory);
+    files = await walkFiles(makeDirectory, {
+      rejectLinks: mode === "signed"
+    });
   } catch (error) {
-    if (error?.code === "ENOENT" && !requireMaker) {
+    if (error?.code === "ENOENT" && !requireMaker && !signedMakerRequired) {
       process.stdout.write(
         "No Squirrel maker output found; skipping .nupkg sidecar verification.\n"
       );
@@ -1388,6 +2024,11 @@ async function makerEvidence(asarPath, expectedSidecarInventory) {
     squirrelReleases.length + squirrelPackages.length + squirrelSetups.length >
     0;
   if (!hasSquirrelOutput) {
+    if (mode === "signed" && process.platform === "win32") {
+      throw new Error(
+        "Signed Windows release requires complete Squirrel output."
+      );
+    }
     process.stdout.write(
       "No Squirrel maker output found; skipping .nupkg sidecar verification.\n"
     );
@@ -1408,6 +2049,61 @@ async function makerEvidence(asarPath, expectedSidecarInventory) {
       `Expected exactly one full Squirrel .nupkg, found ${fullSquirrelPackages.length}.`
     );
   }
+  if (
+    hasSquirrelOutput &&
+    (basename(squirrelSetups[0]) !== "TokenMonsterSetup.exe" ||
+      basename(fullSquirrelPackages[0]) !==
+        `TokenMonster-${squirrelVersionFor(releaseVersion)}-full.nupkg`)
+  ) {
+    throw new Error(
+      "Squirrel maker paths do not match the release version policy."
+    );
+  }
+  if (hasSquirrelOutput && mode === "signed" && process.platform === "win32") {
+    const squirrelDirectory = dirname(squirrelReleases[0]);
+    if (
+      dirname(squirrelSetups[0]) !== squirrelDirectory ||
+      dirname(fullSquirrelPackages[0]) !== squirrelDirectory
+    ) {
+      throw new Error("Signed Squirrel publication files must share one directory.");
+    }
+    const squirrelFiles = files.filter(
+      (path) =>
+        path === squirrelDirectory || path.startsWith(`${squirrelDirectory}${sep}`)
+    );
+    requireSignedWindowsSquirrelInventory(
+      squirrelFiles.map((path) => basename(path)),
+      basename(fullSquirrelPackages[0])
+    );
+  }
+  if (hasSquirrelOutput) {
+    const releasesContents = await readFile(squirrelReleases[0], "utf8");
+    if (
+      releasesContents.length < 1 ||
+      releasesContents.length > 64 * 1_024 ||
+      releasesContents.includes("\0")
+    ) {
+      throw new Error("Squirrel RELEASES metadata is malformed.");
+    }
+    const fullName = basename(fullSquirrelPackages[0]);
+    const fullLines = releasesContents
+      .split(/\r?\n/u)
+      .filter((line) => line.trim().length > 0)
+      .map((line) => line.trim().split(/\s+/u))
+      .filter((parts) => parts[1] === fullName);
+    if (fullLines.length !== 1) {
+      throw new Error(
+        "Squirrel RELEASES must contain exactly one full package entry."
+      );
+    }
+    const fullPackageMetadata = await stat(fullSquirrelPackages[0]);
+    const fullPackageSha1 = await hashFile(fullSquirrelPackages[0], "sha1");
+    requireSquirrelReleaseEntry(fullLines[0], {
+      fileName: fullName,
+      byteSize: fullPackageMetadata.size,
+      sha1: fullPackageSha1
+    });
+  }
   const artifacts = files.filter((path) => {
     const extension = extname(path).toLowerCase();
     return (
@@ -1423,6 +2119,7 @@ async function makerEvidence(asarPath, expectedSidecarInventory) {
   }
   if (
     mode === "signed" &&
+    process.platform === "darwin" &&
     !artifacts.some((path) => extname(path).toLowerCase() === ".dmg")
   ) {
     throw new Error("Signed macOS release requires a DMG artifact.");
@@ -1434,12 +2131,22 @@ async function makerEvidence(asarPath, expectedSidecarInventory) {
       extension === ".zip"
         ? await verifyZipMakerArtifact(path, asarPath)
         : extension === ".nupkg" && fullSquirrelPackages.includes(path)
-          ? await verifySquirrelNupkg(path, expectedSidecarInventory)
+          ? await verifySquirrelNupkg(path, expectedSidecarInventory, asarPath)
           : extension === ".dmg"
             ? { verification: "signed-dmg-native-verification-required" }
-            : extension === ".nupkg"
-              ? { verification: "squirrel-delta-package-hash-only" }
-              : { verification: "squirrel-maker-marker-hash-only" };
+            : extension === ".exe" &&
+                mode === "signed" &&
+                process.platform === "win32"
+              ? {
+                  verification: "native-authenticode",
+                  ...(await verifyWindowsAuthenticode(
+                    path,
+                    expectedWindowsSignerSubject
+                  ))
+                }
+              : extension === ".nupkg"
+                ? { verification: "squirrel-delta-package-hash-only" }
+                : { verification: "squirrel-maker-marker-hash-only" };
     if (extension === ".dmg") {
       throw new Error(
         "DMG release verification is blocked until native mount, nested app identity, and stapled-ticket verification are implemented."
@@ -1457,6 +2164,7 @@ async function makerEvidence(asarPath, expectedSidecarInventory) {
 
 function verifySignedMacApplication(asarPath) {
   if (mode !== "signed") return;
+  if (process.platform === "win32") return;
   const appPath = packageRootForAsar(asarPath);
   if (process.platform !== "darwin" || !basename(appPath).endsWith(".app")) {
     throw new Error("Signed verification requires a packaged macOS app.");
@@ -1472,6 +2180,7 @@ function verifySignedMacApplication(asarPath) {
 assertManifestPolicy();
 if (
   mode === "signed" &&
+  process.platform === "darwin" &&
   manifest.collector.signedReleaseStatus !== "ready"
 ) {
   throw new Error(
@@ -1480,7 +2189,9 @@ if (
 }
 const appAsars = await findAppAsars();
 if (appAsars.length !== 1) {
-  throw new Error(`Expected exactly one packaged app.asar, found ${appAsars.length}.`);
+  throw new Error(
+    `Expected exactly one packaged app.asar, found ${appAsars.length}.`
+  );
 }
 const asarPath = appAsars[0];
 const runtimeSnapshots = await verifyPackagePathsAndSnapshots(asarPath);
@@ -1500,14 +2211,24 @@ try {
 const binaryPath = fuseBinaryPath(asarPath);
 const fuseWires = await verifyRawFuseWires(binaryPath);
 verifySignedMacApplication(asarPath);
+const stagedAuthenticode = await stagedWindowsAuthenticodeEvidence(asarPath);
 const makerArtifacts = await makerEvidence(asarPath, sidecarInventory);
 
 const evidenceDirectory = join(rootDirectory, "release-evidence");
 await mkdir(evidenceDirectory, { recursive: true });
 const evidence = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   mode,
   declaredSigned: mode === "signed",
+  releaseVersion: {
+    requested: releaseVersion,
+    sourcePackageVersion: SOURCE_COMPANION_VERSION,
+    packagedApplicationVersion: releaseVersion,
+    electronAppGetVersionSource: "packaged-package-json",
+    packagerAppVersion: releaseVersion,
+    squirrelVersion:
+      process.platform === "win32" ? squirrelVersionFor(releaseVersion) : null
+  },
   appAsar: {
     path: portablePath(relative(rootDirectory, asarPath)),
     bytes: (await stat(asarPath)).size,
@@ -1518,6 +2239,7 @@ const evidence = {
   runtimeExternalAllowlist: allowedBareImports,
   fuseWires,
   runtimeSnapshots,
+  stagedAuthenticode,
   makerArtifacts,
   collector: collectorEvidence,
   sidecar: sidecarEvidence

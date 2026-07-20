@@ -3,10 +3,13 @@ import { join } from "node:path";
 
 import {
   createCompanionGateway,
-  getApprovedAssetManifest,
-  type CompanionGateway
+  getApprovedAssetPackConfiguration,
+  type CompanionCharacterOptions,
+  type CompanionGateway,
+  type CompanionGatewayOptions
 } from "@tokenmonster/companion-gateway";
 import { getCompanionUiAssetDirectory } from "@tokenmonster/companion-ui";
+import type { EncryptedSecretSlot } from "@tokenmonster/secret-vault";
 import {
   SUPPORTED_TOKEN_TRACKER_VERSION,
   createTokenTrackerAdapter,
@@ -21,8 +24,10 @@ import {
 
 import { resolveSidecarExecutable, utilityProcessSpawn } from "./sidecar.js";
 
-export const PET_CHARACTER_CDN_BASE_URL =
-  "https://cdn.ted-h.com/tokenmonster/characters/v1" as const;
+// Keep the retired Electron entry point on the same policy as the CLI:
+// per-object transport is disabled and only the explicit fixed-pack consent
+// lifecycle may acquire a complete approved release.
+export const PET_CHARACTER_CDN_BASE_URL = null;
 
 export const PET_STARTUP_MESSAGES = Object.freeze({
   gateway:
@@ -62,6 +67,42 @@ export interface PetServices {
   readonly bootstrapUrl: string;
 }
 
+export function createPetCharacterOptions(
+  homeDirectory: string,
+  approvedAssetPack: () =>
+    | NonNullable<CompanionCharacterOptions["assetPack"]>
+    | null =
+    getApprovedAssetPackConfiguration
+): CompanionCharacterOptions {
+  return Object.freeze({
+    manifest: null,
+    assetPack: approvedAssetPack(),
+    cacheDirectory: join(homeDirectory, ".tokenmonster", "asset-cache"),
+    cdnBaseUrl: PET_CHARACTER_CDN_BASE_URL,
+    progressionStorePath: join(
+      homeDirectory,
+      ".tokenmonster",
+      "progression-v1.json"
+    )
+  });
+}
+
+export function createPetGatewayOptions(
+  adapter: TokenTrackerAdapter,
+  runtime: ManagedTokenTracker,
+  byok: EncryptedSecretSlot | null,
+  homeDirectory: string,
+  assetDirectory = getCompanionUiAssetDirectory()
+): CompanionGatewayOptions {
+  return Object.freeze({
+    adapter,
+    collector: runtime,
+    byok,
+    assetDirectory,
+    characters: createPetCharacterOptions(homeDirectory)
+  });
+}
+
 async function stopServices(
   gateway: CompanionGateway | null,
   runtime: ManagedTokenTracker | null
@@ -82,7 +123,9 @@ async function stopServices(
   }
 }
 
-export async function startPetServices(): Promise<PetServices> {
+export async function startPetServices(
+  byok: EncryptedSecretSlot | null = null
+): Promise<PetServices> {
   if (PINNED_TOKEN_TRACKER_VERSION !== SUPPORTED_TOKEN_TRACKER_VERSION) {
     throw new PetStartupError("sidecar");
   }
@@ -121,23 +164,9 @@ export async function startPetServices(): Promise<PetServices> {
   try {
     const environment = process.env;
     const homeDirectory = environment["HOME"] ?? homedir();
-    gateway = createCompanionGateway({
-      adapter,
-      collector: runtime,
-      assetDirectory: getCompanionUiAssetDirectory(),
-      characters: {
-        manifest: getApprovedAssetManifest(),
-        cacheDirectory: join(homeDirectory, ".tokenmonster", "asset-cache"),
-        cdnBaseUrl:
-          environment["TOKENMONSTER_CHARACTER_CDN"] ??
-          PET_CHARACTER_CDN_BASE_URL,
-        progressionStorePath: join(
-          homeDirectory,
-          ".tokenmonster",
-          "progression-v1.json"
-        )
-      }
-    });
+    gateway = createCompanionGateway(
+      createPetGatewayOptions(adapter, runtime, byok, homeDirectory)
+    );
     const address = await gateway.start();
     return Object.freeze({
       runtime,

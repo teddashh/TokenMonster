@@ -41,8 +41,8 @@ const copyCompanionUi = () => ({
   }
 });
 
-// The sidecar shim is forked by utilityProcess as its own file; it must not
-// be bundled into main.js, so it is copied verbatim next to it.
+// The sidecar shim and its fail-closed egress guard are loaded as standalone
+// CommonJS files by utilityProcess, so copy the reviewed bytes next to main.js.
 const copySidecarShim = () => ({
   name: "tokenmonster-copy-sidecar-shim",
   async writeBundle(): Promise<void> {
@@ -50,10 +50,21 @@ const copySidecarShim = () => ({
       new URL("dist/main/main/", import.meta.url)
     );
     await mkdir(destinationDirectory, { recursive: true });
-    await copyFile(
-      fileURLToPath(new URL("src/main/pet/sidecar-shim.cjs", import.meta.url)),
-      join(destinationDirectory, "sidecar-shim.cjs")
-    );
+    await Promise.all([
+      copyFile(
+        fileURLToPath(new URL("src/main/pet/sidecar-shim.cjs", import.meta.url)),
+        join(destinationDirectory, "sidecar-shim.cjs")
+      ),
+      copyFile(
+        fileURLToPath(
+          new URL(
+            "../../packages/token-tracker-runtime/src/network-deny.cjs",
+            import.meta.url
+          )
+        ),
+        join(destinationDirectory, "network-deny.cjs")
+      )
+    ]);
   }
 });
 
@@ -70,7 +81,12 @@ export default defineConfig({
     rollupOptions: {
       external: runtimeExternal,
       output: {
-        entryFileNames: "main/[name].js"
+        entryFileNames: "main/[name].js",
+        // Rolldown keeps CommonJS dependencies such as yauzl in the ESM main
+        // bundle and routes their builtin imports through its `__require`
+        // helper. Native Node/Electron ESM has no global `require`, so bind a
+        // module-local loader before any bundled CommonJS factory is evaluated.
+        intro: "const require = createRequire(import.meta.url);"
       }
     },
     sourcemap: false,
