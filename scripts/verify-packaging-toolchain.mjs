@@ -4,6 +4,11 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { rootDirectory } from "./repository-files.mjs";
+import {
+  requireReviewedSquirrelReleaseMode,
+  verifyElectronWinstallerVendor,
+  verifyReviewedSquirrelUpdater,
+} from "../apps/companion/packaging/squirrel-updater.mjs";
 
 const arguments_ = process.argv.slice(2);
 if (
@@ -304,8 +309,15 @@ if (
   );
 }
 
+await Promise.all([
+  verifyElectronWinstallerVendor(),
+  verifyReviewedSquirrelUpdater(),
+]);
+
+if (arguments_[0] === "--require-upstream-compatible") {
+  requireReviewedSquirrelReleaseMode("signed");
+}
+
 process.stdout.write(
-  `Verified exact stable direct Electron packaging toolchain, successful npm dependency tree, and Forge-free packaging closure. Signed/GA upstream-compatible gate ${
-    arguments_[0] === "--require-upstream-compatible" ? "passes" : "is ready"
-  }.\n`,
+  "Verified exact stable direct Electron packaging toolchain, reviewed internal Squirrel updater, successful npm dependency tree, and Forge-free packaging closure. Internal packaging gate passes; signed/GA remains explicitly closed.\n",
 );

@@ -1,0 +1,90 @@
+import { createHash } from "node:crypto";
+import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
+
+import {
+  prepareReviewedSquirrelVendorOverlay,
+  requireReviewedSquirrelReleaseMode,
+  REVIEWED_SQUIRREL_UPDATER,
+  verifyElectronWinstallerVendor,
+  verifyReviewedSquirrelUpdater,
+  verifyReviewedSquirrelVendorOverlay,
+} from "../packaging/squirrel-updater.mjs";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { force: true, recursive: true })),
+  );
+});
+
+describe("reviewed Squirrel updater", () => {
+  it("binds the vendored PE to both independent rebuild confirmations", async () => {
+    const binding = await verifyReviewedSquirrelUpdater();
+    expect(binding).toMatchObject({
+      bytes: 1_840_640,
+      sha256:
+        "1673161fd4e64d1123fb828a5e5f1580cbe3c3f6b3f0893f50bb920dada473fd",
+    });
+    expect(binding.bytes).toBe(REVIEWED_SQUIRREL_UPDATER.bytes);
+    expect(binding.sha256).toBe(REVIEWED_SQUIRREL_UPDATER.sha256);
+  });
+
+  it("creates an exact disposable vendor overlay without changing node_modules", async () => {
+    const temporaryRoot = await mkdtemp(
+      join(tmpdir(), "tokenmonster-squirrel-overlay-test-"),
+    );
+    temporaryDirectories.push(temporaryRoot);
+    const overlayDirectory = join(temporaryRoot, "vendor");
+    const sourceBefore = await verifyElectronWinstallerVendor();
+
+    const prepared = await prepareReviewedSquirrelVendorOverlay(
+      overlayDirectory,
+      "internal",
+    );
+
+    expect(prepared).toEqual({
+      directory: overlayDirectory,
+      updaterSha256: REVIEWED_SQUIRREL_UPDATER.sha256,
+    });
+    await expect(
+      verifyReviewedSquirrelVendorOverlay(overlayDirectory),
+    ).resolves.toEqual(prepared);
+    const updaterPath = join(overlayDirectory, "Squirrel.exe");
+    const updaterStat = await lstat(updaterPath, { bigint: true });
+    const stockUpdaterStat = await lstat(
+      join(sourceBefore.directory, "Squirrel.exe"),
+      { bigint: true },
+    );
+    const updater = await readFile(updaterPath);
+    expect(updaterStat.isFile()).toBe(true);
+    expect(updaterStat.isSymbolicLink()).toBe(false);
+    expect([updaterStat.dev, updaterStat.ino]).not.toEqual([
+      stockUpdaterStat.dev,
+      stockUpdaterStat.ino,
+    ]);
+    expect(updater.byteLength).toBe(REVIEWED_SQUIRREL_UPDATER.bytes);
+    expect(createHash("sha256").update(updater).digest("hex")).toBe(
+      REVIEWED_SQUIRREL_UPDATER.sha256,
+    );
+    await expect(verifyElectronWinstallerVendor()).resolves.toEqual(
+      sourceBefore,
+    );
+  });
+
+  it("keeps signed/public packaging closed while redistribution review is open", () => {
+    expect(() => requireReviewedSquirrelReleaseMode("internal")).not.toThrow();
+    expect(() => requireReviewedSquirrelReleaseMode("signed")).toThrow(
+      /internal-only pending redistribution review/u,
+    );
+    expect(() => requireReviewedSquirrelReleaseMode("preview")).toThrow(
+      /must be internal or signed/u,
+    );
+  });
+});
