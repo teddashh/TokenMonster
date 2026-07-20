@@ -7,36 +7,44 @@ import {
   readFile,
   rename,
   rm,
-  stat
+  stat,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
 
 import {
+  LETTER_WARDROBE_CATALOG,
+  LocalProgressionStoreError,
   PROGRESSION_SCHEMA_VERSION,
+  WardrobeThemeIdSchema,
   evaluateProgression,
+  getCharacterDefinition,
   loadLocalProgressionStore,
   mergeAndSaveDailyProviderBuckets,
   parseAssetManifest,
+  repairLegacyProgressionStoreLock,
   saveLocalProgressionStore,
+  selectTapLine,
   withManualSisterSelection,
   withProgressionEvaluation,
   type AssetManifest,
   type DailyProviderBucket,
   type LocalProgressionStore,
+  type MonsterMood,
+  type MonsterTrait,
   type ProgressionState,
-  type WardrobeThemeId
+  type WardrobeThemeId,
 } from "@tokenmonster/characters";
 import type { TokenTrackerAdapter } from "@tokenmonster/token-tracker-adapter";
 
+import { normalizeAssetPackConfiguration } from "./asset-pack-service.js";
 import type {
-  CompanionCharacterFetch,
-  CompanionCharacterOptions,
   CompanionCharacter,
+  CompanionCharacterInteractionResponse,
   CompanionCharactersResponse,
-  CompanionGatewayClock
+  CompanionGatewayClock,
 } from "./types.js";
 
-const ROSTER_IDS = [
+export const CHARACTER_ROSTER_IDS = [
   "chatgpt",
   "claude",
   "gemini",
@@ -47,21 +55,21 @@ const ROSTER_IDS = [
   "venice",
   "sakana",
   "perplexity",
-  "glm"
+  "glm",
 ] as const;
-type RosterId = (typeof ROSTER_IDS)[number];
+type RosterId = (typeof CHARACTER_ROSTER_IDS)[number];
+type SisterId = "chatgpt" | "claude" | "gemini" | "grok";
 
-const SISTER_IDS = new Set<RosterId>([
-  "chatgpt",
-  "claude",
-  "gemini",
-  "grok"
-]);
+const SISTER_IDS = new Set<RosterId>(["chatgpt", "claude", "gemini", "grok"]);
 const MAX_OBJECT_BYTES = 4 * 1_024 * 1_024;
-const DOWNLOAD_TIMEOUT_MS = 10_000;
 const LEDGER_SYNC_INTERVAL_MS = 60_000;
 const LEDGER_WINDOW_DAYS = 28;
 const CHARACTER_PREFERENCES_FILE = "character-preferences-v1.json";
+export const CHARACTER_INTERACTIONS_FILE = "character-interactions-v1.json";
+export const CHARACTER_TAP_COOLDOWN_MS = 1_600;
+export const CHARACTER_TAP_DAILY_CAP = 48;
+const MAX_TAP_LINE_ID_LENGTH = 128;
+const MAX_TAP_LINE_TEXT_LENGTH = 240;
 
 const LETTER_VISUALS = Object.freeze({
   chatgpt: ["T", "#DDF5EA", "#173F35", "#4A9D84"],
@@ -74,28 +82,52 @@ const LETTER_VISUALS = Object.freeze({
   venice: ["L", "#E6F2E1", "#294923", "#78A86D"],
   sakana: ["S", "#DDF7F5", "#174947", "#4AA49E"],
   perplexity: ["P", "#E3F4F3", "#204C4B", "#5B9E9B"],
-  glm: ["G", "#F0E8FF", "#402A66", "#8566B7"]
-} as const satisfies Record<RosterId, readonly [string, string, string, string]>);
+  glm: ["G", "#F0E8FF", "#402A66", "#8566B7"],
+} as const satisfies Record<
+  RosterId,
+  readonly [string, string, string, string]
+>);
 
 interface CharacterPreferences {
   readonly schemaVersion: "1";
   readonly manualCharacterId: RosterId | null;
   readonly selectedAt: string | null;
-  readonly activeThemeByCharacter: Readonly<Partial<Record<RosterId, WardrobeThemeId>>>;
+  readonly activeThemeByCharacter: Readonly<
+    Partial<Record<RosterId, WardrobeThemeId>>
+  >;
+}
+
+interface CharacterInteractionEntry {
+  readonly lastShownAt: string;
+  readonly dailyCount: number;
+  readonly nextSeed: number;
+}
+
+interface CharacterInteractionStore {
+  readonly schemaVersion: "1";
+  readonly utcDate: string;
+  readonly characters: Readonly<
+    Partial<Record<RosterId, CharacterInteractionEntry>>
+  >;
 }
 
 interface NormalizedCharacterOptions {
   readonly manifest: AssetManifest | null;
+  readonly assetPack: ReturnType<typeof normalizeAssetPackConfiguration>;
   readonly cacheDirectory: string;
-  readonly cdnBaseUrl: string | null;
   readonly progressionStorePath: string;
-  readonly fetch: CompanionCharacterFetch;
 }
 
 interface CharacterServiceOptions {
   readonly adapter: TokenTrackerAdapter;
   readonly characters: NormalizedCharacterOptions;
   readonly clock: CompanionGatewayClock;
+  readonly getTapLineContext?: () => Promise<
+    Readonly<{
+      mood: MonsterMood;
+      traits: readonly MonsterTrait[];
+    }>
+  >;
 }
 
 export interface CharacterAssetResult {
@@ -107,12 +139,23 @@ export interface CharacterAssetResult {
 export interface CharacterService {
   syncAfterCompanionFetch(instant: Date): Promise<void>;
   getCharactersDto(): Promise<CompanionCharactersResponse>;
-  selectCharacter(characterId: unknown): Promise<Readonly<{ status: number; body: unknown }>>;
+  selectCharacter(
+    characterId: unknown,
+  ): Promise<Readonly<{ status: number; body: unknown }>>;
+  repairProgressionLock(
+    confirmedOldVersionsClosed: unknown,
+  ): Promise<Readonly<{ status: number; body: unknown }>>;
   selectWardrobe(
     characterId: unknown,
-    themeId: unknown
+    themeId: unknown,
+  ): Promise<Readonly<{ status: number; body: unknown }>>;
+  interact(
+    characterId: unknown,
+    action: unknown,
+    locale: unknown,
   ): Promise<Readonly<{ status: number; body: unknown }>>;
   getAsset(fileName: string): Promise<CharacterAssetResult>;
+  setManifest(manifest: AssetManifest | null): void;
 }
 
 function isPlainRecord(value: unknown): value is Record<PropertyKey, unknown> {
@@ -124,11 +167,28 @@ function isPlainRecord(value: unknown): value is Record<PropertyKey, unknown> {
 }
 
 function isRosterId(value: unknown): value is RosterId {
-  return typeof value === "string" && ROSTER_IDS.some((id) => id === value);
+  return (
+    typeof value === "string" && CHARACTER_ROSTER_IDS.some((id) => id === value)
+  );
+}
+
+function isSisterId(value: RosterId): value is SisterId {
+  return SISTER_IDS.has(value);
+}
+
+function isStoreBusyError(error: unknown): boolean {
+  return (
+    error instanceof LocalProgressionStoreError && error.code === "store-busy"
+  );
 }
 
 function isIsoInstant(value: unknown): value is string {
-  if (typeof value !== "string") return false;
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value)
+  ) {
+    return false;
+  }
   const parsed = new Date(value);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
 }
@@ -143,7 +203,7 @@ function emptyPreferences(): CharacterPreferences {
     schemaVersion: "1",
     manualCharacterId: null,
     selectedAt: null,
-    activeThemeByCharacter: Object.freeze({})
+    activeThemeByCharacter: Object.freeze({}),
   });
 }
 
@@ -152,7 +212,10 @@ function parsePreferences(input: unknown): CharacterPreferences {
     !isPlainRecord(input) ||
     Reflect.ownKeys(input).length !== 4 ||
     input["schemaVersion"] !== "1" ||
-    !(input["manualCharacterId"] === null || isRosterId(input["manualCharacterId"])) ||
+    !(
+      input["manualCharacterId"] === null ||
+      isRosterId(input["manualCharacterId"])
+    ) ||
     !(input["selectedAt"] === null || isIsoInstant(input["selectedAt"])) ||
     (input["manualCharacterId"] === null) !== (input["selectedAt"] === null) ||
     !isPlainRecord(input["activeThemeByCharacter"])
@@ -165,34 +228,30 @@ function parsePreferences(input: unknown): CharacterPreferences {
       throw new Error("invalid character preferences");
     }
     const value = input["activeThemeByCharacter"][key];
-    if (
-      typeof value !== "string" ||
-      ![
-        "tech", "finance", "politics", "education", "health",
-        "environment", "law", "relationship", "family", "workplace",
-        "science", "culture", "sports", "food", "travel", "psychology",
-        "philosophy", "international", "media", "festival"
-      ].includes(value)
-    ) {
+    const parsedThemeId = WardrobeThemeIdSchema.safeParse(value);
+    if (!parsedThemeId.success) {
       throw new Error("invalid character preferences");
     }
-    activeThemeByCharacter[key] = value as WardrobeThemeId;
+    activeThemeByCharacter[key] = parsedThemeId.data;
   }
   return Object.freeze({
     schemaVersion: "1",
     manualCharacterId: input["manualCharacterId"] as RosterId | null,
     selectedAt: input["selectedAt"] as string | null,
-    activeThemeByCharacter: Object.freeze(activeThemeByCharacter)
+    activeThemeByCharacter: Object.freeze(activeThemeByCharacter),
   });
 }
 
-async function writeJsonAtomically(path: string, value: unknown): Promise<void> {
+async function writeJsonAtomically(
+  path: string,
+  value: unknown,
+): Promise<void> {
   const directory = dirname(path);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await chmod(directory, 0o700);
   const temporaryPath = join(
     directory,
-    `.${basename(path)}.${process.pid}.${randomUUID()}.tmp`
+    `.${basename(path)}.${process.pid}.${randomUUID()}.tmp`,
   );
   let handle: Awaited<ReturnType<typeof open>> | null = null;
   try {
@@ -202,7 +261,6 @@ async function writeJsonAtomically(path: string, value: unknown): Promise<void> 
     await handle.close();
     handle = null;
     await rename(temporaryPath, path);
-    await chmod(path, 0o600);
   } finally {
     if (handle !== null) await handle.close().catch(() => undefined);
     await rm(temporaryPath, { force: true }).catch(() => undefined);
@@ -222,20 +280,134 @@ function preferencesPath(progressionStorePath: string): string {
   return join(dirname(progressionStorePath), CHARACTER_PREFERENCES_FILE);
 }
 
+export function characterInteractionsPath(
+  progressionStorePath: string,
+): string {
+  return join(dirname(progressionStorePath), CHARACTER_INTERACTIONS_FILE);
+}
+
+function emptyInteractionStore(utcDate: string): CharacterInteractionStore {
+  return Object.freeze({
+    schemaVersion: "1",
+    utcDate,
+    characters: Object.freeze({}),
+  });
+}
+
+function parseInteractionEntry(
+  input: unknown,
+  utcDate: string,
+): CharacterInteractionEntry {
+  if (
+    !isPlainRecord(input) ||
+    Reflect.ownKeys(input).length !== 3 ||
+    !Reflect.ownKeys(input).includes("lastShownAt") ||
+    !Reflect.ownKeys(input).includes("dailyCount") ||
+    !Reflect.ownKeys(input).includes("nextSeed")
+  ) {
+    throw new Error("invalid character interaction entry");
+  }
+  const lastShownAt = input["lastShownAt"];
+  const dailyCount = input["dailyCount"];
+  const nextSeed = input["nextSeed"];
+  if (
+    !isIsoInstant(lastShownAt) ||
+    lastShownAt.slice(0, 10) !== utcDate ||
+    typeof dailyCount !== "number" ||
+    !Number.isInteger(dailyCount) ||
+    dailyCount < 1 ||
+    dailyCount > CHARACTER_TAP_DAILY_CAP ||
+    typeof nextSeed !== "number" ||
+    !Number.isSafeInteger(nextSeed) ||
+    nextSeed < 0
+  ) {
+    throw new Error("invalid character interaction entry");
+  }
+  return Object.freeze({ lastShownAt, dailyCount, nextSeed });
+}
+
+function parseInteractionStore(
+  input: unknown,
+  utcDate: string,
+): CharacterInteractionStore {
+  if (
+    !isPlainRecord(input) ||
+    Reflect.ownKeys(input).length !== 3 ||
+    input["schemaVersion"] !== "1" ||
+    typeof input["utcDate"] !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/u.test(input["utcDate"]) ||
+    !isPlainRecord(input["characters"])
+  ) {
+    throw new Error("invalid character interaction store");
+  }
+  if (input["utcDate"] !== utcDate) return emptyInteractionStore(utcDate);
+  const entries: Partial<Record<RosterId, CharacterInteractionEntry>> = {};
+  for (const key of Reflect.ownKeys(input["characters"])) {
+    if (typeof key !== "string" || !isRosterId(key)) {
+      throw new Error("invalid character interaction store");
+    }
+    entries[key] = parseInteractionEntry(input["characters"][key], utcDate);
+  }
+  return Object.freeze({
+    schemaVersion: "1",
+    utcDate,
+    characters: Object.freeze(entries),
+  });
+}
+
+async function loadInteractionStore(
+  path: string,
+  utcDate: string,
+): Promise<CharacterInteractionStore> {
+  try {
+    return parseInteractionStore(
+      JSON.parse(await readFile(path, "utf8")) as unknown,
+      utcDate,
+    );
+  } catch {
+    return emptyInteractionStore(utcDate);
+  }
+}
+
+function isSupportedTapLocale(value: unknown): value is "zh-TW" | "en" {
+  return value === "zh-TW" || value === "en";
+}
+
+function nextUtcDateStartMs(utcDate: string): number {
+  return Date.parse(`${utcDate}T00:00:00.000Z`) + 86_400_000;
+}
+
+function boundedRetryAfterMs(value: number): number {
+  return Math.max(1, Math.min(86_400_000, Math.ceil(value)));
+}
+
+function validTapLine(lineId: string, text: string): boolean {
+  return (
+    lineId.length >= 1 &&
+    lineId.length <= MAX_TAP_LINE_ID_LENGTH &&
+    /^[A-Za-z0-9./-]+$/u.test(lineId) &&
+    text.trim() === text &&
+    text.length >= 1 &&
+    text.length <= MAX_TAP_LINE_TEXT_LENGTH
+  );
+}
+
 async function loadPreferences(path: string): Promise<CharacterPreferences> {
   try {
-    return parsePreferences(JSON.parse(await readFile(path, "utf8")) as unknown);
-  } catch (error) {
-    if (!isMissingFile(error)) {
-      const preferences = emptyPreferences();
-      await writeJsonAtomically(path, preferences);
-      return preferences;
-    }
+    return parsePreferences(
+      JSON.parse(await readFile(path, "utf8")) as unknown,
+    );
+  } catch {
+    // Reads are side-effect free. In particular, selecting a sister must not
+    // repair or replace the friend-authority file as a hidden second commit.
     return emptyPreferences();
   }
 }
 
-function evaluateStore(store: LocalProgressionStore, evaluatedAt: string): ProgressionState {
+function evaluateStore(
+  store: LocalProgressionStore,
+  evaluatedAt: string,
+): ProgressionState {
   return evaluateProgression({
     schemaVersion: PROGRESSION_SCHEMA_VERSION,
     evaluatedAt,
@@ -245,7 +417,7 @@ function evaluateStore(store: LocalProgressionStore, evaluatedAt: string): Progr
     dailyProviderBuckets: store.lifetime.dailyProviderBuckets,
     traitIds: [],
     persistedUnlockedAt: store.unlockedAt,
-    selection: store.selection
+    selection: store.selection,
   });
 }
 
@@ -261,13 +433,136 @@ function fallbackProgression(evaluatedAt: string): ProgressionState {
       manualCharacterId: null,
       manualSelectedAt: null,
       autoStarterCharacterId: null,
-      autoStarterSelectedAt: null
-    }
+      autoStarterSelectedAt: null,
+    },
   });
+}
+
+interface ResolvedCharacterSelection {
+  readonly characterId: RosterId;
+  readonly selectedBy: "manual" | "auto-starter";
+  readonly selectedAt: string;
+}
+
+function resolveCharacterSelection(
+  progression: ProgressionState,
+  preferences: CharacterPreferences,
+): ResolvedCharacterSelection | null {
+  const progressionSelection = progression.selection;
+  const sisterSelection: ResolvedCharacterSelection | null =
+    progressionSelection === null ||
+    !isSisterId(progressionSelection.characterId)
+      ? null
+      : Object.freeze({
+          characterId: progressionSelection.characterId,
+          selectedBy:
+            progressionSelection.selectedBy === "manual"
+              ? ("manual" as const)
+              : ("auto-starter" as const),
+          selectedAt: progressionSelection.selectedAt,
+        });
+
+  const preferredCharacterId = preferences.manualCharacterId;
+  const preferredCharacter =
+    preferredCharacterId === null || isSisterId(preferredCharacterId)
+      ? undefined
+      : progression.characters.find(
+          (candidate) => candidate.characterId === preferredCharacterId,
+        );
+  const friendSelection: ResolvedCharacterSelection | null =
+    preferredCharacterId === null ||
+    preferences.selectedAt === null ||
+    preferredCharacter === undefined ||
+    !preferredCharacter.unlocked
+      ? null
+      : Object.freeze({
+          characterId: preferredCharacterId,
+          selectedBy: "manual" as const,
+          selectedAt: preferences.selectedAt,
+        });
+
+  if (friendSelection === null) return sisterSelection;
+  if (sisterSelection === null) return friendSelection;
+  // Preference wins an exact legacy tie because old releases wrote it last.
+  // New mutations always allocate a strictly increasing millisecond, so ties
+  // cannot be created by this implementation.
+  return friendSelection.selectedAt >= sisterSelection.selectedAt
+    ? friendSelection
+    : sisterSelection;
+}
+
+function nextSelectionTimestamp(
+  now: Date,
+  store: LocalProgressionStore,
+  preferences: CharacterPreferences,
+): string {
+  const nowMs = now.getTime();
+  if (!Number.isFinite(nowMs)) throw new Error("invalid selection clock");
+  const persisted = [
+    store.selection.manualSelectedAt,
+    store.selection.autoStarterSelectedAt,
+    preferences.selectedAt,
+  ]
+    .filter((value): value is string => value !== null)
+    .map((value) => Date.parse(value));
+  const latestPersistedMs =
+    persisted.length === 0 ? Number.NEGATIVE_INFINITY : Math.max(...persisted);
+  const selectedAtMs = Math.max(nowMs, latestPersistedMs + 1);
+  const selectedAt = new Date(selectedAtMs).toISOString();
+  if (!isIsoInstant(selectedAt)) throw new Error("invalid selection clock");
+  return selectedAt;
+}
+
+async function saveSisterSelection(
+  store: LocalProgressionStore,
+  characterId: SisterId,
+  selectedAt: string,
+  progressionOptions: Readonly<{ path: string }>,
+): Promise<void> {
+  const selectedStore = withManualSisterSelection(
+    store,
+    characterId,
+    selectedAt,
+  );
+  const selectedProgression = evaluateStore(selectedStore, selectedAt);
+  const committed = withProgressionEvaluation(
+    selectedStore,
+    selectedProgression,
+  );
+  try {
+    await saveLocalProgressionStore(committed, progressionOptions);
+  } catch (error) {
+    // The progression writer uses atomic rename. If a post-rename durability
+    // step reports an error, do not tell the player selection failed after the
+    // exact requested authority is already durable.
+    try {
+      const verified = await loadLocalProgressionStore(progressionOptions);
+      if (
+        verified.store.selection.manualCharacterId === characterId &&
+        verified.store.selection.manualSelectedAt === selectedAt
+      ) {
+        return;
+      }
+    } catch {
+      // Preserve the original failure when the committed state cannot be read.
+    }
+    throw error;
+  }
 }
 
 function manifestPath(path: string): string {
   return `/assets/characters/${path}`;
+}
+
+function starterPersonaDto(
+  characterId: RosterId,
+): CompanionCharacter["starterPersona"] {
+  if (!isSisterId(characterId)) return null;
+  const definition = getCharacterDefinition(characterId);
+  return {
+    alias: definition.alias,
+    taglineZhTw: definition.tagline["zh-TW"],
+  };
 }
 
 function characterDto(
@@ -275,59 +570,77 @@ function characterDto(
   progression: ProgressionState,
   manifest: AssetManifest | null,
   preferences: CharacterPreferences,
-  forceLetterMode: boolean
+  forceLetterMode: boolean,
 ): CompanionCharacter {
   const status = progression.characters.find(
-    (character) => character.characterId === characterId
+    (character) => character.characterId === characterId,
   )!;
   const assets = forceLetterMode
     ? undefined
-    : manifest?.characters.find((character) => character.characterId === characterId);
+    : manifest?.characters.find(
+        (character) => character.characterId === characterId,
+      );
   const preferredThemeId = preferences.activeThemeByCharacter[characterId];
   const preferredTheme = status.themes.find(
-    (theme) => theme.themeId === preferredThemeId && theme.unlocked
+    (theme) => theme.themeId === preferredThemeId && theme.unlocked,
   );
   const firstUnlockedTheme = status.themes.find((theme) => theme.unlocked);
-  const firstUnlockedAssetTheme = assets?.themes.find((theme) =>
-    status.themes.some(
-      (candidate) => candidate.themeId === theme.themeId && candidate.unlocked
-    )
-  );
   const activeThemeId =
-    preferredTheme !== undefined &&
-    (assets === undefined ||
-      assets.themes.some((theme) => theme.themeId === preferredTheme.themeId))
-      ? preferredTheme.themeId
-      : assets === undefined
-        ? (firstUnlockedTheme?.themeId ?? null)
-        : (firstUnlockedAssetTheme?.themeId ?? null);
+    preferredTheme?.themeId ?? firstUnlockedTheme?.themeId ?? null;
+  const activeAssetTheme = assets?.themes.find(
+    (theme) => theme.themeId === activeThemeId,
+  );
   const nextTheme = status.unlocked
     ? status.themes.find((theme) => !theme.unlocked)
     : undefined;
   const progress = !status.unlocked
     ? {
         value: status.progress.value,
-        explain: `再累積一點本機用量，就能遇見 ${status.displayName}。`
+        explain: `再累積一點本機用量，就能遇見 ${status.displayName}。`,
       }
     : nextTheme === undefined
       ? null
       : {
           value: nextTheme.progress.value,
-          explain: `再累積一點本機用量，就能解鎖 ${status.displayName} 的下一套服裝。`
+          explain: `再累積一點本機用量，就能解鎖 ${status.displayName} 的下一套服裝。`,
         };
-  const voice = manifest?.voice.find((entry) => entry.characterId === characterId);
+  const voice = manifest?.voice.find(
+    (entry) => entry.characterId === characterId,
+  );
+  const starterPersona = starterPersonaDto(characterId);
 
   let visual: CompanionCharacter["visual"];
-  if (assets === undefined) {
-    const [glyph, background, foreground, accent] = LETTER_VISUALS[characterId];
-    visual = { mode: "letter", glyph, background, foreground, accent };
+  if (assets === undefined || activeAssetTheme === undefined) {
+    const [glyph, defaultBackground, defaultForeground, defaultAccent] =
+      LETTER_VISUALS[characterId];
+    const activeLetterTheme = LETTER_WARDROBE_CATALOG.find(
+      (theme) => theme.themeId === activeThemeId,
+    );
+    visual = {
+      mode: "letter",
+      glyph,
+      background: activeLetterTheme?.palette.background ?? defaultBackground,
+      foreground: activeLetterTheme?.palette.foreground ?? defaultForeground,
+      accent: activeLetterTheme?.palette.accent ?? defaultAccent,
+      themes: LETTER_WARDROBE_CATALOG.map((theme) => ({
+        themeId: theme.themeId,
+        displayName: theme.displayName,
+        accessibleLabel: theme.accessibleLabel,
+        unlocked:
+          status.themes.find((candidate) => candidate.themeId === theme.themeId)
+            ?.unlocked ?? false,
+        palette: theme.palette,
+        pattern: theme.pattern,
+        accent: theme.accent,
+      })),
+    };
   } else {
     visual = {
       mode: "doll",
       avatarPath: manifestPath(assets.avatar.path),
       themes: assets.themes.map((theme) => {
         const themeStatus = status.themes.find(
-          (candidate) => candidate.themeId === theme.themeId
+          (candidate) => candidate.themeId === theme.themeId,
         );
         return {
           themeId: theme.themeId,
@@ -345,20 +658,21 @@ function characterDto(
             victory:
               theme.poses.victory === undefined
                 ? null
-                : manifestPath(theme.poses.victory.path)
-          }
+                : manifestPath(theme.poses.victory.path),
+          },
         };
-      })
+      }),
     };
   }
 
   return {
     characterId,
     displayName: status.displayName,
-    kind: status.kind === "sister" ? "sister" : "friend",
+    kind: starterPersona === null ? "friend" : "sister",
     unlocked: status.unlocked,
     unlockedAt: status.unlockedAt,
-    isStarter: status.kind === "sister",
+    isStarter: starterPersona !== null,
+    starterPersona,
     activeThemeId,
     visual,
     progress,
@@ -368,29 +682,16 @@ function characterDto(
             id: line.id,
             trigger: line.trigger,
             path: manifestPath(line.object.path),
-            durationMs: line.durationMs
+            durationMs: line.durationMs,
           }))
-        : []
+        : [],
   };
 }
 
-class DownloadSemaphore {
-  private active = 0;
-  private readonly waiting: Array<() => void> = [];
-
-  public async acquire(): Promise<() => void> {
-    if (this.active >= 3) {
-      await new Promise<void>((resolve) => this.waiting.push(resolve));
-    }
-    this.active += 1;
-    return () => {
-      this.active -= 1;
-      this.waiting.shift()?.();
-    };
-  }
-}
-
-async function readVerifiedCache(path: string, sha256: string): Promise<Buffer | null> {
+async function readVerifiedCache(
+  path: string,
+  sha256: string,
+): Promise<Buffer | null> {
   try {
     const metadata = await stat(path);
     if (!metadata.isFile() || metadata.size > MAX_OBJECT_BYTES) {
@@ -409,77 +710,21 @@ async function readVerifiedCache(path: string, sha256: string): Promise<Buffer |
   }
 }
 
-async function readDownloadBody(
-  response: Awaited<ReturnType<CompanionCharacterFetch>>
-): Promise<Buffer> {
-  if (!response.ok || response.status !== 200 || response.body === null) {
-    throw new Error("asset fetch failed");
-  }
-  const contentLength = response.headers.get("content-length");
-  if (contentLength !== null) {
-    if (!/^\d+$/u.test(contentLength) || Number(contentLength) > MAX_OBJECT_BYTES) {
-      throw new Error("asset too large");
-    }
-  }
-  const reader = response.body.getReader();
-  const chunks: Buffer[] = [];
-  let totalBytes = 0;
-  try {
-    while (true) {
-      const result = await reader.read();
-      if (result.done) break;
-      if (!(result.value instanceof Uint8Array) || result.value.byteLength === 0) {
-        throw new Error("invalid asset body");
-      }
-      totalBytes += result.value.byteLength;
-      if (totalBytes > MAX_OBJECT_BYTES) throw new Error("asset too large");
-      chunks.push(Buffer.from(result.value));
-    }
-  } catch (error) {
-    await reader.cancel(error).catch(() => undefined);
-    throw error;
-  }
-  return Buffer.concat(chunks, totalBytes);
-}
-
-async function cacheAtomically(directory: string, fileName: string, body: Buffer): Promise<void> {
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  await chmod(directory, 0o700);
-  const destination = join(directory, fileName);
-  const temporary = join(
-    directory,
-    `.${fileName}.${process.pid}.${randomUUID()}.tmp`
-  );
-  let handle: Awaited<ReturnType<typeof open>> | null = null;
-  try {
-    handle = await open(temporary, "wx", 0o600);
-    await handle.writeFile(body);
-    await handle.sync();
-    await handle.close();
-    handle = null;
-    await rename(temporary, destination);
-    await chmod(destination, 0o600);
-  } finally {
-    if (handle !== null) await handle.close().catch(() => undefined);
-    await rm(temporary, { force: true }).catch(() => undefined);
-  }
-}
-
 function assetIsUnlocked(
   fileName: string,
   manifest: AssetManifest,
-  progression: ProgressionState
+  progression: ProgressionState,
 ): boolean {
   const objectPath = `objects/${fileName}`;
   for (const characterAssets of manifest.characters) {
     const character = progression.characters.find(
-      (candidate) => candidate.characterId === characterAssets.characterId
+      (candidate) => candidate.characterId === characterAssets.characterId,
     );
     if (character?.unlocked !== true) continue;
     if (characterAssets.avatar.path === objectPath) return true;
     for (const theme of characterAssets.themes) {
       const themeStatus = character.themes.find(
-        (candidate) => candidate.themeId === theme.themeId
+        (candidate) => candidate.themeId === theme.themeId,
       );
       if (themeStatus?.unlocked !== true) continue;
       if (
@@ -492,7 +737,7 @@ function assetIsUnlocked(
   }
   for (const voice of manifest.voice) {
     const character = progression.characters.find(
-      (candidate) => candidate.characterId === voice.characterId
+      (candidate) => candidate.characterId === voice.characterId,
     );
     if (
       character?.unlocked === true &&
@@ -504,16 +749,24 @@ function assetIsUnlocked(
   return false;
 }
 
-export function createCharacterService(options: CharacterServiceOptions): CharacterService {
+export function createCharacterService(
+  options: CharacterServiceOptions,
+): CharacterService {
   const { adapter, characters, clock } = options;
-  const progressionOptions = Object.freeze({ path: characters.progressionStorePath });
+  let activeManifest = characters.manifest;
+  const progressionOptions = Object.freeze({
+    path: characters.progressionStorePath,
+  });
   const preferenceFile = preferencesPath(characters.progressionStorePath);
-  const semaphore = new DownloadSemaphore();
-  const downloads = new Map<string, Promise<Buffer>>();
+  const interactionFile = characterInteractionsPath(
+    characters.progressionStorePath,
+  );
   let lastLedgerSyncStartedAtMs: number | null = null;
   let ledgerSyncInFlight: Promise<void> | null = null;
   let storeMutation = Promise.resolve();
   let preferenceMutation = Promise.resolve();
+  let selectionMutation = Promise.resolve();
+  let interactionMutation = Promise.resolve();
 
   const serializeStore = async <T>(operation: () => Promise<T>): Promise<T> => {
     const previous = storeMutation;
@@ -529,7 +782,9 @@ export function createCharacterService(options: CharacterServiceOptions): Charac
     }
   };
 
-  const serializePreferences = async <T>(operation: () => Promise<T>): Promise<T> => {
+  const serializePreferences = async <T>(
+    operation: () => Promise<T>,
+  ): Promise<T> => {
     const previous = preferenceMutation;
     let release!: () => void;
     preferenceMutation = new Promise<void>((resolve) => {
@@ -543,10 +798,44 @@ export function createCharacterService(options: CharacterServiceOptions): Charac
     }
   };
 
-  const loadEvaluated = async (): Promise<Readonly<{
-    store: LocalProgressionStore;
-    progression: ProgressionState;
-  }>> =>
+  const serializeInteractions = async <T>(
+    operation: () => Promise<T>,
+  ): Promise<T> => {
+    const previous = interactionMutation;
+    let release!: () => void;
+    interactionMutation = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  };
+
+  const serializeSelection = async <T>(
+    operation: () => Promise<T>,
+  ): Promise<T> => {
+    const previous = selectionMutation;
+    let release!: () => void;
+    selectionMutation = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
+  };
+
+  const loadEvaluated = async (): Promise<
+    Readonly<{
+      store: LocalProgressionStore;
+      progression: ProgressionState;
+    }>
+  > =>
     serializeStore(async () => {
       const loaded = await loadLocalProgressionStore(progressionOptions);
       const evaluatedAt = clock().toISOString();
@@ -562,17 +851,23 @@ export function createCharacterService(options: CharacterServiceOptions): Charac
       const today = instant.toISOString().slice(0, 10);
       const windowStart = addUtcDays(today, -(LEDGER_WINDOW_DAYS - 1));
       const existing = new Set(
-        loaded.store.lifetime.dailyProviderBuckets.map((bucket) => bucket.utcDate)
+        loaded.store.lifetime.dailyProviderBuckets.map(
+          (bucket) => bucket.utcDate,
+        ),
       );
       const dates = new Set<string>([today]);
       for (let offset = 0; offset < LEDGER_WINDOW_DAYS; offset += 1) {
         const date = addUtcDays(windowStart, offset);
         if (!existing.has(date)) dates.add(date);
       }
-      const lastDate = loaded.store.lifetime.dailyProviderBuckets.at(-1)?.utcDate;
+      const lastDate =
+        loaded.store.lifetime.dailyProviderBuckets.at(-1)?.utcDate;
       if (lastDate !== undefined && lastDate < today) {
         for (
-          let date = addUtcDays(lastDate < windowStart ? windowStart : lastDate, 1);
+          let date = addUtcDays(
+            lastDate < windowStart ? windowStart : lastDate,
+            1,
+          );
           date <= today;
           date = addUtcDays(date, 1)
         ) {
@@ -584,60 +879,24 @@ export function createCharacterService(options: CharacterServiceOptions): Charac
           utcDate,
           providerTotals: await adapter.getProgressionFamilyTotals({
             fromUtcDate: utcDate,
-            toUtcDate: utcDate
-          })
-        }))
+            toUtcDate: utcDate,
+          }),
+        })),
       );
       const merged = await mergeAndSaveDailyProviderBuckets(
         buckets,
-        progressionOptions
+        progressionOptions,
       );
       const progression = evaluateStore(merged.store, instant.toISOString());
       await saveLocalProgressionStore(
         withProgressionEvaluation(merged.store, progression),
-        progressionOptions
+        progressionOptions,
       );
     });
   };
 
   const getStateForAsset = async (): Promise<ProgressionState> =>
     (await loadEvaluated()).progression;
-
-  const downloadAsset = async (fileName: string, sha256: string): Promise<Buffer> => {
-    const existing = downloads.get(fileName);
-    if (existing !== undefined) return existing;
-    const operation = (async () => {
-      const release = await semaphore.acquire();
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
-      timer.unref();
-      try {
-        const response = await characters.fetch(
-          `${characters.cdnBaseUrl}/objects/${fileName}`,
-          Object.freeze({
-            method: "GET",
-            redirect: "error",
-            signal: controller.signal
-          })
-        );
-        const body = await readDownloadBody(response);
-        if (createHash("sha256").update(body).digest("hex") !== sha256) {
-          throw new Error("asset integrity mismatch");
-        }
-        await cacheAtomically(characters.cacheDirectory, fileName, body);
-        return body;
-      } finally {
-        clearTimeout(timer);
-        release();
-      }
-    })();
-    downloads.set(fileName, operation);
-    try {
-      return await operation;
-    } finally {
-      downloads.delete(fileName);
-    }
-  };
 
   return Object.freeze({
     async syncAfterCompanionFetch(instant: Date): Promise<void> {
@@ -665,44 +924,39 @@ export function createCharacterService(options: CharacterServiceOptions): Charac
       try {
         [progression, preferences] = await Promise.all([
           loadEvaluated().then((state) => state.progression),
-          loadPreferences(preferenceFile)
+          loadPreferences(preferenceFile),
         ]);
       } catch {
         progression = fallbackProgression(generatedAt);
         preferences = emptyPreferences();
         forceLetterMode = true;
       }
-      const progressionSelection = progression.selection;
+      const resolvedSelection = resolveCharacterSelection(
+        progression,
+        preferences,
+      );
       const selection =
-        preferences.manualCharacterId !== null
-          ? {
-              characterId: preferences.manualCharacterId,
-              selectedBy: "manual" as const
-            }
-          : progressionSelection === null
-            ? { characterId: null, selectedBy: null }
-            : {
-                characterId: progressionSelection.characterId,
-                selectedBy:
-                  progressionSelection.selectedBy === "manual"
-                    ? ("manual" as const)
-                    : ("auto-starter" as const)
-              };
+        resolvedSelection === null
+          ? { characterId: null, selectedBy: null }
+          : {
+              characterId: resolvedSelection.characterId,
+              selectedBy: resolvedSelection.selectedBy,
+            };
       return {
         status: "ok",
         generatedAt,
         unlockBatchId: progression.unlockBatchId ?? null,
         selection,
         voiceEnabled: true,
-        characters: ROSTER_IDS.map((characterId) =>
+        characters: CHARACTER_ROSTER_IDS.map((characterId) =>
           characterDto(
             characterId,
             progression,
-            characters.manifest,
+            activeManifest,
             preferences,
-            forceLetterMode
-          )
-        )
+            forceLetterMode,
+          ),
+        ),
       };
     },
 
@@ -710,82 +964,140 @@ export function createCharacterService(options: CharacterServiceOptions): Charac
       if (!isRosterId(characterId)) {
         return Object.freeze({
           status: 400,
-          body: { status: "error", error: "invalid-request" }
+          body: { status: "error", error: "invalid-request" },
         });
       }
       try {
-        const current = await loadEvaluated();
-        const status = current.progression.characters.find(
-          (candidate) => candidate.characterId === characterId
+        const selectionAllowed = await serializeSelection(() =>
+          serializeStore(async () => {
+            const loaded = await loadLocalProgressionStore(progressionOptions);
+            const evaluatedAt = clock().toISOString();
+            const progression = evaluateStore(loaded.store, evaluatedAt);
+            return serializePreferences(async () => {
+              const preferences = await loadPreferences(preferenceFile);
+              const status = progression.characters.find(
+                (candidate) => candidate.characterId === characterId,
+              );
+              const isFirstStarterChoice =
+                status?.unlocked === false &&
+                resolveCharacterSelection(progression, preferences) === null &&
+                isSisterId(characterId);
+              if (status?.unlocked !== true && !isFirstStarterChoice) {
+                return false;
+              }
+
+              const selectedAt = nextSelectionTimestamp(
+                clock(),
+                loaded.store,
+                preferences,
+              );
+              if (isSisterId(characterId)) {
+                await saveSisterSelection(
+                  loaded.store,
+                  characterId,
+                  selectedAt,
+                  progressionOptions,
+                );
+              } else {
+                await writeJsonAtomically(preferenceFile, {
+                  ...preferences,
+                  manualCharacterId: characterId,
+                  selectedAt,
+                });
+              }
+              return true;
+            });
+          }),
         );
-        if (status?.unlocked !== true) {
+        if (!selectionAllowed) {
           return Object.freeze({
             status: 409,
-            body: { status: "error", error: "locked" }
+            body: { status: "error", error: "locked" },
           });
         }
-        const selectedAt = clock().toISOString();
-        if (SISTER_IDS.has(characterId)) {
-          await serializeStore(async () => {
-            const loaded = await loadLocalProgressionStore(progressionOptions);
-            await saveLocalProgressionStore(
-              withManualSisterSelection(
-                loaded.store,
-                characterId as "chatgpt" | "claude" | "gemini" | "grok",
-                selectedAt
-              ),
-              progressionOptions
-            );
-          });
-        }
-        await serializePreferences(async () => {
-          const preferences = await loadPreferences(preferenceFile);
-          await writeJsonAtomically(preferenceFile, {
-            ...preferences,
-            manualCharacterId: characterId,
-            selectedAt
-          });
-        });
         return Object.freeze({
           status: 200,
           body: {
             status: "ok",
-            selection: { characterId, selectedBy: "manual" }
-          }
+            selection: { characterId, selectedBy: "manual" },
+          },
         });
-      } catch {
+      } catch (error) {
+        if (isStoreBusyError(error)) {
+          return Object.freeze({
+            status: 409,
+            body: { status: "error", error: "store-busy" },
+          });
+        }
         return Object.freeze({
           status: 400,
-          body: { status: "error", error: "invalid-request" }
+          body: { status: "error", error: "invalid-request" },
+        });
+      }
+    },
+
+    async repairProgressionLock(confirmedOldVersionsClosed: unknown) {
+      if (confirmedOldVersionsClosed !== true) {
+        return Object.freeze({
+          status: 400,
+          body: { status: "error", error: "invalid-request" },
+        });
+      }
+      try {
+        const outcome = await repairLegacyProgressionStoreLock({
+          path: progressionOptions.path,
+          confirmedOldVersionsClosed,
+        });
+        if (outcome === "busy") {
+          return Object.freeze({
+            status: 409,
+            body: { status: "error", error: "store-busy" },
+          });
+        }
+        return Object.freeze({
+          status: 200,
+          body: { status: "ok", outcome },
+        });
+      } catch (error) {
+        if (isStoreBusyError(error)) {
+          return Object.freeze({
+            status: 409,
+            body: { status: "error", error: "store-busy" },
+          });
+        }
+        return Object.freeze({
+          status: 400,
+          body: { status: "error", error: "invalid-request" },
         });
       }
     },
 
     async selectWardrobe(characterId: unknown, themeId: unknown) {
-      if (!isRosterId(characterId) || typeof themeId !== "string") {
+      const parsedThemeId = WardrobeThemeIdSchema.safeParse(themeId);
+      if (!isRosterId(characterId) || !parsedThemeId.success) {
         return Object.freeze({
           status: 400,
-          body: { status: "error", error: "invalid-request" }
+          body: { status: "error", error: "invalid-request" },
         });
       }
       try {
         const current = await loadEvaluated();
         const character = current.progression.characters.find(
-          (candidate) => candidate.characterId === characterId
+          (candidate) => candidate.characterId === characterId,
         );
         const theme = character?.themes.find(
-          (candidate) => candidate.themeId === themeId
+          (candidate) => candidate.themeId === parsedThemeId.data,
         );
         if (character === undefined || theme === undefined) {
           return Object.freeze({
             status: 400,
-            body: { status: "error", error: "invalid-request" }
+            body: { status: "error", error: "invalid-request" },
           });
         }
         if (!character.unlocked || !theme.unlocked) {
           return Object.freeze({
             status: 409,
-            body: { status: "error", error: "locked" }
+            body: { status: "error", error: "locked" },
           });
         }
         await serializePreferences(async () => {
@@ -794,8 +1106,8 @@ export function createCharacterService(options: CharacterServiceOptions): Charac
             ...preferences,
             activeThemeByCharacter: {
               ...preferences.activeThemeByCharacter,
-              [characterId]: theme.themeId
-            }
+              [characterId]: theme.themeId,
+            },
           });
         });
         return Object.freeze({
@@ -803,36 +1115,153 @@ export function createCharacterService(options: CharacterServiceOptions): Charac
           body: {
             status: "ok",
             characterId,
-            activeThemeId: theme.themeId
-          }
+            activeThemeId: theme.themeId,
+          },
         });
       } catch {
         return Object.freeze({
           status: 400,
-          body: { status: "error", error: "invalid-request" }
+          body: { status: "error", error: "invalid-request" },
+        });
+      }
+    },
+
+    async interact(characterId: unknown, action: unknown, locale: unknown) {
+      if (
+        !isRosterId(characterId) ||
+        action !== "tap" ||
+        !isSupportedTapLocale(locale)
+      ) {
+        return Object.freeze({
+          status: 400,
+          body: { status: "error", error: "invalid-request" },
+        });
+      }
+      try {
+        const current = await loadEvaluated();
+        const preferences = await serializePreferences(() =>
+          loadPreferences(preferenceFile),
+        );
+        const character = current.progression.characters.find(
+          (candidate) => candidate.characterId === characterId,
+        );
+        if (character?.unlocked !== true) {
+          return Object.freeze({
+            status: 409,
+            body: { status: "error", error: "locked" },
+          });
+        }
+        const selected = resolveCharacterSelection(
+          current.progression,
+          preferences,
+        );
+        if (selected?.characterId !== characterId) {
+          return Object.freeze({
+            status: 409,
+            body: { status: "error", error: "not-selected" },
+          });
+        }
+
+        return await serializeInteractions(async () => {
+          const now = clock();
+          const nowMs = now.getTime();
+          const shownAt = now.toISOString();
+          const utcDate = shownAt.slice(0, 10);
+          const store = await loadInteractionStore(interactionFile, utcDate);
+          const previous = store.characters[characterId];
+          if (previous !== undefined) {
+            const lastShownAtMs = Date.parse(previous.lastShownAt);
+            const retryAfterMs =
+              previous.dailyCount >= CHARACTER_TAP_DAILY_CAP
+                ? nextUtcDateStartMs(utcDate) - nowMs
+                : lastShownAtMs + CHARACTER_TAP_COOLDOWN_MS - nowMs;
+            if (retryAfterMs > 0) {
+              const body: CompanionCharacterInteractionResponse = {
+                status: "ok",
+                action: "tap",
+                characterId,
+                locale,
+                outcome: "animation-only",
+                retryAfterMs: boundedRetryAfterMs(retryAfterMs),
+              };
+              return Object.freeze({ status: 200, body: Object.freeze(body) });
+            }
+          }
+
+          const seed = previous?.nextSeed ?? 0;
+          let tapLineContext: Readonly<{
+            mood: MonsterMood;
+            traits: readonly MonsterTrait[];
+          }> = Object.freeze({ mood: "unknown", traits: Object.freeze([]) });
+          try {
+            tapLineContext =
+              (await options.getTapLineContext?.()) ?? tapLineContext;
+          } catch {
+            // A missing or temporarily unreadable profile must never make the
+            // local tap interaction unavailable.
+          }
+          const selected = selectTapLine({
+            characterId,
+            locale,
+            seed,
+            mood: tapLineContext.mood,
+            traits: tapLineContext.traits,
+          });
+          if (!validTapLine(selected.lineId, selected.text)) {
+            throw new Error("invalid tap line projection");
+          }
+          const nextSeed = seed === Number.MAX_SAFE_INTEGER ? 0 : seed + 1;
+          const nextEntry = Object.freeze({
+            lastShownAt: shownAt,
+            dailyCount: (previous?.dailyCount ?? 0) + 1,
+            nextSeed,
+          });
+          const nextStore: CharacterInteractionStore = Object.freeze({
+            schemaVersion: "1",
+            utcDate,
+            characters: Object.freeze({
+              ...store.characters,
+              [characterId]: nextEntry,
+            }),
+          });
+          await writeJsonAtomically(interactionFile, nextStore);
+          const body: CompanionCharacterInteractionResponse = {
+            status: "ok",
+            action: "tap",
+            characterId,
+            locale,
+            outcome: "line",
+            line: Object.freeze({
+              lineId: selected.lineId,
+              text: selected.text,
+            }),
+            cooldownMs: CHARACTER_TAP_COOLDOWN_MS,
+          };
+          return Object.freeze({ status: 200, body: Object.freeze(body) });
+        });
+      } catch {
+        return Object.freeze({
+          status: 503,
+          body: { status: "error", error: "unavailable" },
         });
       }
     },
 
     async getAsset(fileName: string): Promise<CharacterAssetResult> {
       const match = /^([0-9a-f]{64})\.(webp|png|wav)$/u.exec(fileName);
-      if (match === null || characters.manifest === null) {
+      const manifest = activeManifest;
+      if (match === null || manifest === null) {
         return Object.freeze({ status: 404 });
       }
       const sha256 = match[1]!;
       try {
         const progression = await getStateForAsset();
-        if (!assetIsUnlocked(fileName, characters.manifest, progression)) {
+        if (!assetIsUnlocked(fileName, manifest, progression)) {
           return Object.freeze({ status: 404 });
         }
         const cachePath = join(characters.cacheDirectory, fileName);
-        let body = await readVerifiedCache(cachePath, sha256);
-        if (body === null) {
-          if (characters.cdnBaseUrl === null) {
-            return Object.freeze({ status: 404 });
-          }
-          body = await downloadAsset(fileName, sha256);
-        }
+        const body = await readVerifiedCache(cachePath, sha256);
+        if (body === null) return Object.freeze({ status: 404 });
         const contentType =
           match[2] === "webp"
             ? "image/webp"
@@ -843,20 +1272,23 @@ export function createCharacterService(options: CharacterServiceOptions): Charac
       } catch {
         return Object.freeze({ status: 503 });
       }
-    }
+    },
+
+    setManifest(manifest: AssetManifest | null): void {
+      activeManifest = manifest === null ? null : parseAssetManifest(manifest);
+    },
   });
 }
 
 export function normalizeCharacterOptions(
   value: unknown,
-  nativeFetch: CompanionCharacterFetch
 ): NormalizedCharacterOptions {
   const keys = new Set<PropertyKey>([
     "manifest",
+    "assetPack",
     "cacheDirectory",
     "cdnBaseUrl",
     "progressionStorePath",
-    "fetch"
   ]);
   if (
     !isPlainRecord(value) ||
@@ -871,50 +1303,37 @@ export function normalizeCharacterOptions(
   const manifestValue = value["manifest"];
   let manifest: AssetManifest | null;
   try {
-    manifest = manifestValue === null ? null : parseAssetManifest(manifestValue);
+    manifest =
+      manifestValue === null ? null : parseAssetManifest(manifestValue);
+  } catch {
+    throw new Error("invalid character configuration");
+  }
+  let assetPack: ReturnType<typeof normalizeAssetPackConfiguration>;
+  try {
+    assetPack = normalizeAssetPackConfiguration(value["assetPack"]);
   } catch {
     throw new Error("invalid character configuration");
   }
   const cacheDirectory = value["cacheDirectory"];
   const progressionStorePath = value["progressionStorePath"];
-  const fetchValue = value["fetch"];
   if (
     typeof cacheDirectory !== "string" ||
     !isAbsolute(cacheDirectory) ||
     typeof progressionStorePath !== "string" ||
-    !isAbsolute(progressionStorePath) ||
-    (fetchValue !== undefined && typeof fetchValue !== "function")
+    !isAbsolute(progressionStorePath)
   ) {
     throw new Error("invalid character configuration");
   }
-  const cdnValue = value["cdnBaseUrl"];
-  let cdnBaseUrl: string | null = null;
-  if (cdnValue !== null) {
-    if (typeof cdnValue !== "string") {
-      throw new Error("invalid character configuration");
-    }
-    let parsed: URL;
-    try {
-      parsed = new URL(cdnValue);
-    } catch {
-      throw new Error("invalid character configuration");
-    }
-    if (
-      parsed.protocol !== "https:" ||
-      parsed.username !== "" ||
-      parsed.password !== "" ||
-      parsed.search !== "" ||
-      parsed.hash !== ""
-    ) {
-      throw new Error("invalid character configuration");
-    }
-    cdnBaseUrl = parsed.toString().replace(/\/$/u, "");
+  if (value["cdnBaseUrl"] !== null) {
+    throw new Error("invalid character configuration");
+  }
+  if (manifest !== null && assetPack !== null) {
+    throw new Error("invalid character configuration");
   }
   return Object.freeze({
     manifest,
+    assetPack,
     cacheDirectory,
-    cdnBaseUrl,
     progressionStorePath,
-    fetch: (fetchValue as CompanionCharacterFetch | undefined) ?? nativeFetch
   });
 }

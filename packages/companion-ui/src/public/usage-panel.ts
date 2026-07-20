@@ -2,18 +2,20 @@ import type {
   CompanionDailyPoint,
   CompanionHealthySnapshot
 } from "./dto.js";
+import {
+  formatUiDate,
+  formatUiNumber,
+  localizeUiText,
+} from "./localization.js";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-const numberFormatter = new Intl.NumberFormat("zh-TW", {
-  maximumFractionDigits: 0
-});
-const compactNumberFormatter = new Intl.NumberFormat("zh-TW", {
-  notation: "compact",
-  maximumFractionDigits: 1
-});
+const numberFormatter = Object.freeze({ format: formatUiNumber });
 
 export function formatCompactTokenCount(value: number): string {
-  return compactNumberFormatter.format(value);
+  return formatUiNumber(value, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  });
 }
 
 export interface UsagePanelElements {
@@ -33,7 +35,11 @@ export function createUsagePanel(elements: UsagePanelElements): UsagePanel {
   const trendAccessibleElement = elements.accessible;
 
   function formatDate(utcDate: string): string {
-    return `${utcDate.slice(5, 7)}/${utcDate.slice(8, 10)}`;
+    return formatUiDate(Date.parse(`${utcDate}T00:00:00.000Z`), {
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: "UTC",
+    });
   }
 
   function createSvgElement<K extends keyof SVGElementTagNameMap>(
@@ -55,7 +61,9 @@ export function createUsagePanel(elements: UsagePanelElements): UsagePanel {
     const fragment = document.createDocumentFragment();
     for (const point of points) {
       const item = document.createElement("li");
-      item.textContent = `UTC ${point.utcDate}：${numberFormatter.format(point.totalTokens)} tokens`;
+      item.textContent = localizeUiText(
+        `UTC ${point.utcDate}：${numberFormatter.format(point.totalTokens)} tokens`,
+      );
       fragment.append(item);
     }
     trendAccessibleElement.replaceChildren(fragment);
@@ -64,7 +72,7 @@ export function createUsagePanel(elements: UsagePanelElements): UsagePanel {
   function renderTrend(snapshot: CompanionHealthySnapshot): void {
     const points = snapshot.daily;
     if (points.length === 0) {
-      clearTrend("目前還沒有 UTC 每日用量紀錄。", true);
+      clearTrend(localizeUiText("目前還沒有 UTC 每日用量紀錄。"), true);
       return;
     }
 
@@ -85,7 +93,9 @@ export function createUsagePanel(elements: UsagePanelElements): UsagePanel {
     svg.setAttribute("role", "img");
     svg.setAttribute(
       "aria-label",
-      `最近 28 個 UTC 日的每日 token 趨勢，共 ${numberFormatter.format(snapshot.totals.last28Days)} tokens。`
+      localizeUiText(
+        `最近 28 個 UTC 日的每日 token 趨勢，共 ${numberFormatter.format(snapshot.totals.last28Days)} tokens。`,
+      ),
     );
     svg.classList.add("trend-chart");
 
@@ -115,7 +125,9 @@ export function createUsagePanel(elements: UsagePanelElements): UsagePanel {
       bar.setAttribute("rx", "4");
       bar.classList.add("trend-bar");
       const title = createSvgElement("title");
-      title.textContent = `${point.utcDate}：${numberFormatter.format(point.totalTokens)} tokens`;
+      title.textContent = localizeUiText(
+        `${point.utcDate}：${numberFormatter.format(point.totalTokens)} tokens`,
+      );
       bar.append(title);
       svg.append(bar);
     }
@@ -144,4 +156,3 @@ export function createUsagePanel(elements: UsagePanelElements): UsagePanel {
 
     return Object.freeze({ clearTrend, renderTrend });
 }
-

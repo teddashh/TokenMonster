@@ -7,6 +7,11 @@ import {
   type UsageWindow
 } from "./dto.js";
 import { formatCompactTokenCount } from "./usage-panel.js";
+import {
+  formatUiDate,
+  formatUiNumber,
+  localizeUiText,
+} from "./localization.js";
 
 export const USAGE_FAMILY_LABELS = Object.freeze({
   openai: "OpenAI",
@@ -23,10 +28,11 @@ export const USAGE_FAMILY_LABELS = Object.freeze({
   other: "其他"
 } as const satisfies Readonly<Record<UsageFamily, string>>);
 
-const numberFormatter = new Intl.NumberFormat("zh-TW", {
-  maximumFractionDigits: 0,
-  useGrouping: true
-});
+function usageFamilyLabel(family: UsageFamily): string {
+  return localizeUiText(USAGE_FAMILY_LABELS[family]);
+}
+
+const numberFormatter = Object.freeze({ format: formatUiNumber });
 
 export interface FamilyShare {
   readonly family: UsageFamily;
@@ -177,7 +183,11 @@ function familyClass(family: UsageFamily): string {
 }
 
 function formatDate(utcDate: string): string {
-  return `${utcDate.slice(5, 7)}/${utcDate.slice(8, 10)}`;
+  return formatUiDate(Date.parse(`${utcDate}T00:00:00.000Z`), {
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "UTC",
+  });
 }
 
 export function createAnalyticsPanel(
@@ -231,7 +241,7 @@ export function createAnalyticsPanel(
         const chip = document.createElement("span");
         chip.classList.add("family-chip", familyClass(share.family));
         chip.setAttribute("aria-hidden", "true");
-        item.append(chip, USAGE_FAMILY_LABELS[share.family]);
+        item.append(chip, usageFamilyLabel(share.family));
         return item;
       })
     );
@@ -271,18 +281,18 @@ export function createAnalyticsPanel(
       column.setAttribute("aria-hidden", "true");
       const bar = document.createElement("div");
       bar.className = "family-day-bar";
-      bar.title = `${day.utcDate}：${numberFormatter.format(
-        dayTotals[index] ?? 0
-      )} tokens`;
+      bar.title = localizeUiText(
+        `${day.utcDate}：${numberFormatter.format(dayTotals[index] ?? 0)} tokens`,
+      );
       for (const family of USAGE_FAMILIES) {
         const familyTokens = day.families[family];
         if (familyTokens === 0) continue;
         const segment = document.createElement("span");
         segment.classList.add("family-day-segment", familyClass(family));
         segment.style.height = `${(familyTokens / maxDayTotal) * 100}%`;
-        segment.title = `${USAGE_FAMILY_LABELS[family]}：${numberFormatter.format(
-          familyTokens
-        )} tokens`;
+        segment.title = localizeUiText(
+          `${usageFamilyLabel(family)}：${numberFormatter.format(familyTokens)} tokens`,
+        );
         bar.append(segment);
       }
       column.append(bar);
@@ -307,7 +317,7 @@ export function createAnalyticsPanel(
         const chip = document.createElement("span");
         chip.classList.add("family-chip", familyClass(share.family));
         chip.setAttribute("aria-hidden", "true");
-        identity.append(chip, USAGE_FAMILY_LABELS[share.family]);
+        identity.append(chip, usageFamilyLabel(share.family));
         const value = document.createElement("span");
         value.className = "family-share-value";
         value.textContent = `${numberFormatter.format(share.totalTokens)} · ${share.percentage}%`;
@@ -321,7 +331,7 @@ export function createAnalyticsPanel(
     if (snapshot.models.models.length === 0) {
       const message = document.createElement("p");
       message.className = "analytics-model-empty";
-      message.textContent = "目前沒有可列出的模型明細。";
+      message.textContent = localizeUiText("目前沒有可列出的模型明細。");
       models.replaceChildren(message);
       return;
     }
@@ -332,7 +342,7 @@ export function createAnalyticsPanel(
         identity.className = "model-identity";
         const chip = document.createElement("span");
         chip.classList.add("family-chip", familyClass(model.family));
-        chip.setAttribute("aria-label", USAGE_FAMILY_LABELS[model.family]);
+        chip.setAttribute("aria-label", usageFamilyLabel(model.family));
         const name = document.createElement("code");
         name.textContent = model.model;
         name.title = model.model;
@@ -346,10 +356,14 @@ export function createAnalyticsPanel(
         usage.append(total);
         const splitParts: string[] = [];
         if (model.inputTokens !== undefined) {
-          splitParts.push(`輸入 ${formatCompactTokenCount(model.inputTokens)}`);
+          splitParts.push(
+            localizeUiText(`輸入 ${formatCompactTokenCount(model.inputTokens)}`),
+          );
         }
         if (model.outputTokens !== undefined) {
-          splitParts.push(`輸出 ${formatCompactTokenCount(model.outputTokens)}`);
+          splitParts.push(
+            localizeUiText(`輸出 ${formatCompactTokenCount(model.outputTokens)}`),
+          );
         }
         if (splitParts.length > 0) {
           const split = document.createElement("small");
@@ -369,7 +383,9 @@ export function createAnalyticsPanel(
       shares.replaceChildren();
       models.replaceChildren();
       accessible.replaceChildren();
-      summary.textContent = `近 ${snapshot.families.window} 天沒有 token 用量可分析。`;
+      summary.textContent = localizeUiText(
+        `近 ${snapshot.families.window} 天沒有 token 用量可分析。`,
+      );
       setView("empty");
       return;
     }
@@ -384,7 +400,9 @@ export function createAnalyticsPanel(
     renderShares(familyShares);
     renderModels(snapshot);
     setSummary(
-      `近 ${snapshot.families.window} 天共 ${numberFormatter.format(totalTokens)} tokens，來自 ${familyShares.length} 個供應商家族。`
+      localizeUiText(
+        `近 ${snapshot.families.window} 天共 ${numberFormatter.format(totalTokens)} tokens，來自 ${familyShares.length} 個供應商家族。`,
+      ),
     );
     setView("content");
   }
@@ -404,7 +422,9 @@ export function createAnalyticsPanel(
     const requestController = controller;
     updateButtons();
     if (!background) {
-      setSummary(`正在整理近 ${request.window} 天的各家分析。`);
+      setSummary(
+        localizeUiText(`正在整理近 ${request.window} 天的各家分析。`),
+      );
       setView("loading");
     }
     try {
@@ -419,7 +439,9 @@ export function createAnalyticsPanel(
       // Background refreshes must not blank out data the user is reading;
       // the next poll retries anyway.
       if (background && !content.hidden) return;
-      setSummary(`近 ${request.window} 天的各家分析暫時無法載入。`);
+      setSummary(
+        localizeUiText(`近 ${request.window} 天的各家分析暫時無法載入。`),
+      );
       setView("error");
     } finally {
       if (controller === requestController) controller = undefined;
