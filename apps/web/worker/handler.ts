@@ -15,12 +15,17 @@ import {
   createD1RetentionMaintenanceStorage,
   type D1MutationDatabaseLike,
 } from "@tokenmonster/cloud-d1";
+import {
+  PUBLIC_RELEASE_ENDPOINT,
+  publicReleaseFromEnvironment,
+} from "../src/public-release.js";
 
 export interface TokenMonsterWorkerEnvironment
   extends CloudflareApiEnvironment {
   readonly TOKENMONSTER_DB?: D1MutationDatabaseLike;
   readonly TOKENMONSTER_RATE_LIMIT_DO?: unknown;
   readonly TOKENMONSTER_SUPPRESSION_LEDGER_DO?: unknown;
+  readonly TOKENMONSTER_PUBLIC_RELEASE_JSON?: unknown;
 }
 
 export interface TokenMonsterScheduledController {
@@ -162,6 +167,61 @@ export const tokenMonsterWorker = Object.freeze({
     request: Request,
     environment: TokenMonsterWorkerEnvironment = {},
   ): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname === PUBLIC_RELEASE_ENDPOINT) {
+      if (url.search !== "") {
+        return Promise.resolve(new Response(null, { status: 404 }));
+      }
+      if (request.method !== "GET") {
+        return Promise.resolve(
+          new Response(null, { status: 405, headers: { Allow: "GET" } }),
+        );
+      }
+      if (
+        !Object.prototype.hasOwnProperty.call(
+          environment,
+          "TOKENMONSTER_PUBLIC_RELEASE_JSON",
+        )
+      ) {
+        return Promise.resolve(
+          Response.json(
+            { error: "PUBLIC_RELEASE_NOT_CONFIGURED" },
+            {
+              status: 404,
+              headers: {
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+              },
+            },
+          ),
+        );
+      }
+      try {
+        const release = publicReleaseFromEnvironment(environment);
+        return Promise.resolve(
+          Response.json(release, {
+            status: 200,
+            headers: {
+              "Cache-Control": "public, max-age=60",
+              "X-Content-Type-Options": "nosniff",
+            },
+          }),
+        );
+      } catch {
+        return Promise.resolve(
+          Response.json(
+            { error: "PUBLIC_RELEASE_UNAVAILABLE" },
+            {
+              status: 503,
+              headers: {
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+              },
+            },
+          ),
+        );
+      }
+    }
     return apiWorkerFor(environment).fetch(request, environment);
   },
 

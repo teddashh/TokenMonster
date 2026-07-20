@@ -19,12 +19,30 @@ anonymous historical rollups. No placeholder or animated total is shown.
 The HTTP enrollment/ingest/delete/status surface is exercised by a Companion
 source slice with real payload preview, OS-backed scoped secrets, background
 sync/idempotent retry, local stop, delete and deletion-status handling.
-Background sync has local scheduler/service tests; staging packet capture and
-server pause/resume are not implemented. The
+Background sync has local scheduler/service tests; server pause/resume now has
+domain/HTTP/D1/Worker tests, while Companion wiring and staging packet capture
+remain pending. The
 Worker exports and binds separate SQLite-backed Durable Objects for
 route-scoped quota and deletion suppression; mutation routes still require the
-independent D1, flag, and secret gates. The download control is also
-unavailable until a signed Alpha artifact exists.
+independent D1, flag, and secret gates. The download control independently
+fails closed until the single `TOKENMONSTER_PUBLIC_RELEASE_JSON` binding is the
+exact canonical JSON generated from one promoted signed Windows x64 artifact.
+The URL must be the version-bound
+`https://cdn.ted-h.com/tokenmonster/releases/windows/v<version>/TokenMonsterSetup.exe`
+object; a missing, non-canonical, reordered, query-bearing, foreign-host, or
+version-drifted configuration keeps the CTA disabled. A genuinely absent
+binding returns the precise `404 PUBLIC_RELEASE_NOT_CONFIGURED` bootstrap
+state; a configured but invalid binding returns `503 PUBLIC_RELEASE_UNAVAILABLE`.
+The
+protected release workflow generates this JSON from the exact signed Setup
+bytes, verifies the bucket and authoritatively reads the versioned R2 object
+before and after any missing-key put, recalls the full public object and
+compares SHA-256 plus byte length, then monotonically sets and reads back this
+one binding. Same-version JSON drift and version downgrades fail. Four
+hand-authored metadata fields can no longer light the CTA. This
+runtime Worker projection lets a release owner open a verified download
+without changing the React source or baking mutable release metadata into the
+client bundle.
 
 Character presentation uses only stable catalog metadata and code-native
 letter placeholders. The production build fails if any blocked candidate asset

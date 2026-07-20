@@ -19,6 +19,7 @@
     "packages/*"
   ],
   "scripts": {
+    "audit:zstd-native-prebuild": "node scripts/release/audit-zstd-native-prebuild.mjs --all",
     "build": "node scripts/run-workspaces.mjs build",
     "format:check": "node scripts/verify-format.mjs",
     "lint": "node scripts/verify-repository.mjs",
@@ -30,7 +31,8 @@
     "verify:artifacts": "node scripts/verify-release-artifacts.mjs",
     "verify:companion-package": "node scripts/verify-companion-package.mjs --mode internal",
     "verify:packaging-toolchain": "node scripts/verify-packaging-toolchain.mjs",
-    "verify:secrets": "node scripts/scan-secrets.mjs"
+    "verify:secrets": "node scripts/scan-secrets.mjs",
+    "verify:zstd-native-prebuild": "node scripts/release/zstd-native-verifier.mjs --installed-root ."
   },
   "devDependencies": {
     "@types/node": "24.13.3",
