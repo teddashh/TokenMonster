@@ -190,6 +190,42 @@ locked/headless, crash-boundary, canary-scan, binary inventory/hash/provenance,
 and native OS/architecture tests. Until then the normal CLI remains unavailable,
 default-off, and zero-cloud.
 
+### Post-hardening clean-checkout evidence
+
+The credential, startup, shutdown, and collector hardening is committed in
+`87aa002`; the verification-only process-barrier stabilization is committed in
+`082e3f3`. The latter exact snapshot
+(`082e3f3789a01beed114c92b40cecfe7133d1a31`) was cloned with `--no-hardlinks`
+into a new empty temporary directory and installed with `npm ci` under Node
+24.15.0/npm 11.12.1. The install added 589 packages, audited 611 packages, and
+reported zero vulnerabilities. Both the implementation worktree and that clean
+clone passed the following gates:
+
+- `npm run typecheck` across all 21 workspaces
+- `npm test`: 140 test files and **1,727/1,727 tests**; the Electron companion
+  accounts for 37 files and 265 tests
+- `npm run lint`, `npm run format:check`, `npm run verify:secrets`, and
+  `git diff --check`
+- `npm run build`, including the Electron main/preload/renderer bundle verifier
+- `npm run verify:artifacts`
+- `npm run verify:packaging-toolchain`; the reviewed override set passes its
+  default internal classification
+- `npm audit --audit-level=high`: 0 vulnerabilities
+- `npm ls --depth=0`: exit 0. A fresh npm 11.12.1 install still labels optional
+  `@emnapi/runtime` and `tslib` entries extraneous, matching the earlier clean
+  checkout rather than indicating reused-worktree residue
+- `npm run verify:zstd-native-prebuild`: installed Linux x64 binding passes
+- `npm run audit:zstd-native-prebuild`: Linux x64, macOS arm64, and Windows x64
+  archives/bindings plus the pinned MongoDB signer pass
+
+The strict
+`npm run verify:packaging-toolchain -- --require-upstream-compatible` gate exits
+1 as designed: signed/GA publication remains blocked until stable Forge ranges
+accept the reviewed safe dependency versions. No new release version was
+selected, no Electron make/package or candidate archive was produced, and
+`npm run verify:companion-package` remains a required next-candidate gate. No
+tag, push, signing, publication, CDN promotion, or public release occurred.
+
 ## Continuation verification status — 2026-07-20
 
 By the final recovery pass, the interrupted tree contained 183 modified and two
