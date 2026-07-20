@@ -34,7 +34,16 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Verify exact upstream identities and one-file fix
+      - name: Check out exact deterministic ILRepack source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: gluck/il-repack
+          ref: 5b55fa2f4d7c7b18ffb104e2fade2f794f4ccedf
+          path: ilrepack-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact upstream identities and reviewed build-tool source
         shell: pwsh
         env:
           SOURCE_TAG_OBJECT: 274f7a9a5dc211552f27d1da7dc7899546a52be3
@@ -45,6 +54,11 @@ jobs:
           FIX_DETECTOR_BLOB: e8e442e0d95c5b7f5cc31a2eb84cf9407f5be2ab
           UPSTREAM_MERGE_COMMIT: 45834cbfeae84d20ef2bed24ac863f02d0abec66
           NUGET_SUBMODULE_COMMIT: 50f8d9e438fe948d7109501bd10f6024d0585b70
+          ILREPACK_SOURCE_COMMIT: 5b55fa2f4d7c7b18ffb104e2fade2f794f4ccedf
+          ILREPACK_SOURCE_TREE: 4c7e73b48c55a535790f9d3f56687258efc525d0
+          ILREPACK_RELEASE_TAG_COMMIT: 92843eace06c4eff3d6296a6fc4470ba725c57aa
+          ILREPACK_IMPORTER_BLOB: 07ea3c6054587b2dca44121ca99762b950b103c2
+          ILREPACK_LICENSE_BLOB: d645695673349e3947e8e5ae42332d0ac3164cd7
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
@@ -127,16 +141,53 @@ jobs:
             }
           }
 
+          $ilrepackSource = Join-Path $env:GITHUB_WORKSPACE "ilrepack-source"
+          $ilrepackHead = (git -C $ilrepackSource rev-parse HEAD).Trim()
+          $ilrepackTag = (git -C $ilrepackSource rev-parse "refs/tags/2.0.24^{}").Trim()
+          $ilrepackTree = (git -C $ilrepackSource rev-parse "HEAD^{tree}").Trim()
+          $ilrepackImporterBlob = (
+            git -C $ilrepackSource rev-parse "HEAD:ILRepack/RepackImporter.cs"
+          ).Trim()
+          $ilrepackLicenseBlob = (git -C $ilrepackSource rev-parse "HEAD:LICENSE").Trim()
+          git -C $ilrepackSource merge-base --is-ancestor $env:ILREPACK_SOURCE_COMMIT $env:ILREPACK_RELEASE_TAG_COMMIT
+          $ilrepackSourcePredatesTag = $LASTEXITCODE -eq 0
+          $ilrepackDirty = @(git -C $ilrepackSource status --porcelain --untracked-files=no)
+          $ilrepackPersistedCredentials = @(
+            git -C $ilrepackSource config --local --get-regexp "^http\..*\.extraheader$" 2>$null
+          )
+          if (
+            $ilrepackHead -cne $env:ILREPACK_SOURCE_COMMIT -or
+            $ilrepackTag -cne $env:ILREPACK_RELEASE_TAG_COMMIT -or
+            $ilrepackTree -cne $env:ILREPACK_SOURCE_TREE -or
+            -not $ilrepackSourcePredatesTag -or
+            $ilrepackImporterBlob -cne $env:ILREPACK_IMPORTER_BLOB -or
+            $ilrepackLicenseBlob -cne $env:ILREPACK_LICENSE_BLOB -or
+            $ilrepackDirty.Count -ne 0 -or
+            $ilrepackPersistedCredentials.Count -ne 0
+          ) {
+            throw "The deterministic ILRepack source is not the exact reviewed 2.0.24 tree."
+          }
+
       - name: Build twice with isolated dependency caches
         id: build
         shell: pwsh
         env:
           BROKEN_UPDATER_SHA256: 76359cd4b0349a83337b941332ad042c90351c2bb0a4628307740324c97984cc
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+          DOTNET_NOLOGO: 1
+          DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
           NUGET_URL: https://dist.nuget.org/win-x86-commandline/v4.9.4/nuget.exe
           NUGET_SHA256: cb139d855d06d07e7da892e8558fe16dcaa65cb381175c506f5ed0a759eaf8f6
           NUGET_SOURCE: https://api.nuget.org/v3/index.json
           REFERENCE_ASSEMBLIES_URL: https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net45/1.0.3/microsoft.netframework.referenceassemblies.net45.1.0.3.nupkg
           REFERENCE_ASSEMBLIES_SHA256: 23a9f94ea3e2cb88cd8341af75b811c6fb5cb82516fc696e95ed4620279128e3
+          ILREPACK_URL: https://api.nuget.org/v3-flatcontainer/ilrepack/2.0.24/ilrepack.2.0.24.nupkg
+          ILREPACK_PACKAGE_SHA256: 4354440d0b1ad531ef2dfd9f112fde80018b9d1534c25d10afe728146a6f67be
+          ILREPACK_TOOL_SHA256: adc25f9933da1e9d660ba41d2f6ae8181b7383bc2c08b869a03b10aac2dd9ab5
+          ILREPACK_RUNTIMECONFIG_SHA256: f528ed48a5ea5a5dafc7460a4db46c0a95823a806c523ec914250aa1e5798782
+          ILREPACK_SOURCE_COMMIT: 5b55fa2f4d7c7b18ffb104e2fade2f794f4ccedf
+          ILREPACK_SOURCE_TREE: 4c7e73b48c55a535790f9d3f56687258efc525d0
+          ILREPACK_RELEASE_TAG_COMMIT: 92843eace06c4eff3d6296a6fc4470ba725c57aa
           SOURCE_BASE_COMMIT: eef37460aef77b2f9de8cd2237c1e55b344a6554
           FIX_COMMIT: c98244936f6876b080366417301268058028a53c
           FIX_TREE: 0a1ebfa90cea6f8037907134d53562a26c6bb4c3
@@ -236,6 +287,45 @@ jobs:
             throw "The reviewed reference-assembly package lacks its exact net45 build inputs."
           }
 
+          $ilrepackPackage = Join-Path $env:RUNNER_TEMP "ilrepack.2.0.24.nupkg"
+          $ilrepackPackageRoot = Join-Path $env:RUNNER_TEMP "ilrepack.2.0.24"
+          if (
+            (Test-Path -LiteralPath $ilrepackPackage) -or
+            (Test-Path -LiteralPath $ilrepackPackageRoot)
+          ) {
+            throw "The reviewed deterministic ILRepack paths must start absent."
+          }
+          Invoke-WebRequest -Uri $env:ILREPACK_URL -OutFile $ilrepackPackage -MaximumRedirection 0
+          $ilrepackPackageFile = Get-Item -LiteralPath $ilrepackPackage
+          $ilrepackPackageSha256 = (
+            Get-FileHash -LiteralPath $ilrepackPackage -Algorithm SHA256
+          ).Hash.ToLowerInvariant()
+          if (
+            $ilrepackPackageFile.Length -ne 726144 -or
+            $ilrepackPackageSha256 -cne $env:ILREPACK_PACKAGE_SHA256
+          ) {
+            throw "The deterministic ILRepack package is not the reviewed NuGet binary."
+          }
+          & $nuget verify -Signatures $ilrepackPackage
+          if ($LASTEXITCODE -ne 0) {
+            throw "The exact deterministic ILRepack NuGet signature is invalid."
+          }
+          New-Item -ItemType Directory -Path $ilrepackPackageRoot | Out-Null
+          [IO.Compression.ZipFile]::ExtractToDirectory($ilrepackPackage, $ilrepackPackageRoot)
+          $ilrepackTool = Join-Path $ilrepackPackageRoot "tools/ILRepack.exe"
+          $ilrepackRuntimeConfig = Join-Path $ilrepackPackageRoot "tools/ILRepack.runtimeconfig.json"
+          $ilrepackVersionInfo = (Get-Item -LiteralPath $ilrepackTool).VersionInfo
+          if (
+            -not (Test-Path -LiteralPath $ilrepackTool -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $ilrepackRuntimeConfig -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $ilrepackTool -Algorithm SHA256).Hash.ToLowerInvariant() -cne $env:ILREPACK_TOOL_SHA256 -or
+            (Get-FileHash -LiteralPath $ilrepackRuntimeConfig -Algorithm SHA256).Hash.ToLowerInvariant() -cne $env:ILREPACK_RUNTIMECONFIG_SHA256 -or
+            $ilrepackVersionInfo.FileVersion -cne "2.0.24.0" -or
+            $ilrepackVersionInfo.ProductVersion -cne "2.0.24+5b55fa2f4d7c7b18ffb104e2fade2f794f4ccedf"
+          ) {
+            throw "The reviewed ILRepack package lacks its exact deterministic tools."
+          }
+
           $nugetConfig = Join-Path $env:RUNNER_TEMP "tokenmonster-squirrel-nuget.config"
           [IO.File]::WriteAllText(
             $nugetConfig,
@@ -243,8 +333,61 @@ jobs:
             [Text.UTF8Encoding]::new($false)
           )
 
+          function Assert-IsolatedProjectAssets {
+            param(
+              [Parameter(Mandatory)] [string] $AssetsPath,
+              [Parameter(Mandatory)] [string] $PackageRoot,
+              [Parameter(Mandatory)] [string] $ConfigPath
+            )
+
+            if (-not (Test-Path -LiteralPath $AssetsPath -PathType Leaf)) {
+              throw "The exact PackageReference restore did not produce $AssetsPath."
+            }
+            $assets = Get-Content -LiteralPath $AssetsPath -Raw | ConvertFrom-Json
+            $packageFolders = @($assets.packageFolders.PSObject.Properties.Name)
+            $sources = @($assets.project.restore.sources.PSObject.Properties.Name)
+            $configFiles = @($assets.project.restore.configFilePaths)
+            $expectedPackageRoot = [IO.Path]::TrimEndingDirectorySeparator(
+              [IO.Path]::GetFullPath($PackageRoot)
+            )
+            $actualPackageRoot = if ($packageFolders.Count -eq 1) {
+              [IO.Path]::TrimEndingDirectorySeparator(
+                [IO.Path]::GetFullPath($packageFolders[0])
+              )
+            } else {
+              ""
+            }
+            $unexpectedReferencePackages = @(
+              $assets.libraries.PSObject.Properties.Name |
+                Where-Object { $_ -match "^Microsoft\.NETFramework\.ReferenceAssemblies" }
+            )
+            if (
+              $packageFolders.Count -ne 1 -or
+              $actualPackageRoot -ine $expectedPackageRoot -or
+              $sources.Count -ne 1 -or
+              $sources[0] -cne $env:NUGET_SOURCE -or
+              $configFiles.Count -ne 1 -or
+              [IO.Path]::GetFullPath($configFiles[0]) -ine [IO.Path]::GetFullPath($ConfigPath) -or
+              $unexpectedReferencePackages.Count -ne 0
+            ) {
+              throw "The PackageReference restore escaped its reviewed source, config, package root, or reference inputs."
+            }
+          }
+
+          $env:NUGET_RESTORE_MSBUILD_ARGS = @(
+            "/p:DisableImplicitLibraryPacksFolder=true"
+            "/p:DisableImplicitNuGetFallbackFolder=true"
+            "/p:RestoreFallbackFolders=clear"
+            "/p:RestoreAdditionalProjectSources="
+            "/p:RestoreAdditionalProjectFallbackFolders="
+            "/p:AutomaticallyUseReferenceAssemblyPackages=false"
+            "/p:TargetFrameworkRootPath=$referenceBuildRoot"
+            "/p:DirectoryBuildTargetsPath=$referenceTargets"
+          ) -join " "
+
           $outputs = @()
           $dependencyInventories = @()
+          $mergeInputInventories = @()
           foreach ($sourceName in @("squirrel-a", "squirrel-b")) {
             $source = Join-Path $env:GITHUB_WORKSPACE $sourceName
             $dependencyCache = Join-Path $env:RUNNER_TEMP "$sourceName-nuget-packages"
@@ -260,12 +403,14 @@ jobs:
             New-Item -ItemType Directory -Path $dependencyCache | Out-Null
             New-Item -ItemType Directory -Path $httpCache | Out-Null
             New-Item -ItemType Directory -Path $scratch | Out-Null
-            # Upstream's legacy PostBuild target concatenates this property
-            # directly with "ilrepack", so the terminal separator is required.
+            # Keep the global-package root canonical for both NuGet 4.9 and
+            # PackageReference-generated MSBuild inputs.
             $nugetPackageRoot = $dependencyCache + [IO.Path]::DirectorySeparatorChar
             $env:NUGET_PACKAGES = $nugetPackageRoot
             $env:NUGET_HTTP_CACHE_PATH = $httpCache
             $env:NUGET_SCRATCH = $scratch
+            $env:TEMP = $scratch
+            $env:TMP = $scratch
             $env:NUGET_CREDENTIALPROVIDERS_PATH = ""
             $env:NUGET_PLUGIN_PATHS = ""
 
@@ -274,23 +419,85 @@ jobs:
             if ($LASTEXITCODE -ne 0) {
               throw "The exact upstream legacy Core dependency restore failed."
             }
-            & $nuget restore (Join-Path $source "src/Squirrel/Squirrel.csproj") -NonInteractive -NoCache -DirectDownload -ConfigFile $nugetConfig -Source $env:NUGET_SOURCE -MSBuildPath (Split-Path -Parent $msbuild)
+            & $nuget restore (Join-Path $source "src/Squirrel/Squirrel.csproj") -PackagesDirectory $nugetPackageRoot -NonInteractive -NoCache -DirectDownload -ConfigFile $nugetConfig -Source $env:NUGET_SOURCE -MSBuildPath (Split-Path -Parent $msbuild)
             if ($LASTEXITCODE -ne 0) {
               throw "The exact upstream Squirrel library dependency restore failed."
             }
-            & $nuget restore (Join-Path $source "src/Update/Update.csproj") -NonInteractive -NoCache -DirectDownload -ConfigFile $nugetConfig -Source $env:NUGET_SOURCE -MSBuildPath (Split-Path -Parent $msbuild)
+            Assert-IsolatedProjectAssets -AssetsPath (Join-Path $source "build/obj/Squirrel/project.assets.json") -PackageRoot $nugetPackageRoot -ConfigPath $nugetConfig
+            & $nuget restore (Join-Path $source "src/Update/Update.csproj") -PackagesDirectory $nugetPackageRoot -NonInteractive -NoCache -DirectDownload -ConfigFile $nugetConfig -Source $env:NUGET_SOURCE -MSBuildPath (Split-Path -Parent $msbuild)
             if ($LASTEXITCODE -ne 0) {
               throw "The exact upstream updater dependency restore failed."
             }
-            & $msbuild (Join-Path $source "src/Update/Update.csproj") "/p:Configuration=Release" "/p:Platform=Any CPU" "/p:TargetFrameworkRootPath=$referenceBuildRoot" "/p:DirectoryBuildTargetsPath=$referenceTargets" "/p:NuGetPackageRoot=$nugetPackageRoot" "/m:1" "/nr:false" "/v:minimal"
+            Assert-IsolatedProjectAssets -AssetsPath (Join-Path $source "build/obj/Update/project.assets.json") -PackageRoot $nugetPackageRoot -ConfigPath $nugetConfig
+
+            $buildArguments = @(
+              "/p:Configuration=Release"
+              "/p:Platform=Any CPU"
+              "/p:TargetFrameworkRootPath=$referenceBuildRoot"
+              "/p:DirectoryBuildTargetsPath=$referenceTargets"
+              "/p:NuGetPackageRoot=$nugetPackageRoot"
+              "/p:DisableImplicitLibraryPacksFolder=true"
+              "/p:DisableImplicitNuGetFallbackFolder=true"
+              "/p:RestoreFallbackFolders=clear"
+              "/p:RestoreAdditionalProjectSources="
+              "/p:RestoreAdditionalProjectFallbackFolders="
+              "/p:AutomaticallyUseReferenceAssemblyPackages=false"
+              "/p:Deterministic=true"
+              "/p:ContinuousIntegrationBuild=true"
+              "/p:PathMap=$source=/_/squirrel"
+              "/p:PostBuildEvent="
+              "/m:1"
+              "/nr:false"
+              "/v:minimal"
+            )
+            & $msbuild (Join-Path $source "src/Update/Update.csproj") @buildArguments
             if ($LASTEXITCODE -ne 0) {
               throw "The exact upstream updater build failed."
             }
 
-            $output = Join-Path $source "build/Release/net45/Update.exe"
-            if (-not (Test-Path -LiteralPath $output -PathType Leaf)) {
-              throw "The exact upstream build did not produce Update.exe."
+            $outputDirectory = Join-Path $source "build/Release/net45"
+            $mergeInputNames = @(
+              "Update.exe"
+              "WpfAnimatedGif.dll"
+              "SharpCompress.dll"
+              "Microsoft.Web.XmlTransform.dll"
+              "DeltaCompressionDotNet.dll"
+              "DeltaCompressionDotNet.MsDelta.dll"
+              "Squirrel.dll"
+              "NuGet.Squirrel.dll"
+              "Mono.Cecil.dll"
+            )
+            $mergeInputInventory = @(
+              $mergeInputNames | ForEach-Object {
+                $inputPath = Join-Path $outputDirectory $_
+                if (-not (Test-Path -LiteralPath $inputPath -PathType Leaf)) {
+                  throw "The exact upstream build did not produce merge input $_."
+                }
+                $inputHash = (
+                  Get-FileHash -LiteralPath $inputPath -Algorithm SHA256
+                ).Hash.ToLowerInvariant()
+                "$_`tsha256:$inputHash`tbytes:$((Get-Item -LiteralPath $inputPath).Length)"
+              }
+            )
+            $mergeInputInventories += ,$mergeInputInventory
+
+            $mergedTemporaryOutput = Join-Path $outputDirectory "Update.exe.tmp"
+            if (Test-Path -LiteralPath $mergedTemporaryOutput) {
+              throw "The deterministic merge output path must start absent."
             }
+            $mergeExitCode = $null
+            Push-Location $outputDirectory
+            try {
+              & dotnet $ilrepackTool "/ndebug" "/internalize" "/out:Update.exe.tmp" @mergeInputNames
+              $mergeExitCode = $LASTEXITCODE
+            } finally {
+              Pop-Location
+            }
+            if ($mergeExitCode -ne 0 -or -not (Test-Path -LiteralPath $mergedTemporaryOutput -PathType Leaf)) {
+              throw "The reviewed deterministic ILRepack merge failed."
+            }
+            $output = Join-Path $outputDirectory "Update.exe"
+            Move-Item -LiteralPath $mergedTemporaryOutput -Destination $output -Force
             $outputs += $output
 
             $globalInventory = @(
@@ -326,6 +533,9 @@ jobs:
           if (Compare-Object $dependencyInventories[0] $dependencyInventories[1] -CaseSensitive) {
             throw "The two isolated restores resolved different dependency content hashes."
           }
+          if (Compare-Object $mergeInputInventories[0] $mergeInputInventories[1] -CaseSensitive) {
+            throw "The two isolated compilers produced different deterministic merge inputs."
+          }
           $hashes = @(
             $outputs | ForEach-Object {
               (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -352,14 +562,25 @@ jobs:
             throw "The reviewed updater artifact directory must start absent."
           }
           New-Item -ItemType Directory -Path $artifactDirectory | Out-Null
-          Copy-Item -LiteralPath $outputs[0] -Destination (Join-Path $artifactDirectory "Squirrel.exe")
+          $artifactBinary = Join-Path $artifactDirectory "Squirrel.exe"
+          Copy-Item -LiteralPath $outputs[0] -Destination $artifactBinary
+          if (
+            (Get-FileHash -LiteralPath $artifactBinary -Algorithm SHA256).Hash.ToLowerInvariant() -cne $hashes[0] -or
+            (Get-Item -LiteralPath $artifactBinary).Length -ne $sizes[0]
+          ) {
+            throw "The staged updater artifact no longer matches the reviewed output."
+          }
           Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "squirrel-a/COPYING") -Destination (Join-Path $artifactDirectory "SQUIRREL-WINDOWS-LICENSE.txt")
           Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "squirrel-a/vendor/nuget/LICENSE.txt") -Destination (Join-Path $artifactDirectory "NUGET-SUBMODULE-LICENSE.txt")
           Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "squirrel-a/vendor/nuget/COPYRIGHT.txt") -Destination (Join-Path $artifactDirectory "NUGET-SUBMODULE-COPYRIGHT.txt")
           Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "squirrel-a/vendor/nuget/CREDITS.txt") -Destination (Join-Path $artifactDirectory "NUGET-SUBMODULE-CREDITS.txt")
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "ilrepack-source/LICENSE") -Destination (Join-Path $artifactDirectory "ILREPACK-LICENSE.txt")
           $dependencyInventoryPath = Join-Path $artifactDirectory "nuget-content-hashes.txt"
           [IO.File]::WriteAllLines($dependencyInventoryPath, $dependencyInventories[0], [Text.UTF8Encoding]::new($false))
           $dependencyInventorySha256 = (Get-FileHash -LiteralPath $dependencyInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $mergeInputInventoryPath = Join-Path $artifactDirectory "merge-input-hashes.txt"
+          [IO.File]::WriteAllLines($mergeInputInventoryPath, $mergeInputInventories[0], [Text.UTF8Encoding]::new($false))
+          $mergeInputInventorySha256 = (Get-FileHash -LiteralPath $mergeInputInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
           $dotnetInfoPath = Join-Path $artifactDirectory "dotnet-info.txt"
           [IO.File]::WriteAllLines($dotnetInfoPath, $dotnetInfo, [Text.UTF8Encoding]::new($false))
           $dotnetInfoSha256 = (Get-FileHash -LiteralPath $dotnetInfoPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -386,12 +607,37 @@ jobs:
             nugetSha256 = $nugetSha256
             referenceAssembliesVersion = "1.0.3"
             referenceAssembliesSha256 = $referencePackageSha256
+            mergeTool = "ILRepack"
+            mergeToolVersion = "2.0.24"
+            mergeToolSourceCommit = $env:ILREPACK_SOURCE_COMMIT
+            mergeToolSourceTree = $env:ILREPACK_SOURCE_TREE
+            mergeToolReleaseTagCommit = $env:ILREPACK_RELEASE_TAG_COMMIT
+            mergeToolPackageSha256 = $ilrepackPackageSha256
+            mergeToolExecutableSha256 = $env:ILREPACK_TOOL_SHA256
+            mergeToolRuntimeConfigSha256 = $env:ILREPACK_RUNTIMECONFIG_SHA256
+            mergeToolRuntimePolicy = "Microsoft.NETCore.App 6.0.0 with major roll-forward; exact runner inventory is hashed in dotnet-info.txt"
+            mergeArguments = @(
+              "/ndebug"
+              "/internalize"
+              "/out:Update.exe.tmp"
+              "Update.exe"
+              "WpfAnimatedGif.dll"
+              "SharpCompress.dll"
+              "Microsoft.Web.XmlTransform.dll"
+              "DeltaCompressionDotNet.dll"
+              "DeltaCompressionDotNet.MsDelta.dll"
+              "Squirrel.dll"
+              "NuGet.Squirrel.dll"
+              "Mono.Cecil.dll"
+            )
+            upstreamDeclaredMergeTool = "ILRepack 1.26.0 restored but not executed; PostBuildEvent is disabled"
             dependencyInventorySha256 = $dependencyInventorySha256
+            mergeInputInventorySha256 = $mergeInputInventorySha256
             binaryBytes = $sizes[0]
             binarySha256 = $hashes[0]
             productVersion = $versionInfo.ProductVersion
             fileVersion = $versionInfo.FileVersion
-            repeatability = "same-job byte equality across two isolated source trees and NuGet caches"
+            repeatability = "same-job byte equality across two path-mapped source trees, isolated NuGet caches, deterministic compiler inputs, and the reviewed deterministic merge tool"
           }
           $provenancePath = Join-Path $artifactDirectory "provenance.json"
           [IO.File]::WriteAllText(
