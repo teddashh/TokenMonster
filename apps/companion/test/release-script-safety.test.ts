@@ -1,8 +1,10 @@
 import { spawnSync } from "node:child_process";
 import {
+  access,
   chmod,
   mkdtemp,
   mkdir,
+  readFile,
   rm,
   symlink,
   truncate,
@@ -149,33 +151,69 @@ describe("release script physical-byte gates", () => {
     const net45 = join(payloadRoot, "lib", "net45");
     const installRoot = join(directory, "TokenMonster");
     const installedApplication = join(installRoot, "app-0.1.0");
-    const fullPackage = join(
-      directory,
-      "TokenMonster-0.1.0-rc14-full.nupkg"
-    );
+    const fullPackage = join(directory, "TokenMonster-0.1.0-rc14-full.nupkg");
     await Promise.all([
       mkdir(net45, { recursive: true }),
       mkdir(installedApplication, { recursive: true })
     ]);
     const packagedApplication = join(net45, "application.bin");
+    const packagedUpdater = join(net45, "Squirrel.exe");
     const packagedStub = join(net45, "TokenMonster_ExecutionStub.exe");
     const installedApplicationFile = join(
       installedApplication,
       "application.bin"
     );
+    const installedUpdater = join(installedApplication, "Squirrel.exe");
     const installedStub = join(installRoot, "TokenMonster.exe");
+    const installedRootUpdater = join(installRoot, "Update.exe");
+    const updateLog = join(installedApplication, "Squirrel-UpdateSelf.log");
+    const updateLogQuarantine = join(
+      installedApplication,
+      ".tokenmonster-squirrel-update-self.verifying"
+    );
     await Promise.all([
       writeFile(packagedApplication, "application-bytes"),
+      writeFile(packagedUpdater, "squirrel-updater-bytes"),
       writeFile(packagedStub, "execution-stub-bytes"),
       writeFile(installedApplicationFile, "application-bytes"),
-      writeFile(installedStub, "execution-stub-bytes")
+      writeFile(installedUpdater, "squirrel-updater-bytes"),
+      writeFile(installedStub, "execution-stub-bytes"),
+      writeFile(installedRootUpdater, "squirrel-updater-bytes")
     ]);
     await createZip(
       process.platform === "win32" ? payloadRoot : join(payloadRoot, "lib"),
       fullPackage
     );
 
-    const verify = () =>
+    const writeUpdateSelfLog = async (
+      parentEvent = "Program: About to wait for parent PID 1234",
+      sourceUpdater = resolve(
+        dirname(installRoot),
+        "SquirrelTemp",
+        "Update.exe"
+      ),
+      includeBom = true,
+      extraLine?: string
+    ) => {
+      await Promise.all([
+        rm(updateLog, { force: true }),
+        rm(updateLogQuarantine, { force: true })
+      ]);
+      const lines = [
+        `[20/07/26 12:00:00] info: Program: Starting Squirrel Updater: --updateSelf=${sourceUpdater}`,
+        `[20/07/26 12:00:01] info: ${parentEvent}`,
+        "[20/07/26 12:00:02] info: Program: Finished Squirrel Updater"
+      ];
+      if (extraLine !== undefined) lines.push(extraLine);
+      const encodedLog = Buffer.from([...lines, ""].join("\r\n"), "utf8");
+      await writeFile(
+        updateLog,
+        includeBom
+          ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), encodedLog])
+          : encodedLog
+      );
+    };
+    const invokeVerifier = () =>
       spawnSync(
         process.execPath,
         [
@@ -193,16 +231,27 @@ describe("release script physical-byte gates", () => {
           timeout: 10_000
         }
       );
+    const verify = async (parentEvent?: string) => {
+      await writeUpdateSelfLog(parentEvent);
+      return invokeVerifier();
+    };
 
-    const exact = verify();
+    const exact = await verify();
     expect(exact.status).toBe(0);
     expect(exact.stdout).toContain(
-      "installed companion and entry-point files against exact full-nupkg payload bytes"
+      "installed companion, updater, and entry-point files against exact full-nupkg payload bytes"
     );
     expect(exact.stderr).toBe("");
+    await expect(access(updateLog)).rejects.toThrow();
+    await expect(access(updateLogQuarantine)).rejects.toThrow();
+
+    const alternativeParentEvent = await verify(
+      "Program: Parent PID 5678 no longer valid - ignoring"
+    );
+    expect(alternativeParentEvent.status).toBe(0);
 
     await writeFile(installedApplicationFile, "tampered-bytes");
-    const tampered = verify();
+    const tampered = await verify();
     expect(tampered.status).not.toBe(0);
     expect(tampered.stderr).toContain(
       "Installed companion bytes differ from the full Squirrel package"
@@ -212,19 +261,86 @@ describe("release script physical-byte gates", () => {
       writeFile(installedApplicationFile, "application-bytes"),
       writeFile(join(installedApplication, "unexpected.bin"), "unexpected")
     ]);
-    const unexpected = verify();
+    const unexpected = await verify();
     expect(unexpected.status).not.toBe(0);
-    expect(unexpected.stderr).toContain("expected 1, installed 2");
-    expect(unexpected.stderr).toContain('unexpected ["unexpected.bin"]');
+    expect(unexpected.stderr).toContain("expected 2, installed 3");
+    expect(unexpected.stderr).not.toContain("unexpected.bin");
 
     await Promise.all([
       rm(join(installedApplication, "unexpected.bin")),
       rm(installedApplicationFile)
     ]);
-    const missing = verify();
+    const missing = await verify();
     expect(missing.status).not.toBe(0);
-    expect(missing.stderr).toContain("expected 1, installed 0");
-    expect(missing.stderr).toContain('missing ["application.bin"]');
+    expect(missing.stderr).toContain("expected 2, installed 1");
+
+    await Promise.all([
+      writeFile(installedApplicationFile, "application-bytes"),
+      writeFile(installedRootUpdater, "tampered-updater-bytes")
+    ]);
+    const tamperedUpdater = await verify();
+    expect(tamperedUpdater.status).not.toBe(0);
+    expect(tamperedUpdater.stderr).toContain(
+      "Installed Squirrel updater differs from the full-package Squirrel executable"
+    );
+
+    await writeFile(installedRootUpdater, "squirrel-updater-bytes");
+    await writeUpdateSelfLog("Program: unexpected parent event");
+    const malformedLog = invokeVerifier();
+    expect(malformedLog.status).not.toBe(0);
+    expect(malformedLog.stderr).toContain(
+      "Squirrel update-self log has an unexpected parent event"
+    );
+
+    await writeUpdateSelfLog(
+      undefined,
+      resolve(dirname(installRoot), "wrong", "Update.exe")
+    );
+    const wrongSource = invokeVerifier();
+    expect(wrongSource.status).not.toBe(0);
+    expect(wrongSource.stderr).toContain(
+      "Squirrel update-self log names an unexpected source executable"
+    );
+
+    await writeUpdateSelfLog(
+      "Program: About to wait for parent PID 2147483648"
+    );
+    const overflowingPid = invokeVerifier();
+    expect(overflowingPid.status).not.toBe(0);
+    expect(overflowingPid.stderr).toContain(
+      "Squirrel update-self log has an invalid parent PID"
+    );
+
+    await writeUpdateSelfLog(undefined, undefined, false);
+    const missingBom = invokeVerifier();
+    expect(missingBom.status).not.toBe(0);
+    expect(missingBom.stderr).toContain(
+      "Squirrel update-self log lacks its canonical UTF-8 BOM"
+    );
+
+    await writeUpdateSelfLog(
+      undefined,
+      undefined,
+      true,
+      "[20/07/26 12:00:03] info: Program: unexpected extra event"
+    );
+    const extraLine = invokeVerifier();
+    expect(extraLine.status).not.toBe(0);
+    expect(extraLine.stderr).toContain(
+      "Squirrel update-self log has an unexpected line count"
+    );
+
+    await writeUpdateSelfLog();
+    await writeFile(updateLogQuarantine, "do-not-overwrite");
+    const preexistingQuarantine = invokeVerifier();
+    expect(preexistingQuarantine.status).not.toBe(0);
+    expect(preexistingQuarantine.stderr).toContain(
+      "Squirrel update-self verifier quarantine could not be inspected"
+    );
+    expect(await readFile(updateLogQuarantine, "utf8")).toBe(
+      "do-not-overwrite"
+    );
+    expect(await readFile(updateLog)).not.toHaveLength(0);
   });
 
   it("rejects maker artifacts outside one physical directory and oversized input", async () => {
