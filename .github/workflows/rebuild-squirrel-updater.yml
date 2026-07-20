@@ -443,6 +443,9 @@ jobs:
             }
             Assert-IsolatedProjectAssets -AssetsPath (Join-Path $source "build/obj/Update/project.assets.json") -PackageRoot $nugetPackageRoot -ConfigPath $nugetConfig
 
+            # Core.csproj predates SourceRoot items. Disable MSBuild's inferred
+            # source mapping and supply the same explicit compiler PathMap for
+            # both otherwise independent source trees.
             $buildArguments = @(
               "/p:Configuration=Release"
               "/p:Platform=Any CPU"
@@ -457,6 +460,7 @@ jobs:
               "/p:AutomaticallyUseReferenceAssemblyPackages=false"
               "/p:Deterministic=true"
               "/p:ContinuousIntegrationBuild=true"
+              "/p:DeterministicSourcePaths=false"
               "/p:PathMap=$source=/_/squirrel"
               "/p:PostBuildEvent="
               "/m:1"
