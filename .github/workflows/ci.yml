@@ -235,12 +235,16 @@ jobs:
           TOKENMONSTER_SMOKE: "1"
         run: |
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          set +e
           timeout 180 xvfb-run --auto-servernum \
             apps/companion/out/TokenMonster-linux-x64/TokenMonster \
             --tokenmonster-smoke \
-            > smoke-packaged.log 2>&1 || true
-          if ! grep -q "TOKENMONSTER_SMOKE_OK" smoke-packaged.log; then
-            echo "Packaged app smoke failed" >&2
+            > smoke-packaged.log 2>&1
+          smoke_status=$?
+          set -e
+          if [[ "$smoke_status" -ne 0 ]] || \
+            ! grep -Fxq "TOKENMONSTER_SMOKE_OK" smoke-packaged.log; then
+            echo "Packaged app smoke failed with status $smoke_status" >&2
             tail -n 80 smoke-packaged.log >&2
             exit 1
           fi
@@ -372,7 +376,7 @@ jobs:
       - name: Install denied-egress smoke-test tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends bubblewrap strace
+          sudo apt-get install --yes --no-install-recommends bubblewrap strace xvfb
           bwrap --version
           strace --version
 
@@ -416,6 +420,27 @@ jobs:
 
       - name: Package and inspect unsigned companion
         run: npm run make:companion:internal
+
+      - name: Smoke exact tag-bound packaged app
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          TOKENMONSTER_SMOKE: "1"
+        run: |
+          smoke_log="$RUNNER_TEMP/tokenmonster-exact-tag-smoke.log"
+          set +e
+          timeout 180 xvfb-run --auto-servernum \
+            apps/companion/out/TokenMonster-linux-x64/TokenMonster \
+            --tokenmonster-smoke \
+            > "$smoke_log" 2>&1
+          smoke_status=$?
+          set -e
+          if [[ "$smoke_status" -ne 0 ]] || \
+            ! grep -Fxq "TOKENMONSTER_SMOKE_OK" "$smoke_log"; then
+            echo "Exact tag-bound packaged app smoke failed with status $smoke_status" >&2
+            tail -n 80 "$smoke_log" >&2
+            exit 1
+          fi
 
       - name: Audit dependencies
         run: npm audit --audit-level=high

@@ -234,8 +234,10 @@ describe("local reminder service", () => {
       settings: DEFAULT_REMINDER_SETTINGS,
       ledger: [],
     });
-    expect((await lstat(dirname(instance.path))).mode & 0o777).toBe(0o700);
-    expect((await lstat(instance.path)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect((await lstat(dirname(instance.path))).mode & 0o777).toBe(0o700);
+      expect((await lstat(instance.path)).mode & 0o777).toBe(0o600);
+    }
 
     const before = await readFile(instance.path, "utf8");
     await expect(

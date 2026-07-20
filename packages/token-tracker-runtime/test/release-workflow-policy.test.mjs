@@ -100,6 +100,53 @@ describe("release workflow publication policy", () => {
     expect(candidate).not.toContain("derive-companion-release-version.mjs");
   });
 
+  it("boots the exact tag-bound Linux package before release staging", () => {
+    const verification = job("verify");
+    const userNamespaceSetup = step(
+      verification,
+      "Enable bubblewrap user namespaces",
+    );
+    const make = step(verification, "Package and inspect unsigned companion");
+    const smoke = step(verification, "Smoke exact tag-bound packaged app");
+    expect(verification.indexOf(userNamespaceSetup)).toBeLessThan(
+      verification.indexOf(make),
+    );
+    expect(verification.indexOf(make)).toBeLessThan(
+      verification.indexOf(smoke),
+    );
+    expect(smoke).toContain("if: github.ref_type == 'tag'");
+    expect(smoke).toContain('TOKENMONSTER_SMOKE: "1"');
+    expect(smoke).toContain("timeout 180 xvfb-run --auto-servernum");
+    expect(smoke).toContain(
+      "apps/companion/out/TokenMonster-linux-x64/TokenMonster",
+    );
+    expect(smoke).toContain("--tokenmonster-smoke");
+    expect(smoke).toContain('[[ "$smoke_status" -ne 0 ]]');
+    expect(smoke).toContain(
+      'grep -Fxq "TOKENMONSTER_SMOKE_OK" "$smoke_log"',
+    );
+    expect(smoke).not.toContain("sysctl");
+    expect(smoke).not.toContain("--no-sandbox");
+    expect(smoke).not.toContain("|| true");
+    expect(userNamespaceSetup).toContain(
+      "kernel.apparmor_restrict_unprivileged_userns=0",
+    );
+    expect(
+      step(verification, "Install denied-egress smoke-test tools"),
+    ).toContain("xvfb");
+
+    const installers = job("companion-installers");
+    expect(installers).toContain("if: github.ref_type != 'tag'");
+    const nonTagSmoke = step(installers, "Smoke packaged app");
+    expect(nonTagSmoke).toContain('[[ "$smoke_status" -ne 0 ]]');
+    expect(nonTagSmoke).toContain(
+      'grep -Fxq "TOKENMONSTER_SMOKE_OK" smoke-packaged.log',
+    );
+    expect(nonTagSmoke).not.toContain("|| true");
+
+    expect(job("stage-companion-release")).toContain("      - verify\n");
+  });
+
   it("plans and verifies npm dist-tag publication around one credentialed mutation", () => {
     const npmJob = job("publish-cli-npm");
     expect(npmJob).toContain("plan-npm-publication.mjs");

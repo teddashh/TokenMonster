@@ -28,7 +28,7 @@ function isLoopbackIpv6(address) {
 function inspectSocketCreation(line, lineNumber) {
   if (!/\bsocket\(/u.test(line)) return;
   const match = line.match(
-    /\bsocket\((AF_[A-Z0-9_]+), ([A-Z0-9_|]+), ([A-Z0-9_]+|0)\)/u,
+    /\bsocket\((AF_[A-Z0-9_]+), ([A-Z0-9_|]+), ([A-Z0-9_]+|0)(?:\)| <unfinished \.\.\.>$)/u,
   );
   if (match === null) {
     fail(`line ${lineNumber} opens an uninspectable socket`);
