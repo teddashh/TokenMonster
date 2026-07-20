@@ -267,6 +267,10 @@ jobs:
             if ($LASTEXITCODE -ne 0) {
               throw "The exact upstream legacy Core dependency restore failed."
             }
+            & $nuget restore (Join-Path $source "src/Squirrel/Squirrel.csproj") -NonInteractive -NoCache -DirectDownload -ConfigFile $nugetConfig -Source $env:NUGET_SOURCE -MSBuildPath (Split-Path -Parent $msbuild)
+            if ($LASTEXITCODE -ne 0) {
+              throw "The exact upstream Squirrel library dependency restore failed."
+            }
             & $nuget restore (Join-Path $source "src/Update/Update.csproj") -NonInteractive -NoCache -DirectDownload -ConfigFile $nugetConfig -Source $env:NUGET_SOURCE -MSBuildPath (Split-Path -Parent $msbuild)
             if ($LASTEXITCODE -ne 0) {
               throw "The exact upstream updater dependency restore failed."
