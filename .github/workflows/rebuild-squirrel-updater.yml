@@ -78,6 +78,11 @@ jobs:
             $persistedCredentials = @(
               git -C $source config --local --get-regexp "^http\..*\.extraheader$" 2>$null
             )
+            $credentialQueryExit = $LASTEXITCODE
+            if ($credentialQueryExit -notin @(0, 1)) {
+              throw "The upstream credential-state query failed."
+            }
+            $global:LASTEXITCODE = 0
             $fixParent = (git -C $source rev-parse "$($env:FIX_COMMIT)^").Trim()
             $fixTree = (git -C $source rev-parse "$($env:FIX_COMMIT)^{tree}").Trim()
             $fixDetectorBlob = (
@@ -155,6 +160,11 @@ jobs:
           $ilrepackPersistedCredentials = @(
             git -C $ilrepackSource config --local --get-regexp "^http\..*\.extraheader$" 2>$null
           )
+          $ilrepackCredentialQueryExit = $LASTEXITCODE
+          if ($ilrepackCredentialQueryExit -notin @(0, 1)) {
+            throw "The ILRepack credential-state query failed."
+          }
+          $global:LASTEXITCODE = 0
           if (
             $ilrepackHead -cne $env:ILREPACK_SOURCE_COMMIT -or
             $ilrepackTag -cne $env:ILREPACK_RELEASE_TAG_COMMIT -or
