@@ -181,9 +181,13 @@ planner rehashes both local states. It always plans immutable objects as
 create-or-verify-exact, writes the full package before `RELEASES`, and retires
 the old channel package only after the metadata commit. An identical rerun is
 `idempotent`; an older version, cross-channel input, same-version byte drift,
-or recalled-byte mismatch fails. The current workflow deliberately does not
-invoke `--missing` or execute this feed plan, because it does not yet retrieve
-authoritative current-channel bytes.
+or recalled-byte mismatch fails. The protected workflow now performs the
+authoritative R2 lookup, create-or-verify immutable write, current-channel
+retrieval, ordered feed execution, CDN recall, Worker binding update, and exact
+public readback. Missing state is accepted only after the pinned adapters or
+exact public `404` response classify it authoritatively. These paths have local
+deterministic coverage, but no credentialed protected-environment run has yet
+produced real promotion evidence.
 
 Unsigned internal Windows builds may trigger SmartScreen; unnotarized internal
 macOS builds may require right-clicking and choosing Open. They are test
@@ -201,7 +205,7 @@ rejected because Squirrel drops it and could silently reuse an earlier package
 identity. For example:
 
 ```
-TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.11 npm run make:companion:internal
+TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.12 npm run make:companion:internal
 ```
 
 The source package remains `0.1.0`. Forge injects the candidate into the staged
@@ -231,7 +235,7 @@ Signed mode runs only on the matching native host. Windows uses the modern
 `https://timestamp.digicert.com`. Configure a native Windows shell with:
 
 ```
-$env:TOKENMONSTER_RELEASE_VERSION = "0.1.0-rc.8"
+$env:TOKENMONSTER_RELEASE_VERSION = "0.1.0-rc.12"
 $env:TOKENMONSTER_WINDOWS_CERTIFICATE_PATH = "C:\secure\tokenmonster.pfx"
 $env:TOKENMONSTER_WINDOWS_CERTIFICATE_PASSWORD = "<secret>"
 $env:TOKENMONSTER_WINDOWS_SIGNER_SUBJECT = "CN=..., O=..."
@@ -318,23 +322,25 @@ hoist correctly on every platform.
 
 Prerequisite: Node 24.15.0 and npm 11.12.1 exactly — the workspace root pins
 both engines with `engine-strict`, so `npm ci` rejects any other version.
-PowerShell is fine for every command below.
+Adapt path quoting to the current shell; all invoked Node/npm tools are
+cross-platform.
 
 ```
 git clone <repo> && cd TokenMonster
 npm ci
-node scripts/release/build-release.mjs
-mkdir tokenmonster-app && cd tokenmonster-app
-npm install ../dist-release/tokenmonster-0.1.0.tgz
-npx tokenmonster
+node scripts/release/build-release.mjs --version 0.1.0-rc.12 --out dist-release/rc.12
+node scripts/release/verify-release-digest.mjs dist-release/rc.12 --expected-version 0.1.0-rc.12
+mkdir tokenmonster-app
+npm install --prefix tokenmonster-app dist-release/rc.12/tokenmonster-0.1.0-rc.12.tgz
+node scripts/release/smoke-installed.mjs tokenmonster-app
 ```
 
 Notes:
 
 - Do NOT run a full workspace build on Windows (`npm run build` at the root);
   the Electron app's vite build currently fails there. The release script
-  builds only the seven shipped packages (dependency-closure scoping in
-  `run-workspaces.mjs`), which is Windows-clean and CI-verified.
+  builds only the CLI's reviewed shipped workspace closure (dependency-closure
+  scoping in `run-workspaces.mjs`), which is Windows-clean and CI-verified.
 - `node scripts/release/smoke-installed.mjs <install-dir>` runs the same
   automated smoke CI uses against the directory you installed into. Before
   launch, it compares the installed consumer lock and every physical sidecar

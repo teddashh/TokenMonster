@@ -8,15 +8,17 @@ integrator session that reviews, commits, and ships its work.
 The earlier agent and its three active child tasks were interrupted together at
 14:10:30 EDT. At takeover, this worktree was still at commit `ec2f397` with
 164 modified and 115 untracked files, nothing staged, and changes continuing
-for 98 files after this handoff's earlier rc.11 evidence was written. Preserve
-the dirty tree; do not reset it or substitute another clean worktree.
+for 98 files after this handoff's earlier rc.11 evidence was written. That
+dirty state was preserved outside the repository before recovery; do not
+discard its backups or substitute the historical rc.11 artifacts.
 
 The rc.11 tarball and Linux ZIP described below are historical evidence for an
 earlier snapshot only. Their current bytes/hashes differ from the recorded
 values, so neither artifact may be promoted, published, or used as proof for
-the post-candidate changes. A fresh candidate needs all repository gates, a new
-clean-install/network trace, package verification, Electron make, hashes, and
-the native release matrix after the work below is complete.
+the post-candidate changes. At takeover, a fresh candidate still needed all
+repository gates, a new clean-install/network trace, package verification,
+Electron make, hashes, and the native release matrix. The local rc.12 portion
+is now recorded below; native, signing, and publication gates remain.
 
 Recovered and revalidated:
 
@@ -135,15 +137,45 @@ zero vulnerabilities.
 - `npm run audit:zstd-native-prebuild`: Linux x64, macOS arm64, and Windows x64
   archives/bindings plus the pinned MongoDB signer all pass
 
-No fresh post-takeover candidate artifact exists. The old rc.11 tgz and Linux
-ZIP no longer match their documented sizes or SHA-256 values. Artifact
-verification, installed-package smoke, external-network trace, Electron make
-and package verification, a real signed Squirrel candidate, public feed
-readback, and the native release matrix have not been refreshed for these
-bytes. The feed verifier/planner/executor has deterministic local coverage,
-including response-loss recovery and rollback, but no credentialed R2/CDN run.
-A future candidate must use a new version and regenerate every item; never
-reuse the rc.11 name or artifacts.
+A fresh **local-only** `0.1.0-rc.12` candidate was then built from exact clean
+commit `4f807a3` (whose only change after the fully tested `b5f16f6` snapshot is
+this handoff evidence). It is not tagged, pushed, signed, published, or a public
+release. The old rc.11 artifacts remain superseded and must never be reused.
+
+- `tokenmonster-0.1.0-rc.12.tgz`: 1,179,164 bytes, 1,027 portable entries,
+  SHA-256
+  `ca88682da77336d3d63a7e5258d6153271fa6d249746b26739b8bcd924e19dda`.
+  The strict digest/inventory verifier passed before and after desktop make.
+- An empty-prefix install of that exact tarball passed the complete installed
+  smoke: the 41-package sidecar closure and Linux zstd prebuild matched their
+  lock/integrity records; CLI/package version was rc.12; 18 player artifacts,
+  bootstrap/status, default-off contribution, five fail-closed contribution
+  mutations with no SQLite/vault state, RAM-only key-free BYOK, the clean
+  profile, all 11 characters, starter persistence/tap, asset 404s, shutdown,
+  and remote-helper suppression all passed.
+- A system `strace` of the same installed smoke passed the loopback-only
+  verifier: 3 loopback binds, 23 loopback connects, and no external
+  destination.
+- `TokenMonster-linux-x64-0.1.0-rc.12.zip`: 142,505,021 bytes, 1,052 ZIP
+  entries, SHA-256
+  `9c66f544968c11a71eb4375d93ec10510f4614edd647392e60e5f70c69c49a4a`.
+  Schema-v2 package evidence verified 39 ASAR files, one fuse wire, one maker
+  artifact, collector 4.5.2, and `tokentracker-cli@0.80.0` with 834 files and
+  13,754,682 bytes. The candidate bytes and machine evidence are preserved in
+  a mode-0700 repository-external local evidence directory; individual files
+  are mode 0600 and are not committed.
+- Sandboxed packaged startup did **not** pass on this workstation. It failed
+  closed before application boot because AppArmor restricts unprivileged user
+  namespaces and the unpacked Electron `chrome-sandbox` is user-owned mode
+  0755 rather than root-owned mode 4755. No `--no-sandbox` flag or global
+  `sysctl` workaround was used. Repeat this gate on the correctly isolated CI
+  or release host.
+
+The same immutable CLI tarball still needs macOS and Windows installed smoke.
+A real signed Squirrel candidate, sandbox-enabled packaged boot, public feed
+readback, and the native release matrix remain outstanding. The feed
+verifier/planner/executor has deterministic local coverage, including
+response-loss recovery and rollback, but no credentialed R2/CDN run occurred.
 
 ## Shipped baseline
 
@@ -539,8 +571,9 @@ source-merged hourly data.
   prompt, verify the fixed provider destination and `store: false` request,
   and prove the key and conversation never enter logs, disk state, or
   TokenMonster cloud. This operational proof remains outstanding.
-- **Native Windows next candidate:** create a freshly versioned candidate and
-  build/sign it on the Windows release host, install it as a clean user, choose
+- **Native Windows rc.12 candidate:** transfer and re-verify the exact rc.12 CLI
+  tarball above, build/sign the same source version on the Windows release host,
+  install it as a clean user, choose
   each starter across repeated runs, restart to verify selection/unlocks, tap a
   character, save the real PNG,
   exercise the refreshed quota panel, and run the existing Squirrel `.nupkg`
@@ -556,7 +589,7 @@ source-merged hourly data.
   a freshly versioned signed tag in the protected single-writer environment;
   preserve the emitted evidence and complete native install/update rehearsal
   before treating the connected updater surface as production-usable. No
-  current dirty-tree or rc.11 artifact has been published.
+  current rc.12 candidate artifact has been published.
 - **Signed/GA packaging dependency gate:** the exact `@electron/rebuild 4.2.0`
   and `tmp 0.2.7` overrides pass the local Forge package/build verifier and
   `npm audit` reports zero vulnerabilities. A 2026-07-19 native-range lock for
@@ -577,11 +610,11 @@ source-merged hourly data.
   hardened runtime/Team ID, notarization ticket, mounted-DMG verification, and
   native smoke are not complete. Internal unsigned packaging evidence is not a
   substitute for this gate.
-- **Integrator publication:** review the scoped local commits on the recovery
-  branch, integrate them intentionally into `fable/integration`, push only
-  after the final clean-checkout gates, and run the native release matrix.
+- **Integrator publication:** the scoped recovery commits are integrated into
+  local `fable/integration` but remain unpushed. Push only after reviewing this
+  rc.12 evidence and arranging the native release matrix.
   Configure the protected signing/npm/CDN release environments and the four
   exact public download bindings only after the immutable Windows bytes exist;
-  never call the current local rc.11 artifacts shipped.
+  never call the current local rc.12 artifacts shipped.
 - **Legal owner:** choose the project license, privacy-policy/terms publication,
   TokenMonster name/trademark position, and protected release approvals.
