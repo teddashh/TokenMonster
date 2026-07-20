@@ -23,11 +23,13 @@ function dependencies(
   deps: SquirrelStartupDependencies;
   child: ReturnType<typeof spawnedProcess>;
   spawn: ReturnType<typeof vi.fn>;
+  spawnSync: ReturnType<typeof vi.fn>;
   quit: ReturnType<typeof vi.fn>;
   unlink: ReturnType<typeof vi.fn>;
 } {
   const child = spawnedProcess();
   const spawn = vi.fn(() => child);
+  const spawnSync = vi.fn(() => ({ status: 0 }));
   const quit = vi.fn();
   const unlink = vi.fn();
   return {
@@ -36,6 +38,8 @@ function dependencies(
       platform,
       execPath,
       spawn: spawn as unknown as SquirrelStartupDependencies["spawn"],
+      spawnSync:
+        spawnSync as unknown as SquirrelStartupDependencies["spawnSync"],
       quit,
       environment: {
         LOCALAPPDATA: "C:\\Users\\example\\AppData\\Local",
@@ -48,6 +52,7 @@ function dependencies(
     },
     child,
     spawn,
+    spawnSync,
     quit,
     unlink
   };
@@ -147,7 +152,7 @@ describe("handleSquirrelStartup", () => {
   });
 
   it("removes the execution stub and shortcut on uninstall", () => {
-    const { deps, child, spawn, quit, unlink } = dependencies([
+    const { deps, spawn, spawnSync, quit, unlink } = dependencies([
       "TokenMonster.exe",
       "--squirrel-uninstall"
     ]);
@@ -155,17 +160,41 @@ describe("handleSquirrelStartup", () => {
     expect(unlink).toHaveBeenCalledWith(
       resolve(dirname(execPath), "..", basename(execPath))
     );
-    expect(spawn).toHaveBeenCalledWith(
-      expect.any(String),
+    expect(spawn).not.toHaveBeenCalled();
+    expect(spawnSync).toHaveBeenCalledWith(
+      resolve(dirname(execPath), "..", "Update.exe"),
       [`--removeShortcut=${basename(execPath)}`],
-      expect.any(Object)
+      {
+        env: {
+          LOCALAPPDATA: "C:\\Users\\example\\AppData\\Local",
+          PATH: "C:\\Windows\\System32"
+        },
+        killSignal: "SIGKILL",
+        stdio: "ignore",
+        timeout: 50,
+        windowsHide: true
+      }
     );
-    child.emit("close");
     expect(quit).toHaveBeenCalledOnce();
   });
 
+  it("bounds uninstall shortcut cleanup with the production timeout", () => {
+    const { deps, spawnSync } = dependencies([
+      "TokenMonster.exe",
+      "--squirrel-uninstall"
+    ]);
+    const { timeoutMs: _timeoutMs, ...defaultTimeoutDeps } = deps;
+
+    expect(handleSquirrelStartup(defaultTimeoutDeps)).toBe(true);
+    expect(spawnSync).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({ timeout: 6_000 })
+    );
+  });
+
   it("continues shortcut cleanup when execution-stub removal fails", () => {
-    const { deps, child, spawn, quit, unlink } = dependencies([
+    const { deps, spawnSync, quit, unlink } = dependencies([
       "TokenMonster.exe",
       "--squirrel-uninstall"
     ]);
@@ -175,17 +204,50 @@ describe("handleSquirrelStartup", () => {
 
     expect(handleSquirrelStartup(deps)).toBe(true);
     expect(unlink).toHaveBeenCalledOnce();
-    expect(spawn).toHaveBeenCalledWith(
+    expect(spawnSync).toHaveBeenCalledWith(
       expect.any(String),
       [`--removeShortcut=${basename(execPath)}`],
       expect.any(Object)
     );
-    child.emit("close");
+    expect(quit).toHaveBeenCalledOnce();
+  });
+
+  it("quits after a bounded uninstall shortcut timeout result", () => {
+    const { deps, spawnSync, quit } = dependencies([
+      "TokenMonster.exe",
+      "--squirrel-uninstall"
+    ]);
+    spawnSync.mockReturnValue({
+      error: new Error("timed out"),
+      output: [],
+      pid: 1,
+      signal: "SIGKILL",
+      status: null,
+      stderr: null,
+      stdout: null
+    });
+
+    expect(handleSquirrelStartup(deps)).toBe(true);
+    expect(spawnSync).toHaveBeenCalledOnce();
+    expect(quit).toHaveBeenCalledOnce();
+  });
+
+  it("quits when the uninstall shortcut worker cannot be spawned", () => {
+    const { deps, spawnSync, quit } = dependencies([
+      "TokenMonster.exe",
+      "--squirrel-uninstall"
+    ]);
+    spawnSync.mockImplementation(() => {
+      throw new Error("spawn failed");
+    });
+
+    expect(handleSquirrelStartup(deps)).toBe(true);
+    expect(spawnSync).toHaveBeenCalledOnce();
     expect(quit).toHaveBeenCalledOnce();
   });
 
   it("does not unlink outside a versioned Squirrel app directory", () => {
-    const { deps, child, unlink } = dependencies([
+    const { deps, spawnSync, unlink, quit } = dependencies([
       "TokenMonster.exe",
       "--squirrel-uninstall"
     ]);
@@ -197,7 +259,8 @@ describe("handleSquirrelStartup", () => {
       })
     ).toBe(true);
     expect(unlink).not.toHaveBeenCalled();
-    child.emit("close");
+    expect(spawnSync).toHaveBeenCalledOnce();
+    expect(quit).toHaveBeenCalledOnce();
   });
 
   it("quits obsolete versions without spawning", () => {
