@@ -28,7 +28,7 @@ const SQUIRREL_PAYLOAD_PREFIX = "lib/net45/";
 const EXECUTION_STUB_PAYLOAD_PATH = "TokenMonster_ExecutionStub.exe";
 const INSTALLED_ENTRY_POINT = "TokenMonster.exe";
 const INSTALLED_UPDATE_EXECUTABLE = "Update.exe";
-const PACKAGED_UPDATE_EXECUTABLE = "Squirrel.exe";
+const PACKAGED_UPDATE_EXECUTABLE = "squirrel.exe";
 const SQUIRREL_UPDATE_SELF_LOG = "Squirrel-UpdateSelf.log";
 const SQUIRREL_UPDATE_SELF_QUARANTINE =
   ".tokenmonster-squirrel-update-self.verifying";
