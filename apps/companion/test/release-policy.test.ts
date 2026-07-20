@@ -613,6 +613,9 @@ describe("companion release policy", () => {
       'const INSTALLED_UPDATE_EXECUTABLE = "Update.exe"'
     );
     expect(installedVerifier).toContain(
+      'const PACKAGED_UPDATE_EXECUTABLE = "squirrel.exe"'
+    );
+    expect(installedVerifier).toContain(
       "await rename(logPath, quarantinePath)"
     );
     expect(installedVerifier).toContain("await unlink(updateLogQuarantine)");

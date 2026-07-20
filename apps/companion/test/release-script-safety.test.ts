@@ -157,13 +157,13 @@ describe("release script physical-byte gates", () => {
       mkdir(installedApplication, { recursive: true })
     ]);
     const packagedApplication = join(net45, "application.bin");
-    const packagedUpdater = join(net45, "Squirrel.exe");
+    const packagedUpdater = join(net45, "squirrel.exe");
     const packagedStub = join(net45, "TokenMonster_ExecutionStub.exe");
     const installedApplicationFile = join(
       installedApplication,
       "application.bin"
     );
-    const installedUpdater = join(installedApplication, "Squirrel.exe");
+    const installedUpdater = join(installedApplication, "squirrel.exe");
     const installedStub = join(installRoot, "TokenMonster.exe");
     const installedRootUpdater = join(installRoot, "Update.exe");
     const updateLog = join(installedApplication, "Squirrel-UpdateSelf.log");
