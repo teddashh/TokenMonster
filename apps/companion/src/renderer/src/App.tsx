@@ -84,7 +84,7 @@ const CONTRIBUTION_STATE_LABELS: Readonly<
 > = Object.freeze({
   off: "關閉（預設）",
   active: "已明確加入",
-  stopped: "已在本機永久停止上傳",
+  stopped: "已暫停後續上傳",
   "deletion-pending": "刪除處理中",
   "deletion-complete": "可識別雲端資料已刪除",
   "deletion-failed": "刪除工作失敗",
@@ -94,7 +94,9 @@ const CONTRIBUTION_STATE_LABELS: Readonly<
 function contributionErrorMessage(code: ContributionActionCode): string {
   const messages: Record<ContributionActionCode, string> = {
     enabled: "已明確加入自願貢獻。",
-    stopped: "後續上傳已在本機停止。",
+    resumed: "已重新確認 consent，並恢復原有 enrollment 的背景同步。",
+    stopped: "後續上傳已暫停；原有 enrollment 與 deletion authority 保留。",
+    "pause-pending": "本機上傳已停止；遠端 pause 尚待網路恢復後重試。",
     "deletion-requested": "刪除請求已送出。",
     "deletion-status-updated": "刪除狀態已更新。",
     uploaded: "已送出完成 UTC 日的 absolute snapshots。",
@@ -112,9 +114,9 @@ function contributionErrorMessage(code: ContributionActionCode): string {
     "authority-conflict": "Collector authority 不一致；沒有送出。",
     "local-service-error": "本機貢獻服務安全停止；沒有洩漏內容。",
     "preview-expired": "預覽已過期；請重新產生並再次確認。",
-    "state-conflict": "目前狀態不允許建立新的 enrollment。",
+    "state-conflict": "目前狀態不允許加入或恢復貢獻。",
     "not-enabled": "貢獻尚未啟用。",
-    "consent-stale": "Consent 文件已更新；請停止並刪除，再依新文件重新加入。",
+    "consent-stale": "Consent 文件已更新；請先暫停，再重新預覽並明確同意。",
     "deletion-credential-unavailable": "沒有可用的 deletion authority。",
     "deletion-status-unavailable": "沒有可查詢的 deletion status credential。",
     busy: "另一個貢獻動作仍在處理。"
@@ -388,11 +390,7 @@ export function App() {
       applyContributionStatus(result.status);
       setContributionPreview(null);
       setContributionConfirmed(false);
-      setContributionNotice(
-        result.ok
-          ? "已清除 upload authority 與待送佇列。這不是遠端 pause，不能 resume；deletion authority 仍保留。"
-          : contributionErrorMessage(result.code)
-      );
+      setContributionNotice(contributionErrorMessage(result.code));
     } catch {
       setContributionNotice("停止請求被安全拒絕；請重新啟動後確認狀態。");
     } finally {
@@ -971,6 +969,7 @@ export function App() {
               <div><dt>待送批次</dt><dd>{loadState.data.contribution.outboxPending}</dd></div>
             </dl>
             {loadState.data.contribution.state === "off" ||
+            loadState.data.contribution.state === "stopped" ||
             loadState.data.contribution.state === "deletion-complete" ? (
               <>
                 <button
@@ -1001,7 +1000,7 @@ export function App() {
                         disabled={busy}
                         onChange={(event) => setContributionConfirmed(event.target.checked)}
                       />
-                      我已檢查實際 payload，了解 current buckets 最多可識別 30 天；達 k≥20 混入無 enrollment mapping 的歷史總數後，不能個別抽出或刪除。加入後，Companion 會在背景以相同 strict payload 與冪等佇列同步；停止貢獻會立即取消後續排程並清除 upload authority。
+                      我已檢查實際 payload，了解 current buckets 最多可識別 30 天；達 k≥20 混入無 enrollment mapping 的歷史總數後，不能個別抽出或刪除。加入或恢復後，Companion 會在背景以相同 strict payload 與冪等佇列同步；暫停會立即取消後續排程並清空待送佇列，但保留原有 enrollment 與 deletion authority。
                     </label>
                     <button
                       className="secondary"
@@ -1009,7 +1008,9 @@ export function App() {
                       disabled={busy || !contributionConfirmed}
                       onClick={() => void enableContribution()}
                     >
-                      明確加入並開啟背景同步
+                      {loadState.data.contribution.state === "stopped"
+                        ? "重新同意並恢復原有 enrollment"
+                        : "明確加入並開啟背景同步"}
                     </button>
                   </div>
                 )}
@@ -1094,7 +1095,7 @@ export function App() {
             <fieldset className="reset-control">
               <legend>永久重設 Collector 來源資料</legend>
               <p>
-                會先硬停止雲端貢獻並清除 upload authority；只有停止成功才清除日彙總、完整掃描證據、角色狀態、同步鏡像／佇列與最後掃描時間。Deletion authority 保留；若要再次貢獻，須先刪除舊 enrollment，再重新 preview／enrollment。
+                會先在本機停止雲端貢獻、清空待送佇列並嘗試確認遠端 pause；只有停止成功才清除日彙總、完整掃描證據、角色狀態、同步鏡像／佇列與最後掃描時間。原有 enrollment 與 deletion authority 保留；若要恢復，仍須重新取得實際 payload preview 並明確同意。
               </p>
               <label className="check-row">
                 <input

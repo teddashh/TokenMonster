@@ -1,7 +1,13 @@
+import { builtinModules } from "node:module";
+
 import type { Plugin } from "vite";
 
+const nodeBuiltinSpecifiers = new Set(builtinModules);
+
 export const runtimeExternal = (source: string): boolean =>
-  source === "electron" || source.startsWith("node:");
+  source === "electron" ||
+  source.startsWith("node:") ||
+  nodeBuiltinSpecifiers.has(source);
 
 function normalizedSource(code: string): string {
   return code.replace(/\r\n?/gu, "\n");

@@ -6,7 +6,7 @@ import { type Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 
 import {
-  resolveTokenTrackerEntry,
+  resolveTokenTrackerExecutableFromManifest,
   type TokenTrackerExecutable,
   type TokenTrackerSpawn
 } from "@tokenmonster/token-tracker-runtime";
@@ -213,14 +213,20 @@ export function createUtilityProcessSpawn(
     if (command !== UTILITY_PROCESS_COMMAND) {
       throw new Error("Unexpected TokenTracker utility-process command.");
     }
-    const modulePath = arguments_[0];
-    if (modulePath === undefined) {
-      throw new Error("TokenTracker utility-process module path is missing.");
+    const [requireFlag, guardPath, modulePath, ...cliArguments] = arguments_;
+    if (
+      requireFlag !== "--require" ||
+      typeof guardPath !== "string" ||
+      guardPath.length === 0 ||
+      typeof modulePath !== "string" ||
+      modulePath.length === 0
+    ) {
+      throw new Error("TokenTracker utility-process guarded argv is invalid.");
     }
     // Fork the shim rather than the CLI bin: Electron utility processes never
     // drain their event loop, so run-to-completion commands would hang until
     // the runtime's timeout kills them. The shim exits when run() settles.
-    const args = [modulePath, ...arguments_.slice(1)];
+    const args = [guardPath, modulePath, ...cliArguments];
     const stdio: UtilityProcessStdio =
       options.stdio === "ignore"
         ? "ignore"
@@ -259,10 +265,10 @@ export async function resolveSidecarExecutable(): Promise<TokenTrackerExecutable
     : createRequire(
         pathToFileURL(join(app.getAppPath(), "package.json")).href
       ).resolve("tokentracker-cli/package.json");
-  const entry = await resolveTokenTrackerEntry(manifestPath);
+  const verified = await resolveTokenTrackerExecutableFromManifest(manifestPath);
   return Object.freeze({
     command: UTILITY_PROCESS_COMMAND,
-    argumentPrefix: Object.freeze([entry])
+    argumentPrefix: verified.argumentPrefix
   });
 }
 

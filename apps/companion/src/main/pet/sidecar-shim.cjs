@@ -10,7 +10,7 @@
 // returned promise settles. `serve` never settles, which matches the
 // long-lived main child the runtime expects to own and kill.
 //
-// argv: [electron, shim, <tracker-bin-path>, ...cli-args]
+// argv: [electron, shim, <network-guard-path>, <tracker-bin-path>, ...cli-args]
 "use strict";
 
 const { createRequire } = require("node:module");
@@ -38,7 +38,12 @@ function exitWhenFlushed(code) {
 
 async function main() {
   debug(`start argv=${JSON.stringify(process.argv.slice(2))}`);
-  const entry = process.argv[2];
+  const guardPath = process.argv[2];
+  if (typeof guardPath !== "string" || guardPath.length === 0) {
+    throw new Error("sidecar-shim: missing network guard path");
+  }
+  require(guardPath);
+  const entry = process.argv[3];
   if (typeof entry !== "string" || entry.length === 0) {
     throw new Error("sidecar-shim: missing tracker entry path");
   }
@@ -49,7 +54,7 @@ async function main() {
     throw new Error("sidecar-shim: tokentracker-cli did not export run()");
   }
   debug("cli resolved, invoking run()");
-  await run(process.argv.slice(3));
+  await run(process.argv.slice(4));
 }
 
 main().then(

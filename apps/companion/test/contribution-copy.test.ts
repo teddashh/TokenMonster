@@ -16,6 +16,7 @@ function status(
     enabled: state === "active",
     canEnable: state === "off" || state === "deletion-complete",
     canDelete: state === "active" || state === "stopped",
+    canRecover: state === "deletion-pending",
     outboxPending: 0,
     consentDocumentRevision: state === "active" ? "contribution-2026-07-15" : null,
     deletion: null

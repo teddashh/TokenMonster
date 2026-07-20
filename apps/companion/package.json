@@ -10,7 +10,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit && vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts && vite build --config vite.preload-index.config.ts && vite build --config vite.config.ts && node ../../scripts/verify-companion-bundles.mjs",
+    "build": "tsc -p tsconfig.json --noEmit && vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts && vite build --config vite.preload-index.config.ts && vite build --config vite.companion-preload.config.ts && vite build --config vite.config.ts && node ../../scripts/verify-companion-bundles.mjs",
     "dev": "vite",
     "forge:make": "electron-forge make",
     "forge:package": "electron-forge package",
@@ -18,7 +18,7 @@
     "make:signed": "node ../../scripts/package-companion.mjs make signed",
     "package:internal": "node ../../scripts/package-companion.mjs package internal",
     "start": "electron .",
-    "test": "vite build --config vite.preload.config.ts && vite build --config vite.preload-index.config.ts && node ../../scripts/verify-companion-bundles.mjs && vitest run --config vitest.config.ts",
+    "test": "vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts && vite build --config vite.preload-index.config.ts && vite build --config vite.companion-preload.config.ts && node ../../scripts/verify-companion-bundles.mjs && vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
@@ -27,6 +27,7 @@
     "@tokenmonster/collector-core": "0.1.0",
     "@tokenmonster/companion-gateway": "0.1.0",
     "@tokenmonster/companion-ui": "0.1.0",
+    "@tokenmonster/contribution-runtime": "0.1.0",
     "@tokenmonster/contracts": "0.1.0",
     "@tokenmonster/local-store": "0.1.0",
     "@tokenmonster/monster-engine": "0.1.0",

@@ -65,7 +65,12 @@ describe("Electron utility-process facade", () => {
     );
     const child = spawn(
       UTILITY_PROCESS_COMMAND,
-      ["/sidecar/bin/tracker.js", "--version"],
+      [
+        "--require",
+        "/app/dist/main/main/network-deny.cjs",
+        "/sidecar/bin/tracker.js",
+        "--version"
+      ],
       spawnOptions(["ignore", "pipe", "pipe"])
     );
     const events: string[] = [];
@@ -88,7 +93,11 @@ describe("Electron utility-process facade", () => {
     expect(child.pid).toBe(4321);
     expect(forkCall).toEqual({
       modulePath: "/app/dist/main/main/sidecar-shim.cjs",
-      args: ["/sidecar/bin/tracker.js", "--version"],
+      args: [
+        "/app/dist/main/main/network-deny.cjs",
+        "/sidecar/bin/tracker.js",
+        "--version"
+      ],
       options: {
         stdio: ["ignore", "pipe", "pipe"],
         env: { KEEP: "present" },
@@ -174,7 +183,12 @@ describe("Electron utility-process facade", () => {
     );
     const child = spawn(
       UTILITY_PROCESS_COMMAND,
-      ["/sidecar/bin/tracker.js", "sync"],
+      [
+        "--require",
+        "/app/dist/main/main/network-deny.cjs",
+        "/sidecar/bin/tracker.js",
+        "sync"
+      ],
       spawnOptions("ignore")
     );
     const events: string[] = [];

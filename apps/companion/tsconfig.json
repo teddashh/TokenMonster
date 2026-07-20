@@ -20,6 +20,7 @@
     "test/**/*.ts",
     "forge.config.mjs",
     "vite.config.ts",
+    "vite.companion-preload.config.ts",
     "vite.main.config.ts",
     "vite.preload-index.config.ts",
     "vite.preload.config.ts",
