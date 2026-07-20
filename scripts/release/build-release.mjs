@@ -18,6 +18,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   collectSidecarClosure,
   createReleaseShrinkwrap,
+  exactSidecarDependencyPins,
 } from "./sidecar-lock.mjs";
 import {
   PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY,
@@ -526,6 +527,15 @@ async function main() {
 
   await requireStagedAssetAuthority(stagingDir);
 
+  const rootLock = await readJson(join(SCRIPT_ROOT, "package-lock.json"));
+  // npm ignores a dependency package's shrinkwrap when installing the public
+  // tarball under npx/global/user prefixes. Promote every audited sidecar
+  // closure version to an exact direct pin so upstream semver ranges cannot
+  // resolve newer, unreviewed bytes before the post-install lock comparison.
+  const sidecarDependencyPins = exactSidecarDependencyPins(
+    rootLock,
+    sidecarPin,
+  );
   const registryDependencies = Object.fromEntries(registryVersions);
   const version = resolveCliReleaseVersion(cliManifest.version, options);
   const releaseManifest = {
@@ -551,7 +561,7 @@ async function main() {
       "@tokenmonster/token-tracker-runtime": cliManifest.version,
       "@tokenmonster/characters": cliManifest.version,
       "@tokenmonster/monster-engine": cliManifest.version,
-      "tokentracker-cli": sidecarPin,
+      ...sidecarDependencyPins,
       ...registryDependencies,
     },
     bundleDependencies: [
@@ -573,7 +583,6 @@ async function main() {
     join(stagingDir, "package.json"),
     `${JSON.stringify(releaseManifest, null, 2)}\n`,
   );
-  const rootLock = await readJson(join(SCRIPT_ROOT, "package-lock.json"));
   const shrinkwrap = createReleaseShrinkwrap({
     rootLock,
     releaseManifest,

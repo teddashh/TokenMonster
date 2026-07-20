@@ -2,6 +2,8 @@ const LOCKFILE_VERSION = 3;
 const SIDECAR_PACKAGE = "tokentracker-cli";
 const REGISTRY_PREFIX = "https://registry.npmjs.org/";
 const SHA512_INTEGRITY_PATTERN = /^sha512-[A-Za-z0-9+/]+={0,2}$/u;
+const EXACT_PACKAGE_VERSION_PATTERN =
+  /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
 
 function isPlainRecord(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -380,6 +382,28 @@ export function collectSidecarClosure(lock, sidecarPin, parentPath = "") {
     closure
       .sort((left, right) => compareText(left.path, right.path))
       .map((identity) => Object.freeze(identity)),
+  );
+}
+
+export function exactSidecarDependencyPins(lock, sidecarPin) {
+  const pins = new Map();
+  for (const identity of collectSidecarClosure(lock, sidecarPin)) {
+    if (!EXACT_PACKAGE_VERSION_PATTERN.test(identity.version)) {
+      throw new Error(
+        `Sidecar closure version for ${identity.name} is not an exact package version`,
+      );
+    }
+    if (pins.has(identity.name)) {
+      throw new Error(
+        `Sidecar closure contains more than one install path for ${identity.name}; exact direct pins cannot represent it`,
+      );
+    }
+    pins.set(identity.name, identity.version);
+  }
+  return Object.freeze(
+    Object.fromEntries(
+      [...pins].sort(([left], [right]) => compareText(left, right)),
+    ),
   );
 }
 

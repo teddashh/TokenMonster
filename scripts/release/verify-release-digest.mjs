@@ -27,6 +27,7 @@ import {
   ZSTD_NATIVE_BUNDLE_FILE_PATHS,
   ZSTD_NATIVE_PREBUILD_RELATIVE_PATHS,
 } from "./zstd-native-release-bundle.mjs";
+import { packageNameFromLockPath } from "./sidecar-lock.mjs";
 
 const MAX_CHECKSUM_BYTES = 4 * 1024;
 const MAX_TARBALL_BYTES = 128 * 1024 * 1024;
@@ -65,6 +66,7 @@ const ZSTD_POLICY_ENTRY =
   "package/node_modules/@tokenmonster/token-tracker-runtime/dist/zstd-native-policy.json";
 const ZSTD_VERIFIER_ENTRY =
   "package/node_modules/@tokenmonster/token-tracker-runtime/dist/zstd-native-verifier.js";
+const NPM_REGISTRY_PREFIX = "https://registry.npmjs.org/";
 const CHECKSUM_PATTERN =
   /^([0-9a-f]{64})  (tokenmonster-[0-9A-Za-z.-]+\.tgz)\n$/u;
 const VERIFIED_READ_FLAGS =
@@ -102,6 +104,54 @@ function exactJson(left, right) {
     );
   }
   return left === right;
+}
+
+function verifyExactRegistryDependencyPins(
+  releaseManifest,
+  shrinkwrapRoot,
+  shrinkwrapPackages,
+) {
+  const seenNames = new Map();
+  for (const [lockPath, rawEntry] of Object.entries(shrinkwrapPackages)) {
+    if (
+      lockPath === "" ||
+      !isPlainRecord(rawEntry) ||
+      typeof rawEntry.resolved !== "string" ||
+      !rawEntry.resolved.startsWith(NPM_REGISTRY_PREFIX)
+    ) {
+      continue;
+    }
+    let packageName;
+    try {
+      packageName = packageNameFromLockPath(lockPath);
+    } catch {
+      fail("release npm shrinkwrap contains an unsafe registry package path");
+    }
+    const identity = {
+      version: rawEntry.version,
+      resolved: rawEntry.resolved,
+      integrity: rawEntry.integrity,
+      dependencies: rawEntry.dependencies ?? null,
+      optionalDependencies: rawEntry.optionalDependencies ?? null,
+    };
+    const previousIdentity = seenNames.get(packageName);
+    if (
+      previousIdentity !== undefined &&
+      !exactJson(previousIdentity, identity)
+    ) {
+      fail(`release npm shrinkwrap has conflicting paths for ${packageName}`);
+    }
+    seenNames.set(packageName, identity);
+    if (
+      typeof rawEntry.version !== "string" ||
+      releaseManifest.dependencies[packageName] !== rawEntry.version ||
+      shrinkwrapRoot.dependencies[packageName] !== rawEntry.version
+    ) {
+      fail(
+        `release package does not direct-pin registry dependency ${packageName}`,
+      );
+    }
+  }
 }
 
 function samePlatformPath(left, right) {
@@ -631,6 +681,11 @@ function verifyReleaseZstdBundle(
   ) {
     fail("release npm shrinkwrap zstd entry differs from bundled provenance");
   }
+  verifyExactRegistryDependencyPins(
+    releaseManifest,
+    shrinkwrapRoot,
+    shrinkwrap.packages,
+  );
 }
 
 export async function verifyReleaseDigest(directory, options = {}) {
