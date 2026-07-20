@@ -21,10 +21,11 @@ counter.
 > cross-platform collection; TokenMonster consumes only its loopback aggregate
 > API. The target experience is one command, `npx tokenmonster`, with no
 > repository clone, separate Electron install, or manually started collector.
-> The sidecar source path now passes a real isolated-HOME Linux smoke from the
-> source tree; that is not clean installed-package evidence for the current
-> bytes. npm publication, Windows/macOS CI smoke, and legacy cutover remain
-> incomplete.
+> The exact local `0.1.0-rc.12` tarball now passes an empty-prefix install and
+> real isolated-HOME Linux installed smoke. A system trace contains loopback
+> sockets only and no external destination. This candidate is unpublished;
+> Windows/macOS smoke of the same tarball, npm publication, and legacy cutover
+> remain incomplete.
 > The current Tokscale/Electron collection path is a legacy source slice to be
 > removed; see [ADR 0005](docs/adr/0005-permanent-tokentracker-sidecar-adapter.md).
 
@@ -106,8 +107,8 @@ go directly from the device to the selected provider.
 
 | Area | Current source slice | Release status |
 | --- | --- | --- |
-| Local companion (sidecar path) | Lightweight localhost UI, four-choice onboarding inside the compact pet, real UTC today/7/28 totals, and a daily trend | Source CLI and source-tree isolated-HOME Linux smoke pass for this post-rc.11 worktree; installed-package smoke has not been refreshed for the current bytes, and registry publication plus native Windows smoke of a fresh candidate remain |
-| Collector | Exact-pinned `tokentracker-cli@0.80.0` child, local-only refresh, strict loopback adapter/gateway; the legacy slice still contains `tokscale@4.5.2` | The sidecar source slice and source-tree Linux smoke pass; a clean installed package, registry publication, Windows/macOS CI smoke, and cutover remain |
+| Local companion (sidecar path) | Lightweight localhost UI, four-choice onboarding inside the compact pet, real UTC today/7/28 totals, and a daily trend | The exact local rc.12 tarball passes clean Linux installed smoke and a loopback-only trace; registry publication and native Windows/macOS smoke of the same tarball remain |
+| Collector | Exact-pinned `tokentracker-cli@0.80.0` child, local-only refresh, strict loopback adapter/gateway; the legacy slice still contains `tokscale@4.5.2` | The rc.12 install verifies the exact 41-package sidecar closure and Linux zstd prebuild; registry publication, Windows/macOS CI smoke, and cutover remain |
 | Legacy Electron companion | Local SQLite, old 7/28-day trends, traits/fixed lines, share card, and export/reset | Migration-only; no longer the supported install or collection path, and removed or reduced to a thin shell after cutover |
 | Characters | Eleven switchable characters; local starter selection and monotonic unlocks, 20 themes plus pose art and 50 prerecorded voice refs for ten characters, and GLM letter mode | Fixed-pack consent/verification/repair/removal and letter fallback are complete; the user reports GLM approval is granted, while formal evidence transcription, a non-null authority, and optional art-pack publication remain pending and do not block the letter-mode application release |
 | BYOK | Companion main process calls OpenAI Responses directly with `store: false`, `background: false`, and no tools/files/conversation IDs | Implemented; a manual real-key network smoke on a safe release host remains |
@@ -116,7 +117,7 @@ go directly from the device to the selected provider.
 | Cloud data | Guarded D1 mutations, deletion, projection, retention, Durable Object rate limits/suppression | Implemented and locally tested; real D1 migrations, capacity, and failure rehearsals remain |
 | Anonymous compaction | Complete UTC-day `day-all-v1`, `k = 20` gate, mapping-free rollups, commit-time race guards | Implemented and locally tested; no staging/production E2E yet |
 | Scheduled maintenance | Deletion → compaction → retention → projection; retention preserves compaction-owned input to prevent partial-day loss | Implemented and locally tested; not yet verified against real Cron Triggers/D1 |
-| Installers/update feed | Internal unsigned Linux/macOS ASAR/ZIP can be produced and inspected; Windows release tooling strictly binds `RELEASES` to one full `.nupkg` and emits a deterministic `latest`/`next` promotion plan | Not a public installer; signing, notarization, DMG, Squirrel current-channel retrieval/credentialed deployment/public readback, and native install-update smoke remain STOP gates |
+| Installers/update feed | The local rc.12 unsigned Linux ZIP passes ASAR/fuse/maker/collector/sidecar verification; Windows release tooling strictly binds `RELEASES` to one full `.nupkg` and emits a deterministic `latest`/`next` promotion plan | Not a public installer; packaged boot fails closed under this workstation's Chromium sandbox policy, while signing, notarization, DMG, Squirrel current-channel retrieval/credentialed deployment/public readback, and native install-update smoke remain STOP gates |
 
 ## Accepted target architecture
 
@@ -312,7 +313,7 @@ whenever a required binding is missing.
 ### Internal companion package
 
 ```sh
-npm run make:companion:internal
+TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.12 npm run make:companion:internal
 npm run verify:companion-package
 ```
 

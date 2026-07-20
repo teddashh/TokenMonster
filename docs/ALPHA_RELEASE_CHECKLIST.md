@@ -10,7 +10,8 @@
 > compaction、ordered scheduled maintenance與Companion background sync均已有本機測試，
 > 但background packet capture／wake soak、signing/native smoke、Cloudflare account/D1/domain/secrets與remote rehearsal/staging
 > E2E、backup/restore/suppression replay、project license／法律owner決策及raster rights
-> 仍未完成；AI-Sister cloud asset runtime 也尚未實作或核准，目前只能使用
+> 仍未完成；AI-Sister fixed-pack consent／verification／cache runtime 已實作，但
+> release authority 仍為 `null`，沒有 rights-approved pack 可啟用，目前只能使用
 > code-native placeholders。只可進行本機測試或經核准的 fail-closed staging Web 預覽；
 > 不可 production deploy，也不可開始 30 人 External Alpha。
 
@@ -67,11 +68,12 @@
   AI-Sister asset GET，artifact 也不含舊 CDN origin／override marker／downloader
   capability signature或symbolic link。
 - [ ] Public asset runtime只能以release內嵌schema-v2 rights-approved manifest為唯一
-  authority。目前 gateway 只接受null origin、拒絕transport hook且沒有逐物件
-  downloader；SHA-256／bytes／MIME、content-addressed cache corruption與offline
-  fallback通過。未來網路 enablement 必須改為明確同意的
-  fixed pack，並證明 request set/order 不隨 character、unlock、theme、pose、trigger 或
-  usage 改變。Rights migration與 fixed-pack transport都未完成，因此public enablement為STOP。
+  authority。目前嵌入 authority／descriptor／allowlist 都是 `null`，因此 gateway
+  不會顯示啟用控制，也沒有逐物件 downloader。明確同意的 fixed-pack runtime 已涵蓋
+  SHA-256／bytes／MIME、content-addressed cache corruption、offline restart、repair 與
+  removal，且 request set/order 不隨 character、unlock、theme、pose、trigger 或 usage
+  改變。Rights evidence、非空 authority 與實際 pack 發布仍未完成，因此 public
+  enablement 為 STOP；不得把「runtime 已實作」誤寫成素材已獲准或已上線。
 - [ ] Public API tests驗證 fail-closed `503`、fixed contributor wording、decimal strings、
   ETag/304、narrow CORS、Problem Details 與 security headers。
 - [ ] Web tests驗證 API unavailable 時不 fake counter、download 不冒充可用、zh-TW

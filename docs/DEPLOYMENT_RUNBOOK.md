@@ -118,10 +118,29 @@ npm run verify:packaging-toolchain
 npm audit --audit-level=high
 npm ls --depth=0
 test -f apps/web/dist/client/index.html
-node scripts/release/build-release.mjs --skip-build
+candidate_dir="dist-release/rc.12"
+test ! -e "$candidate_dir"
+node scripts/release/build-release.mjs \
+  --version 0.1.0-rc.12 \
+  --out "$candidate_dir"
+node scripts/release/verify-release-digest.mjs \
+  "$candidate_dir" \
+  --expected-version 0.1.0-rc.12
 release_install_dir="$(mktemp -d)"
-npm install --prefix "$release_install_dir" dist-release/tokenmonster-0.1.0.tgz
+npm install --prefix "$release_install_dir" \
+  "$candidate_dir/tokenmonster-0.1.0-rc.12.tgz"
 node scripts/release/smoke-installed.mjs "$release_install_dir"
+```
+
+Linux 還必須對同一個 installed smoke 執行系統 network trace；不得只依賴應用層
+mock：
+
+```sh
+trace_dir="$(mktemp -d)"
+trace_path="$trace_dir/tokenmonster-installed-network.strace"
+strace -f -s 256 -e trace=network -o "$trace_path" \
+  node scripts/release/smoke-installed.mjs "$release_install_dir"
+node scripts/release/assert-loopback-network-trace.mjs "$trace_path"
 ```
 
 Public CLI assembler 必須從 repository `package-lock.json` 產生可發布的
@@ -133,7 +152,7 @@ integrity替換都必須 fail closed。
 Internal companion bundle review可另外執行：
 
 ```sh
-TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.8 npm run make:companion:internal
+TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.12 npm run make:companion:internal
 test -f release-evidence/companion-package.json
 ```
 

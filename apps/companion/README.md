@@ -78,8 +78,8 @@ The repository can now produce an internal, unsigned, self-contained ASAR/ZIP
 whose exact inventory, runtime imports, blocked assets/secrets, source-map
 absence, raw Electron fuse wire, native Tokscale package-lock identity,
 SHA-256/package-version/executable evidence, and final ZIP byte/mode inventory are
-verified. Set a unique strict candidate version (for example
-`TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.8`) and run
+verified. Set a unique strict candidate version (the current local example is
+`TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.12`) and run
 `npm run make:companion:internal` from the repository root; evidence is written
 to `release-evidence/companion-package.json`. The injected version is bound to
 the staged package, Electron application version, and Squirrel metadata; the
