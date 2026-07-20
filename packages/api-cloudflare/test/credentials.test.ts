@@ -99,10 +99,13 @@ describe("Cloudflare credential service", () => {
       })
     ).toBe(false);
     expect(tracked.verifyCalls()).toBe(2);
+    const differentPublicTokenId = `${
+      upload.stored.publicTokenId.startsWith("A") ? "B" : "A"
+    }${upload.stored.publicTokenId.slice(1)}`;
     expect(
       await service.verify(upload.bearerToken, {
         ...upload.stored,
-        publicTokenId: `A${upload.stored.publicTokenId.slice(1)}`
+        publicTokenId: differentPublicTokenId
       })
     ).toBe(false);
     expect(tracked.verifyCalls()).toBe(2);
