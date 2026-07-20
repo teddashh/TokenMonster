@@ -1,4 +1,5 @@
 import { spawn as nodeSpawn } from "node:child_process";
+import { unlinkSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 
 export type SquirrelEvent =
@@ -16,6 +17,7 @@ export interface SquirrelStartupDependencies {
   readonly quit: () => void;
   readonly environment?: Readonly<NodeJS.ProcessEnv>;
   readonly timeoutMs?: number;
+  readonly unlink?: (path: string) => void;
 }
 
 const FLAGS: ReadonlyArray<readonly [string, SquirrelEvent]> = [
@@ -46,6 +48,8 @@ const SAFE_ENVIRONMENT_KEYS = Object.freeze([
   "LC_CTYPE"
 ]);
 const MAX_ENVIRONMENT_VALUE_CHARACTERS = 32_768;
+const SQUIRREL_APP_DIRECTORY_PATTERN =
+  /^app-[0-9A-Za-z][0-9A-Za-z.-]{0,127}$/u;
 
 function readOwnEnvironmentString(
   source: Readonly<NodeJS.ProcessEnv>,
@@ -96,6 +100,31 @@ export function handleSquirrelStartup(
   if (event === "obsolete") {
     deps.quit();
     return true;
+  }
+
+  if (event === "uninstall") {
+    const applicationDirectory = dirname(deps.execPath);
+    if (
+      SQUIRREL_APP_DIRECTORY_PATTERN.test(basename(applicationDirectory))
+    ) {
+      // Squirrel 2.0.1 runs FullUninstall from the root Update.exe while its
+      // recursive deletion also tries to delete that executable. A failed
+      // worker can otherwise leave this later root execution stub behind.
+      // The app cleanup hook runs from app-* before that recursion, so remove
+      // only our same-named root stub here; Squirrel still owns every other
+      // application, package, registry, and shortcut cleanup step.
+      const executionStub = resolve(
+        applicationDirectory,
+        "..",
+        basename(deps.execPath)
+      );
+      try {
+        (deps.unlink ?? unlinkSync)(executionStub);
+      } catch {
+        // Squirrel will still perform its bounded recursive cleanup. The
+        // installer smoke fails closed if the execution stub remains.
+      }
+    }
   }
 
   const action = event === "uninstall" ? "removeShortcut" : "createShortcut";
