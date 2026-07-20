@@ -384,10 +384,13 @@ jobs:
             }
           }
 
+          # NuGet 4.9 treats the literal value "clear" as a relative fallback
+          # path here. Use an empty global property plus both implicit-folder
+          # disable switches, then verify the generated assets fail-closed.
           $env:NUGET_RESTORE_MSBUILD_ARGS = @(
             "/p:DisableImplicitLibraryPacksFolder=true"
             "/p:DisableImplicitNuGetFallbackFolder=true"
-            "/p:RestoreFallbackFolders=clear"
+            "/p:RestoreFallbackFolders="
             "/p:RestoreAdditionalProjectSources="
             "/p:RestoreAdditionalProjectFallbackFolders="
             "/p:AutomaticallyUseReferenceAssemblyPackages=false"
@@ -448,7 +451,7 @@ jobs:
               "/p:NuGetPackageRoot=$nugetPackageRoot"
               "/p:DisableImplicitLibraryPacksFolder=true"
               "/p:DisableImplicitNuGetFallbackFolder=true"
-              "/p:RestoreFallbackFolders=clear"
+              "/p:RestoreFallbackFolders="
               "/p:RestoreAdditionalProjectSources="
               "/p:RestoreAdditionalProjectFallbackFolders="
               "/p:AutomaticallyUseReferenceAssemblyPackages=false"
