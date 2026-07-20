@@ -496,6 +496,8 @@ jobs:
                 "$_`tsha256:$inputHash`tbytes:$((Get-Item -LiteralPath $inputPath).Length)"
               }
             )
+            Write-Output "Reviewed pre-merge input inventory for $sourceName (fixed public filenames only):"
+            $mergeInputInventory | ForEach-Object { Write-Output $_ }
             $mergeInputInventories += ,$mergeInputInventory
 
             $mergedTemporaryOutput = Join-Path $outputDirectory "Update.exe.tmp"
@@ -550,7 +552,10 @@ jobs:
           if (Compare-Object $dependencyInventories[0] $dependencyInventories[1] -CaseSensitive) {
             throw "The two isolated restores resolved different dependency content hashes."
           }
-          if (Compare-Object $mergeInputInventories[0] $mergeInputInventories[1] -CaseSensitive) {
+          $mergeInputDifferences = @(
+            Compare-Object $mergeInputInventories[0] $mergeInputInventories[1] -CaseSensitive
+          )
+          if ($mergeInputDifferences.Count -ne 0) {
             throw "The two isolated compilers produced different deterministic merge inputs."
           }
           $hashes = @(
