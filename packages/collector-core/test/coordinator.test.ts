@@ -36,6 +36,9 @@ import {
 const NOW = "2026-07-15T18:00:00.000Z";
 const BUCKET_START = "2026-07-15T00:00:00.000Z";
 
+type LegacyQueuedCloudSnapshot = Omit<QueuedCloudSnapshot, "snapshot"> &
+  Readonly<{ snapshot: IngestSnapshotV1 }>;
+
 const TOKENS: TokenCountsV1 = Object.freeze({
   input: "120",
   output: "50",
@@ -125,7 +128,7 @@ class FakeStore implements LocalCollectorStorePort {
   };
   readonly daily = new Map<string, StoredDailyAggregate>();
   readonly mirror = new Map<string, StoredCloudMirrorRow>();
-  readonly outbox = new Map<string, QueuedCloudSnapshot>();
+  readonly outbox = new Map<string, LegacyQueuedCloudSnapshot>();
   forceCorrectionTruncated = false;
   mirrorReads = 0;
 

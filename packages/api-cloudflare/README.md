@@ -5,13 +5,19 @@ Cloudflare Workers-compatible Web Crypto adapters for the pure
 storage, Hono routes, Node runtime imports, or provider credentials.
 
 The credential service emits V1 upload, deletion, and deletion-status bearer
-tokens. A stored credential contains only its scope, random public lookup ID,
-scope-separated HMAC-SHA-256 verifier, and verifier key ID; raw bearer secrets and server keys
-are never part of the storage artifact. New upload/deletion credentials use the
-current pepper while verification accepts the configured current and previous
-pepper during a reviewed rotation window. Deletion-status tokens are
+tokens and accepts canonical client-generated V2 upload, deletion, and
+enrollment-recovery credentials. A stored credential contains only its scope,
+random public lookup ID, scope-and-version-separated HMAC-SHA-256 verifier, and
+verifier key ID; raw bearer secrets and server keys are never part of the
+storage artifact. New or presented upload/deletion credentials use the current
+pepper while verification accepts the configured current and previous pepper
+during a reviewed rotation window. Deletion-status tokens are
 deterministically derived from a separate key and deletion job ID so an
 idempotent replay produces the same one-time response.
+
+V2 input rejects noncanonical base64url aliases before verifier derivation.
+The `tm_r2_` scope can recover only an exact enrollment record and is never
+accepted as deletion-status authority.
 
 The transient issued-credential object exposes its bearer only through the
 typed property used by the domain service. The property is non-enumerable and

@@ -22,8 +22,14 @@ function rebuilder(db: SqliteD1Database, suffix = "0000000000000001") {
   });
 }
 
-function seedCurrentUsage(db: SqliteD1Database, input = 1_500): void {
+function seedCurrentUsage(
+  db: SqliteD1Database,
+  input = 1_500,
+  sidecar = false
+): void {
   const digest = new Uint8Array(32).fill(7);
+  const collectorKind = sidecar ? "tokentracker-sidecar" : "tokscale";
+  const sourceVersion = sidecar ? "0.80.0" : "4.5.2";
   db.database
     .prepare(
       `INSERT INTO installations (
@@ -55,10 +61,15 @@ function seedCurrentUsage(db: SqliteD1Database, input = 1_500): void {
       `INSERT INTO collector_window_bindings (
         installation_id, bucket_start, collector_kind, adapter_version,
         source_version, created_at, expires_at
-      ) VALUES (?, '2026-07-15T00:00:00.000Z', 'tokscale', '0.1.0',
-        '4.5.2', ?, '2026-08-14T00:00:00.000Z')`
+      ) VALUES (?, '2026-07-15T00:00:00.000Z', ?, '0.1.0',
+        ?, ?, '2026-08-14T00:00:00.000Z')`
     )
-    .run("ins_AAAAAAAAAAAAAAAAAAAAAA", NOW);
+    .run(
+      "ins_AAAAAAAAAAAAAAAAAAAAAA",
+      collectorKind,
+      sourceVersion,
+      NOW
+    );
   db.database
     .prepare(
       `INSERT INTO usage_daily_current (
@@ -68,13 +79,15 @@ function seedCurrentUsage(db: SqliteD1Database, input = 1_500): void {
         total_tokens, collector_kind, adapter_version, source_version,
         row_hash, quarantine_status, created_at, updated_at, expires_at
       ) VALUES (?, '2026-07-15T00:00:00.000Z', 'openai', 'gpt-5', 'codex-cli',
-        'exact', 1, ?, 0, 0, 0, 0, 0, ?, 'tokscale', '0.1.0', '4.5.2',
+        'exact', 1, ?, 0, 0, 0, 0, 0, ?, ?, '0.1.0', ?,
         ?, 'accepted', ?, ?, '2026-08-14T00:00:00.000Z')`
     )
     .run(
       "ins_AAAAAAAAAAAAAAAAAAAAAA",
       input,
       input,
+      collectorKind,
+      sourceVersion,
       new Uint8Array(32).fill(9),
       NOW,
       NOW
@@ -128,6 +141,22 @@ describe("authoritative public projection rebuild", () => {
     expect(
       db.database.prepare("SELECT COUNT(*) AS count FROM aggregate_dirty").get()
     ).toEqual({ count: 0 });
+  });
+
+  it("projects accepted V2 permanent-sidecar rows without collector relabeling", async () => {
+    const db = database();
+    seedCurrentUsage(db, 275, true);
+
+    await expect(rebuilder(db)()).resolves.toMatchObject({
+      allTimeTokens: "275",
+      todayUtcTokens: "275",
+      contributors: "1"
+    });
+    expect(
+      db.database.prepare(
+        "SELECT collector_kind AS kind FROM usage_daily_current"
+      ).get()
+    ).toEqual({ kind: "tokentracker-sidecar" });
   });
 
   it("includes writes serialized immediately before its atomic batch", async () => {

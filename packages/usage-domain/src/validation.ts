@@ -1,4 +1,7 @@
-import { IngestSnapshotV1Schema, type IngestSnapshotV1 } from "@tokenmonster/contracts";
+import {
+  SupportedIngestSnapshotSchema,
+  type SupportedIngestSnapshot
+} from "@tokenmonster/contracts";
 import { z } from "zod";
 
 import { UsageDomainError } from "./errors.js";
@@ -50,12 +53,14 @@ export function parseAuthenticatedEnrollment(
   return parsed.data;
 }
 
-export function parseStrictIngestSnapshot(input: unknown): IngestSnapshotV1 {
-  const parsed = IngestSnapshotV1Schema.safeParse(input);
+export function parseStrictIngestSnapshot(
+  input: unknown
+): SupportedIngestSnapshot {
+  const parsed = SupportedIngestSnapshotSchema.safeParse(input);
   if (!parsed.success) {
     throw new UsageDomainError(
       "SCHEMA_INVALID",
-      "IngestSnapshotV1 failed strict validation."
+      "The ingest snapshot failed strict supported-version validation."
     );
   }
   return parsed.data;

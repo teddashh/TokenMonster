@@ -90,6 +90,7 @@ class FakeDurableNamespace {
 const ROUTE_PREFIX: Readonly<Record<RateLimitRoute, string>> = Object.freeze({
   enrollment: "rl_e1_",
   ingest: "rl_i1_",
+  lifecycle: "rl_i1_",
   delete: "rl_d1_"
 });
 
@@ -137,19 +138,25 @@ describe("Cloudflare durable rate-limit port", () => {
     const { rateLimit } = runtime;
     const base = "2026-07-15T18:00:00.000Z";
 
-    for (const route of ["enrollment", "ingest", "delete"] as const) {
+    for (const route of [
+      "enrollment",
+      "ingest",
+      "lifecycle",
+      "delete"
+    ] as const) {
       const policy = CLOUDFLARE_RATE_LIMIT_POLICIES[route];
       for (let consumed = 0; consumed < policy.limit; consumed += 1) {
         await expect(rateLimit.consume(request(route, base))).resolves.toEqual({
           allowed: true
         });
       }
-      const afterOneHundredSeconds = instant(base, 100_000);
+      const elapsedSeconds = Math.min(100, policy.windowSeconds - 1);
+      const withinWindow = instant(base, elapsedSeconds * 1_000);
       await expect(
-        rateLimit.consume(request(route, afterOneHundredSeconds))
+        rateLimit.consume(request(route, withinWindow))
       ).resolves.toEqual({
         allowed: false,
-        retryAfterSeconds: policy.windowSeconds - 100
+        retryAfterSeconds: policy.windowSeconds - elapsedSeconds
       });
       await expect(
         rateLimit.consume(request(route, instant(base, policy.windowSeconds * 1_000)))

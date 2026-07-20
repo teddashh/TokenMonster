@@ -82,6 +82,11 @@ describe("Cloudflare contribution policy", () => {
         kind: "tokentracker-bridge",
         adapterVersion: "0.1.0",
         sourceVersion: "0.79.8"
+      },
+      {
+        kind: "tokentracker-sidecar",
+        adapterVersion: "0.1.0",
+        sourceVersion: "0.80.0"
       }
     ]
   } as const;
@@ -93,10 +98,23 @@ describe("Cloudflare contribution policy", () => {
       "contribution-2026-07-15"
     );
     expect(policy.isCollectorSupported(config.supportedCollectors[0])).toBe(true);
+    expect(policy.isCollectorSupported(config.supportedCollectors[2])).toBe(true);
     expect(
       policy.isCollectorSupported({
         ...config.supportedCollectors[0],
         sourceVersion: "4.5.3"
+      })
+    ).toBe(false);
+    expect(
+      policy.isCollectorSupported({
+        ...config.supportedCollectors[2],
+        sourceVersion: "0.80.1"
+      })
+    ).toBe(false);
+    expect(
+      policy.isCollectorSupported({
+        ...config.supportedCollectors[2],
+        adapterVersion: "0.1.1"
       })
     ).toBe(false);
   });
@@ -128,6 +146,30 @@ describe("Cloudflare contribution policy", () => {
         ]
       })
     ).toThrowError(expect.objectContaining({ code: "CONFIG_INVALID" }));
+    expect(() =>
+      createCloudflareContributionPolicy({
+        ...config,
+        supportedCollectors: [
+          {
+            kind: "tokentracker-cli",
+            adapterVersion: "0.1.0",
+            sourceVersion: "0.80.0"
+          }
+        ]
+      })
+    ).toThrowError(expect.objectContaining({ code: "CONFIG_INVALID" }));
+    expect(() =>
+      createCloudflareContributionPolicy({
+        ...config,
+        supportedCollectors: [
+          {
+            kind: "tokentracker-sidecar",
+            adapterVersion: "latest",
+            sourceVersion: "0.80.0"
+          }
+        ]
+      })
+    ).toThrowError(expect.objectContaining({ code: "CONFIG_INVALID" }));
   });
 });
 
@@ -149,6 +191,20 @@ describe("non-reversible Cloudflare rate-limit keys", () => {
     expect(`${enrollmentKey}${ingestKey}${deletionKey}`).not.toContain(edge);
     expect(`${enrollmentKey}${ingestKey}${deletionKey}`).not.toContain(upload);
     expect(`${enrollmentKey}${ingestKey}${deletionKey}`).not.toContain(deletion);
+  });
+
+  it("accepts canonical V2 role credentials without changing rate-key classes", async () => {
+    const deriver = await createNonReversibleRateLimitKeyDeriver(rateConfig());
+    const upload = `tm_u2_${"u".repeat(24)}.${"U".repeat(43)}`;
+    const deletion = `tm_d2_${"d".repeat(24)}.${"D".repeat(42)}E`;
+
+    expect(await deriver.deriveIngestTokenKey(upload)).toMatch(/^rl_i1_/u);
+    expect(await deriver.deriveDeletionTokenKey(deletion)).toMatch(/^rl_d1_/u);
+    await expect(
+      deriver.deriveIngestTokenKey(
+        `tm_u2_${"u".repeat(24)}.${"A".repeat(42)}B`
+      )
+    ).rejects.toMatchObject({ code: "INPUT_INVALID" });
   });
 
   it("uses independent HMAC purpose keys", async () => {

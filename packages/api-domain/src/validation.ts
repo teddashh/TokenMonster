@@ -1,7 +1,11 @@
 import {
   EnrollmentRequestV1Schema,
-  IngestSnapshotV1Schema,
-  type IngestSnapshotV1
+  EnrollmentRequestV2Schema,
+  ResumeRequestV1Schema,
+  SupportedIngestSnapshotSchema,
+  type ResumeRequestV1,
+  type EnrollmentRequestV2,
+  type SupportedIngestSnapshot
 } from "@tokenmonster/contracts";
 
 import { ApiDomainError } from "./errors.js";
@@ -31,10 +35,13 @@ const HMAC_HEX_PATTERN = /^[a-f0-9]{64}$/;
 const KEY_ID_PATTERN = /^[A-Za-z0-9._-]{1,32}$/;
 const MAX_BEARER_LENGTH = 512;
 const MAX_CLOCK_SKEW_MS = 5 * 60_000;
+const MAX_RECOVERABLE_ENROLLMENT_ACKNOWLEDGEMENT_AGE_MS = 10 * 60_000;
 const BEARER_PATTERN_BY_SCOPE: Readonly<Record<CredentialScope, RegExp>> = {
   upload: /^tm_u1_([A-Za-z0-9_-]{16,32})\.[A-Za-z0-9_-]{43}$/,
   deletion: /^tm_d1_([A-Za-z0-9_-]{16,32})\.[A-Za-z0-9_-]{43}$/,
-  "deletion-status": /^tm_s1_([A-Za-z0-9_-]{16,32})\.[A-Za-z0-9_-]{43}$/
+  "deletion-status": /^tm_s1_([A-Za-z0-9_-]{16,32})\.[A-Za-z0-9_-]{43}$/,
+  "enrollment-recovery":
+    /^tm_r2_([A-Za-z0-9_-]{24})\.[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -52,8 +59,27 @@ export function parseEnrollmentBody(input: unknown): ParsedEnrollmentConsent {
   return parsed.data;
 }
 
-export function parseIngestSnapshot(input: unknown): IngestSnapshotV1 {
-  const parsed = IngestSnapshotV1Schema.safeParse(input);
+export function parseRecoverableEnrollmentBody(
+  input: unknown
+): EnrollmentRequestV2 {
+  if (isRecord(input) && isRecord(input["consent"])) {
+    if (input["consent"]["granted"] === false) {
+      throw new ApiDomainError("CONSENT_NOT_GRANTED");
+    }
+  }
+  const parsed = EnrollmentRequestV2Schema.safeParse(input);
+  if (!parsed.success) throw new ApiDomainError("SCHEMA_INVALID");
+  return parsed.data;
+}
+
+export function parseIngestSnapshot(input: unknown): SupportedIngestSnapshot {
+  const parsed = SupportedIngestSnapshotSchema.safeParse(input);
+  if (!parsed.success) throw new ApiDomainError("SCHEMA_INVALID");
+  return parsed.data;
+}
+
+export function parseResumeBody(input: unknown): ResumeRequestV1 {
+  const parsed = ResumeRequestV1Schema.safeParse(input);
   if (!parsed.success) throw new ApiDomainError("SCHEMA_INVALID");
   return parsed.data;
 }
@@ -77,6 +103,19 @@ export function assertAcknowledgementTime(
 ): void {
   if (Date.parse(acknowledgedAt) > Date.parse(now) + MAX_CLOCK_SKEW_MS) {
     throw new ApiDomainError("ACKNOWLEDGEMENT_IN_FUTURE");
+  }
+}
+
+export function assertFreshRecoverableEnrollmentAcknowledgement(
+  acknowledgedAt: string,
+  now: string
+): void {
+  assertAcknowledgementTime(acknowledgedAt, now);
+  if (
+    Date.parse(acknowledgedAt) <=
+    Date.parse(now) - MAX_RECOVERABLE_ENROLLMENT_ACKNOWLEDGEMENT_AGE_MS
+  ) {
+    throw new ApiDomainError("ACKNOWLEDGEMENT_EXPIRED");
   }
 }
 
@@ -250,7 +289,7 @@ export function addUtcDays(timestamp: string, days: number): string {
 }
 
 export function assertBucketFreshness(
-  snapshot: IngestSnapshotV1,
+  snapshot: SupportedIngestSnapshot,
   receivedAt: string
 ): void {
   const receivedAtMs = Date.parse(receivedAt);

@@ -1,16 +1,20 @@
 import type {
-  CollectorIdentityV1,
-  CollectorKindV1,
   DailyAggregateBucketV1,
-  IngestSnapshotV1,
+  SupportedCollectorIdentity,
+  SupportedCollectorKind,
+  SupportedIngestSnapshot,
   TokenCountsV1,
   ValueQualityV1
 } from "@tokenmonster/contracts";
 import type { CanonicalHasher } from "@tokenmonster/usage-domain";
 
-export type CredentialScope = "upload" | "deletion" | "deletion-status";
+export type CredentialScope =
+  | "upload"
+  | "deletion"
+  | "deletion-status"
+  | "enrollment-recovery";
 export type InstallationStatus = "active" | "paused" | "deleting" | "deleted";
-export type RateLimitRoute = "enrollment" | "ingest" | "delete";
+export type RateLimitRoute = "enrollment" | "ingest" | "lifecycle" | "delete";
 export type OpaqueIdKind = "installation" | "consent-event" | "deletion-job";
 
 /** A base64url or hex encoding of exactly one HMAC-SHA-256 digest. */
@@ -37,6 +41,15 @@ export interface PresentedCredential {
 export interface CredentialService {
   issue(scope: "upload" | "deletion"): Promise<IssuedCredential>;
   /**
+   * Converts one canonical client-generated V2 bearer into verifier material.
+   * The returned artifact must cryptographically bind the credential version
+   * and scope. The raw bearer must remain transient and non-enumerable.
+   */
+  acceptPresentedV2(
+    scope: "upload" | "deletion" | "enrollment-recovery",
+    bearerToken: string
+  ): Promise<StoredCredential>;
+  /**
    * Deterministically issues the one scoped status credential for a deletion
    * job. Repeating the same jobId must return byte-identical bearer and stored
    * HMAC artifacts without persisting the raw bearer.
@@ -62,7 +75,7 @@ export interface OpaqueIdGenerator {
 
 export interface ContributionPolicy {
   readonly currentConsentDocumentRevision: string;
-  isCollectorSupported(collector: CollectorIdentityV1): boolean;
+  isCollectorSupported(collector: SupportedCollectorIdentity): boolean;
 }
 
 export interface RateLimitRequest {
@@ -154,6 +167,52 @@ export interface EnrollmentDependencies {
   readonly storage: EnrollmentStoragePort;
 }
 
+export interface RecoverableEnrollmentRecord {
+  readonly installation: InstallationRecord;
+  readonly consentReceipt: ConsentReceiptRecord;
+  readonly recoveryCredential: StoredCredential;
+}
+
+export interface RecoverableEnrollmentStoragePort {
+  findRecoverableEnrollment(
+    recoveryPublicTokenId: string
+  ): Promise<RecoverableEnrollmentRecord | null>;
+  createRecoverableEnrollmentAtomically(input: {
+    readonly installation: InstallationRecord;
+    readonly consentReceipt: ConsentReceiptRecord;
+    readonly recoveryCredential: StoredCredential;
+  }): Promise<void>;
+}
+
+export interface RecoverableEnrollmentCommand {
+  readonly body: unknown;
+  /** Supplied by the edge adapter after non-reversible prefix hashing. */
+  readonly rateLimitKey: string;
+}
+
+export interface RecoverableEnrollmentResult {
+  readonly contractVersion: 2;
+  readonly status: "active";
+  readonly consentReceipt: {
+    readonly receiptId: string;
+    readonly purpose: "contribution";
+    readonly documentRevision: string;
+    readonly granted: true;
+    readonly acknowledgedAt: string;
+    readonly recordedAt: string;
+  };
+  readonly acceptedSnapshotSchemaVersions: readonly ["1", "2"];
+}
+
+export interface RecoverableEnrollmentDependencies {
+  readonly clock: Clock;
+  readonly ids: OpaqueIdGenerator;
+  readonly credentials: CredentialService;
+  readonly policy: ContributionPolicy;
+  readonly rateLimit: RateLimitPort;
+  readonly storage: RecoverableEnrollmentStoragePort;
+}
+
 export interface IngestBatchSummary {
   readonly appliedBuckets: number;
   readonly staleBuckets: number;
@@ -172,7 +231,7 @@ export interface IngestBatchReceiptRecord {
 export interface AuthorityBindingRecord {
   readonly installationId: string;
   readonly bucketStart: string;
-  readonly collectorKind: CollectorKindV1;
+  readonly collectorKind: SupportedCollectorKind;
   readonly adapterVersion: string;
   readonly sourceVersion: string;
   readonly createdAt: string;
@@ -188,7 +247,7 @@ export interface CurrentUsageRowRecord {
   readonly valueQuality: ValueQualityV1;
   readonly revision: number;
   readonly tokens: TokenCountsV1;
-  readonly collector: CollectorIdentityV1;
+  readonly collector: SupportedCollectorIdentity;
   readonly rowHash: string;
   readonly updatedAt: string;
 }
@@ -245,6 +304,83 @@ export interface IngestDependencies {
   readonly rateLimit: RateLimitPort;
   readonly storage: IngestStoragePort;
   readonly hasher?: CanonicalHasher;
+}
+
+/**
+ * Pause and resume authenticate with the upload credential, then repeat that
+ * verification inside the same optimistic transaction as the state change.
+ */
+export interface LifecycleTransactionPort {
+  findCredentialCandidate(
+    scope: "upload",
+    publicTokenId: string
+  ): Promise<CredentialCandidate | null>;
+  getInstallation(): Promise<InstallationRecord | null>;
+  getLatestGrantedConsentReceipt(
+    documentRevision: string
+  ): Promise<ConsentReceiptRecord | null>;
+  pause(at: string): Promise<void>;
+  resume(input: {
+    readonly consentReceipt: ConsentReceiptRecord;
+    readonly at: string;
+  }): Promise<void>;
+}
+
+export interface LifecycleStoragePort extends CredentialLookupPort {
+  withLifecycleTransaction<T>(
+    installationId: string,
+    operation: (transaction: LifecycleTransactionPort) => Promise<T>
+  ): Promise<T>;
+}
+
+export interface PauseCommand {
+  readonly bearerToken: string;
+  /** Non-reversible upload-token rate key; never the bearer credential. */
+  readonly rateLimitKey: string;
+}
+
+export interface PauseResult {
+  readonly contractVersion: 1;
+  readonly status: "paused";
+  readonly pausedAt: string;
+  readonly futureUploadsBlocked: true;
+  readonly identifiableCurrentDataRetained: true;
+  readonly anonymousHistoricalTotalsRetained: true;
+}
+
+export interface ResumeCommand {
+  readonly bearerToken: string;
+  readonly body: unknown;
+  /** Non-reversible upload-token rate key; never the bearer credential. */
+  readonly rateLimitKey: string;
+}
+
+export interface ResumeResult {
+  readonly contractVersion: 1;
+  readonly status: "active";
+  readonly resumedAt: string;
+  readonly consentReceipt: {
+    readonly receiptId: string;
+    readonly purpose: "contribution";
+    readonly documentRevision: string;
+    readonly granted: true;
+    readonly acknowledgedAt: string;
+    readonly recordedAt: string;
+  };
+}
+
+interface LifecycleBaseDependencies {
+  readonly clock: Clock;
+  readonly credentials: CredentialService;
+  readonly rateLimit: RateLimitPort;
+  readonly storage: LifecycleStoragePort;
+}
+
+export type PauseDependencies = LifecycleBaseDependencies;
+
+export interface ResumeDependencies extends LifecycleBaseDependencies {
+  readonly ids: OpaqueIdGenerator;
+  readonly policy: ContributionPolicy;
 }
 
 export type DeletionJobState = "queued" | "running" | "complete" | "failed";
@@ -410,9 +546,12 @@ export interface SuppressionReplayResult {
 
 export interface SuppressionReplayDependencies {
   readonly clock: Clock;
-  readonly credentials: CredentialService;
-  readonly storage: DeletionStoragePort;
-  readonly suppressionLedger: SuppressionLedgerPort;
+  readonly credentials: Pick<CredentialService, "deriveSuppressionMarker">;
+  readonly storage: Pick<
+    DeletionStoragePort,
+    "listRestoredInstallationIds" | "purgeRestoredInstallation"
+  >;
+  readonly suppressionLedger: Pick<SuppressionLedgerPort, "listActive">;
 }
 
 export type ParsedEnrollmentConsent = {
@@ -425,4 +564,4 @@ export type ParsedEnrollmentConsent = {
   };
 };
 
-export type ValidatedIngestSnapshot = IngestSnapshotV1;
+export type ValidatedIngestSnapshot = SupportedIngestSnapshot;

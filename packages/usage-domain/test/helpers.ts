@@ -1,4 +1,7 @@
-import type { CollectorKindV1, ProviderKindV1 } from "@tokenmonster/contracts";
+import type {
+  ProviderKindV1,
+  SupportedCollectorKind
+} from "@tokenmonster/contracts";
 
 export function testUuid(index: number): string {
   return `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
@@ -53,7 +56,7 @@ export function testBucket(options: TestBucketOptions = {}) {
 
 export interface TestSnapshotOptions {
   readonly batchIndex?: number;
-  readonly kind?: CollectorKindV1;
+  readonly kind?: SupportedCollectorKind;
   readonly generatedAt?: string;
   readonly buckets?: readonly ReturnType<typeof testBucket>[];
 }
@@ -61,13 +64,18 @@ export interface TestSnapshotOptions {
 export function testSnapshot(options: TestSnapshotOptions = {}) {
   const kind = options.kind ?? "tokscale";
   return {
-    schemaVersion: "1",
+    schemaVersion: kind === "tokentracker-sidecar" ? "2" : "1",
     batchId: testUuid(options.batchIndex ?? 1),
     generatedAt: options.generatedAt ?? "2026-07-15T12:00:00.000Z",
     collector: {
       kind,
       adapterVersion: "0.1.0",
-      sourceVersion: kind === "tokscale" ? "4.5.2" : "0.79.8"
+      sourceVersion:
+        kind === "tokscale"
+          ? "4.5.2"
+          : kind === "tokentracker-sidecar"
+            ? "0.80.0"
+            : "0.79.8"
     },
     buckets: options.buckets ?? [testBucket()]
   };

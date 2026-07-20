@@ -1,8 +1,8 @@
 import type {
-  CollectorIdentityV1,
-  CollectorKindV1,
   DailyAggregateBucketV1,
   ProviderKindV1,
+  SupportedCollectorIdentity,
+  SupportedCollectorKind,
   TokenCountsV1,
   ValueQualityV1
 } from "@tokenmonster/contracts";
@@ -27,7 +27,7 @@ export interface CanonicalUsageRow {
   readonly valueQuality: ValueQualityV1;
   readonly revision: number;
   readonly tokens: TokenCountsV1;
-  readonly collector: CollectorIdentityV1;
+  readonly collector: SupportedCollectorIdentity;
   readonly rowHash: string;
 }
 
@@ -35,7 +35,7 @@ export interface AuthorityBinding {
   readonly key: CanonicalAuthorityKey;
   readonly enrollmentId: EnrollmentId;
   readonly bucketStart: string;
-  readonly collectorKind: CollectorKindV1;
+  readonly collectorKind: SupportedCollectorKind;
   readonly adapterVersion: string;
   readonly sourceVersion: string;
 }

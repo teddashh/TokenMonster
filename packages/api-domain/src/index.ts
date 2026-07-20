@@ -4,7 +4,7 @@ export {
   replayDeletionSuppressions,
   requestContributorDeletion
 } from "./deletion.js";
-export { enrollContributor } from "./enrollment.js";
+export { enrollContributor, enrollContributorRecoverably } from "./enrollment.js";
 export {
   ApiDomainError,
   isApiDomainError,
@@ -12,6 +12,7 @@ export {
   type ApiProblemDetails
 } from "./errors.js";
 export { ingestSnapshot } from "./ingest.js";
+export { pauseContribution, resumeContribution } from "./lifecycle.js";
 export type {
   AuthorityBindingRecord,
   Clock,
@@ -54,13 +55,26 @@ export type {
   InstallationRecord,
   InstallationStatus,
   IssuedCredential,
+  LifecycleStoragePort,
+  LifecycleTransactionPort,
   OpaqueIdGenerator,
   OpaqueIdKind,
   PresentedCredential,
+  PauseCommand,
+  PauseDependencies,
+  PauseResult,
   RateLimitDecision,
   RateLimitPort,
   RateLimitRequest,
   RateLimitRoute,
+  RecoverableEnrollmentCommand,
+  RecoverableEnrollmentDependencies,
+  RecoverableEnrollmentRecord,
+  RecoverableEnrollmentResult,
+  RecoverableEnrollmentStoragePort,
+  ResumeCommand,
+  ResumeDependencies,
+  ResumeResult,
   StoredCredential,
   SuppressionLedgerEntry,
   SuppressionLedgerPort,

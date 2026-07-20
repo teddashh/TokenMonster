@@ -16,6 +16,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
+    "test:restore-drill": "vitest run test/restore-drill.test.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {

@@ -18,9 +18,24 @@ The currently implemented public vertical slice includes:
 The mutation boundary also exposes:
 
 - `POST /v1/enrollments`;
+- `POST /v2/enrollments` for recoverable, client-held first-enrollment
+  credentials;
 - `POST /v1/me/ingest-snapshots`;
+- `POST /v1/me/pause` and `POST /v1/me/resume` with an upload-scoped bearer;
 - `DELETE /v1/me/data`;
 - `GET /v1/deletions/:jobId` with its independently scoped status bearer.
+
+Compatibility advertises snapshot schemas 1 and 2. The already-published V1
+enrollment response intentionally retains its exact `["1"]` capability field so
+older clients cannot lose one-time credentials after a successful enrollment;
+trusted native clients use the separate V2 recoverable flow and
+`/v1/compatibility` for current support. A V2 success response never echoes a
+credential or installation ID. Exact replay verifies all three presented
+credentials and the original accepted consent; first creation additionally
+requires a current, fresh acknowledgement. The Worker keeps the
+exact V1 tokscale tuple for migration and accepts the permanent V2
+tuple `tokentracker-sidecar / 0.1.0 / 0.80.0`; every other sidecar source or
+adapter version fails closed before storage.
 
 Production must inject `deriveRateLimitKey` plus the matching api-domain command
 callback for each enabled mutation. The deploy adapter binds those callbacks to
@@ -36,7 +51,8 @@ response exposes no installation or credential field.
 return only a non-reversible, route-scoped key. It must not retain or log the
 request, raw IP, bearer credential, or provider data, and it must not consume or
 clone the request body. Mutation bodies are independently limited to 64 KiB,
-require strict JSON where a body is defined, and never receive CORS headers.
+fixed mutation paths reject every query string, strict JSON is required where a
+body is defined, and mutation responses never receive CORS headers.
 
 `createTokenMonsterApi()` defaults `readPublicTotals` to unavailable. Production
 must inject a reader backed by the rebuildable public projection. It must never
@@ -86,8 +102,10 @@ Both secret JSON bindings are capped at 8 KiB. Their nested keys use a bounded
 underlying factories reject unknown fields, duplicate IDs, reused key material,
 and malformed encodings. Errors, configuration, raw IPs, bearer credentials,
 and key material are never logged or returned. Enrollment derives its
-non-reversible quota key from Cloudflare's `CF-Connecting-IP`; ingest and delete
-derive distinct keys from their already validated, scope-specific bearer.
+non-reversible quota key from Cloudflare's `CF-Connecting-IP`; ingest/lifecycle
+and delete derive distinct keys from their already validated, scope-specific
+bearer. Pause and resume share a dedicated 10-per-minute lifecycle bucket while
+reusing only the upload-token HMAC derivation key, never the bearer itself.
 
 No D1 database ID or production secret is committed here. The web Wrangler
 entrypoint includes only the reviewed Durable Object bindings/migration and

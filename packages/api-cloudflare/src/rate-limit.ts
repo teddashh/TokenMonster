@@ -16,9 +16,9 @@ import {
 } from "./errors.js";
 
 const UPLOAD_TOKEN_PATTERN =
-  /^tm_u1_[A-Za-z0-9_-]{16,32}\.[A-Za-z0-9_-]{43}$/;
+  /^(?:tm_u1_[A-Za-z0-9_-]{16,32}\.[A-Za-z0-9_-]{43}|tm_u2_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048])$/;
 const DELETION_TOKEN_PATTERN =
-  /^tm_d1_[A-Za-z0-9_-]{16,32}\.[A-Za-z0-9_-]{43}$/;
+  /^(?:tm_d1_[A-Za-z0-9_-]{16,32}\.[A-Za-z0-9_-]{43}|tm_d2_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048])$/;
 
 export interface CloudflareRateLimitKeyConfig {
   readonly enrollmentEdgeKey: SerializedHmacKeyConfig;

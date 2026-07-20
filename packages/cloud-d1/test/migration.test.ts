@@ -10,7 +10,19 @@ const COMPACTION_AUDIT_MIGRATION_SQL = readFileSync(
   new URL("../migrations/0002_compaction_audit.sql", import.meta.url),
   "utf8",
 );
-const MIGRATION_SQL = `${INITIAL_MIGRATION_SQL}\n${COMPACTION_AUDIT_MIGRATION_SQL}`;
+const LIFECYCLE_MIGRATION_SQL = readFileSync(
+  new URL("../migrations/0003_lifecycle.sql", import.meta.url),
+  "utf8",
+);
+const SIDECAR_CONTRIBUTION_MIGRATION_SQL = readFileSync(
+  new URL("../migrations/0004_sidecar_contribution.sql", import.meta.url),
+  "utf8",
+);
+const RECOVERABLE_ENROLLMENT_MIGRATION_SQL = readFileSync(
+  new URL("../migrations/0005_recoverable_enrollment.sql", import.meta.url),
+  "utf8",
+);
+const MIGRATION_SQL = `${INITIAL_MIGRATION_SQL}\n${COMPACTION_AUDIT_MIGRATION_SQL}\n${LIFECYCLE_MIGRATION_SQL}\n${SIDECAR_CONTRIBUTION_MIGRATION_SQL}\n${RECOVERABLE_ENROLLMENT_MIGRATION_SQL}`;
 const NOW = "2026-07-15T18:20:00Z";
 const LATER = "2026-08-15T18:20:00Z";
 const BUCKET = "2026-07-15T00:00:00.000Z";
@@ -33,6 +45,7 @@ const EXPECTED_TABLES = [
   "mutation_guards",
   "public_totals_cache",
   "quarantine_events",
+  "recoverable_enrollments",
   "security_rate_events",
   "share_cards",
   "usage_daily_current",
@@ -40,6 +53,13 @@ const EXPECTED_TABLES = [
 
 const REQUIRED_INDEXES = Object.freeze({
   consent_receipts_expires_idx: ["expires_at", "event_id"],
+  consent_receipts_installation_revision_idx: [
+    "installation_id",
+    "document_revision",
+    "granted",
+    "recorded_at",
+    "event_id",
+  ],
   collector_window_bindings_expires_idx: ["expires_at"],
   ingest_batches_created_idx: ["created_at"],
   ingest_batches_expires_idx: ["expires_at", "installation_id", "batch_id"],
@@ -261,6 +281,113 @@ describe("0001_initial.sql", () => {
           "deletion_token_id",
         ]),
       );
+
+      const recoverableEnrollmentColumns = records(
+        db.prepare("PRAGMA table_info(recoverable_enrollments)").all(),
+      ).map((row) => row["name"]);
+      expect(recoverableEnrollmentColumns).toEqual([
+        "recovery_token_id",
+        "recovery_token_hmac",
+        "recovery_hmac_key_id",
+        "installation_id",
+        "consent_event_id",
+        "created_at",
+      ]);
+      expect(recoverableEnrollmentColumns).not.toEqual(
+        expect.arrayContaining([
+          "upload_token",
+          "deletion_token",
+          "recovery_token",
+          "secret",
+        ]),
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  it("accepts only bounded V2 recovery lookup IDs and verifier material", () => {
+    const db = createDatabase();
+    try {
+      insertInstallation(db);
+      db.prepare(
+        `INSERT INTO consent_receipts (
+          event_id, installation_id, purpose, document_revision, granted,
+          occurred_at, recorded_at, expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        "consent-event-0001",
+        INSTALLATION_ID,
+        "contribution",
+        "contribution-2026-07-15",
+        1,
+        NOW,
+        NOW,
+        LATER,
+      );
+      const insertRecovery = db.prepare(
+        `INSERT INTO recoverable_enrollments (
+          recovery_token_id, recovery_token_hmac, recovery_hmac_key_id,
+          installation_id, consent_event_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+      );
+
+      expect(() =>
+        insertRecovery.run(
+          "r".repeat(23),
+          new Uint8Array(32).fill(3),
+          "pepper-v1",
+          INSTALLATION_ID,
+          "consent-event-0001",
+          NOW,
+        ),
+      ).toThrow();
+      expect(() =>
+        insertRecovery.run(
+          `${"r".repeat(23)}!`,
+          new Uint8Array(32).fill(3),
+          "pepper-v1",
+          INSTALLATION_ID,
+          "consent-event-0001",
+          NOW,
+        ),
+      ).toThrow();
+      expect(() =>
+        insertRecovery.run(
+          "r".repeat(24),
+          new Uint8Array(31).fill(3),
+          "pepper-v1",
+          INSTALLATION_ID,
+          "consent-event-0001",
+          NOW,
+        ),
+      ).toThrow();
+      expect(() =>
+        insertRecovery.run(
+          "r".repeat(24),
+          "S".repeat(32),
+          "pepper-v1",
+          INSTALLATION_ID,
+          "consent-event-0001",
+          NOW,
+        ),
+      ).toThrow();
+
+      insertRecovery.run(
+        "r".repeat(24),
+        new Uint8Array(32).fill(3),
+        "pepper-v1",
+        INSTALLATION_ID,
+        "consent-event-0001",
+        NOW,
+      );
+      expect(
+        db.prepare(
+          `SELECT recovery_token_id AS recoveryTokenId,
+             length(recovery_token_hmac) AS verifierBytes
+           FROM recoverable_enrollments`,
+        ).get(),
+      ).toEqual({ recoveryTokenId: "r".repeat(24), verifierBytes: 32 });
     } finally {
       db.close();
     }
@@ -720,7 +847,10 @@ describe("0001_initial.sql", () => {
           db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get(),
         ).toEqual({ count: 0 });
       }
-      expect(MIGRATION_SQL).not.toMatch(/\bINSERT\s+INTO\b/iu);
+      expect(INITIAL_MIGRATION_SQL).not.toMatch(/\bINSERT\s+INTO\b/iu);
+      expect(SIDECAR_CONTRIBUTION_MIGRATION_SQL).not.toMatch(
+        /\bINSERT\s+INTO\b[\s\S]*?\bVALUES\b/iu,
+      );
     } finally {
       db.close();
     }
@@ -1155,6 +1285,201 @@ describe("0002_compaction_audit.sql", () => {
       expect(
         db.prepare("SELECT count(*) AS count FROM compaction_runs").get(),
       ).toEqual({ count: 1 });
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("0003_lifecycle.sql", () => {
+  it("adds the consent replay index to an existing schema without changing rows", () => {
+    const db = new DatabaseSync(":memory:", {
+      enableForeignKeyConstraints: true,
+    });
+    try {
+      db.exec(INITIAL_MIGRATION_SQL);
+      db.exec(COMPACTION_AUDIT_MIGRATION_SQL);
+      insertInstallation(db);
+      db.prepare(
+        `INSERT INTO consent_receipts (
+        event_id, installation_id, purpose, document_revision, granted,
+        occurred_at, recorded_at, expires_at
+      ) VALUES (?, ?, 'contribution', ?, 1, ?, ?, ?)`,
+      ).run(
+        "consent-event-0001",
+        INSTALLATION_ID,
+        "contribution-2026-07-15",
+        NOW,
+        NOW,
+        LATER,
+      );
+
+      db.exec(LIFECYCLE_MIGRATION_SQL);
+      db.exec(LIFECYCLE_MIGRATION_SQL);
+
+      expect(
+        records(
+          db
+            .prepare(
+              "PRAGMA index_info(consent_receipts_installation_revision_idx)",
+            )
+            .all(),
+        ).map((row) => String(row["name"])),
+      ).toEqual([
+        "installation_id",
+        "document_revision",
+        "granted",
+        "recorded_at",
+        "event_id",
+      ]);
+      expect(
+        db.prepare("SELECT count(*) AS count FROM consent_receipts").get(),
+      ).toEqual({ count: 1 });
+      expect(() =>
+        db
+          .prepare(
+            "INSERT INTO mutation_guards (request_id, operation, expires_at) VALUES (?, 'ingest', ?)",
+          )
+          .run("lifecycle-guard-0001", LATER),
+      ).not.toThrow();
+      expect(() =>
+        db.prepare("UPDATE installations SET status = 'paused'").run(),
+      ).toThrow(/TM_INSTALLATION_PAUSE_STATE/);
+      expect(() =>
+        db.prepare("UPDATE installations SET paused_at = ?").run(NOW),
+      ).toThrow(/TM_INSTALLATION_PAUSE_STATE/);
+      db.prepare(
+        "UPDATE installations SET status = 'paused', paused_at = ?",
+      ).run(NOW);
+      expect(
+        db.prepare("SELECT status, paused_at FROM installations").get(),
+      ).toEqual({ status: "paused", paused_at: NOW });
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("0004_sidecar_contribution.sql", () => {
+  it("preserves V1 rows and accepts only the permanent-sidecar collector extension", () => {
+    const db = new DatabaseSync(":memory:", {
+      enableForeignKeyConstraints: true,
+    });
+    try {
+      db.exec(
+        `${INITIAL_MIGRATION_SQL}\n${COMPACTION_AUDIT_MIGRATION_SQL}\n${LIFECYCLE_MIGRATION_SQL}`,
+      );
+      insertInstallation(db);
+      insertCollectorBinding(db);
+      insertUsage(db, {
+        input: 10,
+        output: 5,
+        cacheRead: 2,
+        cacheWrite: 1,
+        reasoning: 3,
+        other: 4,
+        total: 22,
+      });
+
+      db.exec(SIDECAR_CONTRIBUTION_MIGRATION_SQL);
+
+      expect(
+        db.prepare(
+          `SELECT collector_kind AS kind, source_version AS version
+           FROM usage_daily_current WHERE bucket_start = ?`,
+        ).get(BUCKET),
+      ).toEqual({ kind: "tokscale", version: "4.5.2" });
+
+      const sidecarBucket = "2026-07-16T00:00:00.000Z";
+      db.prepare(
+        `INSERT INTO collector_window_bindings (
+          installation_id, bucket_start, collector_kind, adapter_version,
+          source_version, created_at, expires_at
+        ) VALUES (?, ?, 'tokentracker-sidecar', '0.1.0', '0.80.0', ?, ?)`,
+      ).run(INSTALLATION_ID, sidecarBucket, NOW, LATER);
+      db.prepare(
+        `INSERT INTO usage_daily_current (
+          installation_id, bucket_start, provider, model_family, tool,
+          value_quality, revision, input_tokens, output_tokens,
+          cache_read_tokens, cache_write_tokens, reasoning_tokens,
+          other_tokens, total_tokens, collector_kind, adapter_version,
+          source_version, row_hash, quarantine_status, created_at, updated_at,
+          expires_at
+        ) VALUES (?, ?, 'google', 'glm', 'agy', 'exact', 1, 7, 3, 0, 0,
+          1, 0, 10, 'tokentracker-sidecar', '0.1.0', '0.80.0', ?,
+          'accepted', ?, ?, ?)`,
+      ).run(
+        INSTALLATION_ID,
+        sidecarBucket,
+        new Uint8Array(32).fill(9),
+        NOW,
+        NOW,
+        LATER,
+      );
+
+      db.prepare(
+        `INSERT INTO mutation_guards (request_id, operation, expires_at)
+         VALUES ('sidecar-guard-0001', 'ingest', ?)`,
+      ).run(LATER);
+      expect(() =>
+        db.prepare(
+          `INSERT INTO mutation_guard_authorities (
+            request_id, installation_id, bucket_start, expected_exists,
+            expected_collector_kind, expected_adapter_version,
+            expected_source_version
+          ) VALUES ('sidecar-guard-0001', ?, ?, 1,
+            'tokentracker-sidecar', '0.1.0', '0.80.0')`,
+        ).run(INSTALLATION_ID, sidecarBucket),
+      ).not.toThrow();
+
+      expect(() =>
+        db.prepare(
+          `INSERT INTO collector_window_bindings (
+            installation_id, bucket_start, collector_kind, adapter_version,
+            source_version, created_at, expires_at
+          ) VALUES (?, '2026-07-17T00:00:00.000Z', 'unknown-collector',
+            '0.1.0', '1.0.0', ?, ?)`,
+        ).run(INSTALLATION_ID, NOW, LATER),
+      ).toThrow();
+      expect(records(db.prepare("PRAGMA foreign_key_check").all())).toEqual([]);
+      expect(
+        records(db.prepare("PRAGMA foreign_key_list(usage_daily_current)").all())
+          .map((row) => row["table"]),
+      ).toContain("collector_window_bindings");
+      expect(
+        records(db.prepare("PRAGMA foreign_key_list(usage_daily_current)").all())
+          .map((row) => row["table"]),
+      ).not.toContain("collector_window_bindings_v2");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("recreates indexes and mutation/compacted-day guard triggers", () => {
+    const db = createDatabase();
+    try {
+      const names = new Set(
+        records(
+          db.prepare(
+            `SELECT name FROM sqlite_master
+             WHERE type IN ('index', 'trigger')`,
+          ).all(),
+        ).map((row) => row["name"]),
+      );
+      for (const name of [
+        "collector_window_bindings_expires_idx",
+        "usage_daily_current_bucket_quarantine_idx",
+        "usage_daily_current_installation_bucket_revision_idx",
+        "usage_daily_current_expires_idx",
+        "mutation_guard_authorities_assert",
+        "mutation_guard_usage_assert",
+        "collector_window_bindings_compacted_day_insert",
+        "collector_window_bindings_compacted_day_update",
+        "usage_daily_current_compacted_day_insert",
+        "usage_daily_current_compacted_day_update",
+      ]) {
+        expect(names.has(name), name).toBe(true);
+      }
     } finally {
       db.close();
     }

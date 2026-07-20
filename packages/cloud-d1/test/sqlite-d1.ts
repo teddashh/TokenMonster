@@ -9,7 +9,13 @@ import type {
   D1MutationSessionLike
 } from "../src/index.js";
 
-const MIGRATION_SQL = ["0001_initial.sql", "0002_compaction_audit.sql"]
+const MIGRATION_SQL = [
+  "0001_initial.sql",
+  "0002_compaction_audit.sql",
+  "0003_lifecycle.sql",
+  "0004_sidecar_contribution.sql",
+  "0005_recoverable_enrollment.sql"
+]
   .map((name) =>
     readFileSync(new URL(`../migrations/${name}`, import.meta.url), "utf8")
   )

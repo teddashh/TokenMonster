@@ -16,6 +16,7 @@ import {
   MutablePolicy,
   RATE_KEY,
   enrollmentBody,
+  sidecarSnapshot,
   snapshot
 } from "./helpers.js";
 
@@ -353,6 +354,64 @@ describe("authenticated V1 ingest", () => {
     expect(JSON.stringify(error)).not.toContain(canary);
     expect(JSON.stringify(error.toProblemDetails(canary))).not.toContain(
       canary
+    );
+  });
+});
+
+describe("authenticated V2 permanent-sidecar ingest", () => {
+  it("applies and idempotently replays an exact supported sidecar snapshot", async () => {
+    const { dependencies, storage, uploadToken } = await setup();
+    const body = sidecarSnapshot();
+    const first = await ingestSnapshot(command(uploadToken, body), dependencies);
+    const replay = await ingestSnapshot(command(uploadToken, body), dependencies);
+
+    expect(first).toMatchObject({
+      replayed: false,
+      status: "accepted",
+      summary: { appliedBuckets: 1 }
+    });
+    expect(replay).toEqual({ ...first, replayed: true });
+    expect([...storage.rows.values()][0]?.collector).toEqual({
+      kind: "tokentracker-sidecar",
+      adapterVersion: "0.1.0",
+      sourceVersion: "0.80.0"
+    });
+    expect([...storage.authorities.values()][0]?.collectorKind).toBe(
+      "tokentracker-sidecar"
+    );
+  });
+
+  it("fails closed on an unsupported sidecar version or mismatched envelope", async () => {
+    const unsupported = await setup();
+    const wrongSource = sidecarSnapshot({
+      collector: {
+        kind: "tokentracker-sidecar",
+        adapterVersion: "0.1.0",
+        sourceVersion: "0.80.1"
+      }
+    });
+    await expectCode(
+      ingestSnapshot(
+        command(unsupported.uploadToken, wrongSource),
+        unsupported.dependencies
+      ),
+      "COLLECTOR_UNSUPPORTED"
+    );
+
+    const mismatched = await setup();
+    const wrongKind = sidecarSnapshot({
+      collector: {
+        kind: "tokscale",
+        adapterVersion: "0.1.0",
+        sourceVersion: "4.5.2"
+      }
+    });
+    await expectCode(
+      ingestSnapshot(
+        command(mismatched.uploadToken, wrongKind),
+        mismatched.dependencies
+      ),
+      "SCHEMA_INVALID"
     );
   });
 });

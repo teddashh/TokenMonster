@@ -7,7 +7,7 @@ protocol. It contains no Hono, D1, filesystem, network, or logging adapter.
 
 `preflightIngestBatch` accepts an unknown JSON body and a separate authenticated
 enrollment context. The body is parsed through the strict exported
-`IngestSnapshotV1Schema`; client-provided enrollment IDs, bucket IDs, payload
+V1-or-V2 supported snapshot schema; client-provided enrollment IDs, bucket IDs, payload
 hashes, authorization values, event counts, timezones, and other unknown fields
 are rejected. Canonical usage keys are derived only from:
 
@@ -18,7 +18,7 @@ are rejected. Canonical usage keys are derived only from:
     + tool
 
 An enrollment and UTC day are bound to the exact collector kind, adapter
-version, and source version. A tokscale/TokenTracker switch, or an in-day parser
+version, and source version. A tokscale/permanent-sidecar switch, or an in-day parser
 version switch, fails with `AUTHORITY_CONFLICT` instead of combining totals.
 
 ## Canonical hashing and atomic decisions

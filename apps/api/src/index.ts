@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { PERMANENT_SIDECAR_COLLECTOR_IDENTITY_V2 } from "@tokenmonster/contracts";
 
 import {
   registerMutationRoutes,
@@ -244,20 +245,16 @@ function consentDocument(locale: "zh-TW" | "en") {
       ? "啟用背景同步前，companion 必須以你的實際本地資料顯示將送出的 payload preview。"
       : "Before enabling background contribution sync, the companion must preview the payload made from your actual local data.",
     schemaExample: {
-      schemaVersion: "1",
+      schemaVersion: "2",
       batchId: "018f1f6c-7a4a-7f00-8000-123456789abc",
       generatedAt: "2026-07-15T18:20:00Z",
-      collector: {
-        kind: "tokscale",
-        adapterVersion: "0.1.0",
-        sourceVersion: "4.5.2"
-      },
+      collector: PERMANENT_SIDECAR_COLLECTOR_IDENTITY_V2,
       buckets: [
         {
           bucketStart: "2026-07-15T00:00:00.000Z",
-          provider: "openai",
-          modelFamily: "openai-codex",
-          tool: "codex-cli",
+          provider: "other",
+          modelFamily: "all",
+          tool: "all",
           valueQuality: "exact",
           revision: 1,
           tokens: {
@@ -392,11 +389,20 @@ export function createTokenMonsterApi(
     context.header("Cache-Control", "public, max-age=300");
     return context.json({
       contractVersion: 1,
-      acceptedSnapshotSchemaVersions: ["1"],
+      acceptedSnapshotSchemaVersions: ["1", "2"],
       minimumCompanionVersion: "0.1.0-alpha.1",
       recommendedCompanionVersion: "0.1.0-alpha.1",
       collectors: [
-        { kind: "tokscale", sourceVersion: "4.5.2", required: true },
+        {
+          ...PERMANENT_SIDECAR_COLLECTOR_IDENTITY_V2,
+          required: true
+        },
+        {
+          kind: "tokscale",
+          sourceVersion: "4.5.2",
+          required: false,
+          status: "migration-only"
+        },
         {
           kind: "tokentracker-bridge",
           sourceVersion: "0.79.8",

@@ -2,8 +2,12 @@ import {
   DeletionAcceptedResponseV1Schema,
   DeletionStatusResponseV1Schema,
   EnrollmentResponseV1Schema,
+  EnrollmentResponseV2Schema,
   IngestReceiptV1Schema,
-  serializeContributionApiV1
+  PauseResponseV1Schema,
+  ResumeResponseV1Schema,
+  serializeContributionApiV1,
+  serializeContributionEnrollmentV2
 } from "@tokenmonster/contracts";
 import {
   ApiDomainError,
@@ -16,14 +20,27 @@ import {
   type EnrollmentResult,
   type IngestCommand,
   type IngestResult,
-  type RateLimitRoute
+  type PauseCommand,
+  type PauseResult,
+  type RateLimitRoute,
+  type RecoverableEnrollmentCommand,
+  type RecoverableEnrollmentResult,
+  type ResumeCommand,
+  type ResumeResult
 } from "@tokenmonster/api-domain";
 import type { Context, Hono } from "hono";
 
 const MAX_MUTATION_BODY_BYTES = 64 * 1_024;
 const MAX_MUTATION_BODY_CHUNKS = 1_024;
 const SAFE_REQUEST_ID = /^[A-Za-z0-9_-]{8,128}$/u;
-const AUTHORIZATION_PATTERN = /^Bearer ([^\s,]{32,512})$/u;
+const AUTHORIZATION_PATTERN_BY_SCOPE = Object.freeze({
+  upload:
+    /^Bearer ((?:tm_u1_[A-Za-z0-9_-]{16,32}\.[A-Za-z0-9_-]{43}|tm_u2_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]))$/u,
+  deletion:
+    /^Bearer ((?:tm_d1_[A-Za-z0-9_-]{16,32}\.[A-Za-z0-9_-]{43}|tm_d2_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]))$/u,
+  "deletion-status":
+    /^Bearer (tm_s1_[A-Za-z0-9_-]{16,32}\.[A-Za-z0-9_-]{43})$/u
+});
 const CONTENT_LENGTH_PATTERN = /^\d+$/u;
 const DELETION_JOB_ID_PATTERN = /^del_[A-Za-z0-9_-]{22}$/u;
 
@@ -48,7 +65,14 @@ export interface TokenMonsterMutationDependencies {
   readonly enrollContributor?: (
     command: EnrollmentCommand
   ) => Promise<EnrollmentResult>;
+  readonly enrollContributorRecoverably?: (
+    command: RecoverableEnrollmentCommand
+  ) => Promise<RecoverableEnrollmentResult>;
   readonly ingestSnapshot?: (command: IngestCommand) => Promise<IngestResult>;
+  readonly pauseContribution?: (command: PauseCommand) => Promise<PauseResult>;
+  readonly resumeContribution?: (
+    command: ResumeCommand
+  ) => Promise<ResumeResult>;
   readonly requestContributorDeletion?: (
     command: DeleteCommand
   ) => Promise<DeleteResult>;
@@ -277,16 +301,55 @@ function parseDeletionStatusJobId(
     typeof jobId !== "string" ||
     !DELETION_JOB_ID_PATTERN.test(jobId) ||
     url.pathname !== `/v1/deletions/${jobId}` ||
-    url.search !== ""
+    url.search !== "" ||
+    url.href !== `${url.origin}/v1/deletions/${jobId}`
   ) {
     throw new ApiDomainError("SCHEMA_INVALID");
   }
   return jobId;
 }
 
-function parseBearerAuthorization(request: Request): string {
+function assertFixedMutationTarget(request: Request, pathname: string): void {
+  let url: URL;
+  try {
+    url = new URL(request.url);
+  } catch {
+    throw new ApiDomainError("SCHEMA_INVALID");
+  }
+  if (
+    url.pathname !== pathname ||
+    url.search !== "" ||
+    url.href !== `${url.origin}${pathname}`
+  ) {
+    throw new ApiDomainError("SCHEMA_INVALID");
+  }
+}
+
+function assertSecureFixedMutationTarget(
+  request: Request,
+  pathname: string
+): void {
+  assertFixedMutationTarget(request, pathname);
+  let url: URL;
+  try {
+    url = new URL(request.url);
+  } catch {
+    throw new ApiDomainError("SCHEMA_INVALID");
+  }
+  if (url.protocol !== "https:") {
+    throw new ApiDomainError("SCHEMA_INVALID");
+  }
+}
+
+function parseBearerAuthorization(
+  request: Request,
+  scope: keyof typeof AUTHORIZATION_PATTERN_BY_SCOPE
+): string {
   const value = request.headers.get("Authorization");
-  const match = value === null ? null : AUTHORIZATION_PATTERN.exec(value);
+  const match =
+    value === null
+      ? null
+      : AUTHORIZATION_PATTERN_BY_SCOPE[scope].exec(value);
   if (match?.[1] === undefined) {
     throw new ApiDomainError("TOKEN_INVALID");
   }
@@ -316,9 +379,21 @@ export function registerMutationRoutes(
     ...(supplied.enrollContributor === undefined
       ? {}
       : { enrollContributor: supplied.enrollContributor }),
+    ...(supplied.enrollContributorRecoverably === undefined
+      ? {}
+      : {
+          enrollContributorRecoverably:
+            supplied.enrollContributorRecoverably
+        }),
     ...(supplied.ingestSnapshot === undefined
       ? {}
       : { ingestSnapshot: supplied.ingestSnapshot }),
+    ...(supplied.pauseContribution === undefined
+      ? {}
+      : { pauseContribution: supplied.pauseContribution }),
+    ...(supplied.resumeContribution === undefined
+      ? {}
+      : { resumeContribution: supplied.resumeContribution }),
     ...(supplied.requestContributorDeletion === undefined
       ? {}
       : {
@@ -336,6 +411,7 @@ export function registerMutationRoutes(
     try {
       const request = context.req.raw;
       assertDeclaredBodySize(request);
+      assertFixedMutationTarget(request, "/v1/enrollments");
       const deriveRateLimitKey = requireDependency(
         dependencies.deriveRateLimitKey
       );
@@ -352,11 +428,38 @@ export function registerMutationRoutes(
     }
   });
 
+  app.post("/v2/enrollments", async (context) => {
+    try {
+      const request = context.req.raw;
+      assertDeclaredBodySize(request);
+      assertSecureFixedMutationTarget(request, "/v2/enrollments");
+      const deriveRateLimitKey = requireDependency(
+        dependencies.deriveRateLimitKey
+      );
+      const execute = requireDependency(
+        dependencies.enrollContributorRecoverably
+      );
+      const rateLimitKey = await deriveRateLimitKey(request, "enrollment");
+      const body = await readStrictJson(request);
+      const result = await execute({ body, rateLimitKey });
+      return contractResponse(
+        serializeContributionEnrollmentV2(
+          EnrollmentResponseV2Schema,
+          result
+        ),
+        201
+      );
+    } catch (error: unknown) {
+      return mutationErrorResponse(context, error);
+    }
+  });
+
   app.post("/v1/me/ingest-snapshots", async (context) => {
     try {
       const request = context.req.raw;
       assertDeclaredBodySize(request);
-      const bearerToken = parseBearerAuthorization(request);
+      assertFixedMutationTarget(request, "/v1/me/ingest-snapshots");
+      const bearerToken = parseBearerAuthorization(request, "upload");
       const deriveRateLimitKey = requireDependency(
         dependencies.deriveRateLimitKey
       );
@@ -379,11 +482,60 @@ export function registerMutationRoutes(
     }
   });
 
+  app.post("/v1/me/pause", async (context) => {
+    try {
+      const request = context.req.raw;
+      assertDeclaredBodySize(request);
+      assertFixedMutationTarget(request, "/v1/me/pause");
+      const bearerToken = parseBearerAuthorization(request, "upload");
+      const deriveRateLimitKey = requireDependency(
+        dependencies.deriveRateLimitKey
+      );
+      const execute = requireDependency(dependencies.pauseContribution);
+      const rateLimitKey = await deriveRateLimitKey(request, "lifecycle");
+      await assertEmptyBody(request);
+      const result = await execute({ bearerToken, rateLimitKey });
+      return contractResponse(
+        serializeContributionApiV1(PauseResponseV1Schema, result),
+        200
+      );
+    } catch (error: unknown) {
+      return mutationErrorResponse(context, error);
+    }
+  });
+
+  app.post("/v1/me/resume", async (context) => {
+    try {
+      const request = context.req.raw;
+      assertDeclaredBodySize(request);
+      assertFixedMutationTarget(request, "/v1/me/resume");
+      const bearerToken = parseBearerAuthorization(request, "upload");
+      const deriveRateLimitKey = requireDependency(
+        dependencies.deriveRateLimitKey
+      );
+      const execute = requireDependency(dependencies.resumeContribution);
+      const rateLimitKey = await deriveRateLimitKey(request, "lifecycle");
+      const body = await readStrictJson(request);
+      const result = await execute({ bearerToken, body, rateLimitKey });
+      const parsed = ResumeResponseV1Schema.parse(result);
+      if (parsed.consentReceipt.granted !== true) {
+        throw new ApiDomainError("SERVICE_UNAVAILABLE");
+      }
+      return contractResponse(
+        serializeContributionApiV1(ResumeResponseV1Schema, parsed),
+        200
+      );
+    } catch (error: unknown) {
+      return mutationErrorResponse(context, error);
+    }
+  });
+
   app.delete("/v1/me/data", async (context) => {
     try {
       const request = context.req.raw;
       assertDeclaredBodySize(request);
-      const bearerToken = parseBearerAuthorization(request);
+      assertFixedMutationTarget(request, "/v1/me/data");
+      const bearerToken = parseBearerAuthorization(request, "deletion");
       const deriveRateLimitKey = requireDependency(
         dependencies.deriveRateLimitKey
       );
@@ -410,7 +562,10 @@ export function registerMutationRoutes(
     try {
       const request = context.req.raw;
       assertDeclaredBodySize(request);
-      const bearerToken = parseBearerAuthorization(request);
+      const bearerToken = parseBearerAuthorization(
+        request,
+        "deletion-status"
+      );
       const jobId = parseDeletionStatusJobId(context, request);
       await assertEmptyBody(request);
       const execute = requireDependency(
