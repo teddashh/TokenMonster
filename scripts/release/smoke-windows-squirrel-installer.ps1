@@ -162,6 +162,251 @@ function Get-ExactPathProcessCount {
   return $matchingProcessCount
 }
 
+function Test-PathInsideDirectory {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$CandidatePath,
+    [Parameter(Mandatory = $true)]
+    [string]$DirectoryPath
+  )
+  $directorySeparators = [char[]]@(
+    [IO.Path]::DirectorySeparatorChar,
+    [IO.Path]::AltDirectorySeparatorChar
+  )
+  $normalizedDirectory =
+    [IO.Path]::GetFullPath($DirectoryPath).TrimEnd($directorySeparators)
+  $directoryPrefix =
+    $normalizedDirectory + [IO.Path]::DirectorySeparatorChar
+  $normalizedCandidate = [IO.Path]::GetFullPath($CandidatePath)
+  return $normalizedCandidate.StartsWith(
+    $directoryPrefix,
+    [StringComparison]::OrdinalIgnoreCase
+  )
+}
+
+function Get-InstallTreeProcessCount {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$InstallRoot
+  )
+  $matchingProcessCount = 0
+  $processes = @(Get-Process -ErrorAction SilentlyContinue)
+  try {
+    foreach ($process in $processes) {
+      try {
+        $processPath = $process.Path
+        if (
+          -not [String]::IsNullOrWhiteSpace($processPath) -and
+          (Test-PathInsideDirectory `
+            -CandidatePath $processPath `
+            -DirectoryPath $InstallRoot)
+        ) {
+          $matchingProcessCount += 1
+        }
+      } catch {
+        # Inaccessible process metadata cannot establish an install-tree match.
+      }
+    }
+  } finally {
+    foreach ($process in $processes) {
+      $process.Dispose()
+    }
+  }
+  return $matchingProcessCount
+}
+
+function Get-ResidualApplicationSnapshot {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$InstallRoot
+  )
+  $applicationDirectories = @(
+    Get-ChildItem `
+      -LiteralPath $InstallRoot `
+      -Directory `
+      -Force `
+      -ErrorAction SilentlyContinue |
+      Where-Object { $_.Name -like "app-*" }
+  )
+  $directoryCount = 0
+  $fileCount = 0
+  $exclusiveOpenAvailableCount = 0
+  $exclusiveOpenUnavailableCount = 0
+  $sharingOrLockViolationCount = 0
+  $otherOpenFailureCount = 0
+  $pendingDirectories =
+    [Collections.Generic.Queue[System.IO.DirectoryInfo]]::new()
+
+  foreach ($applicationDirectory in $applicationDirectories) {
+    $physicalApplicationDirectory = Get-PhysicalDirectory `
+      -LiteralPath $applicationDirectory.FullName `
+      -Label "Residual Squirrel application directory"
+    $pendingDirectories.Enqueue($physicalApplicationDirectory)
+  }
+
+  while ($pendingDirectories.Count -ne 0) {
+    $currentDirectory = $pendingDirectories.Dequeue()
+    $directoryCount += 1
+    $entries = @($currentDirectory.EnumerateFileSystemInfos())
+    foreach ($entry in $entries) {
+      if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw "A residual Squirrel application path is a reparse point."
+      }
+      if ($entry -is [System.IO.DirectoryInfo]) {
+        $pendingDirectories.Enqueue($entry)
+        continue
+      }
+      if ($entry -isnot [System.IO.FileInfo]) {
+        throw "A residual Squirrel application entry has an unknown type."
+      }
+
+      $fileCount += 1
+      $exclusiveStream = $null
+      try {
+        $exclusiveStream = [IO.File]::Open(
+          $entry.FullName,
+          [IO.FileMode]::Open,
+          [IO.FileAccess]::Read,
+          [IO.FileShare]::None
+        )
+        $exclusiveOpenAvailableCount += 1
+      } catch {
+        $exclusiveOpenUnavailableCount += 1
+        $openException = $_.Exception
+        while ($null -ne $openException.InnerException) {
+          $openException = $openException.InnerException
+        }
+        $win32ErrorCode = $openException.HResult -band 0xffff
+        if ($win32ErrorCode -eq 32 -or $win32ErrorCode -eq 33) {
+          $sharingOrLockViolationCount += 1
+        } else {
+          $otherOpenFailureCount += 1
+        }
+      } finally {
+        if ($null -ne $exclusiveStream) {
+          $exclusiveStream.Dispose()
+        }
+      }
+    }
+  }
+
+  return [PSCustomObject]@{
+    AppDirectoryCount = $applicationDirectories.Count
+    DirectoryCount = $directoryCount
+    FileCount = $fileCount
+    ExclusiveOpenAvailableCount = $exclusiveOpenAvailableCount
+    ExclusiveOpenUnavailableCount = $exclusiveOpenUnavailableCount
+    SharingOrLockViolationCount = $sharingOrLockViolationCount
+    OtherOpenFailureCount = $otherOpenFailureCount
+  }
+}
+
+function Get-FixedRoleExclusiveOpenStatus {
+  param(
+    [AllowNull()]
+    [string]$LiteralPath,
+    [Parameter(Mandatory = $true)]
+    [string]$Label
+  )
+  if ([String]::IsNullOrWhiteSpace($LiteralPath)) {
+    return "not-applicable"
+  }
+  if (-not (Test-Path -LiteralPath $LiteralPath -PathType Leaf)) {
+    return "absent"
+  }
+
+  $physicalFile = Get-PhysicalFile `
+    -LiteralPath $LiteralPath `
+    -Label $Label
+  $exclusiveStream = $null
+  try {
+    $exclusiveStream = [IO.File]::Open(
+      $physicalFile.FullName,
+      [IO.FileMode]::Open,
+      [IO.FileAccess]::Read,
+      [IO.FileShare]::None
+    )
+    return "available"
+  } catch {
+    return "denied"
+  } finally {
+    if ($null -ne $exclusiveStream) {
+      $exclusiveStream.Dispose()
+    }
+  }
+}
+
+function Get-UninstallDiagnosticSnapshot {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$InstallRoot,
+    [AllowNull()]
+    [string]$InstalledApplicationExecutablePath,
+    [AllowNull()]
+    [string]$InstalledPackagedSquirrelPath
+  )
+  $installedApplicationExactPathProcessCount = "not-applicable"
+  if (
+    -not [String]::IsNullOrWhiteSpace(
+      $InstalledApplicationExecutablePath
+    )
+  ) {
+    $installedApplicationExactPathProcessCount =
+      Get-ExactPathProcessCount `
+        -ExecutablePath $InstalledApplicationExecutablePath
+  }
+  $tokenMonsterProcessCount = Get-TokenMonsterProcessCount
+  $installTreeLiveProcessCount = Get-InstallTreeProcessCount `
+    -InstallRoot $InstallRoot
+  $installedApplicationExclusiveOpenStatus =
+    Get-FixedRoleExclusiveOpenStatus `
+      -LiteralPath $InstalledApplicationExecutablePath `
+      -Label "Installed application diagnostic role"
+  $packagedSquirrelExclusiveOpenStatus =
+    Get-FixedRoleExclusiveOpenStatus `
+      -LiteralPath $InstalledPackagedSquirrelPath `
+      -Label "Packaged Squirrel diagnostic role"
+  $residualApplication = Get-ResidualApplicationSnapshot `
+    -InstallRoot $InstallRoot
+  return [PSCustomObject]@{
+    TokenMonsterProcessCount = $tokenMonsterProcessCount
+    InstallTreeLiveProcessCount = $installTreeLiveProcessCount
+    InstalledApplicationExactPathProcessCount =
+      $installedApplicationExactPathProcessCount
+    InstalledApplicationExclusiveOpenStatus =
+      $installedApplicationExclusiveOpenStatus
+    PackagedSquirrelExclusiveOpenStatus =
+      $packagedSquirrelExclusiveOpenStatus
+    AppDirectoryCount = $residualApplication.AppDirectoryCount
+    DirectoryCount = $residualApplication.DirectoryCount
+    FileCount = $residualApplication.FileCount
+    ExclusiveOpenAvailableCount =
+      $residualApplication.ExclusiveOpenAvailableCount
+    ExclusiveOpenUnavailableCount =
+      $residualApplication.ExclusiveOpenUnavailableCount
+    SharingOrLockViolationCount =
+      $residualApplication.SharingOrLockViolationCount
+    OtherOpenFailureCount = $residualApplication.OtherOpenFailureCount
+  }
+}
+
+function New-UnavailableUninstallDiagnosticSnapshot {
+  return [PSCustomObject]@{
+    TokenMonsterProcessCount = "not-collected"
+    InstallTreeLiveProcessCount = "not-collected"
+    InstalledApplicationExactPathProcessCount = "not-collected"
+    InstalledApplicationExclusiveOpenStatus = "not-collected"
+    PackagedSquirrelExclusiveOpenStatus = "not-collected"
+    AppDirectoryCount = "not-collected"
+    DirectoryCount = "not-collected"
+    FileCount = "not-collected"
+    ExclusiveOpenAvailableCount = "not-collected"
+    ExclusiveOpenUnavailableCount = "not-collected"
+    SharingOrLockViolationCount = "not-collected"
+    OtherOpenFailureCount = "not-collected"
+  }
+}
+
 function Get-RequiredRegistryString {
   param(
     [Parameter(Mandatory = $true)]
@@ -244,6 +489,8 @@ if (Test-Path -LiteralPath $installRoot) {
 }
 
 $primaryFailure = $null
+$installedApplicationExecutablePath = $null
+$installedPackagedSquirrelPath = $null
 try {
   $setupExitCode = Invoke-BoundedProcess `
     -FilePath $setup `
@@ -271,6 +518,12 @@ try {
   $installedApplicationExecutable = Get-PhysicalFile `
     -LiteralPath (Join-Path $installedApplication.FullName "TokenMonster.exe") `
     -Label "Installed Squirrel application executable"
+  $installedApplicationExecutablePath =
+    $installedApplicationExecutable.FullName
+  $installedPackagedSquirrel = Get-PhysicalFile `
+    -LiteralPath (Join-Path $installedApplication.FullName "squirrel.exe") `
+    -Label "Installed packaged Squirrel updater"
+  $installedPackagedSquirrelPath = $installedPackagedSquirrel.FullName
   $installedEntryPoint = Get-PhysicalFile `
     -LiteralPath (Join-Path $installedRoot.FullName "TokenMonster.exe") `
     -Label "Installed Squirrel execution stub"
@@ -308,12 +561,19 @@ try {
       $preUninstallEntryPointHash = $null
       $preUninstallEntryPointLength = $null
       $hookObserved = $false
+      $hookProcessStartCount = 0
       $hookWatcher = $null
       $hookWatcherStarted = $false
       $hookSubscriberRegistered = $false
       $hookSourceIdentifier =
         "TokenMonster.SquirrelUninstall.$PID.$([Guid]::NewGuid().ToString('N'))"
       $hookEvent = $null
+      $immediateDiagnosticSnapshot =
+        New-UnavailableUninstallDiagnosticSnapshot
+      $settledDiagnosticSnapshot =
+        New-UnavailableUninstallDiagnosticSnapshot
+      $residualExclusiveOpenClearAfterPoll = "not-observed"
+      $diagnosticSnapshotErrorCount = 0
 
       try {
         $uninstallRegistryValues = Get-ItemProperty `
@@ -411,6 +671,22 @@ try {
         if ($uninstallExitCode -ne 0) {
           throw "Squirrel silent uninstall returned a failure status."
         }
+        try {
+          $immediateDiagnosticSnapshot = Get-UninstallDiagnosticSnapshot `
+            -InstallRoot $installRoot `
+            -InstalledApplicationExecutablePath `
+              $installedApplicationExecutablePath `
+            -InstalledPackagedSquirrelPath $installedPackagedSquirrelPath
+          if ($immediateDiagnosticSnapshot.FileCount -eq 0) {
+            $residualExclusiveOpenClearAfterPoll = "not-applicable"
+          } elseif (
+            $immediateDiagnosticSnapshot.ExclusiveOpenUnavailableCount -eq 0
+          ) {
+            $residualExclusiveOpenClearAfterPoll = 0
+          }
+        } catch {
+          $diagnosticSnapshotErrorCount += 1
+        }
       } catch {
         if ($null -eq $uninstallFailure) {
           $uninstallFailure = [System.Management.Automation.RuntimeException]::new(
@@ -425,7 +701,15 @@ try {
               -SourceIdentifier $hookSourceIdentifier `
               -Timeout $hookObservationTimeoutSeconds `
               -ErrorAction Stop
-            $hookObserved = $null -ne $hookEvent
+            $hookProcessStartCount = @(
+              Get-Event `
+                -SourceIdentifier $hookSourceIdentifier `
+                -ErrorAction SilentlyContinue
+            ).Count
+            if ($null -ne $hookEvent -and $hookProcessStartCount -eq 0) {
+              $hookProcessStartCount = 1
+            }
+            $hookObserved = $hookProcessStartCount -ne 0
           } catch {
             if ($null -eq $uninstallFailure) {
               $uninstallFailure =
@@ -475,6 +759,20 @@ try {
           break
         }
         Start-Sleep -Seconds 1
+        if ($residualExclusiveOpenClearAfterPoll -ceq "not-observed") {
+          try {
+            $pollSnapshot = Get-ResidualApplicationSnapshot `
+              -InstallRoot $installRoot
+            if (
+              $pollSnapshot.FileCount -ne 0 -and
+              $pollSnapshot.ExclusiveOpenUnavailableCount -eq 0
+            ) {
+              $residualExclusiveOpenClearAfterPoll = $attempt + 1
+            }
+          } catch {
+            $diagnosticSnapshotErrorCount += 1
+          }
+        }
       }
       $remainingApplications = @(
         Get-ChildItem -LiteralPath $installRoot -Directory -ErrorAction SilentlyContinue |
@@ -485,6 +783,15 @@ try {
         -PathType Leaf
       $uninstallRegistryRemains = Test-Path `
         -LiteralPath $uninstallRegistryPath
+      try {
+        $settledDiagnosticSnapshot = Get-UninstallDiagnosticSnapshot `
+          -InstallRoot $installRoot `
+          -InstalledApplicationExecutablePath `
+            $installedApplicationExecutablePath `
+          -InstalledPackagedSquirrelPath $installedPackagedSquirrelPath
+      } catch {
+        $diagnosticSnapshotErrorCount += 1
+      }
 
       if (
         $remainingApplications.Count -ne 0 -or
@@ -544,7 +851,7 @@ try {
           }
         }
 
-        $exactPathLiveProcessCount = Get-ExactPathProcessCount `
+        $rootStubExactPathLiveProcessCount = Get-ExactPathProcessCount `
           -ExecutablePath $rootEntryPointPath
         $deadMarkerPresent = Test-Path `
           -LiteralPath (Join-Path $installRoot ".dead") `
@@ -558,11 +865,63 @@ try {
         Write-Output (
           "Squirrel uninstall classification: " +
           "hookObserved=$hookObservedText; " +
-          "appDirectoryCount=$($remainingApplications.Count); " +
+          "hookProcessStartCount=$hookProcessStartCount; " +
+          "diagnosticSnapshotErrorCount=$diagnosticSnapshotErrorCount; " +
+          "immediateTokenMonsterProcessCount=" +
+          "$($immediateDiagnosticSnapshot.TokenMonsterProcessCount); " +
+          "immediateInstallTreeLiveProcessCount=" +
+          "$($immediateDiagnosticSnapshot.InstallTreeLiveProcessCount); " +
+          "immediateInstalledAppExactPathLiveProcessCount=" +
+          "$($immediateDiagnosticSnapshot.InstalledApplicationExactPathProcessCount); " +
+          "immediateInstalledAppExclusiveOpen=" +
+          "$($immediateDiagnosticSnapshot.InstalledApplicationExclusiveOpenStatus); " +
+          "immediatePackagedSquirrelExclusiveOpen=" +
+          "$($immediateDiagnosticSnapshot.PackagedSquirrelExclusiveOpenStatus); " +
+          "immediateAppDirectoryCount=" +
+          "$($immediateDiagnosticSnapshot.AppDirectoryCount); " +
+          "immediateResidualDirectoryCount=" +
+          "$($immediateDiagnosticSnapshot.DirectoryCount); " +
+          "immediateResidualFileCount=" +
+          "$($immediateDiagnosticSnapshot.FileCount); " +
+          "immediateResidualExclusiveOpenAvailableCount=" +
+          "$($immediateDiagnosticSnapshot.ExclusiveOpenAvailableCount); " +
+          "immediateResidualExclusiveOpenUnavailableCount=" +
+          "$($immediateDiagnosticSnapshot.ExclusiveOpenUnavailableCount); " +
+          "immediateResidualSharingOrLockViolationCount=" +
+          "$($immediateDiagnosticSnapshot.SharingOrLockViolationCount); " +
+          "immediateResidualOtherOpenFailureCount=" +
+          "$($immediateDiagnosticSnapshot.OtherOpenFailureCount); " +
+          "settledTokenMonsterProcessCount=" +
+          "$($settledDiagnosticSnapshot.TokenMonsterProcessCount); " +
+          "settledInstallTreeLiveProcessCount=" +
+          "$($settledDiagnosticSnapshot.InstallTreeLiveProcessCount); " +
+          "settledInstalledAppExactPathLiveProcessCount=" +
+          "$($settledDiagnosticSnapshot.InstalledApplicationExactPathProcessCount); " +
+          "settledInstalledAppExclusiveOpen=" +
+          "$($settledDiagnosticSnapshot.InstalledApplicationExclusiveOpenStatus); " +
+          "settledPackagedSquirrelExclusiveOpen=" +
+          "$($settledDiagnosticSnapshot.PackagedSquirrelExclusiveOpenStatus); " +
+          "settledAppDirectoryCount=" +
+          "$($settledDiagnosticSnapshot.AppDirectoryCount); " +
+          "settledResidualDirectoryCount=" +
+          "$($settledDiagnosticSnapshot.DirectoryCount); " +
+          "settledResidualFileCount=" +
+          "$($settledDiagnosticSnapshot.FileCount); " +
+          "settledResidualExclusiveOpenAvailableCount=" +
+          "$($settledDiagnosticSnapshot.ExclusiveOpenAvailableCount); " +
+          "settledResidualExclusiveOpenUnavailableCount=" +
+          "$($settledDiagnosticSnapshot.ExclusiveOpenUnavailableCount); " +
+          "settledResidualSharingOrLockViolationCount=" +
+          "$($settledDiagnosticSnapshot.SharingOrLockViolationCount); " +
+          "settledResidualOtherOpenFailureCount=" +
+          "$($settledDiagnosticSnapshot.OtherOpenFailureCount); " +
+          "residualExclusiveOpenClearAfterPoll=" +
+          "$residualExclusiveOpenClearAfterPoll; " +
           "rootStubPresent=$rootStubPresentText; " +
           "rootStubHashAndSizeUnchanged=$rootStubUnchanged; " +
           "exclusiveOpenAvailable=$exclusiveOpenAvailable; " +
-          "exactPathLiveProcessCount=$exactPathLiveProcessCount; " +
+          "rootStubExactPathLiveProcessCount=" +
+          "$rootStubExactPathLiveProcessCount; " +
           "deadMarkerPresent=$deadMarkerPresentText; " +
           "registryKeyRemains=$registryKeyRemainsText"
         )
