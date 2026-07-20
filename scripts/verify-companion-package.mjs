@@ -29,6 +29,10 @@ import yauzl from "yauzl";
 import { MAX_PACKAGED_COLLECTOR_RESOURCE_BYTES } from "../apps/companion/packaging/package-bounds.mjs";
 import { verifySquirrelAwareExecutable } from "../apps/companion/packaging/squirrel-awareness.mjs";
 import {
+  requireReviewedSquirrelReleaseMode,
+  REVIEWED_SQUIRREL_UPDATER
+} from "../apps/companion/packaging/squirrel-updater.mjs";
+import {
   authenticodeEvidenceFromInspection,
   isWindowsRawPolicyBoundPath,
   isWindowsSignablePath,
@@ -77,6 +81,9 @@ const expectedWindowsSignerSubject =
   mode === "signed" && process.platform === "win32"
     ? requireWindowsSignerSubject(process.env)
     : null;
+if (mode === "signed" && process.platform === "win32") {
+  requireReviewedSquirrelReleaseMode(mode);
+}
 
 const companionDirectory = join(rootDirectory, "apps", "companion");
 const outDirectory = join(companionDirectory, "out");
@@ -1946,6 +1953,17 @@ async function verifySquirrelNupkg(
   const embeddedAsars = [...zip.files].filter(([archivePath]) =>
     /(?:^|\/)resources\/app\.asar$/iu.test(archivePath)
   );
+  const packagedUpdater = zip.files.get("lib/net45/squirrel.exe");
+  if (
+    packagedUpdater === undefined ||
+    (mode === "internal" &&
+      (packagedUpdater.bytes !== REVIEWED_SQUIRREL_UPDATER.bytes ||
+        packagedUpdater.sha256 !== REVIEWED_SQUIRREL_UPDATER.sha256))
+  ) {
+    throw new Error(
+      "Full Squirrel package does not contain the exact reviewed updater."
+    );
+  }
   const stagedAsarMetadata = await stat(stagedAsarPath);
   if (
     embeddedAsars.length !== 1 ||
@@ -1967,6 +1985,16 @@ async function verifySquirrelNupkg(
       path,
       extractionDirectory
     );
+    if (
+      mode === "signed" &&
+      !archiveInspection.portableExecutables.some(
+        (payload) => payload.archivePath === "lib/net45/squirrel.exe"
+      )
+    ) {
+      throw new Error(
+        "Signed full Squirrel package lacks its canonical updater payload."
+      );
+    }
     if (archiveInspection.nuspecs.length !== 1) {
       throw new Error(
         "Full Squirrel package must contain exactly one .nuspec."
@@ -2073,6 +2101,14 @@ async function verifySquirrelNupkg(
     squirrelVersion,
     nuspecPath: versionEvidence.nuspecPath,
     embeddedAsarSha256: embeddedAsars[0][1].sha256,
+    updaterBinding: {
+      bytes: packagedUpdater.bytes,
+      sha256: packagedUpdater.sha256,
+      verification:
+        mode === "internal"
+          ? "exact-reviewed-unsigned-updater"
+          : "canonical-signed-updater-authenticode"
+    },
     containerAuthenticode: "not-applicable-zip-container",
     payloadAuthenticode: versionEvidence.payloadAuthenticode,
     payloadRawPolicyBound: versionEvidence.payloadRawPolicyBound

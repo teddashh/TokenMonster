@@ -7,6 +7,7 @@ import {
   prepareWindowsSigningEnvironment,
   requireReleaseVersion,
 } from "../apps/companion/packaging/release-policy.mjs";
+import { requireReviewedSquirrelReleaseMode } from "../apps/companion/packaging/squirrel-updater.mjs";
 import { rootDirectory } from "./repository-files.mjs";
 
 const [command, mode] = process.argv.slice(2);
@@ -28,6 +29,11 @@ if (
 }
 if (mode === "signed" && command !== "make") {
   throw new Error("Signed companion releases require complete maker output.");
+}
+if (mode === "signed" && process.platform === "win32") {
+  // This public-release gate must run before validating credentials, deleting
+  // prior output, building, packaging, or signing any byte.
+  requireReviewedSquirrelReleaseMode(mode);
 }
 
 if (mode === "signed" && process.platform === "win32") {

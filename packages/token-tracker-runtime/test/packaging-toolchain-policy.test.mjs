@@ -41,7 +41,7 @@ describe("packaging toolchain policy", () => {
     );
   });
 
-  it("passes public release mode only through the same strict clean-tree verifier", () => {
+  it("keeps public release mode closed in the same strict clean-tree verifier", () => {
     const result = spawnSync(
       process.execPath,
       [
@@ -55,10 +55,9 @@ describe("packaging toolchain policy", () => {
     );
 
     expect(result.error).toBeUndefined();
-    expect(result.status).toBe(0);
-    expect(result.stderr).toBe("");
-    expect(result.stdout).toContain(
-      "Signed/GA upstream-compatible gate passes",
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "internal-only pending redistribution review",
     );
   });
 

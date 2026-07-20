@@ -73,6 +73,39 @@ before any public release. It is not a license for TokenMonster itself.
   This technical provenance and notice work does not choose TokenMonster's own
   license or replace that approval.
 
+## Squirrel.Windows updater candidate
+
+- Source: <https://github.com/Squirrel/Squirrel.Windows>
+- Pinned source: base commit `eef37460aef77b2f9de8cd2237c1e55b344a6554`
+  plus upstream fix commit `c98244936f6876b080366417301268058028a53c`.
+- Reviewed internal binary: 1,840,640 bytes, SHA-256
+  `1673161fd4e64d1123fb828a5e5f1580cbe3c3f6b3f0893f50bb920dada473fd`.
+  Two isolated reproducible-build runs and their exact receipts are bound under
+  `apps/companion/packaging/squirrel-windows/`.
+- Intended use: replace only the known-buggy `Squirrel.exe` in a disposable,
+  fully inventoried `electron-winstaller@5.4.4` vendor overlay. The reviewed
+  binary is currently permitted only for unsigned internal native testing.
+- Runtime license inventory: Squirrel.Windows MIT; the pinned NuGet fork
+  Apache-2.0; WpfAnimatedGif 1.4.15 Apache-2.0; Mono.Cecil 0.11.2 MIT;
+  DeltaCompressionDotNet 1.1.0 under the selected MS-PL option; and
+  SharpCompress 0.17.1 with its embedded MIT, Apache-2.0, MS-PL, BSD-3-Clause,
+  Zlib, and UnRAR notices. The complete source-level attribution set has been
+  identified but is not yet packaged as a redistribution notice bundle.
+- Public-release blocker: `Microsoft.Web.Xdt@2.1.1` uses a Microsoft EULA that
+  explicitly discusses redistribution of the original DLL object code but does
+  not clearly authorize ILRepack internalization into `Squirrel.exe`. The
+  current product also lacks reviewed end-user terms capable of carrying that
+  EULA's downstream obligations. A notice file alone does not resolve this.
+- Required action before public release: obtain legal approval for the exact
+  merged form and complete all notices, or build and re-audit a new candidate
+  using the official Apache-2.0 `Microsoft.Web.Xdt@3.1.0`. That upgrade is API
+  compatible but behaviorally different, so it requires new dependency and
+  binary receipts, XDT differential tests, and the full native Windows matrix.
+
+ILRepack 2.0.24 is a reproducible-build tool rather than runtime code. Its
+Apache-2.0 license remains in the build artifact provenance; it is not presented
+as a license for the merged runtime components.
+
 ## token-monitor
 
 - Source: <https://github.com/Javis603/token-monitor>

@@ -50,6 +50,16 @@ progression.
 
 ## Desktop installers
 
+The Windows maker currently uses an exact reviewed Squirrel updater candidate
+from `apps/companion/packaging/squirrel-windows/`. It verifies the complete
+`electron-winstaller@5.4.4` vendor inventory, creates a disposable overlay, and
+replaces only `Squirrel.exe`; `node_modules` is never mutated. The candidate is
+internal-only while its merged Microsoft.Web.Xdt 2.1.1 redistribution terms and
+complete third-party notices are reviewed. Signed packaging fails closed before
+maker execution until that status is explicitly replaced by a reviewed public
+redistribution decision. Do not create or push a release tag while this gate is
+closed.
+
 The `Companion installers [package]` CI job packages the floating pet shell on
 Ubuntu, macOS, and Windows for manual `workflow_dispatch` runs and for pushed
 commits whose message contains `[package]`. Those non-tag candidates are

@@ -36,6 +36,7 @@ import {
   requireReleaseVersion,
 } from "./release-policy.mjs";
 import { markSquirrelAwareExecutable } from "./squirrel-awareness.mjs";
+import { requireReviewedSquirrelReleaseMode } from "./squirrel-updater.mjs";
 
 /** @typedef {import("node:crypto").BinaryLike} BinaryLike */
 /** @typedef {import("@electron/packager").HookFunctionErrorCallback} HookFunctionErrorCallback */
@@ -145,7 +146,7 @@ import { markSquirrelAwareExecutable } from "./squirrel-awareness.mjs";
  */
 
 /**
- * @typedef {Readonly<Omit<SquirrelWindowsOptions, "appDirectory" | "outputDirectory" | "windowsSign"> & {
+ * @typedef {Readonly<Omit<SquirrelWindowsOptions, "appDirectory" | "outputDirectory" | "vendorDirectory" | "windowsSign"> & {
  *   name: string,
  *   exe: string,
  *   setupExe: string,
@@ -192,6 +193,9 @@ const APP_DESCRIPTION =
 
 if (RELEASE_MODE !== "internal" && RELEASE_MODE !== "signed") {
   throw new Error("TOKENMONSTER_RELEASE_MODE must be internal or signed.");
+}
+if (RELEASE_MODE === "signed" && process.platform === "win32") {
+  requireReviewedSquirrelReleaseMode(RELEASE_MODE);
 }
 const RELEASE_VERSION = requireReleaseVersion(process.env);
 

@@ -462,6 +462,24 @@ describe("companion release policy", () => {
     expect(source).not.toContain('runNpm(["run", "build"]');
   });
 
+  it("closes signed Windows updater review before credentials, deletion, or build", async () => {
+    const source = await readFile(
+      join(rootDirectory, "scripts", "package-companion.mjs"),
+      "utf8"
+    );
+    const gate = source.lastIndexOf(
+      "requireReviewedSquirrelReleaseMode(mode)"
+    );
+    expect(gate).toBeGreaterThan(0);
+    expect(gate).toBeLessThan(
+      source.indexOf("prepareWindowsSigningEnvironment({ ...process.env })")
+    );
+    expect(gate).toBeLessThan(source.indexOf("await rm(outDirectory"));
+    expect(gate).toBeLessThan(
+      source.indexOf('join(rootDirectory, "scripts", "run-workspaces.mjs")')
+    );
+  });
+
   it("runs direct makers serially and binds both Squirrel version projections", async () => {
     const source = await readFile(
       join(
@@ -481,6 +499,17 @@ describe("companion release policy", () => {
       source.indexOf("await makeSquirrelArtifacts")
     );
     expect(source).not.toContain("Promise.all(makers)");
+    expect(source).toContain("prepareReviewedSquirrelVendorOverlay(");
+    expect(source).toContain("requireReviewedSquirrelReleaseMode(");
+    expect(source).toContain("verifyReviewedSquirrelVendorOverlay(");
+    expect(source).toContain('join(temporaryRoot, "application")');
+    expect(source).toContain('join(temporaryRoot, "vendor")');
+    expect(source.indexOf("...configuration.squirrel")).toBeLessThan(
+      source.lastIndexOf("vendorDirectory,")
+    );
+    expect(source.indexOf("requireReviewedSquirrelReleaseMode(")).toBeLessThan(
+      source.indexOf("const packagePaths = await packager(")
+    );
   });
 
   it("orders final package metadata, permissions, and fuses", async () => {
@@ -492,6 +521,8 @@ describe("companion release policy", () => {
       join(companionDirectory, "packaging", "package-config.mjs"),
       "utf8"
     );
+    expect(runnerSource).toContain("vendorDirectory,");
+    expect(configSource).toContain('"vendorDirectory"');
     expect(runnerSource.indexOf("await hardenPackagedPermissions")).toBeLessThan(
       runnerSource.indexOf("await finalizePackagedFuses")
     );
@@ -665,6 +696,7 @@ describe("companion release policy", () => {
     expect(installedVerifier).toContain(
       "Installed Squirrel updater differs from the full-package Squirrel executable"
     );
+    expect(workflow).toContain("rebuild_squirrel_updater:");
     expect(installedVerifier).toContain(
       "await verifySquirrelAwareExecutable("
     );

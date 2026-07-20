@@ -17,6 +17,11 @@ import packagingConfiguration, {
 } from "./package-config.mjs";
 import { squirrelVersionFor } from "./release-policy.mjs";
 import { verifySquirrelAwareExecutable } from "./squirrel-awareness.mjs";
+import {
+  prepareReviewedSquirrelVendorOverlay,
+  requireReviewedSquirrelReleaseMode,
+  verifyReviewedSquirrelVendorOverlay,
+} from "./squirrel-updater.mjs";
 
 /** @typedef {"make" | "package"} PackagingCommand */
 /** @typedef {import("@electron/packager").Options} PackagerOptions */
@@ -136,11 +141,17 @@ export async function makeSquirrelArtifacts(
     throw new Error("Squirrel version projections do not match.");
   }
   const outputDirectory = join(makeDirectory, "squirrel.windows", arch);
-  const temporaryDirectory = await mkdtemp(
+  const temporaryRoot = await mkdtemp(
     join(tmpdir(), "tokenmonster-squirrel-maker-"),
   );
+  const temporaryDirectory = join(temporaryRoot, "application");
+  const vendorDirectory = join(temporaryRoot, "vendor");
   try {
     await cp(packagePath, temporaryDirectory, { recursive: true });
+    await prepareReviewedSquirrelVendorOverlay(
+      vendorDirectory,
+      configuration.releaseMode,
+    );
     await rm(outputDirectory, { force: true, recursive: true });
     await mkdir(outputDirectory, { recursive: true });
     await createWindowsInstaller(
@@ -148,10 +159,12 @@ export async function makeSquirrelArtifacts(
         ...configuration.squirrel,
         appDirectory: temporaryDirectory,
         outputDirectory,
+        vendorDirectory,
       }),
     );
+    await verifyReviewedSquirrelVendorOverlay(vendorDirectory);
   } finally {
-    await rm(temporaryDirectory, { force: true, recursive: true });
+    await rm(temporaryRoot, { force: true, recursive: true });
   }
   return Object.freeze([
     join(outputDirectory, "RELEASES"),
@@ -200,6 +213,9 @@ export async function runCompanionPackaging(
   }} */ ({}),
 ) {
   const parsedCommand = requireCommand(command);
+  if (platform === "win32") {
+    requireReviewedSquirrelReleaseMode(configuration.releaseMode);
+  }
   const packagePaths = await packager(
     /** @type {PackagerOptions} */ ({
       ...configuration.packagerConfig,

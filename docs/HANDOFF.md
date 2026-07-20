@@ -3,6 +3,55 @@
 Updated: 2026-07-20. Audience: the next implementation agent (codex) and the
 integrator session that reviews, commits, and ships its work.
 
+## 2026-07-20 reviewed Squirrel updater — internal native gate next
+
+The official `electron-winstaller@5.4.4` updater is Squirrel.Windows 2.0.1 with
+the upstream self-lock bug (SHA-256 `76359cd4b0349a83337b941332ad042c90351c2bb0a4628307740324c97984cc`).
+The exact upstream correction is commit
+`c98244936f6876b080366417301268058028a53c` over base
+`eef37460aef77b2f9de8cd2237c1e55b344a6554`; its tree is
+`0a1ebfa90cea6f8037907134d53562a26c6bb4c3` and the later upstream merge is
+`45834cbfeae84d20ef2bed24ac863f02d0abec66`.
+
+The repository now has a secret-free, exact-source rebuild workflow. Independent
+Actions runs `29772122109` and `29773025781` each built two isolated trees and
+produced the same unsigned PE: 1,840,640 bytes, SHA-256
+`1673161fd4e64d1123fb828a5e5f1580cbe3c3f6b3f0893f50bb920dada473fd`.
+The locked confirmation used Microsoft.NETCore.App 6.0.43 with roll-forward
+disabled, dependency receipt
+`fb9199730812ca5c569d0c44f8d79d910665651dba7b3fa4cf498996c17aac15`,
+and merge-input receipt
+`abddfa18198a408cd1b1d3983ce6afdd4eab4a1f4dcec5cbd4b2a0437104c419`.
+Artifact IDs are `8473224183` and `8473574243`; their
+archive digests and normalized provenance are committed in the integration
+record.
+
+Internal packaging verifies the complete 33-file
+`electron-winstaller@5.4.4` vendor inventory, copies it to a disposable sibling
+of the temporary application directory, replaces only `Squirrel.exe`, and
+verifies both the overlay and untouched `node_modules` again. The full `.nupkg`
+verifier requires exact-case `lib/net45/squirrel.exe` and exact reviewed bytes
+for internal candidates. Signed mode deliberately fails closed before maker
+execution while redistribution review remains open.
+
+This is **not a public release candidate yet**. The merged runtime notice audit
+found incomplete notices plus a material Microsoft.Web.Xdt 2.1.1 EULA question:
+the EULA describes redistribution of its DLL object code but does not clearly
+authorize ILRepack internalization. Separating or omitting the DLL is not a safe
+drop-in fix because Squirrel self-update propagates only one updater EXE.
+Microsoft.Web.Xdt 3.1.0 is an official Apache-2.0 alternative, but it changes
+behavior and assembly identity and therefore needs a new rebuild/audit rather
+than relabeling this binary. SharpCompress's embedded UnRAR/MS-PL notices and
+the rest of the full runtime attribution bundle also remain release gates.
+
+Next technical gate: push the integration commit, dispatch CI with
+`platforms=skip-macos`, and require the native Windows package verifier,
+clean install, packaged startup, lifecycle hook, silent uninstall, and
+zero-residue classification to pass. Only after that should the legal owner
+choose approval of exact XDT 2.1.1 terms or a separately reviewed 3.1.0 rebuild.
+Do not tag, sign, publish npm/CDN assets, or make the GitHub Release public from
+the current internal candidate.
+
 ## 2026-07-20 stable direct packaging replacement — native matrix pending
 
 PR CI run `29731498189` passed at exact commit `ded282e`: both sidecar jobs,
@@ -23,8 +72,10 @@ direct Electron packaging replacement. The companion uses exact
 `@electron/asar 4.2.0`. All Forge packages and root overrides were removed;
 the resulting Forge-free exact lock also contains none of `@electron/rebuild`,
 `external-editor`, or `tmp`. A fresh `npm ci`, both normal and
-`--require-upstream-compatible` toolchain verification, and
-`npm audit --audit-level=high` pass with zero vulnerabilities.
+the default toolchain verification, and `npm audit --audit-level=high` pass
+with zero vulnerabilities. The `--require-upstream-compatible` public mode now
+fails closed on the reviewed updater's redistribution status, as described in
+the current section above.
 
 The direct Linux package/make path has already passed the existing fail-closed
 artifact verifier: 39 ASAR files, the reviewed fuse wire, exact collector, the
