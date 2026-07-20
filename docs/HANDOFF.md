@@ -285,6 +285,27 @@ published to npm/GitHub/CDN, or promoted to a public feed. This is a Linux
 unsigned internal candidate only; native Windows/macOS, signing/notarization,
 protected feed, credentialed staging, and legal approval remain open gates.
 
+The first pushed PR CI run for that snapshot (`29729787069`) then exposed two
+release-proof portability defects. Windows companion tests passed Linux as the
+vault's simulated platform and asserted POSIX mode bits on NTFS; production
+already passes the native platform. The Ubuntu installed-smoke trace contained
+a valid `strace -f` socket call split across `<unfinished ...>` and `resumed`
+lines, which the strict parser had not modeled. Follow-up commit
+`2fd40a88f5a2dc7bbe11e4f76eec8638ce1b0a84` binds those tests to native
+semantics, accepts only fully inspectable safe unfinished socket arguments,
+and adds a tag-only exact-version packaged Linux boot gate. The existing
+non-tag packaged smoke now also requires both exit zero and an exact success
+marker instead of discarding the process status.
+
+Focused regressions, format/lint/secret scans, all 21 workspace typechecks,
+the full **1,731-test** root run, build, artifact, default packaging-toolchain,
+npm audit, and dependency-tree checks pass locally. A real 8-child strace
+fixture produced 1,048 unfinished socket lines and still verified exactly two
+loopback listeners, 1,280 loopback connections, and no external destination.
+Because that correction follows the candidate source commit, the local rc.13
+bytes above are now **superseded evidence only**. Do not tag or publish them;
+build fresh rc.13 bytes from the reviewed post-fix commit after CI is green.
+
 ## Continuation verification status — 2026-07-20
 
 By the final recovery pass, the interrupted tree contained 183 modified and two
