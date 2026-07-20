@@ -17,14 +17,24 @@ export interface EncryptedSecretSlotOptions {
 
 export interface SecretSlotStatus {
   readonly configured: boolean;
+  /** Whether this host is capable of persisting a secret with an approved backend. */
   readonly persistence: SecretPersistence;
+  /** Where the currently configured secret actually lives. */
+  readonly activePersistence?: SecretPersistence;
   readonly backend: string;
 }
 
 export interface EncryptedSecretSlot {
-  initialize(): Promise<SecretSlotStatus>;
-  set(secret: string, options?: Readonly<{ persist?: boolean }>): Promise<SecretSlotStatus>;
+  initialize(
+    options?: Readonly<{ signal?: AbortSignal }>
+  ): Promise<SecretSlotStatus>;
+  set(
+    secret: string,
+    options?: Readonly<{ persist?: boolean; signal?: AbortSignal }>
+  ): Promise<SecretSlotStatus>;
   get(): string | null;
-  clear(): Promise<SecretSlotStatus>;
+  clear(
+    options?: Readonly<{ signal?: AbortSignal }>
+  ): Promise<SecretSlotStatus>;
   status(): SecretSlotStatus;
 }
