@@ -99,15 +99,20 @@ consent contracts.
 
 ## Continuation verification status — 2026-07-20
 
-After preserving the interrupted tree outside the repository as a mode-0600
-binary patch plus an archive containing all 168 untracked files, the current
-tree was split into scoped local commits without using `git add -A`. Two test
-harness defects found during recovery were also fixed without changing
-production code: the progression child-start barrier now allows cold imports
-and awaits child teardown, while the asset-pack concurrency test follows the
-actual mutex winner instead of assuming invocation order.
+By the final recovery pass, the interrupted tree contained 183 modified and two
+deleted tracked files plus 168 untracked files. It was preserved outside the
+repository as a mode-0600 binary patch plus an archive containing every
+untracked file, then split into scoped local commits without using
+`git add -A`. Two test harness defects found during recovery were also fixed
+without changing production code: the progression child-start barrier now
+allows cold imports and awaits child teardown, while the asset-pack concurrency
+test follows the actual mutex winner instead of assuming invocation order.
 
-The resulting current source tree passed these bare root gates:
+The resulting source tree passed these root gates. The same committed snapshot
+(`b5f16f6`) was then cloned into an empty temporary directory and installed with
+`npm ci` under Node 24.15.0/npm 11.12.1; that clean checkout repeated every gate
+listed below. The install added 589 packages, audited 611 packages, and reported
+zero vulnerabilities.
 
 - `npm run typecheck` across all 21 workspaces
 - `npm test`: 137 test files and **1,661/1,661 tests**
@@ -121,9 +126,11 @@ The resulting current source tree passed these bare root gates:
   the external dev-tool range exception remains a signed/GA gate, not an
   application/runtime defect)
 - `npm audit --audit-level=high`: 0 vulnerabilities
-- `npm ls --depth=0` exited successfully; as on 2026-07-19, this reused
-  workspace reports optional `@emnapi/runtime`/`tslib` entries as extraneous,
-  so only a later `npm ci` clean checkout may count as clean-install evidence
+- `npm ls --depth=0` exited successfully. npm 11.12.1 labels optional
+  `@emnapi/runtime` and `tslib` entries as extraneous immediately after a fresh
+  `npm ci`, so this is reproducible optional/platform lockfile behavior rather
+  than reused-worktree residue; the successful clean-checkout install and
+  repeated gates are the clean-install evidence
 - `npm run verify:zstd-native-prebuild`
 - `npm run audit:zstd-native-prebuild`: Linux x64, macOS arm64, and Windows x64
   archives/bindings plus the pinned MongoDB signer all pass
@@ -158,9 +165,10 @@ reuse the rc.11 name or artifacts.
 
 The items below describe the player-facing snapshot that was verified before
 the interrupted post-candidate batch. They remain useful implementation
-context, but no longer constitute current release evidence. All work is local
-and uncommitted; do not describe rc.11 as public until a fresh candidate is
-deliberately reviewed, committed, and green on the native release matrix.
+context, but no longer constitute current release evidence. At that checkpoint
+the work was local and uncommitted; do not describe rc.11 as public until a
+fresh candidate is deliberately reviewed, committed, and green on the native
+release matrix.
 
 - Clean installs begin with no forced character. The player can choose any of
   the four starter sisters; selection, unlock, restart persistence, concurrent
