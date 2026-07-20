@@ -82,7 +82,7 @@ describe("default pet BYOK vault composition", () => {
     const slot = await createPetByokSecretSlot({
       userDataDirectory,
       safeStorage,
-      platform: "linux"
+      platform: process.platform
     });
     expect(slot).not.toBeNull();
     expect(await slot!.set(KEY_CANARY, { persist: true })).toMatchObject({
@@ -107,18 +107,21 @@ describe("default pet BYOK vault composition", () => {
     const reopened = await createPetByokSecretSlot({
       userDataDirectory,
       safeStorage,
-      platform: "linux"
+      platform: process.platform
     });
     expect(reopened?.get()).toBe(KEY_CANARY);
     expect(JSON.stringify(reopened?.status())).not.toContain(KEY_CANARY);
   });
 
-  it("stays usable but RAM-only when the backend is not approved", async () => {
+  it("stays usable but RAM-only when the host storage policy is not approved", async () => {
     const userDataDirectory = await temporaryUserData();
     const slot = await createPetByokSecretSlot({
       userDataDirectory,
-      safeStorage: new FakeSafeStorage("basic_text", true),
-      platform: "linux"
+      safeStorage: new FakeSafeStorage(
+        "basic_text",
+        process.platform === "linux"
+      ),
+      platform: process.platform
     });
     expect(slot).not.toBeNull();
     expect(await slot!.set(KEY_CANARY, { persist: true })).toMatchObject({
@@ -139,7 +142,7 @@ describe("default pet BYOK vault composition", () => {
       createPetByokSecretSlot({
         userDataDirectory: missingRoot,
         safeStorage: new FakeSafeStorage("gnome_libsecret", true),
-        platform: "linux"
+        platform: process.platform
       })
     ).resolves.toBeNull();
 
@@ -148,7 +151,7 @@ describe("default pet BYOK vault composition", () => {
       createPetByokSecretSlot({
         userDataDirectory: unavailableRoot,
         safeStorage: new FakeSafeStorage("gnome_libsecret", true, true),
-        platform: "linux"
+        platform: process.platform
       })
     ).resolves.toBeNull();
 
@@ -162,7 +165,7 @@ describe("default pet BYOK vault composition", () => {
       createPetByokSecretSlot({
         userDataDirectory: corruptRoot,
         safeStorage: new FakeSafeStorage("gnome_libsecret", true),
-        platform: "linux"
+        platform: process.platform
       })
     ).resolves.toBeNull();
   });
@@ -172,7 +175,7 @@ describe("default pet BYOK vault composition", () => {
     const writer = await createPetByokSecretSlot({
       userDataDirectory,
       safeStorage: new FakeSafeStorage("gnome_libsecret", true),
-      platform: "linux"
+      platform: process.platform
     });
     await writer!.set(KEY_CANARY, { persist: true });
     const secretPath = join(userDataDirectory, "secrets", PET_BYOK_SECRET_FILE);
@@ -202,7 +205,7 @@ describe("default pet BYOK vault composition", () => {
     const pending = createPetByokSecretSlot({
       userDataDirectory,
       safeStorage,
-      platform: "linux"
+      platform: process.platform
     });
     await probeStarted;
     await vi.advanceTimersByTimeAsync(PET_BYOK_INITIALIZATION_TIMEOUT_MS);
@@ -237,7 +240,7 @@ describe("default pet BYOK vault composition", () => {
           shouldReEncrypt: false
         })
       }),
-      platform: "linux"
+      platform: process.platform
     });
     await probeStarted;
     let quiesced = false;
@@ -259,7 +262,7 @@ describe("default pet BYOK vault composition", () => {
     const writer = await createPetByokSecretSlot({
       userDataDirectory,
       safeStorage: new FakeSafeStorage("gnome_libsecret", true),
-      platform: "linux"
+      platform: process.platform
     });
     await writer!.set(KEY_CANARY, { persist: true });
     const secretPath = join(userDataDirectory, "secrets", PET_BYOK_SECRET_FILE);
@@ -296,7 +299,7 @@ describe("default pet BYOK vault composition", () => {
     const pending = createPetByokSecretSlot({
       userDataDirectory,
       safeStorage,
-      platform: "linux"
+      platform: process.platform
     });
     await decryptStarted;
     await vi.advanceTimersByTimeAsync(PET_BYOK_INITIALIZATION_TIMEOUT_MS);

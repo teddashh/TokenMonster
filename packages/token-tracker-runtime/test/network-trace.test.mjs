@@ -13,9 +13,22 @@ const safeTrace = [
   "12 socketpair(AF_UNIX, SOCK_STREAM, 0, [3, 4]) = 0",
 ].join("\n");
 
+const safeUnfinishedSocketTrace = [
+  safeTrace,
+  "[pid 13] socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC|SOCK_NONBLOCK, IPPROTO_IP <unfinished ...>",
+  "[pid 13] <... socket resumed>) = 26",
+].join("\n");
+
 describe("installed release network-trace verifier", () => {
   it("accepts the two local listeners and their managed readiness connection", () => {
     expect(inspectLoopbackNetworkTrace(safeTrace)).toEqual({
+      loopbackBinds: 2,
+      loopbackConnects: 1,
+    });
+  });
+
+  it("accepts a strictly inspectable socket split by strace process interleaving", () => {
+    expect(inspectLoopbackNetworkTrace(safeUnfinishedSocketTrace)).toEqual({
       loopbackBinds: 2,
       loopbackConnects: 1,
     });
@@ -34,6 +47,8 @@ describe("installed release network-trace verifier", () => {
     "10 socket(AF_NETLINK, SOCK_RAW|SOCK_CLOEXEC, NETLINK_ROUTE) = 22",
     "10 socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC|SOCK_CLOEXEC, IPPROTO_TCP) = 22",
     "10 socket(AF_INET, SOCK_STREAM, 0x6) = 22",
+    "10 socket(AF_PACKET, SOCK_RAW, 0 <unfinished ...>",
+    "10 socket(AF_INET, SOCK_STREAM, IPPROTO_IP <unfinished ...> trailing",
   ])("rejects external or opaque egress: %s", (unsafeLine) => {
     expect(() =>
       inspectLoopbackNetworkTrace(`${safeTrace}\n${unsafeLine}`),
