@@ -634,8 +634,79 @@ describe("companion release policy", () => {
     expect(windowsSmoke).not.toContain("WaitForNextEvent");
     expect(windowsSmoke).toContain("QuietUninstallString");
     expect(windowsSmoke).toContain("hookObserved=");
+    expect(windowsSmoke).toContain("hookProcessStartCount=");
+    expect(windowsSmoke).toContain("diagnosticSnapshotErrorCount=");
+    expect(windowsSmoke).toContain(
+      "immediateInstallTreeLiveProcessCount="
+    );
+    expect(windowsSmoke).toContain(
+      "immediateInstalledAppExactPathLiveProcessCount="
+    );
+    expect(windowsSmoke).toContain(
+      "immediateResidualExclusiveOpenUnavailableCount="
+    );
+    expect(windowsSmoke).toContain(
+      "immediateResidualSharingOrLockViolationCount="
+    );
+    expect(windowsSmoke).toContain(
+      "immediateResidualOtherOpenFailureCount="
+    );
+    expect(windowsSmoke).toContain(
+      "immediateInstalledAppExclusiveOpen="
+    );
+    expect(windowsSmoke).toContain(
+      "immediatePackagedSquirrelExclusiveOpen="
+    );
+    expect(windowsSmoke).toContain(
+      "settledInstallTreeLiveProcessCount="
+    );
+    expect(windowsSmoke).toContain(
+      "settledInstalledAppExactPathLiveProcessCount="
+    );
+    expect(windowsSmoke).toContain(
+      "settledResidualExclusiveOpenUnavailableCount="
+    );
+    expect(windowsSmoke).toContain(
+      "settledResidualSharingOrLockViolationCount="
+    );
+    expect(windowsSmoke).toContain(
+      "settledResidualOtherOpenFailureCount="
+    );
+    expect(windowsSmoke).toContain(
+      "settledInstalledAppExclusiveOpen="
+    );
+    expect(windowsSmoke).toContain(
+      "settledPackagedSquirrelExclusiveOpen="
+    );
+    expect(windowsSmoke).toContain("residualExclusiveOpenClearAfterPoll=");
+    expect(windowsSmoke).toContain(
+      "while ($null -ne $openException.InnerException)"
+    );
+    expect(windowsSmoke).toContain(
+      "$win32ErrorCode = $openException.HResult -band 0xffff"
+    );
+    expect(windowsSmoke).toContain(
+      "$win32ErrorCode -eq 32 -or $win32ErrorCode -eq 33"
+    );
     expect(windowsSmoke).toContain("exclusiveOpenAvailable=");
     expect(windowsSmoke).toContain("registryKeyRemains=");
+    const classificationStart = windowsSmoke.indexOf(
+      '"Squirrel uninstall classification: "'
+    );
+    const classificationEnd = windowsSmoke.indexOf(
+      "\n        )",
+      classificationStart
+    );
+    const classificationOutput = windowsSmoke.slice(
+      classificationStart,
+      classificationEnd
+    );
+    expect(classificationStart).toBeGreaterThanOrEqual(0);
+    expect(classificationEnd).toBeGreaterThan(classificationStart);
+    expect(classificationOutput).not.toMatch(
+      /\$(?:installRoot|rootEntryPointPath|installedApplicationExecutablePath|installedPackagedSquirrelPath)/u
+    );
+    expect(windowsSmoke).not.toContain("Squirrel-Uninstall.log");
     expect(windowsSmoke).toContain("verify-installed-companion.mjs");
     expect(windowsSmoke).toContain("--full-package");
     expect(windowsSmoke).toContain('"--snapshot-maker"');

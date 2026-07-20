@@ -3,7 +3,7 @@
 Updated: 2026-07-20. Audience: the next implementation agent (codex) and the
 integrator session that reviews, commits, and ships its work.
 
-## 2026-07-20 reviewed Squirrel updater — first native run diagnosed
+## 2026-07-20 reviewed Squirrel updater — native uninstall diagnosed
 
 The official `electron-winstaller@5.4.4` updater is Squirrel.Windows 2.0.1 with
 the upstream self-lock bug (SHA-256 `76359cd4b0349a83337b941332ad042c90351c2bb0a4628307740324c97984cc`).
@@ -52,11 +52,25 @@ precise integration issue: the maker succeeded, but upstream Squirrel writes
 correctly rejected the 34th entry. All other run jobs passed. The follow-up
 allows only that physical, bounded, privacy-sensitive diagnostic, unlinks it
 without reading or retaining it, and then repeats the strict 33-file overlay
-and source-vendor verification. Rerun `platforms=skip-macos` and require the
-native Windows package verifier, clean install, packaged startup, lifecycle
-hook, silent uninstall, and zero-residue classification to pass. Only after
-that should the legal owner choose approval of exact XDT 2.1.1 terms or a
-separately reviewed 3.1.0 rebuild.
+and source-vendor verification. Follow-up commit `fdc9b72` passed that maker
+gate in manual run `29776784521`. The exact full-package payload, all 911 clean
+installed files, Squirrel awareness metadata, packaged startup, uninstall
+hook, root execution-stub removal, registry removal, and expected root `.dead`
+marker all passed. The run still failed closed because one `app-*` directory
+remained after silent uninstall; no Windows artifact was uploaded.
+
+The failed run's original process classifier checked only the already removed
+root execution stub, so its zero count did not identify the remaining lock. A
+diagnostic-only follow-up keeps the zero-residue failure unchanged and reports
+only fixed booleans and counts: immediate and settled TokenMonster/process-tree
+presence, the exact installed application process, residual file/directory
+totals, exclusive-open availability, and lifecycle-hook start count. It never
+emits or persists a path, filename, PID, or raw Squirrel log. Run this narrowed
+native Windows matrix once before changing updater behavior. If the immediate
+lock clears by the settled snapshot, review a bounded upstream deletion retry;
+if it remains locked, identify the owning role without exposing its path and
+fix that lifecycle owner. Only after zero-residue passes should the legal owner
+choose approval of exact XDT 2.1.1 terms or a separately reviewed 3.1.0 rebuild.
 Do not tag, sign, publish npm/CDN assets, or make the GitHub Release public from
 the current internal candidate.
 
@@ -947,9 +961,11 @@ source-merged hourly data.
 - **Integrator publication:** the recovered hardening through `ded282e` is
   pushed on `agent/permanent-sidecar-companion`, PR 1 remains draft, and the
   direct packaging replacement plus reviewed updater integration is committed
-  through `bfc8d0a`. Manual run `29775692315` passed every job except the
-  diagnosed Windows maker post-overlay check described above; rerun after its
-  narrow log-residue fix before claiming native Windows evidence.
+  through `fdc9b72`. Manual run `29775692315` diagnosed and closed the Windows
+  maker log-residue check. Run `29776784521` then passed that check and every
+  other requested job except the fail-closed Windows zero-residue uninstall
+  assertion described above; run the fixed-field diagnostic follow-up before
+  claiming native Windows evidence.
   Configure the protected signing/npm/CDN release environments and the four
   exact public download bindings only after the immutable Windows bytes exist;
   never call the historical local rc.12 artifacts shipped.
