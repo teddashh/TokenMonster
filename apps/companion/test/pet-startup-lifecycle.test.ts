@@ -236,5 +236,13 @@ describe("pet startup shutdown lifecycle", () => {
     expect(source).toMatch(
       /startupLifecycle\.requestShutdown\(\)\s+shutdownOperation/u
     )
+    expect(source).toContain("WINDOWS_SMOKE_EXIT_CODES")
+    expect(source).toContain("ok: 86")
+    expect(source).toContain(
+      'process.platform === "win32"\n      ? WINDOWS_SMOKE_EXIT_CODES[outcome]'
+    )
+    expect(source).toMatch(
+      /if \(process\.platform !== "win32"\) \{\s+process\.stdout\.write/u
+    )
   })
 })

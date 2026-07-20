@@ -87,26 +87,42 @@ const PET_STATE_FILE = "pet-window-state.json"
 const REMINDER_STATE_FILE = "reminders-v1.json"
 const AUTOMATIC_UPDATE_STATE_FILE = "automatic-updates-v1.json"
 const NATIVE_NOTIFICATION_TIMEOUT_MS = 5_000
-// CI smoke mode: report the boot outcome on stdout and exit, so the packaged
-// app (not just the dev tree) proves the sidecar and gateway actually start.
+// CI smoke mode: report the boot outcome through a platform-bound process
+// contract, so the packaged app proves the sidecar and gateway actually start.
 // Dual-gated (env var AND argv flag) so an inherited environment variable
 // alone can never flip a real user's install into exit-after-boot behavior.
 const SMOKE_MODE =
   process.env["TOKENMONSTER_SMOKE"] === "1" &&
   process.argv.includes("--tokenmonster-smoke")
 const SMOKE_EXIT_TIMEOUT_MS = 10_000
+const WINDOWS_SMOKE_EXIT_CODES = Object.freeze({
+  ok: 86,
+  gateway: 87,
+  sidecar: 88
+})
 
 function reportSmokeOutcome(
   outcome: "ok" | "gateway" | "sidecar",
   windDown: () => Promise<void>
 ): void {
   if (!SMOKE_MODE) return
-  process.stdout.write(
-    outcome === "ok"
-      ? "TOKENMONSTER_SMOKE_OK\n"
-      : `TOKENMONSTER_SMOKE_FAIL:${outcome}\n`
-  )
-  const code = outcome === "ok" ? 0 : 1
+  // A packaged Electron executable uses the Windows GUI subsystem, where
+  // stdout is not a reliable process contract even when its parent requests a
+  // pipe. Distinct non-zero exit codes prove the exact boot outcome without a
+  // filesystem marker. Other platforms retain the human-readable marker.
+  if (process.platform !== "win32") {
+    process.stdout.write(
+      outcome === "ok"
+        ? "TOKENMONSTER_SMOKE_OK\n"
+        : `TOKENMONSTER_SMOKE_FAIL:${outcome}\n`
+    )
+  }
+  const code =
+    process.platform === "win32"
+      ? WINDOWS_SMOKE_EXIT_CODES[outcome]
+      : outcome === "ok"
+        ? 0
+        : 1
   // Wind services down first so the sidecar exits cleanly instead of being
   // torn down mid-write by app.exit; bound the wait so a wedged shutdown
   // cannot hang CI.

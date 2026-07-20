@@ -9,6 +9,7 @@ import { resolve, win32 } from "node:path";
 const SMOKE_TIMEOUT_MS = 180_000;
 const FORCE_CLOSE_GRACE_MS = 15_000;
 const MAX_CAPTURE_BYTES = 1024 * 1024;
+const WINDOWS_SMOKE_SUCCESS_EXIT_CODE = 86;
 const [inputPath, ...extraArguments] = process.argv.slice(2);
 
 if (
@@ -195,14 +196,18 @@ if (result.failure === "spawn") {
 if (result.failure === "stream" || !result.closed) {
   throw new Error("Packaged companion startup smoke did not close cleanly.");
 }
-if (result.code !== 0 || result.signal !== null) {
+const expectedExitCode =
+  process.platform === "win32" ? WINDOWS_SMOKE_SUCCESS_EXIT_CODE : 0;
+if (result.code !== expectedExitCode || result.signal !== null) {
   throw new Error("Packaged companion startup smoke exited unsuccessfully.");
 }
-const stdoutLines = result.stdout.split(/\r?\n/u);
-if (
-  stdoutLines.filter((line) => line === "TOKENMONSTER_SMOKE_OK").length !== 1
-) {
-  throw new Error("Packaged companion startup smoke did not emit its marker.");
+if (process.platform !== "win32") {
+  const stdoutLines = result.stdout.split(/\r?\n/u);
+  if (
+    stdoutLines.filter((line) => line === "TOKENMONSTER_SMOKE_OK").length !== 1
+  ) {
+    throw new Error("Packaged companion startup smoke did not emit its marker.");
+  }
 }
 if (`${result.stdout}\n${result.stderr}`.includes("TOKENMONSTER_SMOKE_FAIL:")) {
   throw new Error("Packaged companion startup smoke emitted a failure marker.");
