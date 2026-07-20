@@ -7,6 +7,16 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 $processTimeoutMilliseconds = 180000
 $terminationGraceMilliseconds = 15000
+$squirrelLogCulture = [Globalization.CultureInfo]::CurrentCulture
+if (
+  $squirrelLogCulture.Name -cne "en-US" -or
+  $squirrelLogCulture.DateTimeFormat.DateSeparator -cne "/" -or
+  $squirrelLogCulture.DateTimeFormat.TimeSeparator -cne ":" -or
+  $squirrelLogCulture.TextInfo.ToLower("Info") -cne "info" -or
+  $squirrelLogCulture.DateTimeFormat.Calendar -isnot [Globalization.GregorianCalendar]
+) {
+  throw "The Squirrel smoke requires the exact en-US log-format culture."
+}
 
 function Assert-PhysicalPathChain {
   param(

@@ -586,6 +586,12 @@ describe("companion release policy", () => {
     );
     expect(windowsSmoke).toContain("Select-Object -First 1");
     expect(windowsSmoke).toContain("-LiteralPath $nodeCommand.Source");
+    expect(windowsSmoke).toContain(
+      '$squirrelLogCulture.Name -cne "en-US"'
+    );
+    expect(windowsSmoke).toContain(
+      '$squirrelLogCulture.DateTimeFormat.DateSeparator -cne "/"'
+    );
     expect(windowsSmoke).not.toContain(
       "$nodeCommand = (Get-Command node"
     );
@@ -600,6 +606,20 @@ describe("companion release policy", () => {
     expect(installedVerifier).toContain("hashOpenFileHandle");
     expect(installedVerifier).toContain("entryCount += entries.length");
     expect(installedVerifier).toContain("left.ctimeNs === right.ctimeNs");
+    expect(installedVerifier).toContain(
+      'const SQUIRREL_UPDATE_SELF_LOG = "Squirrel-UpdateSelf.log"'
+    );
+    expect(installedVerifier).toContain(
+      'const INSTALLED_UPDATE_EXECUTABLE = "Update.exe"'
+    );
+    expect(installedVerifier).toContain(
+      "await rename(logPath, quarantinePath)"
+    );
+    expect(installedVerifier).toContain("await unlink(updateLogQuarantine)");
+    expect(installedVerifier).toContain(
+      "Installed Squirrel updater differs from the full-package Squirrel executable"
+    );
+    expect(installedVerifier).not.toContain("summarizeInventoryPaths");
     expect(releaseScriptTsconfig).toContain(
       '"scripts/release/smoke-companion-executable.mjs"'
     );

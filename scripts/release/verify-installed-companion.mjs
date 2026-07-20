@@ -3,7 +3,14 @@
 // @ts-check
 
 import { createHash } from "node:crypto";
-import { lstat, open, readdir, realpath } from "node:fs/promises";
+import {
+  lstat,
+  open,
+  readdir,
+  realpath,
+  rename,
+  unlink
+} from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { Readable } from "node:stream";
 
@@ -13,11 +20,18 @@ const MAX_FILE_COUNT = 5_000;
 const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_SETUP_BYTES = 512 * 1024 * 1024;
 const MAX_RELEASES_BYTES = 64 * 1024;
+const MAX_SQUIRREL_UPDATE_LOG_BYTES = 16 * 1024;
 const MAX_TREE_DEPTH = 24;
+const SQUIRREL_UPDATE_LOG_WAIT_MS = 15_000;
+const SQUIRREL_UPDATE_LOG_POLL_MS = 50;
 const SQUIRREL_PAYLOAD_PREFIX = "lib/net45/";
 const EXECUTION_STUB_PAYLOAD_PATH = "TokenMonster_ExecutionStub.exe";
 const INSTALLED_ENTRY_POINT = "TokenMonster.exe";
-const INVENTORY_DIAGNOSTIC_PATH_LIMIT = 20;
+const INSTALLED_UPDATE_EXECUTABLE = "Update.exe";
+const PACKAGED_UPDATE_EXECUTABLE = "Squirrel.exe";
+const SQUIRREL_UPDATE_SELF_LOG = "Squirrel-UpdateSelf.log";
+const SQUIRREL_UPDATE_SELF_QUARANTINE =
+  ".tokenmonster-squirrel-update-self.verifying";
 
 /** @typedef {{ bytes: number; sha256: string }} FileDigest */
 /** @typedef {{ dev: string; ino: string; mtimeNs: string; ctimeNs: string }} FileIdentity */
@@ -501,6 +515,236 @@ function samePhysicalDirectory(left, right) {
   );
 }
 
+/** @param {number} milliseconds */
+function wait(milliseconds) {
+  return new Promise((resolvePromise) =>
+    setTimeout(resolvePromise, milliseconds)
+  );
+}
+
+/** @param {unknown} error @param {string[]} codes */
+function hasErrorCode(error, codes) {
+  return (
+    error !== null &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    codes.includes(error.code)
+  );
+}
+
+/**
+ * @param {string} path
+ * @param {string} label
+ * @param {number} maximumBytes
+ * @returns {Promise<Buffer>}
+ */
+async function readBoundedPhysicalFile(path, label, maximumBytes) {
+  const beforePath = await lstat(path, { bigint: true });
+  if (
+    !beforePath.isFile() ||
+    beforePath.isSymbolicLink() ||
+    beforePath.size < 0n ||
+    beforePath.size > BigInt(maximumBytes)
+  ) {
+    throw new Error(`${label} is not a bounded physical file.`);
+  }
+  const physicalPath = await realpath(path);
+  if (!samePlatformPath(path, physicalPath)) {
+    throw new Error(`${label} path must not traverse a symbolic link.`);
+  }
+  const handle = await open(path, "r");
+  try {
+    const beforeHandle = await handle.stat({ bigint: true });
+    if (!samePhysicalFile(beforePath, beforeHandle)) {
+      throw new Error(`${label} changed before it could be read.`);
+    }
+    const bytes = Buffer.alloc(Number(beforeHandle.size));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const { bytesRead } = await handle.read(
+        bytes,
+        offset,
+        bytes.length - offset,
+        offset
+      );
+      if (bytesRead < 1) {
+        throw new Error(`${label} changed size while it was read.`);
+      }
+      offset += bytesRead;
+    }
+    const [afterHandle, afterPath] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat(path, { bigint: true })
+    ]);
+    if (
+      !samePhysicalFile(beforeHandle, afterHandle) ||
+      !samePhysicalFile(beforeHandle, afterPath)
+    ) {
+      throw new Error(`${label} changed while it was read.`);
+    }
+    return bytes;
+  } finally {
+    await handle.close();
+  }
+}
+
+/** @param {string} line */
+function parseSquirrelUpdateLogLine(line) {
+  const match =
+    /^\[((?:0[1-9]|[12][0-9]|3[01]))\/((?:0[1-9]|1[0-2]))\/([0-9]{2}) ((?:[01][0-9]|2[0-3])):([0-5][0-9]):([0-5][0-9])\] info: (.*)$/u.exec(
+      line
+    );
+  if (
+    match === null ||
+    match[1] === undefined ||
+    match[2] === undefined ||
+    match[3] === undefined ||
+    match[4] === undefined ||
+    match[5] === undefined ||
+    match[6] === undefined ||
+    match[7] === undefined
+  ) {
+    throw new Error("Squirrel update-self log has invalid line framing.");
+  }
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const timestamp = Date.UTC(2000 + year, month - 1, day, hour, minute, second);
+  const instant = new Date(timestamp);
+  if (
+    instant.getUTCFullYear() !== 2000 + year ||
+    instant.getUTCMonth() !== month - 1 ||
+    instant.getUTCDate() !== day ||
+    instant.getUTCHours() !== hour ||
+    instant.getUTCMinutes() !== minute ||
+    instant.getUTCSeconds() !== second
+  ) {
+    throw new Error("Squirrel update-self log has an invalid timestamp.");
+  }
+  return Object.freeze({ message: match[7], timestamp });
+}
+
+/** @param {Buffer} bytes @param {string} installRoot */
+function validateSquirrelUpdateSelfLog(bytes, installRoot) {
+  const bom = Buffer.from([0xef, 0xbb, 0xbf]);
+  if (bytes.length < bom.length || !bytes.subarray(0, bom.length).equals(bom)) {
+    throw new Error("Squirrel update-self log lacks its canonical UTF-8 BOM.");
+  }
+  const encoded = bytes.subarray(bom.length);
+  const contents = encoded.toString("utf8");
+  if (!Buffer.from(contents, "utf8").equals(encoded)) {
+    throw new Error("Squirrel update-self log is not canonical UTF-8.");
+  }
+  const lines = contents.split("\r\n");
+  if (lines.length !== 4 || lines[3] !== "") {
+    throw new Error("Squirrel update-self log has an unexpected line count.");
+  }
+  const records = lines.slice(0, 3).map(parseSquirrelUpdateLogLine);
+  const firstRecord = records[0];
+  const parentRecord = records[1];
+  const finalRecord = records[2];
+  if (
+    firstRecord === undefined ||
+    parentRecord === undefined ||
+    finalRecord === undefined
+  ) {
+    throw new Error("Squirrel update-self log has an unexpected line count.");
+  }
+  if (
+    firstRecord.timestamp > parentRecord.timestamp ||
+    parentRecord.timestamp > finalRecord.timestamp
+  ) {
+    throw new Error("Squirrel update-self log timestamps are out of order.");
+  }
+  const updatePrefix = "Program: Starting Squirrel Updater: --updateSelf=";
+  if (!firstRecord.message.startsWith(updatePrefix)) {
+    throw new Error("Squirrel update-self log lacks its exact start event.");
+  }
+  const sourceUpdateExecutable = firstRecord.message.slice(updatePrefix.length);
+  const expectedSourceUpdateExecutable = resolve(
+    dirname(installRoot),
+    "SquirrelTemp",
+    INSTALLED_UPDATE_EXECUTABLE
+  );
+  if (
+    !samePlatformPath(sourceUpdateExecutable, expectedSourceUpdateExecutable)
+  ) {
+    throw new Error(
+      "Squirrel update-self log names an unexpected source executable."
+    );
+  }
+  if (
+    !/^Program: (?:About to wait for parent PID ([1-9][0-9]{0,9})|Parent PID ([1-9][0-9]{0,9}) no longer valid - ignoring)$/u.test(
+      parentRecord.message
+    )
+  ) {
+    throw new Error("Squirrel update-self log has an unexpected parent event.");
+  }
+  const parentMatch = /PID ([1-9][0-9]{0,9})/u.exec(parentRecord.message);
+  const parentPid = Number(parentMatch?.[1]);
+  if (!Number.isSafeInteger(parentPid) || parentPid > 2_147_483_647) {
+    throw new Error("Squirrel update-self log has an invalid parent PID.");
+  }
+  if (finalRecord.message !== "Program: Finished Squirrel Updater") {
+    throw new Error(
+      "Squirrel update-self log lacks its exact completion event."
+    );
+  }
+}
+
+/** @param {string} installedRoot @param {string} installRoot */
+async function quarantineSquirrelUpdateSelfLog(installedRoot, installRoot) {
+  const logPath = resolve(installedRoot, SQUIRREL_UPDATE_SELF_LOG);
+  const quarantinePath = resolve(
+    installedRoot,
+    SQUIRREL_UPDATE_SELF_QUARANTINE
+  );
+  try {
+    await lstat(quarantinePath);
+    throw new Error("Squirrel update-self verifier quarantine already exists.");
+  } catch (error) {
+    if (!hasErrorCode(error, ["ENOENT"])) {
+      throw new Error(
+        "Squirrel update-self verifier quarantine could not be inspected."
+      );
+    }
+  }
+  const deadline = Date.now() + SQUIRREL_UPDATE_LOG_WAIT_MS;
+  for (;;) {
+    try {
+      await rename(logPath, quarantinePath);
+      break;
+    } catch (error) {
+      if (
+        Date.now() < deadline &&
+        hasErrorCode(error, ["ENOENT", "EACCES", "EBUSY", "EPERM"])
+      ) {
+        await wait(SQUIRREL_UPDATE_LOG_POLL_MS);
+        continue;
+      }
+      throw new Error(
+        "Squirrel update-self log did not reach its closed-file lifecycle barrier."
+      );
+    }
+  }
+  let bytes;
+  try {
+    bytes = await readBoundedPhysicalFile(
+      quarantinePath,
+      "Squirrel update-self log",
+      MAX_SQUIRREL_UPDATE_LOG_BYTES
+    );
+  } catch {
+    throw new Error("Squirrel update-self log could not be read safely.");
+  }
+  validateSquirrelUpdateSelfLog(bytes, installRoot);
+  return quarantinePath;
+}
+
 /**
  * @param {import("node:fs/promises").FileHandle} handle
  * @param {import("node:fs").BigIntStats} metadata
@@ -686,16 +930,6 @@ async function inventoryDirectory(root, label) {
   return Object.freeze({ entryCount, fileCount, inventory, totalBytes });
 }
 
-/** @param {string[]} paths */
-function summarizeInventoryPaths(paths) {
-  const sorted = [...paths].sort((left, right) =>
-    left < right ? -1 : left > right ? 1 : 0,
-  );
-  const visible = sorted.slice(0, INVENTORY_DIAGNOSTIC_PATH_LIMIT);
-  const remainder = sorted.length - visible.length;
-  return `${JSON.stringify(visible)}${remainder > 0 ? ` (+${remainder} more)` : ""}`;
-}
-
 /** @param {string[]} input */
 async function snapshotMakerArtifacts(input) {
   const [
@@ -769,7 +1003,7 @@ async function verifyInstalledCompanion(input) {
     installedDirectoryFlag,
     installedDirectoryArgument,
     installRootFlag,
-    installRootArgument,
+    installRootArgument
   ] = input;
   if (
     input.length !== 6 ||
@@ -781,29 +1015,34 @@ async function verifyInstalledCompanion(input) {
     typeof installRootArgument !== "string"
   ) {
     throw new Error(
-      "Usage: verify-installed-companion.mjs --full-package <path> --installed-directory <path> --install-root <path>",
+      "Usage: verify-installed-companion.mjs --full-package <path> --installed-directory <path> --install-root <path>"
     );
   }
   const fullPackagePath = await requirePhysicalFile(
     fullPackageArgument,
-    "Full Squirrel package",
+    "Full Squirrel package"
   );
   if (!basename(fullPackagePath).endsWith("-full.nupkg")) {
     throw new Error("Expected a full Squirrel package.");
   }
   const installedRoot = await requirePhysicalDirectory(
     installedDirectoryArgument,
-    "Installed companion",
+    "Installed companion"
   );
   const installRoot = await requirePhysicalDirectory(
     installRootArgument,
-    "Squirrel install root",
+    "Squirrel install root"
   );
   if (!samePlatformPath(dirname(installedRoot), installRoot)) {
     throw new Error(
-      "Installed companion must be a direct child of its install root.",
+      "Installed companion must be a direct child of its install root."
     );
   }
+
+  const updateLogQuarantine = await quarantineSquirrelUpdateSelfLog(
+    installedRoot,
+    installRoot
+  );
 
   const packageBefore = await lstat(fullPackagePath, { bigint: true });
   if (
@@ -812,28 +1051,57 @@ async function verifyInstalledCompanion(input) {
     packageBefore.size < 1n ||
     packageBefore.size > BigInt(MAX_TOTAL_BYTES)
   ) {
-    throw new Error("Full Squirrel package is outside its physical byte bound.");
+    throw new Error(
+      "Full Squirrel package is outside its physical byte bound."
+    );
   }
-  const [expectedPayload, installedResult] = await Promise.all([
-    inventorySquirrelPayload(fullPackagePath),
-    inventoryDirectory(installedRoot, "Installed companion"),
-  ]);
+  const expectedPayload = await inventorySquirrelPayload(fullPackagePath);
+  const expected = expectedPayload.inventory;
+  const expectedUpdater = expected.get(
+    PACKAGED_UPDATE_EXECUTABLE.toLocaleLowerCase("en-US")
+  );
+  if (
+    expectedUpdater === undefined ||
+    expectedUpdater.relativePath !== PACKAGED_UPDATE_EXECUTABLE
+  ) {
+    throw new Error(
+      "Full Squirrel package lacks its exact packaged update executable."
+    );
+  }
+  const installedUpdater = await hashPhysicalFile(
+    resolve(installRoot, INSTALLED_UPDATE_EXECUTABLE),
+    "Installed Squirrel updater",
+    MAX_TOTAL_BYTES
+  );
+  if (
+    installedUpdater.bytes !== expectedUpdater.bytes ||
+    installedUpdater.sha256 !== expectedUpdater.sha256
+  ) {
+    throw new Error(
+      "Installed Squirrel updater differs from the full-package Squirrel executable."
+    );
+  }
+  try {
+    await unlink(updateLogQuarantine);
+  } catch {
+    throw new Error(
+      "Validated Squirrel update-self log quarantine could not be removed."
+    );
+  }
+
+  const installedResult = await inventoryDirectory(
+    installedRoot,
+    "Installed companion"
+  );
   const packageAfter = await lstat(fullPackagePath, { bigint: true });
   if (!samePhysicalFile(packageBefore, packageAfter)) {
     throw new Error("Full Squirrel package changed during comparison.");
   }
 
-  const expected = expectedPayload.inventory;
   const installed = installedResult.inventory;
   if (expected.size !== installed.size) {
-    const missing = [...expected]
-      .filter(([key]) => !installed.has(key))
-      .map(([, file]) => file.relativePath);
-    const unexpected = [...installed]
-      .filter(([key]) => !expected.has(key))
-      .map(([, file]) => file.relativePath);
     throw new Error(
-      `Installed companion file inventory differs from the full Squirrel package: expected ${expected.size}, installed ${installed.size}; missing ${summarizeInventoryPaths(missing)}; unexpected ${summarizeInventoryPaths(unexpected)}.`,
+      `Installed companion file inventory count differs from the full Squirrel package: expected ${expected.size}, installed ${installed.size}.`
     );
   }
   for (const [key, expectedFile] of expected) {
@@ -844,29 +1112,34 @@ async function verifyInstalledCompanion(input) {
       installedFile.sha256 !== expectedFile.sha256
     ) {
       throw new Error(
-        `Installed companion bytes differ from the full Squirrel package: ${expectedFile.relativePath}`,
+        `Installed companion bytes differ from the full Squirrel package: ${expectedFile.relativePath}`
       );
     }
   }
-  if (installedResult.entryCount + 1 > MAX_FILE_COUNT) {
+  if (installedResult.entryCount + 2 > MAX_FILE_COUNT) {
     throw new Error("Installed companion exceeded its total file bound.");
+  }
+  const installedExternalBytes =
+    installedResult.totalBytes + installedUpdater.bytes;
+  if (installedExternalBytes > MAX_TOTAL_BYTES) {
+    throw new Error("Installed companion exceeded its total byte bound.");
   }
   const installedEntryPoint = await hashPhysicalFile(
     resolve(installRoot, INSTALLED_ENTRY_POINT),
     "Installed Squirrel entry point",
-    MAX_TOTAL_BYTES - installedResult.totalBytes,
+    MAX_TOTAL_BYTES - installedExternalBytes
   );
   if (
     installedEntryPoint.bytes !== expectedPayload.executionStub.bytes ||
     installedEntryPoint.sha256 !== expectedPayload.executionStub.sha256
   ) {
     throw new Error(
-      "Installed Squirrel entry point differs from the full-package execution stub.",
+      "Installed Squirrel entry point differs from the full-package execution stub."
     );
   }
 
   process.stdout.write(
-    `Verified ${installed.size + 1} installed companion and entry-point files against exact full-nupkg payload bytes.\n`,
+    `Verified ${installed.size + 2} installed companion, updater, and entry-point files against exact full-nupkg payload bytes.\n`
   );
 }
 
