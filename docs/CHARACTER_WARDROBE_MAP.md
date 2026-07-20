@@ -15,7 +15,7 @@ power.
 The source audit used the AI-Sister repository's `origin/main` commit:
 
 ```text
-0325b0489130116b9ddc597accc7e521434b6c2e
+77b317b95b6047f1de330d5d41e4edab38de3b44
 ```
 
 The active canonical roster at that commit is **four sisters plus seven

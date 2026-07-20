@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { PROGRESSION_CHARACTER_IDS } from "../src/index.js";
 
 const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
+const REPOSITORY_ROOT = resolve(PACKAGE_ROOT, "../..");
 const SOURCE_MAP_PATH = join(PACKAGE_ROOT, "ai-sister-source-map.json");
 const SOURCE_MAP_SCHEMA_PATH = join(
   PACKAGE_ROOT,
@@ -381,6 +382,17 @@ function listFiles(directory: string): string[] {
 }
 
 describe("AI-Sister repository-only source map", () => {
+  it("keeps audit documentation pinned to the canonical source commit", () => {
+    const documentation = [
+      join(REPOSITORY_ROOT, "THIRD_PARTY_NOTICES.md"),
+      join(REPOSITORY_ROOT, "docs", "CHARACTER_WARDROBE_MAP.md"),
+    ].map((path) => readFileSync(path, "utf8"));
+
+    for (const source of documentation) {
+      expect(source).toContain(sourceMap.source.commit);
+    }
+  });
+
   it("validates against its strict draft 2020-12 schema", () => {
     expect(sourceMap.$schema).toBe("./ai-sister-source-map.schema.json");
     expect(sourceMapSchema["$schema"]).toBe(

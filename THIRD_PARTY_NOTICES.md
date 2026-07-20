@@ -141,7 +141,7 @@ as a license for the merged runtime components.
   SHA-256 values are recorded in
   [`packages/characters/asset-manifest.json`](packages/characters/asset-manifest.json).
 - A broader roster, wardrobe, pose, and layered-parts audit is separately pinned
-  to source commit `0325b0489130116b9ddc597accc7e521434b6c2e` in
+  to source commit `77b317b95b6047f1de330d5d41e4edab38de3b44` in
   [`packages/characters/ai-sister-source-map.json`](packages/characters/ai-sister-source-map.json).
   It is a repository-only planning record, not a ship allowlist. If assets pass
   the release gate, rendered bundles and their integrity manifest are published
