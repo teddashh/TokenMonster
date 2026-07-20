@@ -16,6 +16,7 @@ import packagingConfiguration, {
   hardenPackagedPermissions,
 } from "./package-config.mjs";
 import { squirrelVersionFor } from "./release-policy.mjs";
+import { verifySquirrelAwareExecutable } from "./squirrel-awareness.mjs";
 
 /** @typedef {"make" | "package"} PackagingCommand */
 /** @typedef {import("@electron/packager").Options} PackagerOptions */
@@ -217,6 +218,11 @@ export async function runCompanionPackaging(
     resolve(actualPackagePath) !== resolve(expected)
   ) {
     throw new Error("Electron Packager returned an unexpected output path.");
+  }
+  if (platform === "win32") {
+    await verifySquirrelAwareExecutable(
+      join(expected, `${configuration.appName}.exe`),
+    );
   }
   await hardenPackagedPermissions(packagePaths);
   await finalizePackagedFuses(expected, platform, arch);

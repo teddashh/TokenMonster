@@ -16,6 +16,8 @@ import { Readable } from "node:stream";
 
 import yauzl from "yauzl";
 
+import { verifySquirrelAwareExecutable } from "../../apps/companion/packaging/squirrel-awareness.mjs";
+
 const MAX_FILE_COUNT = 5_000;
 const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_SETUP_BYTES = 512 * 1024 * 1024;
@@ -1124,6 +1126,9 @@ async function verifyInstalledCompanion(input) {
   if (installedExternalBytes > MAX_TOTAL_BYTES) {
     throw new Error("Installed companion exceeded its total byte bound.");
   }
+  await verifySquirrelAwareExecutable(
+    resolve(installedRoot, INSTALLED_ENTRY_POINT)
+  );
   const installedEntryPoint = await hashPhysicalFile(
     resolve(installRoot, INSTALLED_ENTRY_POINT),
     "Installed Squirrel entry point",
@@ -1140,6 +1145,9 @@ async function verifyInstalledCompanion(input) {
 
   process.stdout.write(
     `Verified ${installed.size + 2} installed companion, updater, and entry-point files against exact full-nupkg payload bytes.\n`
+  );
+  process.stdout.write(
+    "Verified exact Squirrel awareness metadata in the installed application executable.\n"
   );
 }
 

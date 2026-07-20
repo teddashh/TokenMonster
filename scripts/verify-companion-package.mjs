@@ -27,6 +27,7 @@ import { extractAll, getRawHeader } from "@electron/asar";
 import yauzl from "yauzl";
 
 import { MAX_PACKAGED_COLLECTOR_RESOURCE_BYTES } from "../apps/companion/packaging/package-bounds.mjs";
+import { verifySquirrelAwareExecutable } from "../apps/companion/packaging/squirrel-awareness.mjs";
 import {
   authenticodeEvidenceFromInspection,
   isWindowsRawPolicyBoundPath,
@@ -2297,6 +2298,10 @@ try {
 }
 const binaryPath = fuseBinaryPath(asarPath);
 const fuseWires = await verifyRawFuseWires(binaryPath);
+const squirrelAwareness =
+  process.platform === "win32"
+    ? await verifySquirrelAwareExecutable(binaryPath)
+    : null;
 verifySignedMacApplication(asarPath);
 const {
   authenticode: stagedAuthenticode,
@@ -2328,6 +2333,7 @@ const evidence = {
   asarHeaderIntegrityVerified: true,
   runtimeExternalAllowlist: allowedBareImports,
   fuseWires,
+  squirrelAwareness,
   runtimeSnapshots,
   stagedAuthenticode,
   stagedRawPolicyBound,

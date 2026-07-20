@@ -483,7 +483,7 @@ describe("companion release policy", () => {
     expect(source).not.toContain("Promise.all(makers)");
   });
 
-  it("finalizes internal macOS fuses only after permission hardening", async () => {
+  it("orders final package metadata, permissions, and fuses", async () => {
     const runnerSource = await readFile(
       join(companionDirectory, "packaging", "package-runner.mjs"),
       "utf8"
@@ -494,6 +494,22 @@ describe("companion release policy", () => {
     );
     expect(runnerSource.indexOf("await hardenPackagedPermissions")).toBeLessThan(
       runnerSource.indexOf("await finalizePackagedFuses")
+    );
+    expect(
+      configSource.indexOf("await flipPackagedFuses(resourcesAppPath")
+    ).toBeLessThan(
+      configSource.indexOf("await markSquirrelAwareExecutable(")
+    );
+    expect(
+      configSource.indexOf("await markSquirrelAwareExecutable(")
+    ).toBeLessThan(
+      configSource.indexOf("await writeReleasePackageJson(resourcesAppPath)")
+    );
+    expect(runnerSource).toContain("await verifySquirrelAwareExecutable(");
+    expect(
+      runnerSource.indexOf("await verifySquirrelAwareExecutable(")
+    ).toBeLessThan(
+      runnerSource.indexOf("await hardenPackagedPermissions(packagePaths)")
     );
     expect(configSource).toContain(
       'RELEASE_MODE === "internal" &&\n    platform === "darwin"'
@@ -579,7 +595,16 @@ describe("companion release policy", () => {
       workflow.indexOf("  publish-cli-npm:")
     );
     expect(stagingJob).toContain("- macos-internal-release-gate");
-    expect(windowsSmoke).toContain('@("--uninstall", "--silent")');
+    expect(windowsSmoke).toContain('@("--uninstall", "-s")');
+    expect(windowsSmoke).toContain("Win32_ProcessStartTrace");
+    expect(windowsSmoke).toContain("Register-ObjectEvent");
+    expect(windowsSmoke).toContain("Wait-Event");
+    expect(windowsSmoke).toContain("Unregister-Event");
+    expect(windowsSmoke).not.toContain("WaitForNextEvent");
+    expect(windowsSmoke).toContain("QuietUninstallString");
+    expect(windowsSmoke).toContain("hookObserved=");
+    expect(windowsSmoke).toContain("exclusiveOpenAvailable=");
+    expect(windowsSmoke).toContain("registryKeyRemains=");
     expect(windowsSmoke).toContain("verify-installed-companion.mjs");
     expect(windowsSmoke).toContain("--full-package");
     expect(windowsSmoke).toContain('"--snapshot-maker"');
@@ -639,6 +664,9 @@ describe("companion release policy", () => {
     expect(installedVerifier).toContain("await unlink(updateLogQuarantine)");
     expect(installedVerifier).toContain(
       "Installed Squirrel updater differs from the full-package Squirrel executable"
+    );
+    expect(installedVerifier).toContain(
+      "await verifySquirrelAwareExecutable("
     );
     expect(installedVerifier).not.toContain("summarizeInventoryPaths");
     expect(releaseScriptTsconfig).toContain(
