@@ -220,7 +220,10 @@ try {
     throw "The installed Squirrel payload differs from the verified package."
   }
 
-  & $nodeExecutable $executableSmoke $installedEntryPoint.FullName
+  # The Squirrel execution stub is already bound byte-for-byte above. It uses
+  # a GUI launch that deliberately does not relay the application child's
+  # stdout, so the dual-gated marker must be read from the exact installed app.
+  & $nodeExecutable $executableSmoke $installedApplicationExecutable.FullName
   if ($LASTEXITCODE -ne 0) {
     throw "The installed Squirrel application failed its startup smoke."
   }
