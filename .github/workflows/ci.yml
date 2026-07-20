@@ -224,6 +224,26 @@ jobs:
         shell: bash
         run: node scripts/verify-companion-package.mjs --mode internal --require-maker
 
+      - name: Clean-install, smoke, and uninstall Windows Squirrel candidate
+        if: matrix.os == 'windows-2025'
+        shell: pwsh
+        run: >-
+          ./scripts/release/smoke-windows-squirrel-installer.ps1
+          -SetupPath apps/companion/out/make/squirrel.windows/x64/TokenMonsterSetup.exe
+
+      - name: Re-verify Windows maker bytes after install smoke
+        if: matrix.os == 'windows-2025'
+        shell: bash
+        run: node scripts/verify-companion-package.mjs --mode internal --require-maker
+
+      - name: Smoke packaged macOS application
+        if: matrix.os == 'macos-15'
+        shell: bash
+        run: |
+          arch="$(node -p 'process.arch')"
+          node scripts/release/smoke-companion-executable.mjs \
+            "apps/companion/out/TokenMonster-darwin-${arch}/TokenMonster.app/Contents/MacOS/TokenMonster"
+
       # Boot the packaged binary (not the dev tree) and require the sidecar
       # and gateway to come up — the class of bug a byte-level verifier
       # cannot see. Ubuntu 24.04 restricts unprivileged user namespaces via
@@ -344,6 +364,18 @@ jobs:
           TOKENMONSTER_WINDOWS_SIGNER_SUBJECT: ${{ vars.TOKENMONSTER_WINDOWS_SIGNER_SUBJECT }}
         run: node scripts/verify-companion-package.mjs --mode signed --require-maker
 
+      - name: Clean-install, smoke, and uninstall signed Windows installer
+        shell: pwsh
+        run: >-
+          ./scripts/release/smoke-windows-squirrel-installer.ps1
+          -SetupPath apps/companion/out/make/squirrel.windows/x64/TokenMonsterSetup.exe
+
+      - name: Re-verify signed Windows maker bytes after install smoke
+        shell: bash
+        env:
+          TOKENMONSTER_WINDOWS_SIGNER_SUBJECT: ${{ vars.TOKENMONSTER_WINDOWS_SIGNER_SUBJECT }}
+        run: node scripts/verify-companion-package.mjs --mode signed --require-maker
+
       - name: Upload verified signed installer
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -351,6 +383,57 @@ jobs:
           path: apps/companion/out/make/squirrel.windows/x64/
           if-no-files-found: error
           retention-days: 7
+
+  # The public desktop asset is Windows-only, but the exact tag SHA must also
+  # retain its local-first companion behavior on a native macOS host. This
+  # unsigned evidence stays inside Actions and is never attached to a release.
+  macos-internal-release-gate:
+    name: Native macOS internal release gate
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Build desktop dependency closure
+        run: node scripts/run-workspaces.mjs build @tokenmonster/companion
+
+      - name: Bind exact tagged desktop release version
+        run: |
+          release_version="$(node scripts/derive-companion-release-version.mjs)"
+          echo "TOKENMONSTER_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+
+      - name: Make and verify internal macOS companion
+        run: node scripts/package-companion.mjs make internal
+
+      - name: Smoke exact packaged macOS application
+        run: |
+          arch="$(node -p 'process.arch')"
+          node scripts/release/smoke-companion-executable.mjs \
+            "apps/companion/out/TokenMonster-darwin-${arch}/TokenMonster.app/Contents/MacOS/TokenMonster"
+
+      - name: Retain private exact-SHA macOS evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tokenmonster-macos-internal-gate-${{ github.sha }}
+          path: |
+            apps/companion/out/make/
+            release-evidence/companion-package.json
+          if-no-files-found: error
+          retention-days: 30
 
   verify:
     name: Verify (Node 24)
@@ -448,9 +531,9 @@ jobs:
       - name: Generate release evidence
         run: |
           mkdir -p release-evidence
-          # Release evidence covers shipped (production) dependencies; dev-only
-          # Forge's upstream ranges reject the reviewed safe override pins, which
-          # npm flags as invalid. This gate is not an application runtime dependency.
+          # Release evidence covers shipped (production) dependencies. The
+          # separately verified direct packaging tools are dev-only and never
+          # enter the application runtime inventory.
           npm sbom --sbom-format cyclonedx --omit dev > release-evidence/sbom.cdx.json
           npm pack --dry-run --json --workspaces > release-evidence/npm-pack-inventory.json
           LC_ALL=C find apps/web/dist apps/api/dist apps/companion/out/make packages/*/dist \
@@ -596,6 +679,7 @@ jobs:
     if: github.event_name == 'push' && github.ref_type == 'tag' && vars.TOKENMONSTER_PUBLIC_RELEASE_APPROVED == 'true'
     needs:
       - signed-windows-installer
+      - macos-internal-release-gate
       - release-candidate
       - verify
       - release-smoke
@@ -780,13 +864,13 @@ jobs:
       - name: Pin npm
         run: npm install --global npm@11.12.1
 
-      # Internal packaging and signed candidate review may use the exact audited
-      # overrides. Public npm/CDN/GitHub transitions stay fail-closed until a
-      # stable Forge release natively accepts the safe dependency versions.
+      # Recheck the exact stable direct Electron packaging closure before any
+      # public npm/CDN/GitHub transition. This remains a fail-closed publication
+      # gate even though the former Forge override exception has been removed.
       - name: Install exact publication policy dependencies
         run: npm ci --ignore-scripts
 
-      - name: Require an upstream-compatible stable Forge toolchain
+      - name: Require the reviewed stable direct packaging toolchain
         run: npm run verify:packaging-toolchain -- --require-upstream-compatible
 
       - name: Download the cross-platform-smoked CLI artifact

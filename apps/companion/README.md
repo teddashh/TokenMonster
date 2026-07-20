@@ -113,7 +113,11 @@ sandbox-enabled packaged smoke, and a manual real-key network smoke remain
 release gates. Native Windows signed mode now configures SHA-256-only
 Authenticode plus HTTPS RFC3161 timestamping and verifies the staged PE set,
 Setup.exe, and every PE inside the full Squirrel package against an exact signer
-subject. Certificate paths/passwords are omitted from options and evidence.
+subject, except the single zstd native binding whose reviewed raw SHA-256 is a
+runtime load requirement. The audited signer skips only that exact policy-bound
+path after validating its bytes; staging and nupkg verification require the one
+explicit exception and Authenticode on every other PE. Certificate
+paths/passwords are omitted from options and evidence.
 macOS signed mode is additionally blocked until a native release
 pipeline binds post-sign nested Mach-O hashes, expected Developer ID/Team ID,
 hardened runtime, notarization ticket, and mounted DMG contents. Windows

@@ -7,80 +7,89 @@ import { describe, expect, it } from "vitest";
 
 const rootDirectory = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  "../../.."
+  "../../..",
 );
 const adr = await readFile(
   resolve(rootDirectory, "docs/adr/0004-electron-packaging-and-signing.md"),
-  "utf8"
+  "utf8",
 );
 const handoff = await readFile(
   resolve(rootDirectory, "docs/HANDOFF.md"),
-  "utf8"
+  "utf8",
 );
 const workflow = await readFile(
   resolve(rootDirectory, ".github/workflows/ci.yml"),
-  "utf8"
+  "utf8",
 );
 
 describe("packaging toolchain policy", () => {
-  it("verifies and labels the reviewed exceptions as an external dev-tool gate", () => {
+  it("verifies the exact stable direct tools and Forge-free closure", () => {
     const result = spawnSync(
       process.execPath,
       [resolve(rootDirectory, "scripts/verify-packaging-toolchain.mjs")],
       {
         cwd: rootDirectory,
-        encoding: "utf8"
-      }
+        encoding: "utf8",
+      },
     );
 
     expect(result.error).toBeUndefined();
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain(
-      "external dev-tool supply-chain semver gate, not an application/runtime defect"
+      "successful npm dependency tree, and Forge-free packaging closure",
     );
   });
 
-  it("fails public release mode while stable Forge rejects the safe versions", () => {
+  it("passes public release mode only through the same strict clean-tree verifier", () => {
     const result = spawnSync(
       process.execPath,
       [
         resolve(rootDirectory, "scripts/verify-packaging-toolchain.mjs"),
-        "--require-upstream-compatible"
+        "--require-upstream-compatible",
       ],
       {
         cwd: rootDirectory,
-        encoding: "utf8"
-      }
+        encoding: "utf8",
+      },
     );
 
     expect(result.error).toBeUndefined();
-    expect(result.status).toBe(1);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toContain(
-      "Signed/GA publication is blocked until stable Forge ranges accept the reviewed safe dependency versions."
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain(
+      "Signed/GA upstream-compatible gate passes",
     );
   });
 
-  it("keeps the stable and prerelease findings explicit in release documentation", () => {
-    expect(adr).toContain("8.0.0-alpha.10");
-    expect(adr).toContain("25 audit findings (22 high and 3 low)");
-    expect(adr).toContain("external, dev-only packaging supply-chain semver gate");
-    expect(adr).toContain("application/runtime defect");
-    expect(handoff).toContain("external dev-only toolchain");
-    expect(handoff).toContain("not an application/runtime bug");
+  it("keeps the stable replacement and strict publication gate explicit", () => {
+    expect(adr).toContain("`@electron/packager 18.4.4`");
+    expect(adr).toContain("`@electron/windows-sign 1.2.2`");
+    expect(adr).toContain("Forge-free closure");
+    expect(adr).toContain("native-range lock produced 25");
+    expect(adr).toContain("audit findings (22 high and 3 low)");
+    expect(handoff).toContain(
+      "dependency blocker is now addressed by a reviewed stable",
+    );
+    expect(handoff).toContain("direct Electron packaging replacement");
+    expect(handoff).toContain("Forge-free exact lock");
     expect(workflow).toContain(
-      "This gate is not an application runtime dependency."
+      "former Forge override exception has been removed",
     );
     const npmPublicationJob = workflow.slice(
       workflow.indexOf("  publish-cli-npm:"),
-      workflow.indexOf("  promote-windows-release:")
+      workflow.indexOf("  promote-windows-release:"),
     );
     expect(npmPublicationJob).toContain(
-      "npm run verify:packaging-toolchain -- --require-upstream-compatible"
+      "npm run verify:packaging-toolchain -- --require-upstream-compatible",
     );
-    expect(npmPublicationJob.indexOf("--require-upstream-compatible")).toBeLessThan(
-      npmPublicationJob.indexOf("Plan a monotonic npm publication")
+    expect(npmPublicationJob).toContain(
+      "Require the reviewed stable direct packaging toolchain",
+    );
+    expect(
+      npmPublicationJob.indexOf("--require-upstream-compatible"),
+    ).toBeLessThan(
+      npmPublicationJob.indexOf("Plan a monotonic npm publication"),
     );
   });
 });

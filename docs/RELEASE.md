@@ -53,14 +53,15 @@ progression.
 The `Companion installers [package]` CI job packages the floating pet shell on
 Ubuntu, macOS, and Windows for manual `workflow_dispatch` runs and for pushed
 commits whose message contains `[package]`. Those non-tag candidates are
-unsigned internal evidence only. Each matrix runner uploads its complete Forge
+unsigned internal evidence only. Each matrix runner uploads its complete direct
 maker directory as a seven-day GitHub Actions artifact named
 `tokenmonster-desktop-<os>`; no internal candidate is attached to a public
 GitHub Release.
 
 A version-tag run deliberately narrows the installer matrix to Windows and
 requires signed mode. It decodes the bounded PFX secret into the runner's
-temporary directory, verifies every signable PE and Squirrel metadata, uploads
+temporary directory, verifies every signable PE except the single raw-policy-
+bound zstd binding described below, verifies Squirrel metadata, uploads
 only the exact Squirrel publication directory as
 `tokenmonster-desktop-windows-2025`, and deletes the PFX in an `always()`
 cleanup step. That directory must contain exactly `RELEASES`,
@@ -68,6 +69,14 @@ cleanup step. That directory must contain exactly `RELEASES`,
 logs, debug files, links, and any other entry fail closed. Linux signing and
 macOS signing/notarization do not yet have public-release policies, so tag runs
 publish neither platform.
+
+Every tag also runs a separate native macOS internal gate on the exact tag SHA.
+It makes and verifies the unsigned internal bundle, preserves the manifest-bound
+collector and sidecar bytes while applying the outer ad-hoc signature, performs
+strict `codesign` verification, and requires the packaged application to reach
+the dual-gated startup marker. Its maker output and package evidence remain a
+private 30-day Actions artifact. Draft staging depends on this job, but no macOS
+asset is attached to the public release.
 
 The later Linux promotion job does not claim to verify Authenticode again. It
 accepts only the exact three-file artifact emitted by that native signed job,
@@ -211,12 +220,25 @@ identity. Require a deliberately chosen, previously unused identity:
 TOKENMONSTER_RELEASE_VERSION="$TOKENMONSTER_NEXT_RELEASE_VERSION" npm run make:companion:internal
 ```
 
-The source package remains `0.1.0`. Forge injects the candidate into the staged
-`package.json`, Electron `appVersion`, Windows executable ProductVersion, and
-Squirrel maker metadata. The verifier binds the packaged `package.json`, full
+The source package remains `0.1.0`. The direct packaging runner injects the
+candidate into the staged `package.json`, Electron `appVersion`, Windows
+executable ProductVersion, and Squirrel maker metadata. The verifier binds the
+packaged `package.json`, full
 `.nupkg` filename, embedded ASAR, `.nuspec`, and `RELEASES` byte count to that
 same version and writes the result to
 `release-evidence/companion-package.json`.
+
+Both native Windows candidate and signed tag jobs also install the exact Setup
+into a clean ephemeral profile. Every ordinary `lib/net45/**` payload file in
+the already verified full `.nupkg` must exactly match the installed `app-*`
+tree. The package's `TokenMonster_ExecutionStub.exe` must separately match the
+installed root `TokenMonster.exe`, which is the real user entry point used by
+the dual-gated packaged startup smoke; the job then silently uninstalls it.
+Setup, the full package, and `RELEASES` are bound by physical file identity,
+size, and SHA-256 before installation and after uninstall. Installer and
+uninstaller processes have explicit time and process-tree cleanup bounds; the
+startup smoke has explicit output, time, and close bounds. The full maker
+verifier runs again after this flow before any signed artifact upload.
 
 Windows packages ship without the tokscale collector binary: its runtime
 manifest target is explicitly disabled until a Windows no-egress process
@@ -225,7 +247,7 @@ app shows the same collector-unavailable status as Windows development
 builds; sidecar usage accounting is unaffected.
 
 To build the same internal maker output locally, set the release version and run
-`npm run make:internal` inside `apps/companion`. Forge package/make itself is
+`npm run make:internal` inside `apps/companion`. Direct package/make itself is
 headless. A display (or `xvfb`) is needed only to launch the packaged Chromium
 app; network is needed only when an exact Electron/tool artifact is absent from
 the local cache.
@@ -257,10 +279,17 @@ password argument is not logged.
 
 The native verifier fails closed unless PowerShell reports `Valid`, the exact
 signer subject, a timestamp certificate, and SHA-256 SignedCms digests for every
-signable PE in the staged app, `TokenMonsterSetup.exe`, and every signable PE
-inside the full `.nupkg`. A `.nupkg` is a ZIP container, not an Authenticode
-binary; evidence therefore says the container is not applicable and records
-the signatures of all PE payloads instead of claiming the container is signed.
+signable PE in the staged app, `TokenMonsterSetup.exe`, and full `.nupkg`, with
+one narrow exception. Both signing passes preserve exactly
+`resources/sidecar/node_modules/@mongodb-js/zstd/build/Release/zstd.node` because
+the runtime's checked-in native policy requires its reviewed raw size and
+SHA-256; adding Authenticode would change those bytes and make the sidecar fail
+closed. The signing hook skips only that exact path after validating it against
+the Windows native policy. Staging and nupkg verification then require exactly
+one such exemption and bind it to the complete sidecar inventory; every other
+PE still requires Authenticode. A `.nupkg` is a ZIP container, not an
+Authenticode binary, so evidence records its signed PE payloads and the separate
+raw-policy-bound exception instead of claiming the container is signed.
 The real release still requires the owner-controlled certificate/CI secrets and
 a clean Windows install/update rehearsal.
 

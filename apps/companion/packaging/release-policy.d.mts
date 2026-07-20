@@ -2,7 +2,7 @@ export const SOURCE_COMPANION_VERSION: "0.1.0";
 export const WINDOWS_RFC3161_TIMESTAMP_SERVER: string;
 
 export function requireReleaseVersion(
-  environment?: NodeJS.ProcessEnv | Record<string, string | undefined>
+  environment?: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): string;
 
 export function ciReleaseVersionForRunId(runId: string): string;
@@ -15,7 +15,7 @@ export function requireSquirrelReleaseEntry(
     fileName: string;
     byteSize: number;
     sha1: string;
-  }>
+  }>,
 ): Readonly<{
   sha1: string;
   fileName: string;
@@ -24,17 +24,19 @@ export function requireSquirrelReleaseEntry(
 
 export function requireSignedWindowsSquirrelInventory(
   fileNames: readonly unknown[],
-  fullPackageName: string
+  fullPackageName: string,
 ): readonly string[];
 
 export function packageJsonWithReleaseVersion<
-  PackageJson extends Record<string, unknown>
+  PackageJson extends Record<string, unknown>,
 >(
   packageJson: PackageJson,
-  releaseVersion: string
+  releaseVersion: string,
 ): Omit<PackageJson, "version"> & { version: string };
 
 export function isWindowsSignablePath(path: string): boolean;
+export const WINDOWS_RAW_BOUND_ZSTD_SIDECAR_PATH: string;
+export function isWindowsRawPolicyBoundPath(path: string): boolean;
 
 export interface AuthenticodeInspection {
   readonly status: unknown;
@@ -67,29 +69,29 @@ export interface AuthenticodeEvidence {
 
 export function authenticodeEvidenceFromInspection(
   result: AuthenticodeInspection,
-  expectedSignerSubject: string
+  expectedSignerSubject: string,
 ): AuthenticodeEvidence;
 
 export function requireWindowsSignerSubject(
-  environment?: NodeJS.ProcessEnv | Record<string, string | undefined>
+  environment?: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): string;
 
 export interface WindowsSignOptions {
   readonly automaticallySelectCertificate: false;
   readonly debug: false;
   readonly description: "TokenMonster";
-  readonly hashes: readonly ["sha256"];
+  readonly hashes: ["sha256"];
   readonly signJavaScript: false;
   readonly timestampServer: string;
 }
 
 export function prepareWindowsSigningEnvironment(
-  environment?: NodeJS.ProcessEnv | Record<string, string | undefined>
+  environment?: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): {
   readonly expectedSignerSubject: string;
   readonly windowsSign: WindowsSignOptions;
 };
 
 export function environmentWithoutWindowsSigningSecrets(
-  environment?: NodeJS.ProcessEnv | Record<string, string | undefined>
+  environment?: NodeJS.ProcessEnv | Record<string, string | undefined>,
 ): Record<string, string | undefined>;

@@ -29,6 +29,7 @@ import yauzl from "yauzl";
 import { MAX_PACKAGED_COLLECTOR_RESOURCE_BYTES } from "../apps/companion/packaging/package-bounds.mjs";
 import {
   authenticodeEvidenceFromInspection,
+  isWindowsRawPolicyBoundPath,
   isWindowsSignablePath,
   packageJsonWithReleaseVersion,
   requireReleaseVersion,
@@ -36,7 +37,8 @@ import {
   requireSquirrelReleaseEntry,
   requireWindowsSignerSubject,
   SOURCE_COMPANION_VERSION,
-  squirrelVersionFor
+  squirrelVersionFor,
+  WINDOWS_RAW_BOUND_ZSTD_SIDECAR_PATH
 } from "../apps/companion/packaging/release-policy.mjs";
 import {
   assertSquirrelSidecarInventory,
@@ -1752,12 +1754,48 @@ async function verifyWindowsAuthenticode(path, expectedSignerSubject) {
   return authenticodeEvidenceFromInspection(result, expectedSignerSubject);
 }
 
-async function stagedWindowsAuthenticodeEvidence(asarPath) {
-  if (mode !== "signed" || process.platform !== "win32") return [];
+async function stagedWindowsAuthenticodeEvidence(
+  asarPath,
+  expectedSidecarInventory
+) {
+  if (mode !== "signed" || process.platform !== "win32") {
+    return { authenticode: [], rawPolicyBound: [] };
+  }
   const packageRoot = packageRootForAsar(asarPath);
-  const signablePaths = (await walkFiles(packageRoot))
+  // A signed Windows staging tree must not hide an unsigned PE behind a
+  // symbolic link or another non-regular entry. Windows maker payloads are a
+  // physical-file inventory, so reject links here instead of silently
+  // omitting them from the Authenticode gate.
+  const signablePaths = (await walkFiles(packageRoot, { rejectLinks: true }))
     .filter(isWindowsSignablePath)
     .sort();
+  const rawPolicyBoundPaths = signablePaths.filter(
+    isWindowsRawPolicyBoundPath
+  );
+  if (rawPolicyBoundPaths.length !== 1) {
+    throw new Error(
+      "Signed Windows staging must contain exactly one raw-policy-bound zstd binding."
+    );
+  }
+  const rawPolicyBoundPath = rawPolicyBoundPaths[0];
+  const rawSidecarRelativePath = portablePath(
+    relative(join(packageRoot, "resources", "sidecar"), rawPolicyBoundPath)
+  );
+  const expectedRawBinding = expectedSidecarInventory.get(
+    WINDOWS_RAW_BOUND_ZSTD_SIDECAR_PATH
+  );
+  const rawMetadata = await stat(rawPolicyBoundPath);
+  const rawSha256 = await hashFile(rawPolicyBoundPath);
+  if (
+    rawSidecarRelativePath !== WINDOWS_RAW_BOUND_ZSTD_SIDECAR_PATH ||
+    expectedRawBinding === undefined ||
+    rawMetadata.size !== expectedRawBinding.bytes ||
+    rawSha256 !== expectedRawBinding.sha256
+  ) {
+    throw new Error(
+      "Raw-policy-bound Windows zstd binding differs from verified sidecar bytes."
+    );
+  }
   const mainExecutable = join(packageRoot, "TokenMonster.exe");
   if (
     signablePaths.length < 1 ||
@@ -1767,7 +1805,9 @@ async function stagedWindowsAuthenticodeEvidence(asarPath) {
     throw new Error("Signed Windows staging has no main executable inventory.");
   }
   const evidence = [];
-  for (const path of signablePaths) {
+  for (const path of signablePaths.filter(
+    (candidate) => !isWindowsRawPolicyBoundPath(candidate)
+  )) {
     const authenticode = await verifyWindowsAuthenticode(
       path,
       expectedWindowsSignerSubject
@@ -1785,7 +1825,17 @@ async function stagedWindowsAuthenticodeEvidence(asarPath) {
       ...authenticode
     });
   }
-  return evidence;
+  return {
+    authenticode: evidence,
+    rawPolicyBound: [
+      {
+        path: portablePath(relative(rootDirectory, rawPolicyBoundPath)),
+        bytes: rawMetadata.size,
+        sha256: rawSha256,
+        policy: "zstd-native-policy.json:win32-x64"
+      }
+    ]
+  };
 }
 
 // Foreign-platform zips cannot support the linux byte/mode inventory diff
@@ -1936,6 +1986,7 @@ async function verifySquirrelNupkg(
     }
 
     const payloadAuthenticode = [];
+    const payloadRawPolicyBound = [];
     if (extractionDirectory !== null) {
       if (
         archiveInspection.portableExecutables.length < 1 ||
@@ -1947,6 +1998,32 @@ async function verifySquirrelNupkg(
       }
       let mainExecutableCount = 0;
       for (const payload of archiveInspection.portableExecutables) {
+        if (isWindowsRawPolicyBoundPath(payload.archivePath)) {
+          const expectedArchivePath =
+            `lib/net45/resources/sidecar/${WINDOWS_RAW_BOUND_ZSTD_SIDECAR_PATH}`;
+          const archiveBinding = zip.files.get(payload.archivePath);
+          const expectedBinding = expectedSidecarInventory.get(
+            WINDOWS_RAW_BOUND_ZSTD_SIDECAR_PATH
+          );
+          if (
+            payload.archivePath !== expectedArchivePath ||
+            archiveBinding === undefined ||
+            expectedBinding === undefined ||
+            archiveBinding.bytes !== expectedBinding.bytes ||
+            archiveBinding.sha256 !== expectedBinding.sha256
+          ) {
+            throw new Error(
+              "Full Squirrel package raw zstd binding differs from sidecar policy."
+            );
+          }
+          payloadRawPolicyBound.push({
+            archivePath: payload.archivePath,
+            bytes: archiveBinding.bytes,
+            sha256: archiveBinding.sha256,
+            policy: "zstd-native-policy.json:win32-x64"
+          });
+          continue;
+        }
         const authenticode = await verifyWindowsAuthenticode(
           payload.extractedPath,
           expectedWindowsSignerSubject
@@ -1969,10 +2046,16 @@ async function verifySquirrelNupkg(
           "Full Squirrel package must contain exactly one TokenMonster executable."
         );
       }
+      if (payloadRawPolicyBound.length !== 1) {
+        throw new Error(
+          "Full Squirrel package must preserve exactly one raw-policy-bound zstd binding."
+        );
+      }
     }
     versionEvidence = {
       nuspecPath: archiveInspection.nuspecs[0].archivePath,
-      payloadAuthenticode
+      payloadAuthenticode,
+      payloadRawPolicyBound
     };
   } finally {
     if (extractionDirectory !== null) {
@@ -1990,7 +2073,8 @@ async function verifySquirrelNupkg(
     nuspecPath: versionEvidence.nuspecPath,
     embeddedAsarSha256: embeddedAsars[0][1].sha256,
     containerAuthenticode: "not-applicable-zip-container",
-    payloadAuthenticode: versionEvidence.payloadAuthenticode
+    payloadAuthenticode: versionEvidence.payloadAuthenticode,
+    payloadRawPolicyBound: versionEvidence.payloadRawPolicyBound
   };
 }
 
@@ -2010,7 +2094,7 @@ async function makerEvidence(asarPath, expectedSidecarInventory) {
       return [];
     }
     if (error?.code === "ENOENT") {
-      throw new Error("Forge maker output is required but missing.");
+      throw new Error("Packaging maker output is required but missing.");
     }
     throw error;
   }
@@ -2118,7 +2202,7 @@ async function makerEvidence(asarPath, expectedSidecarInventory) {
     );
   });
   if (requireMaker && artifacts.length === 0) {
-    throw new Error("Forge maker produced no supported artifact.");
+    throw new Error("Packaging maker produced no supported artifact.");
   }
   if (
     mode === "signed" &&
@@ -2214,7 +2298,10 @@ try {
 const binaryPath = fuseBinaryPath(asarPath);
 const fuseWires = await verifyRawFuseWires(binaryPath);
 verifySignedMacApplication(asarPath);
-const stagedAuthenticode = await stagedWindowsAuthenticodeEvidence(asarPath);
+const {
+  authenticode: stagedAuthenticode,
+  rawPolicyBound: stagedRawPolicyBound
+} = await stagedWindowsAuthenticodeEvidence(asarPath, sidecarInventory);
 const makerArtifacts = await makerEvidence(asarPath, sidecarInventory);
 
 const evidenceDirectory = join(rootDirectory, "release-evidence");
@@ -2243,6 +2330,7 @@ const evidence = {
   fuseWires,
   runtimeSnapshots,
   stagedAuthenticode,
+  stagedRawPolicyBound,
   makerArtifacts,
   collector: collectorEvidence,
   sidecar: sidecarEvidence

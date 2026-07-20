@@ -1,12 +1,11 @@
 import { spawn } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
 import { rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import {
   environmentWithoutWindowsSigningSecrets,
   prepareWindowsSigningEnvironment,
-  requireReleaseVersion
+  requireReleaseVersion,
 } from "../apps/companion/packaging/release-policy.mjs";
 import { rootDirectory } from "./repository-files.mjs";
 
@@ -24,7 +23,7 @@ if (
   process.platform !== "win32"
 ) {
   throw new Error(
-    "Signed companion releases require a native macOS or Windows host."
+    "Signed companion releases require a native macOS or Windows host.",
   );
 }
 if (mode === "signed" && command !== "make") {
@@ -47,42 +46,28 @@ const windowsSignerDiagnosticPaths = [
     "node_modules",
     "electron-winstaller",
     "vendor",
-    "electron-windows-sign.log"
-  )
+    "electron-windows-sign.log",
+  ),
 ];
 
-// Windows cannot spawn the npm .cmd shim without a shell (Node >= 20 EINVAL),
-// so run npm's JS entry point with the current node binary, exactly like
-// run-workspaces.mjs does.
-function resolveNpmCli() {
-  const nodeDir = dirname(realpathSync(process.execPath));
-  const candidates = [
-    join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js"),
-    join(nodeDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js")
-  ];
-  return candidates.find((candidate) => existsSync(candidate)) ?? null;
-}
-
-const npmCli = resolveNpmCli();
-const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
 const releaseEnvironment = {
   ...process.env,
   TOKENMONSTER_RELEASE_MODE: mode,
-  TOKENMONSTER_RELEASE_VERSION: releaseVersion
+  TOKENMONSTER_RELEASE_VERSION: releaseVersion,
 };
 const buildEnvironment =
   environmentWithoutWindowsSigningSecrets(releaseEnvironment);
 const verificationEnvironment =
   environmentWithoutWindowsSigningSecrets(releaseEnvironment);
-const forgeEnvironment =
+const packagingEnvironment =
   mode === "internal"
     ? environmentWithoutWindowsSigningSecrets(releaseEnvironment)
     : { ...releaseEnvironment };
 if (mode === "signed" && process.platform === "win32") {
   // Prevent Node or dependency debug channels from printing the signtool argv.
-  delete forgeEnvironment.DEBUG;
-  delete forgeEnvironment.NODE_DEBUG;
-  delete forgeEnvironment.NODE_OPTIONS;
+  delete packagingEnvironment.DEBUG;
+  delete packagingEnvironment.NODE_DEBUG;
+  delete packagingEnvironment.NODE_OPTIONS;
 }
 
 function run(executable, arguments_, options = {}) {
@@ -93,7 +78,7 @@ function run(executable, arguments_, options = {}) {
       env: environment,
       shell: false,
       stdio: "inherit",
-      ...spawnOptions
+      ...spawnOptions,
     });
     child.once("error", reject);
     child.once("exit", (code, signal) => {
@@ -105,21 +90,16 @@ function run(executable, arguments_, options = {}) {
         new Error(
           `${executable} ${arguments_.join(" ")} failed${
             signal === null ? ` with exit code ${code}` : ` from ${signal}`
-          }.`
-        )
+          }.`,
+        ),
       );
     });
   });
 }
 
-function runNpm(npmArguments, environment) {
-  return npmCli === null
-    ? run(npmExecutable, npmArguments, { environment })
-    : run(process.execPath, [npmCli, ...npmArguments], { environment });
-}
-
 await rm(outDirectory, { force: true, recursive: true });
-// Build the complete local dependency closure before Forge stages the app.
+// Build the complete local dependency closure before Electron Packager stages
+// the app.
 // A package-local build can otherwise consume stale workspace dist/ output
 // even though the companion sources themselves were rebuilt.
 await run(
@@ -127,27 +107,31 @@ await run(
   [
     join(rootDirectory, "scripts", "run-workspaces.mjs"),
     "build",
-    "@tokenmonster/companion"
+    "@tokenmonster/companion",
   ],
   {
     cwd: rootDirectory,
-    environment: buildEnvironment
-  }
+    environment: buildEnvironment,
+  },
 );
 if (mode === "signed" && process.platform === "win32") {
   await Promise.all(
-    windowsSignerDiagnosticPaths.map((path) => rm(path, { force: true }))
+    windowsSignerDiagnosticPaths.map((path) => rm(path, { force: true })),
   );
 }
 try {
-  await runNpm(["run", `forge:${command}`], forgeEnvironment);
+  await run(
+    process.execPath,
+    [join(companionDirectory, "packaging", "package-runner.mjs"), command],
+    { environment: packagingEnvironment },
+  );
 } finally {
   if (mode === "signed" && process.platform === "win32") {
     // electron-winstaller's SEA bridge writes process arguments even when its
     // debug namespace is disabled. Its options are secret-free, but the
     // release wrapper still removes the tool-owned diagnostic deterministically.
     await Promise.all(
-      windowsSignerDiagnosticPaths.map((path) => rm(path, { force: true }))
+      windowsSignerDiagnosticPaths.map((path) => rm(path, { force: true })),
     );
   }
 }
@@ -155,14 +139,14 @@ try {
 const verificationArguments = [
   join(rootDirectory, "scripts", "verify-companion-package.mjs"),
   "--mode",
-  mode
+  mode,
 ];
 if (command === "make") verificationArguments.push("--require-maker");
 
 const internalDmgPath = join(outDirectory, "make", "TokenMonster.dmg");
 const heldInternalDmgPath = join(
   outDirectory,
-  "TokenMonster.dmg.verification-pending"
+  "TokenMonster.dmg.verification-pending",
 );
 const holdInternalDmg =
   command === "make" && mode === "internal" && process.platform === "darwin";
@@ -172,7 +156,7 @@ if (holdInternalDmg) await rename(internalDmgPath, heldInternalDmgPath);
 try {
   await run(process.execPath, verificationArguments, {
     cwd: rootDirectory,
-    environment: verificationEnvironment
+    environment: verificationEnvironment,
   });
 } finally {
   if (holdInternalDmg) await rename(heldInternalDmgPath, internalDmgPath);

@@ -3,6 +3,71 @@
 Updated: 2026-07-20. Audience: the next implementation agent (codex) and the
 integrator session that reviews, commits, and ships its work.
 
+## 2026-07-20 stable direct packaging replacement — native matrix pending
+
+PR CI run `29731498189` passed at exact commit `ded282e`: both sidecar jobs,
+both companion desktop jobs, Linux/Windows installed release smoke, Linux
+loopback-only syscall evidence, the full verify job, packaging, audit, and
+release evidence all completed successfully. The progression store no longer
+gives a healthy multi-writer queue one shared one-second budget; each advancing
+head has the same bounded stall budget while an independent five-second total
+cap prevents churn from waiting forever. The final post-replacement local run
+passed 1,749 tests across all workspaces with one platform-only skip, plus the
+root strict typecheck, lint, format, secret scan, and diff checks.
+
+The former signed/GA dependency blocker is now addressed by a reviewed stable
+direct Electron packaging replacement. The companion uses exact
+`@electron/packager 18.4.4`, `@electron/fuses 1.8.0`,
+`@electron/osx-sign 1.3.3`, `@electron/windows-sign 1.2.2`, `cross-zip 4.0.1`,
+`electron-installer-dmg 5.0.1`, `electron-winstaller 5.4.4`, and verifier
+`@electron/asar 4.2.0`. All Forge packages and root overrides were removed;
+the resulting Forge-free exact lock also contains none of `@electron/rebuild`,
+`external-editor`, or `tmp`. A fresh `npm ci`, both normal and
+`--require-upstream-compatible` toolchain verification, and
+`npm audit --audit-level=high` pass with zero vulnerabilities.
+
+The direct Linux package/make path has already passed the existing fail-closed
+artifact verifier: 39 ASAR files, the reviewed fuse wire, exact collector, the
+834-file sidecar closure, and full ZIP byte/mode inventory. Do not tag or
+publish from this paragraph alone. The committed packaging replacement still
+needs the native Windows Squirrel and macOS internal package/maker matrix,
+followed by a fresh full CI run. Public Windows signing, npm, CDN, and GitHub
+publication also require the protected credentials and environments; none are
+currently configured in this repository.
+
+The native Windows candidate job now treats Setup as the primary artifact: it
+silently installs into a fresh ephemeral profile, byte-compares the complete
+installed application to the exact `lib/net45/**` payload in the already
+verified full `.nupkg`, reaches the packaged startup-smoke marker, and performs
+a silent uninstall. The Squirrel execution stub is compared against its exact
+full-package source separately and then used for the smoke, matching the real
+user entry point. Before Setup runs and after uninstall completes, the job
+binds physical identity, size, and SHA-256 for Setup, the full package, and
+`RELEASES`; bounded process-tree cleanup prevents a hung installer from
+escaping the job's deadline. A complete maker verification runs again after
+the smoke and immediately before signed upload. This remains valid after
+Authenticode mutates PE bytes; the signed tag job repeats the same flow.
+
+Windows signing uses one deliberately narrow raw-byte exception: both Packager
+and Squirrel must preserve the exact sidecar
+`@mongodb-js/zstd/build/Release/zstd.node` because the runtime binds its reviewed
+Windows size/SHA-256 before load. The serializable signing hook validates that
+policy before skipping only this path; the native verifier requires exactly one
+matching exemption and Authenticode on every other staged/nupkg PE.
+
+Internal macOS packaging deliberately flips fuses only after Packager has
+finished mutating the final bundle, then applies an inside-out ad-hoc signature
+while preserving both manifest-bound resource roots: the pre-signed collector
+files and the byte-bound sidecar closure (including its native zstd binding).
+It performs a strict `codesign` verification before maker output. The native
+macOS matrix must still prove that the collector and sidecar hashes remain
+exact and that the packaged application actually reaches the dual-gated
+startup-smoke marker.
+
+Tag staging is also mechanically downstream of a dedicated native macOS
+internal gate for the exact tag SHA. That gate retains private maker/evidence
+artifacts for 30 days but publishes no macOS desktop asset.
+
 ## 2026-07-18 interrupted-batch takeover — NOT A RELEASE CANDIDATE
 
 The earlier agent and its three active child tasks were interrupted together at
@@ -809,30 +874,21 @@ source-merged hourly data.
   before treating the connected updater surface as production-usable. A local
   post-hardening rc.13 CLI tarball and unsigned Linux ZIP now exist, but no
   signed Windows Squirrel artifact was built or published.
-- **Signed/GA packaging dependency gate:** the exact `@electron/rebuild 4.2.0`
-  and `tmp 0.2.7` overrides pass the local Forge package/build verifier and
-  `npm audit` reports zero vulnerabilities. A 2026-07-19 native-range lock for
-  stable Forge 7.11.2 instead reported 25 findings (22 high, 3 low) through the
-  rejected rebuild/tar and external-editor/tmp paths. Forge 8.0.0-alpha.10
-  resolves those paths but is prerelease-only and requires the fuse 2 and
-  packager 20 breaking-change matrix. This is an external dev-only toolchain
-  semver gate, not an application/runtime bug. Keep signed/GA fail-closed until
-  a stable upstream range accepts the safe versions or a reviewed stable
-  replacement passes the full packaging, fuse, artifact, and native matrix.
-  The default verifier still permits internal packaging and signed-candidate
-  review with the exact audited overrides; `publish-cli-npm` now runs its
-  `--require-upstream-compatible` mode after installing the exact lock but
-  before any TokenMonster registry-state read or mutation, so npm, CDN/Squirrel,
-  and final GitHub publication remain mechanically blocked while non-public
-  candidate and draft evidence can still be produced.
+- **Stable direct packaging native proof:** the Forge semver blocker is removed
+  in the Forge-free exact lock described above, and the strict public
+  toolchain gate now passes locally without an override exception. Linux direct
+  package/ZIP evidence passes. Keep signed/GA publication fail-closed until the
+  same replacement passes the fresh GitHub CI native Windows Squirrel and
+  macOS internal maker matrix; preserve their exact artifact evidence.
 - **macOS signed artifact:** nested Tokscale Mach-O re-sign/hash binding,
   hardened runtime/Team ID, notarization ticket, mounted-DMG verification, and
   native smoke are not complete. Internal unsigned packaging evidence is not a
   substitute for this gate.
-- **Integrator publication:** the scoped recovery commits are integrated into
-  local `fable/integration` but remain unpushed. Push only after reviewing the
-  historical rc.12 evidence, this post-hardening change, the local-only rc.13
-  evidence, and the native release plan.
+- **Integrator publication:** the recovered hardening through `ded282e` is
+  pushed on `agent/permanent-sidecar-companion`, PR 1 remains draft, and its
+  latest pre-replacement CI is green. The direct packaging replacement is not
+  yet committed or pushed. Review and push it only with the new lock, tests,
+  docs, and native matrix plan as one coherent change.
   Configure the protected signing/npm/CDN release environments and the four
   exact public download bindings only after the immutable Windows bytes exist;
   never call the historical local rc.12 artifacts shipped.
