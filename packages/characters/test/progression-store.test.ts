@@ -682,9 +682,9 @@ describe("local progression lifetime store", () => {
           }
 
           let ready = false;
-          // Leave room for cold Node imports without overtaking the child's
-          // own 10-second wait for the shared go signal.
-          const readyDeadline = Date.now() + 9_000;
+          // Leave room for cold Node imports on resource-constrained CI hosts
+          // without overtaking the child's own 60-second shared-go barrier.
+          const readyDeadline = Date.now() + 30_000;
           while (Date.now() < readyDeadline) {
             if ((await Promise.all(readyPaths.map(pathExists))).every(Boolean)) {
               ready = true;
@@ -732,7 +732,7 @@ describe("local progression lifetime store", () => {
         expect(await readdir(`${path}.lock-queue`)).toEqual([]);
       }
     },
-    90_000,
+    180_000,
   );
 
   it("folds buckets older than 366 days into an optional baseline", async () => {

@@ -17,7 +17,11 @@ if (
 
 await writeFile(readyPath, "ready\n", { flag: "wx", mode: 0o600 });
 let released = false;
-for (let attempt = 0; attempt < 2_000; attempt += 1) {
+// Ten cold Node processes can take more than ten seconds to import on a
+// resource-constrained CI host. Keep the child-side barrier comfortably wider
+// than the parent readiness deadline so an early child cannot time out while a
+// later sibling is still starting.
+for (let attempt = 0; attempt < 12_000; attempt += 1) {
   try {
     await access(goPath);
     released = true;
