@@ -329,6 +329,77 @@ describe("local progression lifetime store", () => {
     ]);
   });
 
+  it("gives each advancing live queue head a fresh bounded stall budget", async () => {
+    const path = await temporaryPath();
+    const queueDirectory = `${path}.lock-queue`;
+    await mkdir(queueDirectory, { recursive: true, mode: 0o700 });
+    const predecessors = [
+      "00000000-0000-4000-8000-000000000011",
+      "00000000-0000-4000-8000-000000000012",
+      "00000000-0000-4000-8000-000000000013",
+      "00000000-0000-4000-8000-000000000014",
+    ];
+    const predecessorPaths = predecessors.map((ownerId) =>
+      join(queueDirectory, `ticket-${ownerId}.json`),
+    );
+    await Promise.all(
+      predecessorPaths.map((ticketPath, index) =>
+        writeFile(
+          ticketPath,
+          `${JSON.stringify({
+            phase: "ticket",
+            pid: process.pid,
+            createdAt: new Date().toISOString(),
+            ownerId: predecessors[index],
+            ticket: index + 1,
+          })}\n`,
+          { encoding: "utf8", mode: 0o600 },
+        ),
+      ),
+    );
+
+    const mergePromise = mergeAndSaveDailyProviderBuckets(
+      [{ utcDate: "2026-07-16", providerTotals: { openai: 1 } }],
+      { path },
+    );
+    // Install a rejection handler immediately: the regression intentionally
+    // keeps this promise pending past the old whole-queue timeout.
+    void mergePromise.catch(() => undefined);
+    try {
+      let contenderPublished = false;
+      const contenderDeadline = Date.now() + 2_000;
+      while (Date.now() < contenderDeadline) {
+        const ticketCount = (await readdir(queueDirectory)).filter((name) =>
+          name.startsWith("ticket-"),
+        ).length;
+        if (ticketCount === predecessors.length + 1) {
+          contenderPublished = true;
+          break;
+        }
+        await delay(5);
+      }
+      expect(contenderPublished).toBe(true);
+
+      // Start the clock only after the contender has published its ticket.
+      // The aggregate wait exceeds the old one-second whole-queue budget, but
+      // every live predecessor advances well inside its own stall budget.
+      for (const predecessorPath of predecessorPaths) {
+        await delay(300);
+        await rm(predecessorPath);
+      }
+      const merged = await mergePromise;
+      expect(merged.store.lifetime.providerTotals.openai).toBe(1);
+    } finally {
+      await Promise.all(
+        predecessorPaths.map((predecessorPath) =>
+          rm(predecessorPath, { force: true }),
+        ),
+      );
+      await mergePromise.catch(() => undefined);
+    }
+    expect(await readdir(queueDirectory)).toEqual([]);
+  });
+
   it.each(["choosing", "ticket"] as const)(
     "recovers a freshly published %s queue record whose owner is dead",
     async (phase) => {

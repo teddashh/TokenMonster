@@ -60,7 +60,8 @@ export class LocalProgressionStoreError extends Error {
 }
 
 const STORE_LOCK_RETRY_COUNT = 10;
-const STORE_LOCK_QUEUE_RETRY_COUNT = 20;
+const STORE_LOCK_QUEUE_STALL_RETRY_COUNT = 20;
+const STORE_LOCK_QUEUE_TOTAL_RETRY_COUNT = 100;
 const STORE_LOCK_RETRY_DELAY_MS = 50;
 const STORE_LOCK_STALE_AFTER_MS = 10_000;
 const DAILY_BUCKET_RETENTION_MS = 366 * 86_400_000;
@@ -901,11 +902,10 @@ async function acquireStoreQueueLock(path: string): Promise<StoreQueueLock> {
     ticketEntry = await publishQueueRecord(queueDirectory, ticketRecord);
     await rm(choosingEntry.path);
 
-    for (
-      let attempt = 0;
-      attempt <= STORE_LOCK_QUEUE_RETRY_COUNT;
-      attempt += 1
-    ) {
+    let stalledAttempts = 0;
+    let totalAttempts = 0;
+    let leadingOwnerId: string | null | undefined;
+    for (;;) {
       const state = await readStoreLockQueue(queueDirectory);
       const ordered = orderedTickets(state.tickets);
       const ownTicket = ordered.find(
@@ -931,12 +931,28 @@ async function acquireStoreQueueLock(path: string): Promise<StoreQueueLock> {
           },
         });
       }
-      if (attempt === STORE_LOCK_QUEUE_RETRY_COUNT) {
+
+      // A live predecessor still gets a short, bounded stall budget. Reset
+      // that budget only when the queue head advances so a healthy chain of
+      // writers does not make every later ticket share the same one-second
+      // window. The total budget keeps even a continually changing queue
+      // fail-closed and bounded.
+      const currentLeadingOwnerId = ordered[0]?.record.ownerId ?? null;
+      if (currentLeadingOwnerId === leadingOwnerId) {
+        stalledAttempts += 1;
+      } else {
+        leadingOwnerId = currentLeadingOwnerId;
+        stalledAttempts = 0;
+      }
+      if (
+        stalledAttempts >= STORE_LOCK_QUEUE_STALL_RETRY_COUNT ||
+        totalAttempts >= STORE_LOCK_QUEUE_TOTAL_RETRY_COUNT
+      ) {
         throw new LocalProgressionStoreError("store-busy");
       }
       await delay(STORE_LOCK_RETRY_DELAY_MS);
+      totalAttempts += 1;
     }
-    throw new LocalProgressionStoreError("store-busy");
   } finally {
     await rm(choosingEntry.path, { force: true }).catch(() => undefined);
     if (!acquired && ticketEntry !== undefined) {
