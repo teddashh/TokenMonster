@@ -112,26 +112,32 @@ describe("release workflow publication policy", () => {
     );
 
     const consumers = [
-      "sidecar-compatibility",
-      "companion-desktop",
-      "companion-installers",
-      "signed-windows-installer",
-      "macos-internal-release-gate",
-      "verify",
-      "release-candidate",
-      "promote-windows-release",
+      ["sidecar-compatibility", "Install exact dependencies"],
+      ["companion-desktop", "Install exact dependencies"],
+      ["companion-installers", "Install exact dependencies"],
+      ["signed-windows-installer", "Install exact dependencies"],
+      ["macos-internal-release-gate", "Install exact dependencies"],
+      ["verify", "Install exact dependencies"],
+      ["release-candidate", "Install exact dependencies"],
+      ["promote-windows-release", "Install repo-pinned Wrangler"],
     ];
-    for (const name of consumers) {
+    for (const [name, installName] of consumers) {
       const consumer = job(name);
       const download = step(consumer, "Download authenticated zstd prebuilds");
+      const install = step(consumer, installName);
+      const jobConfiguration = consumer.slice(
+        0,
+        consumer.indexOf("    steps:"),
+      );
       expect(consumer).toContain("zstd-native-prebuilds");
-      expect(consumer).toContain("TOKENMONSTER_ZSTD_PREBUILD_DIR:");
-      expect(consumer).toContain("npm_config_mongodb_js_zstd_local_prebuilds:");
+      expect(jobConfiguration).not.toContain("${{ runner.temp }}");
+      expect(install).toContain("TOKENMONSTER_ZSTD_PREBUILD_DIR:");
+      expect(install).toContain("npm_config_mongodb_js_zstd_local_prebuilds:");
       expect(download).toContain(
         "tokenmonster-zstd-native-prebuilds-${{ github.sha }}",
       );
       expect(consumer.indexOf(download)).toBeLessThan(
-        consumer.indexOf("npm ci"),
+        consumer.indexOf(install),
       );
     }
 

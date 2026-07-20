@@ -108,9 +108,6 @@ jobs:
       - zstd-native-prebuilds
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
-    env:
-      TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
-      npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
     strategy:
       fail-fast: false
       matrix:
@@ -136,6 +133,9 @@ jobs:
         run: npm install --global npm@11.12.1
 
       - name: Install exact dependencies
+        env:
+          TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
+          npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
         run: npm ci
 
       # Build dependency-first so workspace package exports exist in a fresh checkout.
@@ -194,9 +194,6 @@ jobs:
       - zstd-native-prebuilds
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
-    env:
-      TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
-      npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
     strategy:
       fail-fast: false
       matrix:
@@ -220,6 +217,9 @@ jobs:
 
       - name: Install exact dependencies
         shell: bash
+        env:
+          TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
+          npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
         run: npm ci
 
       - name: Build desktop dependency closure
@@ -240,9 +240,6 @@ jobs:
       - zstd-native-prebuilds
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    env:
-      TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
-      npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
     permissions:
       contents: read
     strategy:
@@ -268,6 +265,9 @@ jobs:
 
       - name: Install exact dependencies
         shell: bash
+        env:
+          TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
+          npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
         run: npm ci
 
       - name: Build desktop dependency closure
@@ -353,9 +353,6 @@ jobs:
       - zstd-native-prebuilds
     runs-on: windows-2025
     timeout-minutes: 30
-    env:
-      TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
-      npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
     environment: release-signing
     permissions:
       contents: read
@@ -378,6 +375,9 @@ jobs:
 
       - name: Install exact dependencies
         shell: bash
+        env:
+          TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
+          npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
         run: npm ci
 
       - name: Build desktop dependency closure
@@ -469,9 +469,6 @@ jobs:
     needs: zstd-native-prebuilds
     runs-on: macos-15
     timeout-minutes: 30
-    env:
-      TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
-      npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
     permissions:
       contents: read
 
@@ -492,6 +489,9 @@ jobs:
           path: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
 
       - name: Install exact dependencies
+        env:
+          TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
+          npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
         run: npm ci
 
       - name: Build desktop dependency closure
@@ -526,9 +526,6 @@ jobs:
     needs: zstd-native-prebuilds
     runs-on: ubuntu-24.04
     timeout-minutes: 25
-    env:
-      TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
-      npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
 
     steps:
       - name: Check out repository
@@ -568,6 +565,9 @@ jobs:
           test "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns)" = "0"
 
       - name: Install exact dependencies
+        env:
+          TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
+          npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
         run: npm ci
 
       - name: Verify repository policy and formatting
@@ -657,9 +657,6 @@ jobs:
     needs: zstd-native-prebuilds
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    env:
-      TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
-      npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
     outputs:
       version: ${{ steps.bind-version.outputs.version }}
 
@@ -683,6 +680,9 @@ jobs:
         run: npm install --global npm@11.12.1
 
       - name: Install exact dependencies
+        env:
+          TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
+          npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
         run: npm ci
 
       - name: Bind the CLI candidate to this tag or CI run
@@ -694,6 +694,8 @@ jobs:
           echo "TOKENMONSTER_CLI_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
 
       - name: Build release artifact
+        env:
+          TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
         run: >-
           node scripts/release/build-release.mjs
           --version "$TOKENMONSTER_CLI_RELEASE_VERSION"
@@ -1140,9 +1142,6 @@ jobs:
     # enter the mutable RELEASES commit without a 30-minute recovery window.
     # Keep job-level headroom so GitHub cannot kill that critical section.
     timeout-minutes: 90
-    env:
-      TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
-      npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
     environment: release-promotion
     permissions:
       contents: read
@@ -1164,6 +1163,9 @@ jobs:
           path: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
 
       - name: Install repo-pinned Wrangler
+        env:
+          TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
+          npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
         run: npm ci
 
       - name: Download the verified signed Windows artifact
