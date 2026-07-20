@@ -4,6 +4,8 @@ import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
+import { requireDisabledRemoteLimitsResponse } from "../../../scripts/release/smoke-installed-policy.mjs";
+
 const execFileAsync = promisify(execFile);
 const guardPath = fileURLToPath(
   new URL("../src/network-deny.cjs", import.meta.url),
@@ -137,6 +139,53 @@ server.listen(0, "127.0.0.1", async () => {
 `;
 
 describe("sidecar network deny preload", () => {
+  it("accepts only the exact platform-specific disabled remote-limits result", () => {
+    expect(
+      requireDisabledRemoteLimitsResponse({
+        body: { error: "TokenMonster blocked sidecar network egress." },
+        platform: "darwin",
+        status: 500,
+      }),
+    ).toBe("macos-native-helper-blocked");
+    expect(
+      requireDisabledRemoteLimitsResponse({
+        body: { providers: [] },
+        platform: "linux",
+        status: 200,
+      }),
+    ).toBe("neutral-response");
+
+    for (const input of [
+      {
+        body: { error: "TokenMonster blocked sidecar network egress." },
+        platform: "darwin",
+        status: 200,
+      },
+      {
+        body: {
+          error: "TokenMonster blocked sidecar network egress.",
+          extra: true,
+        },
+        platform: "darwin",
+        status: 500,
+      },
+      {
+        body: { error: "different" },
+        platform: "darwin",
+        status: 500,
+      },
+      {
+        body: { error: "TokenMonster blocked sidecar network egress." },
+        platform: "linux",
+        status: 500,
+      },
+    ]) {
+      expect(() => requireDisabledRemoteLimitsResponse(input)).toThrow(
+        /unexpected HTTP/u,
+      );
+    }
+  });
+
   it("keeps loopback listening available while denying every outbound primitive", async () => {
     const { stdout, stderr } = await execFileAsync(
       process.execPath,

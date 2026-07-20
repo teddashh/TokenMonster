@@ -29,6 +29,12 @@ const executableSmoke = join(
   "release",
   "smoke-companion-executable.mjs"
 );
+const installedSmoke = join(
+  rootDirectory,
+  "scripts",
+  "release",
+  "smoke-installed.mjs"
+);
 
 const temporaryDirectories: string[] = [];
 
@@ -84,6 +90,26 @@ function createZip(inputPath: string, outputPath: string): Promise<void> {
 }
 
 describe("release script physical-byte gates", () => {
+  it.runIf(process.platform !== "win32")(
+    "never skips the installed smoke when invoked through a symlink",
+    async () => {
+      const directory = await temporaryDirectory();
+      const linkedSmoke = join(directory, "smoke-installed.mjs");
+      await symlink(installedSmoke, linkedSmoke);
+
+      for (const entryPoint of [installedSmoke, linkedSmoke]) {
+        const result = spawnSync(process.execPath, [entryPoint], {
+          cwd: rootDirectory,
+          encoding: "utf8",
+          timeout: 10_000
+        });
+        expect(result.status).toBe(1);
+        expect(result.stdout).toBe("");
+        expect(result.stderr).toContain("SMOKE usage:");
+      }
+    }
+  );
+
   it("binds the three co-located maker artifacts and detects byte changes", async () => {
     const directory = await temporaryDirectory();
     const setup = join(directory, "TokenMonsterSetup.exe");

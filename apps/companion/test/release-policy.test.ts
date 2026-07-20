@@ -581,6 +581,14 @@ describe("companion release policy", () => {
     expect(windowsSmoke).toContain("Assert-PhysicalPathChain");
     expect(windowsSmoke).toContain("Set-StrictMode -Version Latest");
     expect(windowsSmoke).toContain("$current = $current.Directory");
+    expect(windowsSmoke).toContain(
+      "Get-Command node -CommandType Application -ErrorAction Stop |"
+    );
+    expect(windowsSmoke).toContain("Select-Object -First 1");
+    expect(windowsSmoke).toContain("-LiteralPath $nodeCommand.Source");
+    expect(windowsSmoke).not.toContain(
+      "$nodeCommand = (Get-Command node"
+    );
     expect(windowsSmoke).not.toContain("--expected-directory");
     expect(installedVerifier).toContain('const SQUIRREL_PAYLOAD_PREFIX = "lib/net45/"');
     expect(installedVerifier).toContain(
