@@ -13,64 +13,52 @@ Linux/macOS packaging now also needs a deterministic way to select, copy,
 verify, and consume one exact native Tokscale binary without allowing a runtime
 command or path override.
 
-Electron Forge's Vite plugin remains experimental. TokenMonster already has
-stable runtime entry paths, so adopting that plugin would add lifecycle and
-directory changes without improving the release boundary.
+TokenMonster already has stable Vite runtime entry paths. Packaging therefore
+needs only a small, explicit orchestration layer around the stable Electron
+Packager and installer APIs; a framework-owned build lifecycle is unnecessary.
 
 ## Decision
 
 ### Build and package layout
 
-- Keep Electron exactly at `43.1.1`, Vite at `8.1.4`, Electron Forge CLI,
-  ZIP/DMG makers, and fuse plugin exactly at `7.11.2`, and `@electron/fuses`
-  exactly at `1.8.0`.
-- Forge 7.11.2 still declares `@electron/rebuild ^3.7.0`, whose resolved tree
-  is currently covered by high-severity `node-tar` advisories. The root uses a
-  narrowly scoped exact override to `@electron/rebuild 4.2.0`; the CLI's
-  `external-editor` tree similarly overrides vulnerable `tmp ^0.0.33` to exact
-  `tmp 0.2.7`. `npm audit` must be clean and the full Forge package operation
-  must pass. Because these replacements cross the upstream-declared ranges,
-  the policy script permits exactly those two `npm ls` exceptions and any
-  signed/GA release stays blocked until Forge's ranges natively accept safe
-  versions or an equally reviewed upstream fix replaces the overrides. The
-  verifier's default mode keeps internal packaging and signed-candidate review
-  usable with that exact audited set. Its fixed `--require-upstream-compatible`
-  mode validates the same installed tree and then rejects any remaining
-  cross-range problem; after installing the exact lock, the public npm job runs
-  that strict mode before its first TokenMonster registry-state read or
-  mutation, transitively blocking CDN and GitHub publication while preserving
-  non-public candidate and draft evidence.
-- A registry recheck on 2026-07-19 confirmed that 7.11.2 is still the latest
-  stable Forge release. A temporary native-range lock with the two overrides
-  removed produced 25 audit findings (22 high and 3 low); the relevant paths
-  resolved through `@electron/rebuild 3.7.2` to `tar 6`, and through
-  `external-editor 3.1.0` to `tmp 0.0.33`. There is no safe version inside
-  either published upstream range.
-- Forge `8.0.0-alpha.10` accepts `@electron/rebuild ^4.0.1` and removes the
-  CLI's `external-editor`/`tmp` path, and an exact temporary alpha resolution
-  audited clean. It is not a drop-in GA fix: it is a prerelease with ESM and
-  packager-major changes, and its fuse plugin requires `@electron/fuses ^2`
-  while this reviewed configuration pins 1.8.0. Adopting it requires a full
-  packaging, fuse, artifact, and native-host matrix review.
-- This is an external, dev-only packaging supply-chain semver gate, not an
-  application/runtime defect. The packaged app has no runtime `node_modules`,
-  and none of `@electron/rebuild`, `external-editor`, or `tmp` is declared as a
-  companion dependency. Close the gate only when a stable upstream release
-  natively accepts the safe versions, or after a reviewed stable packaging
-  replacement passes the same cross-platform release checks.
-- Use three explicit Vite builds, not the experimental Forge Vite plugin. Main
+- Keep Electron exactly at `43.1.1`, Vite at `8.1.4`, and the reviewed stable
+  direct packaging tools exact: `@electron/packager 18.4.4`,
+  `@electron/fuses 1.8.0`, `@electron/osx-sign 1.3.3`,
+  `@electron/windows-sign 1.2.2`, `cross-zip 4.0.1`,
+  `electron-installer-dmg 5.0.1`, `electron-winstaller 5.4.4`, and verifier
+  `@electron/asar 4.2.0`.
+- The 2026-07-20 reviewed stable replacement removes every Electron Forge
+  package and the root overrides. Consequently `@electron/rebuild`,
+  `external-editor`, and `tmp` are absent from both the exact lock and installed
+  tree. The toolchain verifier requires `npm ls --all` to exit successfully,
+  permits only npm's reproducible optional-platform `@emnapi/runtime`/`tslib`
+  extraneous labels, checks every direct version and API shape, and rejects any
+  return of the banned packages.
+- The fixed `--require-upstream-compatible` verifier mode remains part of the
+  public npm job before its first TokenMonster registry-state read or mutation.
+  It now validates the same Forge-free closure and passes only after all normal
+  dependency and API checks pass; it is not a bypass or a deleted gate.
+- Historical rationale: stable Forge 7.11.2 required cross-range overrides for
+  `@electron/rebuild` and `tmp`. Without them its native-range lock produced 25
+  audit findings (22 high and 3 low). Forge `8.0.0-alpha.10` removed those paths
+  but introduced prerelease, packager-major, ESM, and fuse-major changes. The
+  direct replacement instead uses the exact stable lower-level versions already
+  exercised by the prior packaging flow, without retaining Forge's unused CLI,
+  rebuild, editor, or plugin closures.
+- Use the explicit Vite builds independently of packaging. Main
   is bundled to `dist/main/main/main.js`, preload to
   `dist/main/preload/*.cjs`, and renderer to `dist/renderer`.
 - Runtime externalization has exactly two entries: `electron` and `node:*`.
   Workspace packages and third-party JavaScript are bundled. A packaged app
   has no runtime `node_modules`.
-- Forge packages only `dist`, `package.json`, `README.md`, and the checked-in
-  runtime bundle manifest. It creates one `app.asar`, with no
+- Direct Electron Packager stages only `dist`, `package.json`, `README.md`, the
+  checked-in runtime bundle manifest, and its checked-in Tokscale license. It
+  creates one `app.asar`, with no
   `app.asar.unpacked`. A reviewed hook copies only the current native host's
   exact Tokscale files to `resources/collector/tokscale`; no package JavaScript
   or `node_modules` enters the runtime.
 - Packager dependency pruning is disabled because the runtime is already
-  bundled and the strict input allowlist excludes `node_modules`; Forge must
+  bundled and the strict input allowlist excludes `node_modules`; it must
   not crawl workspace symlinks from production dependency declarations.
 - ZIP is the cross-platform internal maker. DMG is macOS-only. No updater feed
   or release-channel metadata is emitted until signing and rollback ownership
@@ -81,7 +69,8 @@ directory changes without improving the release boundary.
 
 ### Fuse policy
 
-The fuse plugin writes the first eight V1 fuses. `strictlyRequireAllFuses` is
+The direct `flipFuses()` call writes the first eight V1 fuses.
+`strictlyRequireAllFuses` is
 intentionally `false` because `@electron/fuses@1.8.0` does not name Electron
 43's ninth fuse. The artifact verifier reads the binary wire directly and
 requires all nine states, including the inherited ninth default:
@@ -101,9 +90,20 @@ requires all nine states, including the inherited ninth default:
 An Electron upgrade is blocked until the raw wire length and every expected
 state are reviewed again.
 
+Signed Windows and macOS candidates flip fuses before the platform signer so
+the final trusted signature covers the changed runtime. Internal macOS builds
+defer the fuse change until Packager has finished ASAR and plist mutation,
+harden filesystem permissions, and then use the exact `@electron/osx-sign`
+inside-out API with an ad-hoc identity. The manifest-bound Tokscale directory
+and byte-bound sidecar closure are excluded from rewriting so their existing
+Mach-O signatures and raw hashes remain the upstream-reviewed bytes; the outer
+app seal still covers those files. A strict
+`codesign --verify --deep --strict` and native startup smoke are mandatory
+before the internal maker artifact is accepted.
+
 Electron's prebuilt archive provides `v8_context_snapshot.bin`, while fuse 6
 requires the browser process to load `browser_v8_context_snapshot.bin`. A
-bounded Forge hook copies the exact per-platform/architecture runtime snapshot
+bounded direct Packager hook copies the exact per-platform/architecture runtime snapshot
 to the browser-specific sibling name. The artifact verifier requires both
 files to exist and be byte-identical; otherwise the packaged app would fail
 before main-process startup.
@@ -125,17 +125,26 @@ that exactly matches the extracted bytes. This verifies the archive metadata;
 the platform-enforced embedded integrity fuse still requires macOS/Windows
 packaged smoke and signing evidence.
 
-For ZIP output, the verifier also reads the central directory without extracting
-it, rejects traversal, duplicate/case-colliding paths, links, non-regular entries,
-privileged/writeable modes and bounded-size violations, then compares every
-file byte hash, size, file mode, directory path and directory mode with the
-already inspected staged app. A ZIP hash alone is not release evidence.
+For Linux ZIP output, the verifier reads the central directory without
+extracting it, rejects traversal, duplicate/case-colliding paths, links,
+non-regular entries, privileged/writeable modes and bounded-size violations,
+then compares every file byte hash, size and mode plus every directory path and
+mode with the already inspected staged app. Windows PowerShell ZIPs do not
+round-trip POSIX modes, while macOS app ZIPs contain framework symlinks. On
+those native hosts the verifier therefore records only bounded entry/path
+safety, sizes and packaged-executable presence; it does not claim byte-for-byte
+equivalence with staging. Those reduced non-Linux ZIP checks are private
+matrix evidence, not public Windows release evidence: the tag workflow uploads
+only the separately verified three-file Squirrel publication directory. A ZIP
+hash alone is not release evidence.
 
 The verifier writes hashes and inventory to
 `release-evidence/companion-package.json`. Internal evidence explicitly says
 `declaredSigned: false` and records the exact collector target, package-lock
-integrity, package version, per-file hashes/modes, and final ZIP content-inventory
-hash. Evidence schema v2 also binds a unique injected candidate version to the
+integrity, package version, and per-file hashes/modes. Linux evidence also
+records the final ZIP content-inventory hash; Windows/macOS evidence labels its
+reduced ZIP verification as `entry-safety-and-executable-presence` instead.
+Evidence schema v2 also binds a unique injected candidate version to the
 packaged application and Squirrel metadata; source `0.1.0` and SemVer build
 metadata are rejected as candidate identities.
 
@@ -163,15 +172,27 @@ password, and exact expected certificate subject in the audited
 `TOKENMONSTER_WINDOWS_*` environment. Both Electron Packager and Squirrel use
 the modern `windowsSign` interface with SHA-256 only and a fixed HTTPS RFC3161
 timestamp server; legacy `WINDOWS_*` overrides and signer debug injection are
-rejected or removed. Native verification checks `Valid`, the exact subject,
-the RFC3161 counter-signature OID, and SHA-256 SignedCms digests for every PE in
-the staged app, Setup.exe, and the full `.nupkg` payload. The ZIP-based nupkg is
-explicitly recorded as a non-Authenticode container rather than mislabeled as
-signed.
+rejected or removed. A serializable audited signing hook preserves only the
+exact raw-policy-bound sidecar zstd binding after validating its checked-in
+Windows size and SHA-256; Authenticode would otherwise change bytes that the
+runtime must reject. Native verification requires exactly that one raw-byte
+exception, then checks `Valid`, the exact subject, the RFC3161 counter-signature
+OID, and SHA-256 SignedCms digests for every other PE in the staged app,
+Setup.exe, and full `.nupkg` payload. The ZIP-based nupkg is explicitly recorded
+as a non-Authenticode container rather than mislabeled as signed.
+
+Native Windows install evidence binds physical identity, size, and SHA-256 for
+Setup, `RELEASES`, and the full nupkg both before installation and after bounded
+uninstall. The nupkg reader uses one validated file handle for complete hashing
+and bounded positional ZIP reads, while installed directory traversal rejects
+links, reparse traversal, identity changes, entry-count overflow, and byte
+overflow. The signed maker is fully reverified after this smoke and before
+upload, so installed bytes cannot be compared against a post-verification
+substitution.
 
 The runtime manifest declares exact `tokscale@4.5.2` package-lock integrity,
 file SHA-256, mode and source/target inventory for macOS and Linux x64/arm64,
-plus audited-but-disabled Windows packages. Forge only accepts a native host
+plus audited-but-disabled Windows packages. Direct Packager only accepts a native host
 build and validates the selected optional package and copied bytes without
 executing native payloads on the release host. At startup, the main process rereads
 the ASAR-protected policy and revalidates the exact extraResource inventory,
@@ -184,7 +205,7 @@ This makes unsigned internal Linux/macOS collector packaging reviewable, but it
 does not make a signed macOS artifact ready. Electron's recursive macOS signing
 pass may rewrite the nested Tokscale Mach-O and arm64 dylib after the upstream
 hash gate. `signedReleaseStatus` therefore remains
-`blocked-native-resigning-audit`, and both Forge and the verifier reject signed
+`blocked-native-resigning-audit`, and both the packaging runner and verifier reject signed
 mode. A native macOS release change must bind post-sign nested hashes to the
 expected Developer ID/Team ID, hardened runtime and notarization ticket, then
 mount and inspect the final DMG. DMG verification currently fails closed.
@@ -196,7 +217,7 @@ mount and inspect the final DMG. DMG verification currently fails closed.
 - The package is useful for bundle and collector review but is not an Alpha
   installer. It is unsigned, has no secure updater, and has no packaged
   sandbox-enabled smoke evidence.
-- The current Linux workstation cannot run that smoke safely: Forge's copied
+- The current Linux workstation cannot run that smoke safely: Packager's copied
   `chrome-sandbox` is user-owned mode `0755`, while AppArmor restricts
   unprivileged user namespaces. Electron aborts unless the helper is root-owned
   mode `4755`. The release process must use a properly isolated/configured
@@ -209,16 +230,14 @@ mount and inspect the final DMG. DMG verification currently fails closed.
 
 ## References
 
-- [Electron Forge CLI](https://www.electronforge.io/cli)
-- [Electron Forge build lifecycle](https://www.electronforge.io/core-concepts/build-lifecycle)
-- [Electron Forge Vite plugin status](https://www.electronforge.io/config/plugins/vite)
-- [Electron Forge fuses plugin](https://www.electronforge.io/config/plugins/fuses)
 - [Electron fuses](https://www.electronjs.org/docs/latest/tutorial/fuses)
 - [Electron ASAR archives](https://www.electronjs.org/docs/latest/tutorial/asar-archives)
 - [Electron ASAR integrity](https://www.electronjs.org/docs/latest/tutorial/asar-integrity)
 - [Electron Packager options](https://electron.github.io/packager/main/interfaces/Options.html)
-- [Forge macOS code signing](https://www.electronforge.io/guides/code-signing/code-signing-macos)
-- [Forge DMG maker](https://www.electronforge.io/config/makers/dmg)
+- [Electron Packager](https://github.com/electron/packager)
+- [Electron macOS signing](https://github.com/electron/osx-sign)
+- [Electron Installer DMG](https://github.com/electron-userland/electron-installer-dmg)
+- [Electron Windows Installer](https://github.com/electron/windows-installer)
+- [cross-zip](https://github.com/feross/cross-zip)
 - [Electron native Node modules](https://www.electronjs.org/docs/latest/tutorial/using-native-node-modules/)
 - [Electron 43.1.1 release](https://releases.electronjs.org/release/v43.1.1)
-- [npm dependency overrides](https://docs.npmjs.com/cli/v11/configuring-npm/package-json/#overrides)

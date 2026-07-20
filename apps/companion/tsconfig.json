@@ -2,23 +2,20 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
     "jsx": "react-jsx",
-    "lib": [
-      "ES2024",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "types": [
-      "node",
-      "vitest/globals"
-    ]
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["node", "vitest/globals"]
   },
   "include": [
     "src/**/*.ts",
     "src/**/*.cts",
     "src/**/*.tsx",
     "test/**/*.ts",
-    "forge.config.mjs",
+    "packaging/**/*.cjs",
+    "packaging/**/*.d.ts",
+    "packaging/**/*.mjs",
     "vite.config.ts",
     "vite.companion-preload.config.ts",
     "vite.main.config.ts",

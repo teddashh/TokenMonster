@@ -23,6 +23,10 @@ const WINDOWS_SIGNING_OVERRIDE_ENVIRONMENT = [
   "WINDOWS_TIMESTAMP_SERVER"
 ];
 const WINDOWS_SIGNABLE_EXTENSION = /\.(?:dll|efi|exe|node|scr|sys)$/iu;
+export const WINDOWS_RAW_BOUND_ZSTD_SIDECAR_PATH =
+  "node_modules/@mongodb-js/zstd/build/Release/zstd.node";
+const WINDOWS_RAW_BOUND_ZSTD_RESOURCE_SUFFIX =
+  `resources/sidecar/${WINDOWS_RAW_BOUND_ZSTD_SIDECAR_PATH}`;
 function requiredText(environment, name, options = {}) {
   const value = environment[name];
   const maximumLength = options.maximumLength ?? 1_024;
@@ -134,6 +138,15 @@ export function packageJsonWithReleaseVersion(packageJson, releaseVersion) {
 
 export function isWindowsSignablePath(path) {
   return typeof path === "string" && WINDOWS_SIGNABLE_EXTENSION.test(path);
+}
+
+export function isWindowsRawPolicyBoundPath(path) {
+  if (typeof path !== "string" || path.includes("\0")) return false;
+  const normalized = path.replaceAll("\\", "/").toLocaleLowerCase("en-US");
+  const expected = WINDOWS_RAW_BOUND_ZSTD_RESOURCE_SUFFIX.toLocaleLowerCase(
+    "en-US"
+  );
+  return normalized === expected || normalized.endsWith(`/${expected}`);
 }
 
 function hasExactKeys(value, keys) {

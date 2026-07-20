@@ -15,6 +15,7 @@ import {
   authenticodeEvidenceFromInspection,
   ciReleaseVersionForRunId,
   environmentWithoutWindowsSigningSecrets,
+  isWindowsRawPolicyBoundPath,
   isWindowsSignablePath,
   packageJsonWithReleaseVersion,
   prepareWindowsSigningEnvironment,
@@ -24,6 +25,7 @@ import {
   requireWindowsSignerSubject,
   SOURCE_COMPANION_VERSION,
   squirrelVersionFor,
+  WINDOWS_RAW_BOUND_ZSTD_SIDECAR_PATH,
   WINDOWS_RFC3161_TIMESTAMP_SERVER
 } from "../packaging/release-policy.mjs";
 
@@ -370,21 +372,29 @@ describe("companion release policy", () => {
     });
   });
 
-  it("uses the injected version in Forge package and maker configuration", () => {
+  it("uses the injected version in direct package and maker configuration", () => {
     const configUrl = pathToFileURL(
-      join(companionDirectory, "forge.config.mjs")
+      join(companionDirectory, "packaging", "package-config.mjs")
+    ).href;
+    const runnerUrl = pathToFileURL(
+      join(companionDirectory, "packaging", "package-runner.mjs")
     ).href;
     const script = `
-      const { default: config } = await import(process.env.CONFIG_URL);
-      const source = { name: "@tokenmonster/companion", version: "0.1.0" };
-      const packaged = await config.hooks.readPackageJson(config, source);
-      const squirrel = config.makers.find((maker) => maker.name === "@electron-forge/maker-squirrel");
+      const { default: config, deferInternalDarwinFuses } = await import(process.env.CONFIG_URL);
+      const { basename } = await import("node:path");
+      const { expectedPackagePath, zipArtifactPath } = await import(process.env.RUNNER_URL);
+      const packagePath = expectedPackagePath("linux", "x64", config);
       process.stdout.write(JSON.stringify({
         appVersion: config.packagerConfig.appVersion,
-        packagedVersion: packaged.version,
-        squirrelVersion: squirrel.config.version,
+        releaseVersion: config.releaseVersion,
+        squirrelVersion: config.squirrel.version,
+        afterCopyHookCount: config.packagerConfig.afterCopy.length,
+        deferInternalDarwinArm64: deferInternalDarwinFuses("darwin", "arm64"),
+        deferInternalDarwinX64: deferInternalDarwinFuses("darwin", "x64"),
+        linuxPackageName: basename(packagePath),
+        linuxZipName: basename(zipArtifactPath(packagePath, "linux", "x64", config)),
         internalPackagerSigning: config.packagerConfig.windowsSign ?? null,
-        internalMakerSigning: squirrel.config.windowsSign ?? null
+        internalMakerSigning: config.squirrel.windowsSign ?? null
       }));
     `;
     const result = spawnSync(
@@ -396,6 +406,7 @@ describe("companion release policy", () => {
         env: {
           ...environmentWithoutWindowsSigningSecrets(process.env),
           CONFIG_URL: configUrl,
+          RUNNER_URL: runnerUrl,
           TOKENMONSTER_RELEASE_MODE: "internal",
           TOKENMONSTER_RELEASE_VERSION: "0.1.0-rc.8"
         }
@@ -404,8 +415,13 @@ describe("companion release policy", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
       appVersion: "0.1.0-rc.8",
-      packagedVersion: "0.1.0-rc.8",
+      releaseVersion: "0.1.0-rc.8",
       squirrelVersion: "0.1.0-rc.8",
+      afterCopyHookCount: 1,
+      deferInternalDarwinArm64: true,
+      deferInternalDarwinX64: true,
+      linuxPackageName: "TokenMonster-linux-x64",
+      linuxZipName: "TokenMonster-linux-x64-0.1.0-rc.8.zip",
       internalPackagerSigning: null,
       internalMakerSigning: null
     });
@@ -431,7 +447,7 @@ describe("companion release policy", () => {
     }
   });
 
-  it("builds the complete companion workspace dependency closure before Forge", async () => {
+  it("builds the complete companion workspace dependency closure before Electron Packager", async () => {
     const source = await readFile(
       join(rootDirectory, "scripts", "package-companion.mjs"),
       "utf8"
@@ -442,11 +458,157 @@ describe("companion release policy", () => {
     expect(source).not.toContain('runNpm(["run", "build"]');
   });
 
+  it("runs direct makers serially and binds both Squirrel version projections", async () => {
+    const source = await readFile(
+      join(
+        companionDirectory,
+        "packaging",
+        "package-runner.mjs"
+      ),
+      "utf8"
+    );
+    expect(source).toContain(
+      "convertVersion(configuration.releaseVersion) !== squirrelVersion"
+    );
+    expect(source.indexOf("await makeZipArtifact")).toBeLessThan(
+      source.indexOf("await makeDmgArtifact")
+    );
+    expect(source.indexOf("await makeZipArtifact")).toBeLessThan(
+      source.indexOf("await makeSquirrelArtifacts")
+    );
+    expect(source).not.toContain("Promise.all(makers)");
+  });
+
+  it("finalizes internal macOS fuses only after permission hardening", async () => {
+    const runnerSource = await readFile(
+      join(companionDirectory, "packaging", "package-runner.mjs"),
+      "utf8"
+    );
+    const configSource = await readFile(
+      join(companionDirectory, "packaging", "package-config.mjs"),
+      "utf8"
+    );
+    expect(runnerSource.indexOf("await hardenPackagedPermissions")).toBeLessThan(
+      runnerSource.indexOf("await finalizePackagedFuses")
+    );
+    expect(configSource).toContain(
+      'RELEASE_MODE === "internal" &&\n    platform === "darwin"'
+    );
+    expect(configSource).toContain("preservedResourceDirectories.some");
+    expect(configSource).toContain(
+      "runtimeManifest.sidecar.extraResourceTarget"
+    );
+    expect(configSource).toContain("identityValidation: false");
+    expect(configSource).toContain("optionsForFile: () => ({");
+    expect(configSource).toContain('timestamp: "none"');
+    expect(configSource).toContain(
+      '["--verify", "--deep", "--strict", appPath]'
+    );
+  });
+
+  it("keeps native macOS launch and Windows install smoke in CI", async () => {
+    const workflow = await readFile(
+      join(rootDirectory, ".github", "workflows", "ci.yml"),
+      "utf8"
+    );
+    const windowsSmoke = await readFile(
+      join(
+        rootDirectory,
+        "scripts",
+        "release",
+        "smoke-windows-squirrel-installer.ps1"
+      ),
+      "utf8"
+    );
+    const executableSmoke = await readFile(
+      join(
+        rootDirectory,
+        "scripts",
+        "release",
+        "smoke-companion-executable.mjs"
+      ),
+      "utf8"
+    );
+    const installedVerifier = await readFile(
+      join(
+        rootDirectory,
+        "scripts",
+        "release",
+        "verify-installed-companion.mjs"
+      ),
+      "utf8"
+    );
+    const releaseScriptTsconfig = await readFile(
+      join(rootDirectory, "tsconfig.release-scripts.json"),
+      "utf8"
+    );
+    const rootPackage = JSON.parse(
+      await readFile(join(rootDirectory, "package.json"), "utf8")
+    ) as { scripts?: { typecheck?: string } };
+    expect(workflow).toContain(
+      "Clean-install, smoke, and uninstall Windows Squirrel candidate"
+    );
+    expect(workflow).toContain("Smoke packaged macOS application");
+    expect(workflow).toContain(
+      "Clean-install, smoke, and uninstall signed Windows installer"
+    );
+    expect(workflow).toContain(
+      "Re-verify signed Windows maker bytes after install smoke"
+    );
+    expect(
+      workflow.indexOf(
+        "Re-verify signed Windows maker bytes after install smoke"
+      )
+    ).toBeLessThan(workflow.indexOf("Upload verified signed installer"));
+    expect(workflow).toContain("macos-internal-release-gate:");
+    const stagingJob = workflow.slice(
+      workflow.indexOf("  stage-companion-release:"),
+      workflow.indexOf("  publish-cli-npm:")
+    );
+    expect(stagingJob).toContain("- macos-internal-release-gate");
+    expect(windowsSmoke).toContain('@("--uninstall", "--silent")');
+    expect(windowsSmoke).toContain("verify-installed-companion.mjs");
+    expect(windowsSmoke).toContain("--full-package");
+    expect(windowsSmoke).toContain('"--snapshot-maker"');
+    expect(windowsSmoke).toContain("$makerBindingBefore");
+    expect(windowsSmoke).toContain("$makerBindingAfter");
+    expect(windowsSmoke).toContain("$process.WaitForExit($TimeoutMilliseconds)");
+    expect(windowsSmoke).toContain("$process.Kill($true)");
+    expect(windowsSmoke).toContain("Assert-PhysicalPathChain");
+    expect(windowsSmoke).toContain("Set-StrictMode -Version Latest");
+    expect(windowsSmoke).toContain("$current = $current.Directory");
+    expect(windowsSmoke).not.toContain("--expected-directory");
+    expect(installedVerifier).toContain('const SQUIRREL_PAYLOAD_PREFIX = "lib/net45/"');
+    expect(installedVerifier).toContain(
+      'const EXECUTION_STUB_PAYLOAD_PATH = "TokenMonster_ExecutionStub.exe"'
+    );
+    expect(installedVerifier).toContain("inventorySquirrelPayload");
+    expect(installedVerifier).toContain("yauzl.fromRandomAccessReader");
+    expect(installedVerifier).toContain("FileHandleRangeReadStream");
+    expect(installedVerifier).toContain("hashOpenFileHandle");
+    expect(installedVerifier).toContain("entryCount += entries.length");
+    expect(installedVerifier).toContain("left.ctimeNs === right.ctimeNs");
+    expect(releaseScriptTsconfig).toContain(
+      '"scripts/release/smoke-companion-executable.mjs"'
+    );
+    expect(releaseScriptTsconfig).toContain(
+      '"scripts/release/verify-installed-companion.mjs"'
+    );
+    expect(rootPackage.scripts?.typecheck).toContain(
+      "tsc -p tsconfig.release-scripts.json"
+    );
+    expect(executableSmoke).toContain("TOKENMONSTER_SMOKE_OK");
+    expect(executableSmoke).toContain('child.kill("SIGKILL")');
+    expect(executableSmoke).toContain("FORCE_CLOSE_GRACE_MS");
+    expect(executableSmoke).toContain('spawnSync(taskkillPath');
+    expect(executableSmoke).toContain('/^[A-Za-z]:\\\\Windows$/iu');
+  });
+
   it.runIf(process.platform !== "darwin" && process.platform !== "win32")(
     "rejects signed packaging on a non-native host without misreporting macOS",
     () => {
       const configUrl = pathToFileURL(
-        join(companionDirectory, "forge.config.mjs")
+        join(companionDirectory, "packaging", "package-config.mjs")
       ).href;
       const result = spawnSync(
         process.execPath,
@@ -494,6 +656,25 @@ describe("companion release policy", () => {
       "readme"
     ]) {
       expect(isWindowsSignablePath(path)).toBe(false);
+    }
+  });
+
+  it("exempts only the exact raw-policy-bound Windows zstd payload", () => {
+    const expected =
+      `resources/sidecar/${WINDOWS_RAW_BOUND_ZSTD_SIDECAR_PATH}`;
+    expect(isWindowsRawPolicyBoundPath(expected)).toBe(true);
+    expect(
+      isWindowsRawPolicyBoundPath(
+        `C:\\staging\\resources\\sidecar\\${WINDOWS_RAW_BOUND_ZSTD_SIDECAR_PATH.replaceAll("/", "\\")}`
+      )
+    ).toBe(true);
+    for (const path of [
+      `resources/other/${WINDOWS_RAW_BOUND_ZSTD_SIDECAR_PATH}`,
+      `${expected}.substituted`,
+      "resources/sidecar/node_modules/other/build/Release/zstd.node",
+      "TokenMonster.exe"
+    ]) {
+      expect(isWindowsRawPolicyBoundPath(path)).toBe(false);
     }
   });
 });

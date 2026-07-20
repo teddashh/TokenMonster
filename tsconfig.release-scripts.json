@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "scripts/release/smoke-companion-executable.mjs",
+    "scripts/release/verify-installed-companion.mjs"
+  ]
+}
