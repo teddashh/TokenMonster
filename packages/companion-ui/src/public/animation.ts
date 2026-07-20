@@ -65,6 +65,20 @@ export function createPortraitSwitchStateMachine<T extends PortraitTarget>(
   });
 }
 
+/** Owns the letter-to-doll handoff so the current letter stays visible while decoding. */
+export function createPortraitStageStateMachine<T extends PortraitTarget>(
+  letterLayer: Pick<HTMLElement, "hidden">,
+  hooks: PortraitSwitchHooks<T>
+): PortraitSwitchStateMachine<T> {
+  return createPortraitSwitchStateMachine({
+    ...hooks,
+    onCommit: (target, current) => {
+      hooks.onCommit(target, current);
+      letterLayer.hidden = true;
+    }
+  });
+}
+
 export type CharacterImageFactory = () => HTMLImageElement;
 
 export async function preloadCharacterImage(

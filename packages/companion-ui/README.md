@@ -1,22 +1,28 @@
 # `@tokenmonster/companion-ui`
 
 Lightweight, zh-TW-first static companion UI served by the TokenMonster
-loopback gateway. The package has no browser runtime dependencies and makes no
-request except a same-origin `GET /api/companion`.
+loopback gateway. The package has no browser runtime dependencies and calls
+only the gateway's fixed, session-protected same-origin routes. It never
+contacts TokenMonster cloud or a provider endpoint directly.
 
 The first screen always shows the code-native TokenMonster letter companion and
-four sister choices. A unique highest local 28-day provider total suggests the
-starting sister; ties or unavailable provider data leave the choice to the
-user. A manual choice wins for the current UI session, and token volume never
-becomes progression or an unlock rule.
+four sister choices. A unique highest local 28-day provider total may label one
+choice as a recommendation; ties or unavailable provider data leave every
+choice neutral, and usage never selects a companion without the player's
+explicit action. The choice is persisted locally. The wider roster, wardrobe,
+poses, and actions unlock through deterministic, explainable, monotonic local
+aggregate milestones; progression is never purchasable and does not encourage
+wasteful token use.
 Metrics remain placeholders until a strict, internally consistent healthy
 aggregate response arrives. An unreachable or incompatible sidecar produces a
 small, sanitized recovery state. Temporary unavailability retries after 5,
 15, then at most 60 seconds; a compatible response or manual retry resets that
 backoff. An incompatible version never retries automatically and asks the user
 to restart or update TokenMonster. Raw errors, fake/demo numbers, collector
-controls, cloud controls, BYOK, and reviewer-facing policy copy are
-intentionally absent.
+configuration, and reviewer-facing policy copy are intentionally absent. The
+UI does include strict local controls for anonymous-contribution preview,
+enable, stop, delete, and recovery, plus BYOK status, configure, clear, and
+chat; every operation stays behind the same-origin loopback gateway.
 
 ## Gateway response
 
@@ -57,11 +63,12 @@ after restart or update.
 ## Serving the assets
 
 After building, the gateway may import `getCompanionUiAssetDirectory()` and
-read only `index.html`, `styles.css`, and the self-contained `app.js`. It serves
-those immutable bytes at `/`, `/assets/companion.css`, and
-`/assets/companion.js` with its own loopback session, Host, Origin, and path
-traversal protections. `index.html` contains a restrictive CSP and only
-references those same-origin routes.
+load `index.html`, `styles.css`, the `main.js` module entry, and only the
+bounded JavaScript module filenames discovered in that same static directory.
+It serves those immutable bytes at `/`, `/assets/companion.css`, and the
+bounded `/assets/<module>.js` route set with its own loopback session, Host,
+Origin, and path traversal protections. `index.html` contains a restrictive
+CSP and references only those same-origin routes.
 
 ```sh
 npm run typecheck --workspace @tokenmonster/companion-ui

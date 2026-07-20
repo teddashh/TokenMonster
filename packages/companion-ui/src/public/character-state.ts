@@ -3,20 +3,21 @@ import type {
   CharacterId,
   CharacterPose,
   CharactersSnapshot,
-  CharacterUnlock
+  CharacterUnlock,
 } from "./dto.js";
-import { CHARACTER_THEME_LABELS } from "./wardrobe.js";
+import { characterThemeLabel } from "./wardrobe.js";
+import { localizeUiText } from "./localization.js";
 
 const INDIVIDUAL_UNLOCK_TOAST_LIMIT = 3;
 
 export function diffCharacterUnlocks(
   previous: CharactersSnapshot | undefined,
-  current: CharactersSnapshot
+  current: CharactersSnapshot,
 ): readonly CharacterUnlock[] {
   if (previous === undefined) return Object.freeze([]);
   const batchId = current.unlockBatchId ?? current.generatedAt;
   const previousById = new Map(
-    previous.characters.map((character) => [character.characterId, character])
+    previous.characters.map((character) => [character.characterId, character]),
   );
   const unlocks: CharacterUnlock[] = [];
   for (const character of current.characters) {
@@ -33,15 +34,12 @@ export function diffCharacterUnlocks(
           kind: "character",
           characterId: character.characterId,
           displayName: character.displayName,
-          themeId: null
-        })
+          themeId: null,
+        }),
       );
     }
-    if (character.visual.mode !== "doll") continue;
     const priorThemes = new Map(
-      prior?.visual.mode === "doll"
-        ? prior.visual.themes.map((theme) => [theme.themeId, theme])
-        : []
+      (prior?.visual.themes ?? []).map((theme) => [theme.themeId, theme]),
     );
     for (const theme of character.visual.themes) {
       if (theme.unlocked && !priorThemes.get(theme.themeId)?.unlocked) {
@@ -52,8 +50,8 @@ export function diffCharacterUnlocks(
             kind: "theme",
             characterId: character.characterId,
             displayName: character.displayName,
-            themeId: theme.themeId
-          })
+            themeId: theme.themeId,
+          }),
         );
       }
     }
@@ -62,37 +60,42 @@ export function diffCharacterUnlocks(
 }
 
 export function coalesceCharacterUnlocks(
-  unlocks: readonly CharacterUnlock[]
+  unlocks: readonly CharacterUnlock[],
 ): readonly CharacterUnlock[] {
   if (unlocks.length <= INDIVIDUAL_UNLOCK_TOAST_LIMIT) return unlocks;
   const first = unlocks[0]!;
   const characterCount = unlocks.filter(
-    (unlock) => unlock.kind === "character"
+    (unlock) => unlock.kind === "character",
   ).length;
   const themeCount = unlocks.length - characterCount;
   return Object.freeze([
     Object.freeze({
       ...first,
       key: `summary:${first.batchId}`,
-      summary: Object.freeze({ characterCount, themeCount })
-    })
+      summary: Object.freeze({ characterCount, themeCount }),
+    }),
   ]);
 }
 
 export function characterUnlockToastText(unlock: CharacterUnlock): string {
+  let raw: string;
   if (unlock.summary !== undefined) {
     const { characterCount, themeCount } = unlock.summary;
     if (characterCount > 0 && themeCount > 0) {
-      return `解鎖了 ${characterCount} 位夥伴與 ${themeCount} 件服裝，到衣櫃看看`;
+      raw = `解鎖了 ${characterCount} 位夥伴與 ${themeCount} 件服裝，到衣櫃看看`;
+      return localizeUiText(raw);
     }
     if (themeCount > 0) {
-      return `解鎖了 ${themeCount} 件新服裝，到衣櫃看看`;
+      raw = `解鎖了 ${themeCount} 件新服裝，到衣櫃看看`;
+      return localizeUiText(raw);
     }
-    return `解鎖了 ${characterCount} 位新夥伴，到衣櫃看看`;
+    raw = `解鎖了 ${characterCount} 位新夥伴，到衣櫃看看`;
+    return localizeUiText(raw);
   }
-  return unlock.kind === "character"
+  raw = unlock.kind === "character"
     ? `${unlock.displayName} 來了！`
-    : `${unlock.displayName} 的${CHARACTER_THEME_LABELS[unlock.themeId!]}服裝準備好了！`;
+    : `${unlock.displayName} 的${characterThemeLabel(unlock.themeId!)}服裝準備好了！`;
+  return localizeUiText(raw);
 }
 
 export interface CharacterUnlockQueue {
@@ -126,14 +129,14 @@ export function createCharacterUnlockQueue(): CharacterUnlockQueue {
     },
     pendingCount(): number {
       return queued.length;
-    }
+    },
   });
 }
 
 export function resolveCharacterPose(
   connection: CharacterConnectionState,
   todayTokens: number,
-  celebrating: boolean
+  celebrating: boolean,
 ): CharacterPose | null {
   if (connection === "refresh-failed" || connection === "stale") {
     return "challenged";
@@ -150,6 +153,7 @@ interface ImageFailure {
 
 export interface CharacterImageFallbackTracker {
   advancePoll(): void;
+  reset(): void;
   canAttempt(characterId: CharacterId, path: string): boolean;
   recordFailure(characterId: CharacterId, path: string): void;
   recordSuccess(characterId: CharacterId, path: string): void;
@@ -164,6 +168,9 @@ export function createCharacterImageFallbackTracker(): CharacterImageFallbackTra
     advancePoll(): void {
       pollNumber += 1;
     },
+    reset(): void {
+      failures.clear();
+    },
     canAttempt(characterId: CharacterId, path: string): boolean {
       const failure = failures.get(keyFor(characterId, path));
       return (
@@ -176,12 +183,11 @@ export function createCharacterImageFallbackTracker(): CharacterImageFallbackTra
       const previous = failures.get(key);
       failures.set(key, {
         failureCount: (previous?.failureCount ?? 0) + 1,
-        failedOnPoll: pollNumber
+        failedOnPoll: pollNumber,
       });
     },
     recordSuccess(characterId: CharacterId, path: string): void {
       failures.delete(keyFor(characterId, path));
-    }
+    },
   });
 }
-

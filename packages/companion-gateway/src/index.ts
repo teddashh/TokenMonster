@@ -1,7 +1,56 @@
 export { CompanionGatewayError } from "./errors.js";
 export { createCompanionGateway } from "./gateway.js";
-export { getApprovedAssetManifest } from "@tokenmonster/characters";
+export {
+  UI_LOCALE_PREFERENCE_FILE,
+  UI_LOCALES,
+  UiLocalePreferenceError,
+  isUiLocale,
+  loadUiLocalePreference,
+  parseUiLocalePreference,
+  saveUiLocalePreference,
+  uiLocalePreferencePath,
+} from "./ui-locale-preference.js";
+export {
+  UNAVAILABLE_COMPANION_CONTRIBUTION_STATUS,
+  isCompanionContributionController,
+  projectCompanionContributionStatus,
+} from "./contribution-status.js";
+export {
+  contributionControlHttpStatus,
+  prepareCompanionContributionPreview,
+  projectCompanionContributionPreview,
+  runCompanionContributionAction,
+} from "./contribution-control.js";
+export {
+  CHARACTER_PROFILE_FILE,
+  characterProfilePath,
+} from "./character-profile-service.js";
+export { getApprovedAssetPackConfiguration } from "@tokenmonster/characters";
 export type {
+  CompanionByokAvailability,
+  CompanionByokChatErrorCode,
+  CompanionByokChatMessage,
+  CompanionByokChatResponse,
+  CompanionByokChatRouteResponse,
+  CompanionByokControlErrorCode,
+  CompanionByokControlErrorResponse,
+  CompanionByokControlResponse,
+  CompanionByokPersistence,
+  CompanionByokRequestErrorResponse,
+  CompanionByokStatusResponse,
+  CompanionContributionAvailability,
+  CompanionContributionAction,
+  CompanionContributionController,
+  CompanionContributionControlCode,
+  CompanionContributionControlResponse,
+  CompanionContributionPreviewResponse,
+  CompanionContributionPreviewRouteResponse,
+  CompanionContributionStatusResponse,
+  CompanionContributionStatusSource,
+  CompanionContributionUnavailableReason,
+  CompanionAssetPackError,
+  CompanionAssetPackPhase,
+  CompanionAssetPackStatusResponse,
   CompanionApiErrorCode,
   CompanionApiErrorResponse,
   CompanionApiHealthyResponse,
@@ -9,15 +58,20 @@ export type {
   CompanionCollectorController,
   CompanionCollectorPhase,
   CompanionCollectorStatus,
-  CompanionCharacterFetch,
-  CompanionCharacterFetchInit,
-  CompanionCharacterFetchResponse,
   CompanionCharacter,
   CompanionCharacterDollVisual,
   CompanionCharacterId,
   CompanionCharacterLetterVisual,
+  CompanionCharacterInteractionCooldownResponse,
+  CompanionCharacterInteractionLineResponse,
+  CompanionCharacterInteractionLocale,
+  CompanionCharacterInteractionResponse,
   CompanionCharacterOptions,
   CompanionCharacterProgress,
+  CompanionCharacterProfileReason,
+  CompanionCharacterProfileReasonInput,
+  CompanionCharacterProfileResponse,
+  CompanionCharacterProfileTraitId,
   CompanionCharactersResponse,
   CompanionCharacterThemeVisual,
   CompanionCharacterVoiceLine,
@@ -31,23 +85,29 @@ export type {
   CompanionQuotaFamily,
   CompanionQuotaFamilyEstimate,
   CompanionQuotaResponse,
+  CompanionProgressionLockRepairOutcome,
+  CompanionProgressionLockRepairResponse,
   CompanionUiAssets,
+  CompanionUiLocale,
+  CompanionUiLocalePreferenceErrorCode,
+  CompanionUiLocalePreferenceErrorResponse,
+  CompanionUiLocalePreferenceResponse,
   CompanionUsageFamiliesResponse,
   CompanionUsageFamilyDay,
   CompanionUsageModel,
   CompanionUsageModelsResponse,
-  CompanionUsageWindow
+  CompanionUsageWindow,
 } from "./types.js";
 export {
   QUOTA_CATALOG_FAMILIES,
   QUOTA_PLAN_CATALOG,
   findQuotaPlan,
-  plansForFamily
+  plansForFamily,
 } from "./quota-catalog.js";
 export {
   dailyEquivalentBudget,
   quotaWindowStart,
-  remainingQuotaPercent
+  remainingQuotaPercent,
 } from "./quota-estimator.js";
 export {
   QUOTA_PLANS_FILE,
@@ -55,11 +115,16 @@ export {
   parseQuotaPlanSelections,
   quotaPlansPath,
   saveQuotaPlanSelections,
-  withQuotaPlanSelection
+  withQuotaPlanSelection,
 } from "./quota-store.js";
 export type {
   QuotaCatalogFamily,
   QuotaPlan,
-  QuotaWindow
+  QuotaWindow,
 } from "./quota-catalog.js";
 export type { QuotaPlanSelections } from "./quota-store.js";
+export type {
+  UiLocale,
+  UiLocalePreference,
+  UiLocalePreferenceErrorCode,
+} from "./ui-locale-preference.js";
