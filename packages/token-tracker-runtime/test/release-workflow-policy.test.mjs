@@ -20,10 +20,7 @@ const squirrelExecutor = await readFile(
   "utf8",
 );
 const squirrelAdapter = await readFile(
-  resolve(
-    rootDirectory,
-    "scripts/release/promote-windows-squirrel-feed.mjs",
-  ),
+  resolve(rootDirectory, "scripts/release/promote-windows-squirrel-feed.mjs"),
   "utf8",
 );
 
@@ -76,9 +73,10 @@ describe("release workflow publication policy", () => {
         const marker = `npm ${command === "test" ? "test" : `run ${command}`} --workspace ${workspace}`;
         expect(occurrences(check, marker), `${stepName}: ${workspace}`).toBe(1);
         const index = check.indexOf(marker);
-        expect(index, `${stepName}: ${workspace} dependency order`).toBeGreaterThan(
-          priorIndex,
-        );
+        expect(
+          index,
+          `${stepName}: ${workspace} dependency order`,
+        ).toBeGreaterThan(priorIndex);
         priorIndex = index;
       }
     }
@@ -98,6 +96,77 @@ describe("release workflow publication policy", () => {
     expect(candidate).toContain("node scripts/derive-cli-release-version.mjs");
     expect(candidate).not.toContain("-ci.${GITHUB_RUN_ID}");
     expect(candidate).not.toContain("derive-companion-release-version.mjs");
+  });
+
+  it("authenticates one all-platform zstd set before scripted installs", () => {
+    const authentication = job("zstd-native-prebuilds");
+    const audit = step(
+      authentication,
+      "Authenticate all pinned zstd prebuilds",
+    );
+    expect(audit).toContain("audit-zstd-native-prebuild.mjs");
+    expect(audit).toContain("--all");
+    expect(audit).toContain("--output authenticated-zstd-prebuilds");
+    expect(authentication).toContain(
+      "tokenmonster-zstd-native-prebuilds-${{ github.sha }}",
+    );
+
+    const consumers = [
+      "sidecar-compatibility",
+      "companion-desktop",
+      "companion-installers",
+      "signed-windows-installer",
+      "macos-internal-release-gate",
+      "verify",
+      "release-candidate",
+      "promote-windows-release",
+    ];
+    for (const name of consumers) {
+      const consumer = job(name);
+      const download = step(consumer, "Download authenticated zstd prebuilds");
+      expect(consumer).toContain("zstd-native-prebuilds");
+      expect(consumer).toContain("TOKENMONSTER_ZSTD_PREBUILD_DIR:");
+      expect(consumer).toContain("npm_config_mongodb_js_zstd_local_prebuilds:");
+      expect(download).toContain(
+        "tokenmonster-zstd-native-prebuilds-${{ github.sha }}",
+      );
+      expect(consumer.indexOf(download)).toBeLessThan(
+        consumer.indexOf("npm ci"),
+      );
+    }
+
+    const candidate = job("release-candidate");
+    expect(step(candidate, "Build release artifact")).toContain(
+      '--zstd-prebuilds "$TOKENMONSTER_ZSTD_PREBUILD_DIR"',
+    );
+  });
+
+  it("proves embedded zstd installation with no reusable cache or binary host", () => {
+    const smokeJob = job("release-smoke");
+    const install = step(smokeJob, "Install release tarball locally");
+    const nativeVerification = step(
+      smokeJob,
+      "Verify installed zstd binding bytes",
+    );
+    const runtimeSmoke = step(smokeJob, "Smoke-test installed release");
+    expect(install).toContain(
+      "npm_config_mongodb_js_zstd_binary_host: http://127.0.0.1:1/",
+    );
+    expect(install).toContain("tokenmonster-empty-release-npm-cache");
+    expect(install).toContain('if [[ -e "$smoke_cache" ]]');
+    expect(install).toContain('npm_config_cache="$smoke_cache"');
+    expect(install).not.toContain("mongodb_js_zstd_local_prebuilds");
+    expect(install).not.toContain("set +e");
+    expect(install).not.toContain("|| true");
+    expect(smokeJob).not.toContain("Download authenticated zstd prebuilds");
+    expect(nativeVerification).toContain("zstd-native-verifier.mjs");
+    expect(nativeVerification).toContain("--installed-root");
+    expect(smokeJob.indexOf(install)).toBeLessThan(
+      smokeJob.indexOf(nativeVerification),
+    );
+    expect(smokeJob.indexOf(nativeVerification)).toBeLessThan(
+      smokeJob.indexOf(runtimeSmoke),
+    );
   });
 
   it("boots the exact tag-bound Linux package before release staging", () => {
@@ -122,9 +191,7 @@ describe("release workflow publication policy", () => {
     );
     expect(smoke).toContain("--tokenmonster-smoke");
     expect(smoke).toContain('[[ "$smoke_status" -ne 0 ]]');
-    expect(smoke).toContain(
-      'grep -Fxq "TOKENMONSTER_SMOKE_OK" "$smoke_log"',
-    );
+    expect(smoke).toContain('grep -Fxq "TOKENMONSTER_SMOKE_OK" "$smoke_log"');
     expect(smoke).not.toContain("sysctl");
     expect(smoke).not.toContain("--no-sandbox");
     expect(smoke).not.toContain("|| true");
@@ -215,9 +282,7 @@ describe("release workflow publication policy", () => {
       "Authoritatively create or verify the immutable R2 object",
     );
     expect(generation).toContain("prepare-windows-promotion.mjs");
-    expect(verification).toContain(
-      "verify-windows-squirrel-candidate.mjs",
-    );
+    expect(verification).toContain("verify-windows-squirrel-candidate.mjs");
     expect(verification).toContain(
       "windows-squirrel-candidate-verification-v1.json",
     );
@@ -245,9 +310,7 @@ describe("release workflow publication policy", () => {
     expect(evidence).toContain(
       "windows-squirrel-candidate-verification-v1.json",
     );
-    expect(evidence).toContain(
-      "windows-squirrel-promotion-evidence-v1.json",
-    );
+    expect(evidence).toContain("windows-squirrel-promotion-evidence-v1.json");
   });
 
   it("keeps Cloudflare credentials out of setup and scopes them to mutations", () => {
@@ -284,9 +347,7 @@ describe("release workflow publication policy", () => {
       "Promote and verify the exact Squirrel feed",
     );
     expect(mutation).toContain("promote-windows-squirrel-feed.mjs");
-    expect(mutation).toContain(
-      "windows-squirrel-promotion-evidence-v1.json",
-    );
+    expect(mutation).toContain("windows-squirrel-promotion-evidence-v1.json");
     expect(promotion).toContain(
       "non-cancelling tag concurrency group is the single",
     );
@@ -297,7 +358,9 @@ describe("release workflow publication policy", () => {
     expect(squirrelExecutor).toContain(
       "public channel full-package before metadata commit",
     );
-    expect(squirrelExecutor.indexOf('label: "channel full-package"')).toBeLessThan(
+    expect(
+      squirrelExecutor.indexOf('label: "channel full-package"'),
+    ).toBeLessThan(
       squirrelExecutor.indexOf(
         'operations.push("channel-releases-commit-attempt-returned")',
       ),
@@ -312,9 +375,7 @@ describe("release workflow publication policy", () => {
       "prior-channel-full-package-retired",
     );
     expect(squirrelAdapter).toContain("COMMAND_TIMEOUT_MS = 180_000");
-    expect(squirrelAdapter).toContain(
-      "EXECUTOR_DEADLINE_MS = 60 * 60 * 1_000",
-    );
+    expect(squirrelAdapter).toContain("EXECUTOR_DEADLINE_MS = 60 * 60 * 1_000");
     expect(squirrelAdapter).toContain(
       "METADATA_CRITICAL_WINDOW_MS = 30 * 60 * 1_000",
     );
@@ -323,9 +384,7 @@ describe("release workflow publication policy", () => {
     expect(squirrelAdapter).toContain(
       '"node_modules/wrangler/bin/wrangler.js"',
     );
-    expect(squirrelAdapter).not.toContain(
-      "stdout.includes(WRANGLER_VERSION)",
-    );
+    expect(squirrelAdapter).not.toContain("stdout.includes(WRANGLER_VERSION)");
     expect(squirrelExecutor).toContain(
       "insufficient aggregate deadline remains for Squirrel metadata commit",
     );

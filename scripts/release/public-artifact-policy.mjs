@@ -1,7 +1,34 @@
+import { createHash } from "node:crypto";
 import { extname } from "node:path";
+
+import { inspectZstdPrebuildArchive } from "./audit-zstd-native-prebuild.mjs";
+import {
+  validateZstdNativePolicy,
+  ZSTD_NATIVE_POLICY,
+} from "./zstd-native-verifier.mjs";
 
 export const PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY =
   "package/node_modules/@tokenmonster/characters/dist/approved-release-v2.json";
+export const PUBLIC_ZSTD_PREINSTALL_ARCHIVE_ENTRY =
+  "package/preinstall-zstd.cjs";
+export const PUBLIC_ZSTD_PREINSTALL_COMMAND = "node preinstall-zstd.cjs";
+// This executable runs during a consumer's npm install. Any change requires a
+// fresh review and an intentional update to both of these byte authorities.
+export const PUBLIC_ZSTD_PREINSTALL_BYTES = 34_332;
+export const PUBLIC_ZSTD_PREINSTALL_SHA256 =
+  "f4e82d7dd2b2fe9f38c484fa1824e376c194cfef6ae5bcf5f281df187009df03";
+
+const PUBLIC_ZSTD_PACKAGE_PREFIX = "package/node_modules/@mongodb-js/zstd/";
+const PUBLIC_ZSTD_PREBUILD_PREFIX = `${PUBLIC_ZSTD_PACKAGE_PREFIX}prebuilds/`;
+
+export const PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRIES = Object.freeze(
+  Object.values(ZSTD_NATIVE_POLICY.platforms)
+    .map((platform) => `${PUBLIC_ZSTD_PREBUILD_PREFIX}${platform.archiveName}`)
+    .sort(),
+);
+const PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRY_SET = new Set(
+  PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRIES,
+);
 
 const CHARACTERS_DIST_JSON_PREFIX =
   "package/node_modules/@tokenmonster/characters/dist/";
@@ -111,10 +138,21 @@ export function requirePublicTarEntry(entry) {
   }
   if (
     !directory &&
-    FORBIDDEN_PUBLIC_EXTENSIONS.has(asciiLowercase(extname(path)))
+    FORBIDDEN_PUBLIC_EXTENSIONS.has(asciiLowercase(extname(path))) &&
+    !PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRY_SET.has(entry)
   ) {
     throw new Error(
       `Release tarball contains a forbidden binary asset: ${entry}`,
+    );
+  }
+  if (
+    !directory &&
+    segments.length === 2 &&
+    asciiLowercase(extname(path)) === ".cjs" &&
+    entry !== PUBLIC_ZSTD_PREINSTALL_ARCHIVE_ENTRY
+  ) {
+    throw new Error(
+      `Release tarball contains an unreviewed root script: ${entry}`,
     );
   }
   if (
@@ -130,13 +168,79 @@ export function requirePublicTarEntry(entry) {
   return entry;
 }
 
-export function requirePublicStagedFile(entry, contents) {
+export function requirePublicStagedFile(
+  entry,
+  contents,
+  policy = ZSTD_NATIVE_POLICY,
+) {
   requirePublicTarEntry(entry);
-  if (!(contents instanceof Uint8Array) || contents.includes(0)) {
+  if (!(contents instanceof Uint8Array)) {
     throw new Error(
       `Release staging contains an unknown binary file: ${entry}`,
     );
   }
+  if (PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRY_SET.has(entry)) {
+    requirePublicZstdPrebuildArchive(entry, contents, policy);
+    return entry;
+  }
+  if (entry === PUBLIC_ZSTD_PREINSTALL_ARCHIVE_ENTRY) {
+    requirePublicZstdPreinstallBootstrap(entry, contents);
+    return entry;
+  }
+  if (contents.includes(0)) {
+    throw new Error(
+      `Release staging contains an unknown binary file: ${entry}`,
+    );
+  }
+  return entry;
+}
+
+export function requirePublicZstdPreinstallBootstrap(entry, contents) {
+  requirePublicTarEntry(entry);
+  if (entry !== PUBLIC_ZSTD_PREINSTALL_ARCHIVE_ENTRY) {
+    throw new Error("Release zstd preinstall must use its one fixed path.");
+  }
+  if (!(contents instanceof Uint8Array)) {
+    throw new Error("Release zstd preinstall must contain script bytes.");
+  }
+  if (contents.byteLength !== PUBLIC_ZSTD_PREINSTALL_BYTES) {
+    throw new Error("Release zstd preinstall byte length differs from policy.");
+  }
+  const bootstrapSha256 = createHash("sha256").update(contents).digest("hex");
+  if (bootstrapSha256 !== PUBLIC_ZSTD_PREINSTALL_SHA256) {
+    throw new Error("Release zstd preinstall SHA-256 differs from policy.");
+  }
+  return entry;
+}
+
+export function requirePublicZstdPrebuildArchive(
+  entry,
+  contents,
+  policy = ZSTD_NATIVE_POLICY,
+) {
+  requirePublicTarEntry(entry);
+  if (!PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRY_SET.has(entry)) {
+    throw new Error("Release zstd prebuild must use one fixed policy path.");
+  }
+  if (!(contents instanceof Uint8Array)) {
+    throw new Error("Release zstd prebuild must contain archive bytes.");
+  }
+  const validatedPolicy = validateZstdNativePolicy(policy);
+  const platform = Object.values(validatedPolicy.platforms).find(
+    (candidate) =>
+      `${PUBLIC_ZSTD_PREBUILD_PREFIX}${candidate.archiveName}` === entry,
+  );
+  if (platform === undefined) {
+    throw new Error("Release zstd prebuild path differs from its policy.");
+  }
+  if (contents.byteLength !== platform.archiveBytes) {
+    throw new Error("Release zstd prebuild byte length differs from policy.");
+  }
+  const archiveSha256 = createHash("sha256").update(contents).digest("hex");
+  if (archiveSha256 !== platform.archiveSha256) {
+    throw new Error("Release zstd prebuild SHA-256 differs from policy.");
+  }
+  inspectZstdPrebuildArchive(contents, platform);
   return entry;
 }
 

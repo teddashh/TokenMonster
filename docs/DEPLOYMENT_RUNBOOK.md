@@ -76,7 +76,9 @@ Release operator 在執行遠端命令前逐項取得證據：
    hard-retention source tests已完成；仍須完成suppression-aware backup/restore、
    真實Wrangler D1 rehearsal、監控及staging E2E。目前不滿足此gate。
 4. 專案 license、TokenMonster 名稱／商標、隱私政策、服務條款、資料處理與事件
-   通知責任已有 owner 書面決策。
+   通知責任已有 owner 書面決策；release owner／legal 也已書面核准再散布
+   `@mongodb-js/zstd@2.0.1` 的 Apache-2.0 native package 與 statically linked
+   Zstandard 1.5.6 BSD binary，且兩份 notice 均存在於 exact candidate inventory。
 5. External Alpha 需要可驗證簽章的 companion；Apple/Windows signing identities、
    notarization/updater 與 Electron hardening 現在未完成。
 6. Legacy `asset-manifest.json` 的四張 raster candidate 仍為 `blocked`；另有
@@ -121,9 +123,15 @@ test -f apps/web/dist/client/index.html
 : "${TOKENMONSTER_NEXT_RELEASE_VERSION:?設定全新且未使用的 SemVer prerelease}"
 candidate_dir="dist-release/$TOKENMONSTER_NEXT_RELEASE_VERSION"
 test ! -e "$candidate_dir"
+zstd_parent="$(cd "$(mktemp -d)" && pwd -P)"
+zstd_prebuilds="$zstd_parent/prebuilds"
+node scripts/release/audit-zstd-native-prebuild.mjs \
+  --all \
+  --output "$zstd_prebuilds"
 node scripts/release/build-release.mjs \
   --version "$TOKENMONSTER_NEXT_RELEASE_VERSION" \
-  --out "$candidate_dir"
+  --out "$candidate_dir" \
+  --zstd-prebuilds "$zstd_prebuilds"
 node scripts/release/verify-release-digest.mjs \
   "$candidate_dir" \
   --expected-version "$TOKENMONSTER_NEXT_RELEASE_VERSION"
@@ -149,6 +157,13 @@ Public CLI assembler 必須從 repository `package-lock.json` 產生可發布的
 `resolved` + SHA-512 integrity。Installed smoke 在啟動前會把 consumer lock 與實體
 package name/version逐筆對回該 shrinkwrap；缺 entry、版本漂移、非 registry來源或
 integrity替換都必須 fail closed。
+
+Assembler 只接受 fresh directory 內三個已通過官方 MongoDB detached signature、
+固定 signer fingerprint、archive/binding SHA-256 與 single-entry tar layout 的
+zstd prebuild。三個 archive 會放入 bundled `@mongodb-js/zstd`，但不寫入 Git；
+release smoke 使用 fresh npm cache 與不可達 binary host，證明安裝只使用 candidate
+內 bytes。Candidate 必須同時保留 dependency 的 Apache-2.0 `LICENSE.md` 與
+`THIRD_PARTY_LICENSES/Zstandard-1.5.6-BSD.txt`，否則 digest verifier fail closed。
 
 Internal companion bundle review可另外執行：
 

@@ -84,11 +84,13 @@ describe("public CLI sidecar shrinkwrap", () => {
       bin: { tokenmonster: "dist/bin.js" },
       engines: { node: ">=20" },
       dependencies: {
+        "@mongodb-js/zstd": "2.0.1",
         "@tokenmonster/token-tracker-runtime": "0.1.0",
         "tokentracker-cli": sidecarPin,
         zod: "4.4.3",
       },
       bundleDependencies: [
+        "@mongodb-js/zstd",
         "@tokenmonster/token-tracker-runtime",
         "zod",
       ],
@@ -97,6 +99,15 @@ describe("public CLI sidecar shrinkwrap", () => {
       rootLock,
       releaseManifest,
       bundledManifests: [
+        {
+          name: "@mongodb-js/zstd",
+          version: "2.0.1",
+          dependencies: {
+            "node-addon-api": "^4.3.0",
+            "prebuild-install": "^7.1.3",
+          },
+          engines: { node: ">= 16.20.1" },
+        },
         {
           name: "@tokenmonster/token-tracker-runtime",
           version: "0.1.0",
@@ -115,11 +126,16 @@ describe("public CLI sidecar shrinkwrap", () => {
     expect(
       shrinkwrap.packages["node_modules/@tokenmonster/token-tracker-runtime"],
     ).toMatchObject({ version: "0.1.0", inBundle: true });
+    expect(shrinkwrap.packages["node_modules/@mongodb-js/zstd"]).toEqual({
+      ...rootLock.packages["node_modules/@mongodb-js/zstd"],
+      inBundle: true,
+    });
     expect(shrinkwrap.packages["node_modules/tokentracker-cli"]).toMatchObject({
       version: sidecarPin,
       integrity:
         "sha512-rm6HdcLeq4uWPPo6ikIpnmVyyCD/Y22iune5ZeVP0FJ34P9XmFDAeX2DldyPouzy1PJ4W6o0JraSzjJp6iVX3w==",
     });
+    expect(collectSidecarClosure(shrinkwrap, sidecarPin)).toHaveLength(41);
   });
 
   it("reuses an exact provenance-bearing bundled transitive dependency", () => {

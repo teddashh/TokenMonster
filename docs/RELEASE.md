@@ -315,7 +315,12 @@ package integrities in the repository lock.
 `packages/token-tracker-runtime/src/zstd-native-policy.json` binds the exact
 `tokentracker-cli@0.80.0` → `@mongodb-js/zstd@2.0.1` chain to the reviewed
 Linux x64, macOS arm64, and Windows x64 release archives and extracted
-`build/Release/zstd.node` byte lengths/SHA-256 digests. That single authority
+`build/Release/zstd.node` byte lengths/SHA-256 digests. Candidate assembly first
+downloads and authenticates all three official archives into a fresh temporary
+directory, then bundles only those exact archives with the fixed ten-file
+`@mongodb-js/zstd` package inventory. npm therefore installs the current
+platform binding from candidate-local bytes instead of making a second GitHub
+request. That single authority
 also pins the exact compiled runtime-verifier SHA-256, so merely preserving its
 archive path cannot substitute verifier code. It ships in
 `@tokenmonster/token-tracker-runtime`; the product verifies the actual resolved
@@ -342,10 +347,20 @@ requires primary fingerprint
 then checks the pinned archive bytes/digest, safe single-entry tar layout, and
 extracted binding bytes/digest. The mutable public key response is not checked
 in or trusted by URL alone: both its official origin and exact fingerprint are
-pinned. Temporary audit bytes and keyring are removed on success or failure.
-Run the audit for all three platforms before approving any sidecar/zstd pin or
-policy change. `npm run verify:zstd-native-prebuild` is the network-free check
-for the current repository install.
+pinned. Temporary key/signature material and keyring are removed on success or
+failure. Audit-only mode removes the archives as well. Candidate mode accepts
+only `--all --output <fresh-directory>` and retains exactly the three
+authenticated archives there; partial-platform output is forbidden. Run the
+audit for all three platforms before approving any sidecar/zstd pin or policy
+change. `npm run verify:zstd-native-prebuild` is the network-free check for the
+current repository install. Release smoke uses a fresh npm cache and an
+unreachable zstd binary host, so a missing local archive cannot be hidden by a
+prior cache entry or successful network fallback.
+
+The bundled `@mongodb-js/zstd@2.0.1` Apache-2.0 license and the Zstandard 1.5.6
+BSD notice are required release inventory. Native redistribution still needs
+the release owner/legal approval recorded by the deployment runbook; technical
+authentication does not grant or infer TokenMonster's own project license.
 
 **Do not use `npm install -g` on the tarball.** npm has a global-install quirk
 with bundled dependencies: transitive install scripts (the sidecar's
@@ -365,7 +380,14 @@ git clone <repo> && cd TokenMonster
 npm ci
 : "${TOKENMONSTER_NEXT_RELEASE_VERSION:?set a new, unused SemVer prerelease}"
 candidate_dir="dist-release/$TOKENMONSTER_NEXT_RELEASE_VERSION"
-node scripts/release/build-release.mjs --version "$TOKENMONSTER_NEXT_RELEASE_VERSION" --out "$candidate_dir"
+zstd_parent="$(cd "$(mktemp -d)" && pwd -P)"
+zstd_prebuilds="$zstd_parent/prebuilds"
+node scripts/release/audit-zstd-native-prebuild.mjs \
+  --all --output "$zstd_prebuilds"
+node scripts/release/build-release.mjs \
+  --version "$TOKENMONSTER_NEXT_RELEASE_VERSION" \
+  --out "$candidate_dir" \
+  --zstd-prebuilds "$zstd_prebuilds"
 node scripts/release/verify-release-digest.mjs "$candidate_dir" --expected-version "$TOKENMONSTER_NEXT_RELEASE_VERSION"
 mkdir tokenmonster-app
 npm install --prefix tokenmonster-app "$candidate_dir/tokenmonster-$TOKENMONSTER_NEXT_RELEASE_VERSION.tgz"
