@@ -1,4 +1,7 @@
-import { spawn as nodeSpawn } from "node:child_process";
+import {
+  spawn as nodeSpawn,
+  spawnSync as nodeSpawnSync
+} from "node:child_process";
 import { unlinkSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 
@@ -14,6 +17,7 @@ export interface SquirrelStartupDependencies {
   readonly platform: NodeJS.Platform;
   readonly execPath: string;
   readonly spawn: typeof nodeSpawn;
+  readonly spawnSync: typeof nodeSpawnSync;
   readonly quit: () => void;
   readonly environment?: Readonly<NodeJS.ProcessEnv>;
   readonly timeoutMs?: number;
@@ -48,6 +52,7 @@ const SAFE_ENVIRONMENT_KEYS = Object.freeze([
   "LC_CTYPE"
 ]);
 const MAX_ENVIRONMENT_VALUE_CHARACTERS = 32_768;
+const DEFAULT_UNINSTALL_SHORTCUT_TIMEOUT_MS = 6_000;
 const SQUIRREL_APP_DIRECTORY_PATTERN =
   /^app-[0-9A-Za-z][0-9A-Za-z.-]{0,127}$/u;
 
@@ -128,13 +133,41 @@ export function handleSquirrelStartup(
   }
 
   const action = event === "uninstall" ? "removeShortcut" : "createShortcut";
+  const updateExecutable = resolve(
+    dirname(deps.execPath),
+    "..",
+    "Update.exe"
+  );
+  const environment = buildSquirrelEnvironment(deps.environment);
+  if (event === "uninstall") {
+    try {
+      // Squirrel deletes app-* exactly once as soon as this hook exits. Keep
+      // the shortcut worker owned and wait for its handles to close; the
+      // timeout forcibly terminates it and returns only after it has exited.
+      deps.spawnSync(
+        updateExecutable,
+        [`--${action}=${basename(deps.execPath)}`],
+        {
+          env: environment,
+          killSignal: "SIGKILL",
+          stdio: "ignore",
+          timeout: deps.timeoutMs ?? DEFAULT_UNINSTALL_SHORTCUT_TIMEOUT_MS,
+          windowsHide: true
+        }
+      );
+    } catch {
+      // Shortcut cleanup is best-effort; Squirrel still owns uninstall.
+    }
+    deps.quit();
+    return true;
+  }
   try {
     const child = deps.spawn(
-      resolve(dirname(deps.execPath), "..", "Update.exe"),
+      updateExecutable,
       [`--${action}=${basename(deps.execPath)}`],
       {
         detached: true,
-        env: buildSquirrelEnvironment(deps.environment),
+        env: environment,
         windowsHide: true,
         stdio: "ignore"
       }
@@ -162,6 +195,7 @@ export function handleDefaultSquirrelStartup(quit: () => void): boolean {
     platform: process.platform,
     execPath: process.execPath,
     spawn: nodeSpawn,
+    spawnSync: nodeSpawnSync,
     quit
   });
 }
