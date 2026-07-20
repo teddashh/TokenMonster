@@ -43,6 +43,7 @@ type CompanionByokServiceResult<T> = Readonly<{
 
 export interface CompanionByokService {
   initialize(): Promise<void>;
+  quiesce(): Promise<void>;
   status(): CompanionByokStatusResponse;
   configure(
     apiKey: unknown,
@@ -93,6 +94,93 @@ function dataValue(
 ): unknown {
   return (Object.getOwnPropertyDescriptor(record, key) as PropertyDescriptor)
     .value as unknown;
+}
+
+function normalizeSecretSlotStatus(value: unknown): SecretSlotStatus | null {
+  const record = exactDataRecord(value, [
+    "configured",
+    "persistence",
+    "activePersistence",
+    "backend",
+  ]);
+  if (record === null) return null;
+  const configured = dataValue(record, "configured");
+  const persistence = dataValue(record, "persistence");
+  const activePersistence = dataValue(record, "activePersistence");
+  const backend = dataValue(record, "backend");
+  if (
+    typeof configured !== "boolean" ||
+    (persistence !== "os-backed" && persistence !== "memory-only") ||
+    (activePersistence !== "os-backed" &&
+      activePersistence !== "memory-only") ||
+    typeof backend !== "string" ||
+    backend.length === 0 ||
+    backend.length > 64 ||
+    !/^[a-z0-9_-]+$/u.test(backend) ||
+    (!configured && activePersistence !== "memory-only") ||
+    (persistence === "memory-only" && activePersistence !== "memory-only")
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    configured,
+    persistence,
+    activePersistence,
+    backend,
+  });
+}
+
+type SecretSlotEvidence = Readonly<{
+  status: SecretSlotStatus;
+  secret: string | null;
+}>;
+
+function sameSecretSlotStatus(
+  left: SecretSlotStatus,
+  right: SecretSlotStatus,
+): boolean {
+  return (
+    left.configured === right.configured &&
+    left.persistence === right.persistence &&
+    left.activePersistence === right.activePersistence &&
+    left.backend === right.backend
+  );
+}
+
+function sameSecretSlotHost(
+  left: SecretSlotStatus,
+  right: SecretSlotStatus,
+): boolean {
+  return (
+    left.persistence === right.persistence && left.backend === right.backend
+  );
+}
+
+function readSecretSlotEvidence(
+  slot: EncryptedSecretSlot,
+  returnedStatus: unknown,
+): SecretSlotEvidence | null {
+  const returned = normalizeSecretSlotStatus(returnedStatus);
+  if (returned === null) return null;
+
+  let secret: unknown;
+  let currentStatus: unknown;
+  try {
+    secret = slot.get();
+    currentStatus = slot.status();
+  } catch {
+    return null;
+  }
+  const current = normalizeSecretSlotStatus(currentStatus);
+  if (
+    current === null ||
+    !sameSecretSlotStatus(returned, current) ||
+    (secret !== null && typeof secret !== "string") ||
+    current.configured !== (secret !== null)
+  ) {
+    return null;
+  }
+  return Object.freeze({ status: current, secret });
 }
 
 function validText(value: unknown, maximumBytes: number): value is string {
@@ -280,12 +368,25 @@ export function createCompanionByokService(
   let canPersist = false;
   let activePersistence: "os-backed" | "memory-only" = "memory-only";
   let disposed = false;
+  let failureLatched = false;
+  let verifiedSlotStatus: SecretSlotStatus | null = null;
   let stateRevision = 0;
   let initializePromise: Promise<void> | null = null;
   let initializeController: AbortController | null = null;
   let activeChatController: AbortController | null = null;
   let activeChatDone: Promise<void> | null = null;
   let activeControlController: AbortController | null = null;
+  const activeCredentialWorkers = new Set<Promise<void>>();
+
+  const trackCredentialWorker = <T>(worker: Promise<T>): Promise<T> => {
+    const settled = worker.then(
+      () => undefined,
+      () => undefined,
+    );
+    activeCredentialWorkers.add(settled);
+    void settled.then(() => activeCredentialWorkers.delete(settled));
+    return worker;
+  };
 
   const markUnavailable = (): void => {
     available = false;
@@ -294,35 +395,80 @@ export function createCompanionByokService(
     activePersistence = "memory-only";
   };
 
-  const applySlotStatus = (
-    status: SecretSlotStatus,
-    fallback?: "os-backed" | "memory-only",
-  ): void => {
-    if (disposed) {
-      markUnavailable();
-      return;
-    }
-    available = true;
-    configured = status.configured === true;
-    canPersist = status.persistence === "os-backed";
-    const reportedPersistence = status.activePersistence ?? fallback;
-    activePersistence =
-      configured &&
-      canPersist &&
-      (reportedPersistence ?? status.persistence) === "os-backed"
-        ? "os-backed"
-        : "memory-only";
+  const latchStorageFailure = (): void => {
+    failureLatched = true;
+    markUnavailable();
   };
 
-  const refreshSlotStatus = (): void => {
-    if (secretSlot === null || disposed) {
+  const applySlotEvidence = (evidence: SecretSlotEvidence): boolean => {
+    if (disposed || failureLatched) {
       markUnavailable();
-      return;
+      return false;
     }
+    const { status } = evidence;
+    verifiedSlotStatus = status;
+    available = true;
+    configured = status.configured;
+    canPersist = status.persistence === "os-backed";
+    activePersistence = configured ? status.activePersistence : "memory-only";
+    return true;
+  };
+
+  const verifyInitializedSlot = (
+    returnedStatus: unknown,
+  ): SecretSlotEvidence | null => {
+    if (secretSlot === null) return null;
+    return readSecretSlotEvidence(secretSlot, returnedStatus);
+  };
+
+  const verifySetSlot = (
+    returnedStatus: unknown,
+    expectedSecret: string,
+    persist: boolean,
+  ): SecretSlotEvidence | null => {
+    if (secretSlot === null || verifiedSlotStatus === null) return null;
+    const evidence = readSecretSlotEvidence(secretSlot, returnedStatus);
+    if (
+      evidence === null ||
+      evidence.secret !== expectedSecret ||
+      !sameSecretSlotHost(evidence.status, verifiedSlotStatus)
+    ) {
+      return null;
+    }
+    if (
+      !evidence.status.configured ||
+      (!persist && evidence.status.activePersistence !== "memory-only")
+    ) {
+      return null;
+    }
+    return evidence;
+  };
+
+  const verifyClearedSlot = (
+    returnedStatus: unknown,
+  ): SecretSlotEvidence | null => {
+    if (secretSlot === null) return null;
+    const evidence = readSecretSlotEvidence(secretSlot, returnedStatus);
+    if (
+      evidence === null ||
+      evidence.secret !== null ||
+      evidence.status.configured ||
+      evidence.status.activePersistence !== "memory-only" ||
+      (verifiedSlotStatus !== null &&
+        !sameSecretSlotHost(evidence.status, verifiedSlotStatus))
+    ) {
+      return null;
+    }
+    return evidence;
+  };
+
+  const protectiveClear = async (): Promise<boolean> => {
+    if (secretSlot === null) return false;
     try {
-      applySlotStatus(secretSlot.status());
+      const result = await secretSlot.clear();
+      return verifyClearedSlot(result) !== null;
     } catch {
-      markUnavailable();
+      return false;
     }
   };
 
@@ -359,6 +505,25 @@ export function createCompanionByokService(
     }
   };
 
+  const disposeService = (): void => {
+    if (disposed) return;
+    disposed = true;
+    stateRevision += 1;
+    markUnavailable();
+    initializeController?.abort();
+    abortActiveChat();
+    activeControlController?.abort();
+  };
+
+  const quiesceService = async (): Promise<void> => {
+    const chatDone = activeChatDone;
+    disposeService();
+    if (chatDone !== null) await chatDone;
+    while (activeCredentialWorkers.size > 0) {
+      await Promise.all([...activeCredentialWorkers]);
+    }
+  };
+
   return Object.freeze({
     async initialize(): Promise<void> {
       if (secretSlot === null || disposed) {
@@ -369,42 +534,43 @@ export function createCompanionByokService(
         const revision = stateRevision;
         const controller = new AbortController();
         initializeController = controller;
-        const initialization = Promise.resolve().then(() =>
-          secretSlot.initialize({ signal: controller.signal }),
+        const initialization = trackCredentialWorker(
+          Promise.resolve().then(() =>
+            secretSlot.initialize({ signal: controller.signal }),
+          ),
         );
-        void initialization.then(
-          (status) => {
+        initializePromise = trackCredentialWorker(
+          (async () => {
+            const outcome = await settleBounded(
+              initialization,
+              BYOK_STORAGE_OPERATION_TIMEOUT_MS,
+            );
+            if (outcome.kind === "timed-out") controller.abort();
             if (
-              !controller.signal.aborted &&
-              !disposed &&
-              stateRevision === revision
+              disposed ||
+              stateRevision !== revision ||
+              controller.signal.aborted
             ) {
-              applySlotStatus(status);
+              if (!disposed && stateRevision === revision) {
+                latchStorageFailure();
+              }
+              return;
             }
-          },
-          () => undefined,
+            if (outcome.kind !== "fulfilled") {
+              latchStorageFailure();
+              return;
+            }
+            const evidence = verifyInitializedSlot(outcome.value);
+            if (evidence === null || !applySlotEvidence(evidence)) {
+              latchStorageFailure();
+            }
+          })(),
         );
-        initializePromise = (async () => {
-          const outcome = await settleBounded(
-            initialization,
-            BYOK_STORAGE_OPERATION_TIMEOUT_MS,
-          );
-          if (outcome.kind === "timed-out") controller.abort();
-          if (outcome.kind === "fulfilled") {
-            if (
-              !controller.signal.aborted &&
-              !disposed &&
-              stateRevision === revision
-            ) {
-              applySlotStatus(outcome.value);
-            }
-          } else if (!disposed && stateRevision === revision) {
-            markUnavailable();
-          }
-        })();
       }
       await initializePromise;
     },
+
+    quiesce: quiesceService,
 
     status: snapshot,
 
@@ -424,69 +590,10 @@ export function createCompanionByokService(
       if (secretSlot === null || disposed) {
         return serviceError(503, "unavailable");
       }
-      if (activeControlController !== null) {
+      if (failureLatched) {
         return serviceError(503, "storage-failed");
       }
-
-      stateRevision += 1;
-      const controller = new AbortController();
-      const unlinkAbort = forwardAbort(signal, controller);
-      activeControlController = controller;
-      let mutationStarted = false;
-      const worker = (async (): Promise<boolean> => {
-        try {
-          await waitForActiveChat(controller);
-          mutationStarted = true;
-          const result = await secretSlot.set(apiKey, {
-            persist,
-            signal: controller.signal,
-          });
-          if (controller.signal.aborted || disposed) {
-            throw new Error("aborted");
-          }
-          applySlotStatus(
-            result,
-            persist && result.persistence === "os-backed"
-              ? "os-backed"
-              : "memory-only",
-          );
-          return true;
-        } catch {
-          if (mutationStarted && (controller.signal.aborted || disposed)) {
-            try {
-              const result = await secretSlot.clear();
-              if (!disposed) applySlotStatus(result, "memory-only");
-            } catch {
-              // A timed-out implementation may have ignored its abort signal.
-              // If cleanup then fails, keep chat unavailable instead of
-              // surfacing or using a possibly late-written credential.
-              if (!disposed) markUnavailable();
-            }
-          } else if (!disposed) {
-            refreshSlotStatus();
-          }
-          if (disposed) markUnavailable();
-          return false;
-        } finally {
-          finishControl(controller, unlinkAbort);
-        }
-      })();
-
-      const outcome = await settleBounded(
-        worker,
-        BYOK_STORAGE_OPERATION_TIMEOUT_MS,
-        controller.signal,
-      );
-      if (outcome.kind === "fulfilled" && outcome.value) {
-        return Object.freeze({ status: 200, body: snapshot() });
-      }
-      if (outcome.kind === "timed-out") controller.abort();
-      return serviceError(503, "storage-failed");
-    },
-
-    async clear(confirmation: unknown, signal?: AbortSignal) {
-      if (confirmation !== "clear-openai-byok") return invalidRequest();
-      if (secretSlot === null || disposed) {
+      if (!available || verifiedSlotStatus === null) {
         return serviceError(503, "unavailable");
       }
       if (activeControlController !== null) {
@@ -497,21 +604,44 @@ export function createCompanionByokService(
       const controller = new AbortController();
       const unlinkAbort = forwardAbort(signal, controller);
       activeControlController = controller;
-      const worker = (async (): Promise<boolean> => {
-        try {
-          await waitForActiveChat(controller);
-          const result = await secretSlot.clear();
-          if (!disposed) applySlotStatus(result, "memory-only");
-          if (controller.signal.aborted || disposed) return false;
-          return true;
-        } catch {
-          if (!disposed) refreshSlotStatus();
-          if (disposed) markUnavailable();
-          return false;
-        } finally {
-          finishControl(controller, unlinkAbort);
-        }
-      })();
+      let mutationStarted = false;
+      let mutationResolved = false;
+      const worker = trackCredentialWorker(
+        (async (): Promise<boolean> => {
+          try {
+            await waitForActiveChat(controller);
+            mutationStarted = true;
+            const result = await secretSlot.set(apiKey, {
+              persist,
+              signal: controller.signal,
+            });
+            mutationResolved = true;
+            if (controller.signal.aborted || disposed) {
+              throw new Error("aborted");
+            }
+            const evidence = verifySetSlot(result, apiKey, persist);
+            if (evidence === null || !applySlotEvidence(evidence)) {
+              throw new Error("credential postcondition failed");
+            }
+            return true;
+          } catch {
+            if (mutationStarted) {
+              latchStorageFailure();
+              if (mutationResolved || controller.signal.aborted || disposed) {
+                // A timed-out implementation may have ignored its abort signal,
+                // while a resolved contradiction may have already written. Clear
+                // those cases defensively, but preserve an existing credential
+                // when set() rejects cleanly before any success evidence exists.
+                await protectiveClear();
+              }
+            }
+            if (disposed) markUnavailable();
+            return false;
+          } finally {
+            finishControl(controller, unlinkAbort);
+          }
+        })(),
+      );
 
       const outcome = await settleBounded(
         worker,
@@ -522,6 +652,67 @@ export function createCompanionByokService(
         return Object.freeze({ status: 200, body: snapshot() });
       }
       if (outcome.kind === "timed-out") controller.abort();
+      if (mutationStarted) latchStorageFailure();
+      return serviceError(503, "storage-failed");
+    },
+
+    async clear(confirmation: unknown, signal?: AbortSignal) {
+      if (confirmation !== "clear-openai-byok") return invalidRequest();
+      if (secretSlot === null || disposed) {
+        return serviceError(503, "unavailable");
+      }
+      if (!available && !failureLatched) {
+        return serviceError(503, "unavailable");
+      }
+      if (activeControlController !== null) {
+        return serviceError(503, "storage-failed");
+      }
+
+      stateRevision += 1;
+      const controller = new AbortController();
+      const unlinkAbort = forwardAbort(signal, controller);
+      activeControlController = controller;
+      let mutationStarted = false;
+      const worker = trackCredentialWorker(
+        (async (): Promise<boolean> => {
+          try {
+            await waitForActiveChat(controller);
+            mutationStarted = true;
+            const result = await secretSlot.clear();
+            const evidence = verifyClearedSlot(result);
+            if (evidence === null) {
+              latchStorageFailure();
+              return false;
+            }
+            if (controller.signal.aborted || disposed) {
+              latchStorageFailure();
+              return false;
+            }
+            if (!failureLatched && !applySlotEvidence(evidence)) {
+              latchStorageFailure();
+              return false;
+            }
+            return true;
+          } catch {
+            if (mutationStarted) latchStorageFailure();
+            if (disposed) markUnavailable();
+            return false;
+          } finally {
+            finishControl(controller, unlinkAbort);
+          }
+        })(),
+      );
+
+      const outcome = await settleBounded(
+        worker,
+        BYOK_STORAGE_OPERATION_TIMEOUT_MS,
+        controller.signal,
+      );
+      if (outcome.kind === "fulfilled" && outcome.value) {
+        return Object.freeze({ status: 200, body: snapshot() });
+      }
+      if (outcome.kind === "timed-out") controller.abort();
+      if (mutationStarted) latchStorageFailure();
       return serviceError(503, "storage-failed");
     },
 
@@ -531,21 +722,38 @@ export function createCompanionByokService(
       if (activeControlController !== null) {
         return chatError(request.characterId, "busy");
       }
-      if (!available || disposed || secretSlot === null) {
+      if (
+        !available ||
+        failureLatched ||
+        disposed ||
+        secretSlot === null ||
+        verifiedSlotStatus === null
+      ) {
         return chatError(request.characterId, "unavailable");
       }
-      let apiKey: string | null;
-      try {
-        apiKey = secretSlot.get();
-      } catch {
-        return chatError(request.characterId, "local-service-error");
-      }
-      if (apiKey === null) {
+      if (!configured) {
         return chatError(request.characterId, "not-configured");
       }
       if (activeChatController !== null) {
         return chatError(request.characterId, "busy");
       }
+
+      let evidence: SecretSlotEvidence | null = null;
+      try {
+        evidence = readSecretSlotEvidence(secretSlot, secretSlot.status());
+      } catch {
+        // The failure latch below owns the stable public result.
+      }
+      if (
+        evidence === null ||
+        evidence.secret === null ||
+        !API_KEY_PATTERN.test(evidence.secret) ||
+        !sameSecretSlotStatus(evidence.status, verifiedSlotStatus)
+      ) {
+        latchStorageFailure();
+        return chatError(request.characterId, "unavailable");
+      }
+      const apiKey = evidence.secret;
 
       const controller = new AbortController();
       const unlinkAbort = forwardAbort(signal, controller);
@@ -598,14 +806,6 @@ export function createCompanionByokService(
       }
     },
 
-    dispose(): void {
-      if (disposed) return;
-      disposed = true;
-      stateRevision += 1;
-      markUnavailable();
-      initializeController?.abort();
-      abortActiveChat();
-      activeControlController?.abort();
-    },
+    dispose: disposeService,
   });
 }

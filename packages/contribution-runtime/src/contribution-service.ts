@@ -233,6 +233,95 @@ class ContributionServiceError extends Error {
   }
 }
 
+const SECRET_SLOT_STATUS_KEYS = Object.freeze([
+  "configured",
+  "persistence",
+  "activePersistence",
+  "backend",
+] as const);
+
+function credentialStatusMatches(
+  value: unknown,
+  expectedSecret: string | null,
+  expectedBackend?: string,
+): value is SecretSlotStatus {
+  if (
+    (expectedSecret !== null && typeof expectedSecret !== "string") ||
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    ![Object.prototype, null].includes(
+      Object.getPrototypeOf(value) as object | null,
+    )
+  ) {
+    return false;
+  }
+  const keys = Reflect.ownKeys(value);
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const configured = descriptors["configured"];
+  const persistence = descriptors["persistence"];
+  const activePersistence = descriptors["activePersistence"];
+  const backend = descriptors["backend"];
+  const expectedConfigured = expectedSecret !== null;
+  const expectedActivePersistence = expectedConfigured
+    ? "os-backed"
+    : "memory-only";
+  return (
+    keys.length === SECRET_SLOT_STATUS_KEYS.length &&
+    keys.every(
+      (key) =>
+        typeof key === "string" &&
+        SECRET_SLOT_STATUS_KEYS.some((expectedKey) => expectedKey === key),
+    ) &&
+    configured !== undefined &&
+    "value" in configured &&
+    configured.value === expectedConfigured &&
+    persistence !== undefined &&
+    "value" in persistence &&
+    persistence.value === "os-backed" &&
+    activePersistence !== undefined &&
+    "value" in activePersistence &&
+    activePersistence.value === expectedActivePersistence &&
+    backend !== undefined &&
+    "value" in backend &&
+    typeof backend.value === "string" &&
+    backend.value.length > 0 &&
+    backend.value.length <= 64 &&
+    /^[a-z0-9_-]+$/u.test(backend.value) &&
+    (expectedBackend === undefined || backend.value === expectedBackend)
+  );
+}
+
+function credentialPostcondition(
+  slot: EncryptedSecretSlot,
+  result: SecretSlotStatus,
+  expectedSecret: string | null,
+  expectedBackend?: string,
+): SecretSlotStatus {
+  if (!credentialStatusMatches(result, expectedSecret, expectedBackend)) {
+    throw new ContributionServiceError("secure-storage-failed");
+  }
+  let currentSecret: unknown;
+  let currentStatus: unknown;
+  try {
+    currentSecret = slot.get();
+    currentStatus = slot.status();
+  } catch {
+    throw new ContributionServiceError("secure-storage-failed");
+  }
+  if (
+    currentSecret !== expectedSecret ||
+    !credentialStatusMatches(
+      currentStatus,
+      expectedSecret,
+      expectedBackend ?? result.backend,
+    )
+  ) {
+    throw new ContributionServiceError("secure-storage-failed");
+  }
+  return result;
+}
+
 function strictRecord(value: unknown): Record<string, unknown> | null {
   if (
     typeof value !== "object" ||
@@ -1083,39 +1172,117 @@ export function createContributionService(
   let activeRequest: Readonly<{
     controller: AbortController;
     abortOnStop: boolean;
+    abortOnStorageFailure: boolean;
   }> | null = null;
   let busy = false;
   let localCleanupRequired = false;
   let uploadBlockedUntilRestart = false;
   let disposed = false;
+  let initializationPromise: Promise<void> | null = null;
+  const activeCredentialOperations = new Set<
+    Readonly<{
+      controller: AbortController;
+      settled: Promise<void>;
+    }>
+  >();
+  const initializedCredentialBackends = new WeakMap<
+    EncryptedSecretSlot,
+    string
+  >();
+
+  const latchStorageUnavailable = (): void => {
+    storageReady = false;
+    if (activeRequest?.abortOnStorageFailure === true) {
+      activeRequest.controller.abort("secure-storage-unavailable");
+    }
+  };
+
+  const requireStorageReady = (): void => {
+    if (!storageReady) {
+      throw new ContributionServiceError("secure-storage-unavailable");
+    }
+  };
 
   const credentialOperation = async <T>(
     operation: (signal: AbortSignal) => Promise<T>,
   ): Promise<T> => {
     const controller = new AbortController();
+    const operationPromise = Promise.resolve().then(() =>
+      operation(controller.signal),
+    );
+    const record = Object.freeze({
+      controller,
+      settled: operationPromise.then(
+        () => undefined,
+        () => undefined,
+      ),
+    });
+    activeCredentialOperations.add(record);
+    void record.settled.then(() => activeCredentialOperations.delete(record));
+    if (disposed) controller.abort("disposed");
     let timeout: ReturnType<typeof setTimeout> | null = null;
     const deadline = new Promise<never>((_resolve, reject) => {
       timeout = setTimeout(() => {
         controller.abort("credential-operation-timeout");
         reject(new ContributionServiceError("secure-storage-failed"));
       }, CONTRIBUTION_CREDENTIAL_OPERATION_TIMEOUT_MS);
+      timeout.unref?.();
     });
     try {
-      return await Promise.race([
-        Promise.resolve().then(() => operation(controller.signal)),
-        deadline,
-      ]);
+      return await Promise.race([operationPromise, deadline]);
     } finally {
       if (timeout !== null) clearTimeout(timeout);
     }
   };
 
+  const initializedCredentialBackend = (slot: EncryptedSecretSlot): string => {
+    const backend = initializedCredentialBackends.get(slot);
+    if (backend === undefined) {
+      throw new ContributionServiceError("secure-storage-failed");
+    }
+    return backend;
+  };
+
   const initializeCredential = (slot: EncryptedSecretSlot) =>
-    credentialOperation((signal) => slot.initialize({ signal }));
-  const setCredential = (slot: EncryptedSecretSlot, value: string) =>
-    credentialOperation((signal) => slot.set(value, { signal }));
-  const clearCredential = (slot: EncryptedSecretSlot) =>
-    credentialOperation((signal) => slot.clear({ signal }));
+    credentialOperation(async (signal) => {
+      const result = await slot.initialize({ signal });
+      const validated = credentialPostcondition(slot, result, slot.get());
+      initializedCredentialBackends.set(slot, validated.backend);
+      return validated;
+    });
+  const setCredential = async (
+    slot: EncryptedSecretSlot,
+    value: string,
+  ): Promise<SecretSlotStatus> => {
+    try {
+      const backend = initializedCredentialBackend(slot);
+      const result = await credentialOperation((signal) =>
+        slot.set(value, { signal }),
+      );
+      return credentialPostcondition(slot, result, value, backend);
+    } catch (error) {
+      latchStorageUnavailable();
+      throw error instanceof ContributionServiceError
+        ? error
+        : new ContributionServiceError("secure-storage-failed");
+    }
+  };
+  const clearCredential = async (
+    slot: EncryptedSecretSlot,
+  ): Promise<SecretSlotStatus> => {
+    try {
+      const backend = initializedCredentialBackend(slot);
+      const result = await credentialOperation((signal) =>
+        slot.clear({ signal }),
+      );
+      return credentialPostcondition(slot, result, null, backend);
+    } catch (error) {
+      latchStorageUnavailable();
+      throw error instanceof ContributionServiceError
+        ? error
+        : new ContributionServiceError("secure-storage-failed");
+    }
+  };
 
   const clearDeletionSupersededAuthorities = async (): Promise<void> => {
     const cleared = await Promise.allSettled([
@@ -1133,10 +1300,33 @@ export function createContributionService(
   };
 
   const credentialState = () => {
-    const rawUpload = options.uploadCredential.get();
-    const rawDeletion = options.deletionCredential.get();
-    const rawStatus = options.statusCredential.get();
-    const rawPending = options.pendingEnrollmentCredential.get();
+    const readCredential = (slot: EncryptedSecretSlot): string | null => {
+      const backend = initializedCredentialBackend(slot);
+      const secret: unknown = slot.get();
+      if (secret !== null && typeof secret !== "string") {
+        throw new TypeError("Invalid credential slot value");
+      }
+      if (!credentialStatusMatches(slot.status(), secret, backend)) {
+        throw new TypeError("Invalid credential slot status");
+      }
+      return secret;
+    };
+    let rawUpload: string | null;
+    let rawDeletion: string | null;
+    let rawStatus: string | null;
+    let rawPending: string | null;
+    try {
+      rawUpload = readCredential(options.uploadCredential);
+      rawDeletion = readCredential(options.deletionCredential);
+      rawStatus = readCredential(options.statusCredential);
+      rawPending = readCredential(options.pendingEnrollmentCredential);
+    } catch {
+      latchStorageUnavailable();
+      rawUpload = null;
+      rawDeletion = null;
+      rawStatus = null;
+      rawPending = null;
+    }
     return Object.freeze({
       rawUpload,
       rawDeletion,
@@ -1311,15 +1501,25 @@ export function createContributionService(
     path: string,
     init: RequestInit,
     expectedStatuses: readonly number[],
-    abortOnStop = true,
-    recoverableEnrollment = false,
-    ingestConsentRequiredIsStale = false,
+    policy: Readonly<{
+      abortOnStop?: boolean;
+      protective?: boolean;
+      recoverableEnrollment?: boolean;
+      ingestConsentRequiredIsStale?: boolean;
+    }> = {},
   ): Promise<Readonly<{ status: number; body: unknown }>> => {
     if (baseUrl === null) {
       throw new ContributionServiceError("api-not-configured");
     }
+    const abortOnStop = policy.abortOnStop ?? true;
+    const abortOnStorageFailure = policy.protective !== true;
+    if (abortOnStorageFailure) requireStorageReady();
     const controller = new AbortController();
-    const requestState = Object.freeze({ controller, abortOnStop });
+    const requestState = Object.freeze({
+      controller,
+      abortOnStop,
+      abortOnStorageFailure,
+    });
     activeRequest = requestState;
     const timer = setTimeout(
       () => controller.abort("timeout"),
@@ -1334,26 +1534,29 @@ export function createContributionService(
         cache: "no-store",
         referrerPolicy: "no-referrer",
       });
+      if (abortOnStorageFailure) requireStorageReady();
       if (!expectedStatuses.includes(response.status)) {
         if (
-          ingestConsentRequiredIsStale &&
+          policy.ingestConsentRequiredIsStale === true &&
           response.status === 403 &&
           PROBLEM_JSON_CONTENT_TYPE_PATTERN.test(
             response.headers.get("Content-Type")?.toLowerCase() ?? "",
           )
         ) {
           const problem = await readBoundedJson(response, true);
+          if (abortOnStorageFailure) requireStorageReady();
           if (isConsentRequiredProblem(problem)) {
             throw new ContributionServiceError("consent-stale");
           }
           throw new ContributionServiceError("request-rejected");
         }
         if (
-          recoverableEnrollment &&
+          policy.recoverableEnrollment === true &&
           (response.status === 400 || response.status === 403)
         ) {
           try {
             const problem = strictRecord(await readBoundedJson(response, true));
+            if (abortOnStorageFailure) requireStorageReady();
             if (
               problem !== null &&
               ((response.status === 403 &&
@@ -1376,12 +1579,17 @@ export function createContributionService(
         }
         throw new ContributionServiceError("request-rejected");
       }
+      const body = await readBoundedJson(response);
+      if (abortOnStorageFailure) requireStorageReady();
       return Object.freeze({
         status: response.status,
-        body: await readBoundedJson(response),
+        body,
       });
     } catch (error: unknown) {
       if (error instanceof ContributionServiceError) throw error;
+      if (abortOnStorageFailure && !storageReady) {
+        throw new ContributionServiceError("secure-storage-unavailable");
+      }
       if (controller.signal.aborted) {
         throw new ContributionServiceError("timeout");
       }
@@ -1412,7 +1620,7 @@ export function createContributionService(
         },
       },
       [200],
-      false,
+      { abortOnStop: false, protective: true },
     );
     if (!PauseResponseV1Schema.safeParse(response.body).success) {
       throw new ContributionServiceError("contract-mismatch");
@@ -1504,8 +1712,7 @@ export function createContributionService(
         }),
       },
       [201],
-      false,
-      true,
+      { abortOnStop: false, recoverableEnrollment: true },
     );
     const parsed = EnrollmentResponseV2Schema.safeParse(enrolled.body);
     if (
@@ -1588,63 +1795,79 @@ export function createContributionService(
     }
   };
 
-  const initialize = async (): Promise<void> => {
+  const initializeOnce = async (): Promise<void> => {
     if (initialized || disposed) return;
-    const settled = await Promise.allSettled([
-      initializeCredential(options.uploadCredential),
-      initializeCredential(options.deletionCredential),
-      initializeCredential(options.statusCredential),
-      initializeCredential(options.pendingEnrollmentCredential),
-    ]);
-    initialized = true;
-    storageReady = settled.every(
-      (result): result is PromiseFulfilledResult<SecretSlotStatus> =>
-        result.status === "fulfilled" &&
-        result.value.persistence === "os-backed",
-    );
-    if (!storageReady) {
-      pendingPreview = null;
-      try {
-        options.store.clearCloudOutbox();
-      } catch {
-        // A failed cleanup never enables network contribution.
-      }
-      return;
-    }
-    const credentials = credentialState();
-    if (
-      credentials.rawUpload === null &&
-      credentials.rawDeletion === null &&
-      credentials.rawStatus === null &&
-      credentials.rawPending === null
-    ) {
-      try {
-        clearContributionSyncState(options.store);
-      } catch {
-        localStateReady = false;
-      }
-    }
-    if (credentials.rawPending !== null) {
-      try {
-        await reconcilePendingEnrollment(null);
-      } catch {
-        // Durable credential shape and matching rules below determine whether
-        // recovery is safe. A transient vault write must not poison the local
-        // store-health flag or hide byte-identical recovery authority.
-      }
-    } else if (credentials.deletionStatus !== null) {
-      try {
-        if (credentials.deletionStatus.status === "complete") {
-          localCleanupRequired = true;
-          clearContributionSyncState(options.store);
-          localCleanupRequired = false;
+    busy = true;
+    try {
+      const settled = await Promise.allSettled([
+        initializeCredential(options.uploadCredential),
+        initializeCredential(options.deletionCredential),
+        initializeCredential(options.statusCredential),
+        initializeCredential(options.pendingEnrollmentCredential),
+      ]);
+      initialized = true;
+      storageReady =
+        !disposed &&
+        settled.every(
+          (result): result is PromiseFulfilledResult<SecretSlotStatus> =>
+            result.status === "fulfilled" &&
+            result.value.persistence === "os-backed",
+        );
+      if (!storageReady) {
+        pendingPreview = null;
+        try {
+          options.store.clearCloudOutbox();
+        } catch {
+          // A failed cleanup never enables network contribution.
         }
-        await clearDeletionSupersededAuthorities();
-      } catch {
-        // The status authority remains durable. canRecover stays true while
-        // superseded authority or completed-deletion local sync state remains.
+        return;
       }
+      const credentials = credentialState();
+      if (
+        credentials.rawUpload === null &&
+        credentials.rawDeletion === null &&
+        credentials.rawStatus === null &&
+        credentials.rawPending === null
+      ) {
+        try {
+          clearContributionSyncState(options.store);
+        } catch {
+          localStateReady = false;
+        }
+      }
+      if (disposed) {
+        storageReady = false;
+        return;
+      }
+      if (credentials.rawPending !== null) {
+        try {
+          await reconcilePendingEnrollment(null);
+        } catch {
+          // Durable credential shape and matching rules below determine whether
+          // recovery is safe. A failed mutation requires a fresh host/service
+          // initialization before cloud recovery may resume.
+        }
+      } else if (credentials.deletionStatus !== null) {
+        try {
+          if (credentials.deletionStatus.status === "complete") {
+            localCleanupRequired = true;
+            clearContributionSyncState(options.store);
+            localCleanupRequired = false;
+          }
+          await clearDeletionSupersededAuthorities();
+        } catch {
+          // The status authority remains durable for restart recovery, while a
+          // failed credential mutation hard-pauses this service instance.
+        }
+      }
+    } finally {
+      busy = false;
     }
+  };
+
+  const initialize = (): Promise<void> => {
+    initializationPromise ??= initializeOnce();
+    return initializationPromise;
   };
 
   const preparePreview = async (): Promise<ContributionPreview> => {
@@ -1825,7 +2048,7 @@ export function createContributionService(
             }),
           },
           [200],
-          false,
+          { abortOnStop: false },
         );
         const parsedResume = ResumeResponseV1Schema.safeParse(resumed.body);
         if (
@@ -1931,9 +2154,7 @@ export function createContributionService(
         body: JSON.stringify(snapshot),
       },
       [200, 202],
-      true,
-      false,
-      true,
+      { ingestConsentRequiredIsStale: true },
     );
     const parsedReceipt = IngestReceiptV1Schema.safeParse(response.body);
     if (!parsedReceipt.success) {
@@ -2014,13 +2235,16 @@ export function createContributionService(
         });
       }
       const document = await fetchConsent();
+      requireStorageReady();
       if (document.revision !== credentials.upload.consentDocumentRevision) {
         await transitionToConsentStale(credentials.upload);
         throw new ContributionServiceError("consent-stale");
       }
       for (const queued of due) {
+        requireStorageReady();
         try {
           await uploadOne(queued.snapshot, credentials.upload.token);
+          requireStorageReady();
           uploadedBatches += 1;
         } catch (error: unknown) {
           const code =
@@ -2257,7 +2481,7 @@ export function createContributionService(
           },
         },
         [202],
-        false,
+        { abortOnStop: false, protective: true },
       );
       const parsedAccepted = DeletionAcceptedResponseV1Schema.safeParse(
         response.body,
@@ -2395,6 +2619,20 @@ export function createContributionService(
     if (busy) {
       return Object.freeze({ ok: false, code: "busy", status: status() });
     }
+    if (!initialized || !storageReady) {
+      return Object.freeze({
+        ok: false,
+        code: "secure-storage-unavailable",
+        status: status(),
+      });
+    }
+    if (baseUrl === null) {
+      return Object.freeze({
+        ok: false,
+        code: "api-not-configured",
+        status: status(),
+      });
+    }
     const before = credentialState();
     if (before.rawPending === null) {
       if (before.deletionStatus === null) {
@@ -2409,12 +2647,6 @@ export function createContributionService(
       }
       busy = true;
       try {
-        if (!initialized || !storageReady) {
-          throw new ContributionServiceError("secure-storage-unavailable");
-        }
-        if (baseUrl === null) {
-          throw new ContributionServiceError("api-not-configured");
-        }
         if (
           before.deletionStatus.status === "queued" ||
           before.deletionStatus.status === "running"
@@ -2444,12 +2676,6 @@ export function createContributionService(
     }
     busy = true;
     try {
-      if (!initialized || !storageReady) {
-        throw new ContributionServiceError("secure-storage-unavailable");
-      }
-      if (baseUrl === null) {
-        throw new ContributionServiceError("api-not-configured");
-      }
       const reconciled = await reconcilePendingEnrollment(null);
       if (reconciled === "consent-rejected") {
         return Object.freeze({
@@ -2482,16 +2708,34 @@ export function createContributionService(
     initialize,
     dispose(): void {
       disposed = true;
+      storageReady = false;
       pendingPreview = null;
       activeRequest?.controller.abort("disposed");
+      for (const operation of activeCredentialOperations) {
+        operation.controller.abort("disposed");
+      }
     },
     async quiesce(): Promise<void> {
       disposed = true;
+      storageReady = false;
       pendingPreview = null;
       activeRequest?.controller.abort("disposed");
+      for (const operation of activeCredentialOperations) {
+        operation.controller.abort("disposed");
+      }
       while (busy) {
         activeRequest?.controller.abort("disposed");
+        for (const operation of activeCredentialOperations) {
+          operation.controller.abort("disposed");
+        }
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      }
+      while (activeCredentialOperations.size > 0) {
+        const operations = [...activeCredentialOperations];
+        for (const operation of operations) {
+          operation.controller.abort("disposed");
+        }
+        await Promise.allSettled(operations.map(({ settled }) => settled));
       }
     },
     status,

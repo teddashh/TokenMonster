@@ -27,7 +27,10 @@ class Slot implements EncryptedSecretSlot {
     return Object.freeze({
       configured: this.value !== null,
       persistence: this.persistence,
-      activePersistence: this.persistence,
+      activePersistence:
+        this.value !== null && this.persistence === "os-backed"
+          ? "os-backed"
+          : "memory-only",
       backend: this.persistence === "os-backed" ? "keychain" : "basic_text",
     });
   }
@@ -292,7 +295,11 @@ describe("CLI contribution runtime composition", () => {
       await expect(runtime.controller.stop()).resolves.toMatchObject({
         ok: false,
         code: "secure-storage-failed",
-        status: { state: "active", enabled: true },
+        status: {
+          secureStorage: "unavailable",
+          state: "unavailable",
+          enabled: false,
+        },
       });
       await vi.advanceTimersByTimeAsync(10_000);
       expect(

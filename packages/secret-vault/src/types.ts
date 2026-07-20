@@ -20,7 +20,7 @@ export interface SecretSlotStatus {
   /** Whether this host is capable of persisting a secret with an approved backend. */
   readonly persistence: SecretPersistence;
   /** Where the currently configured secret actually lives. */
-  readonly activePersistence?: SecretPersistence;
+  readonly activePersistence: SecretPersistence;
   readonly backend: string;
 }
 

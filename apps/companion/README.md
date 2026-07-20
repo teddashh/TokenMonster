@@ -64,22 +64,45 @@ BYOK uses the fixed OpenAI Responses endpoint and `gpt-5.6-luna` from the main
 process with `store: false`, `background: false`, redirect denial, bounded
 responses, and no tools/files/conversation IDs. The key is encrypted with
 Electron async `safeStorage` only when an approved OS-backed backend exists.
-Linux `basic_text` and unavailable keychains stay RAM-only. Conversation
-history is bounded to 12 messages in renderer RAM and sent anew with each
-stateless gateway request; the gateway retains no conversation. The default
-pet uses the legacy-compatible
+Linux `basic_text` and unavailable keychains stay RAM-only. In the legacy
+Electron slice, conversation history is bounded to 12 messages in main-process
+RAM; the renderer sends only the current character and message over fixed IPC,
+and the main-process service constructs each provider request. History is never
+persisted and is cleared on character change, window suspension, or permanent
+service disposal. The default pet uses the legacy-compatible
 `app.getPath("userData")/secrets/openai-byok.json` path, after verifying and
 hardening the `secrets` directory. A private-directory, safeStorage-policy, or
 vault-load failure does not block the local pet: BYOK reports unavailable while
-tracking, characters, and scripted interaction remain usable. Key removal,
-window close, and process shutdown clear the corresponding in-memory authority.
+tracking, characters, and scripted interaction remain usable. Explicit key
+removal clears the slot. In the default pet, collapsing or closing the chat
+drawer aborts its request and clears renderer-memory conversation history; an
+OS window close hides the pet to the tray and does not claim to clear the live
+session. A legacy window close suspends BYOK, aborts requests, and clears its
+main-process conversation history so macOS activation can recreate a usable
+window; permanent service disposal fences further access. Shutdown aborts and
+then joins active chat plus every accepted
+vault worker through any late-write protective cleanup before releasing local
+owners. Process exit clears remaining RAM, while an explicitly persisted
+encrypted key remains available for the next launch until removed.
+The default pet also tracks the raw safeStorage startup behind its bounded BYOK
+result, fences retry continuations, and closes any sidecar/gateway that finishes
+starting after shutdown instead of adopting it. An early quit is held until the
+top-level startup hands control to the pet drain; current owners, late owners,
+and raw credential work all settle before the runtime lease is released.
+The main-process service accepts only exact plain vault snapshots whose return,
+current status, and readable key agree. Control operations are single-flight,
+bounded, and abort then join active chat before mutating. A rejected, timed-out,
+or contradictory mutation latches BYOK unavailable until a new service
+instance; a verified clear remains available for local cleanup but does not
+revive provider work. Every send revalidates the configured status and key
+before contacting the fixed provider.
 
 The repository can now produce an internal, unsigned, self-contained ASAR/ZIP
 whose exact inventory, runtime imports, blocked assets/secrets, source-map
 absence, raw Electron fuse wire, native Tokscale package-lock identity,
 SHA-256/package-version/executable evidence, and final ZIP byte/mode inventory are
-verified. Set a unique strict candidate version (the current local example is
-`TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.12`) and run
+verified. Set `TOKENMONSTER_NEXT_RELEASE_VERSION` to a new, unused strict
+candidate SemVer, then pass it as `TOKENMONSTER_RELEASE_VERSION` to
 `npm run make:companion:internal` from the repository root; evidence is written
 to `release-evidence/companion-package.json`. The injected version is bound to
 the staged package, Electron application version, and Squirrel metadata; the

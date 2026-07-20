@@ -21,11 +21,23 @@ a fresh preview; it never silently generates or consents to a replacement.
 
 Credential operations are bounded and receive abort signals. Stop and delete
 abort an in-flight upload before returning; shutdown rejects new work and waits
-for accepted work to quiesce before the host closes the local store. Stop stays
+for accepted work to quiesce before the host closes the local store.
+Initialization is single-flight, and shutdown aborts and joins the underlying
+credential promises even when an earlier caller-facing deadline fired. Stop stays
 fail-closed if remote pause or outbox cleanup fails. Delete removes upload
 authority before the first remote request, retains the stable deletion authority
 needed for a response-loss retry, and treats accepted cloud deletion as
 committed even when later local cleanup still needs recovery.
+
+The runtime does not trust a host's capability claim by itself. Initialize,
+set, and clear must return an exact persistence snapshot that agrees with the
+slot's current status and readable value: configured secrets must be actively
+OS-backed, while a cleared slot must be empty and actively memory-only. A
+missing field, RAM-only write, stale readable value, backend mismatch, or other
+contradiction hard-pauses enrollment, upload, deletion, and recovery until a
+newly created service instance or restarted process initializes successfully.
+A best-effort remote pause, an already-started protective cloud deletion, and
+local authority removal may still run to reduce exposure after a failure.
 
 Every sync re-reads current consent. A revision change, or an exact `403
 application/problem+json` `CONSENT_REQUIRED` response caused by a read/upload

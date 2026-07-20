@@ -21,11 +21,12 @@ counter.
 > cross-platform collection; TokenMonster consumes only its loopback aggregate
 > API. The target experience is one command, `npx tokenmonster`, with no
 > repository clone, separate Electron install, or manually started collector.
-> The exact local `0.1.0-rc.12` tarball now passes an empty-prefix install and
-> real isolated-HOME Linux installed smoke. A system trace contains loopback
-> sockets only and no external destination. This candidate is unpublished;
-> Windows/macOS smoke of the same tarball, npm publication, and legacy cutover
-> remain incomplete.
+> The historical local `0.1.0-rc.12` tarball passed an empty-prefix install and
+> real isolated-HOME Linux installed smoke. A system trace contained loopback
+> sockets only and no external destination. Later credential-host hardening
+> superseded that candidate; its bytes must not be completed, relabeled, or
+> published. A new unique version must repeat clean install, Windows/macOS
+> smoke, registry gates, and legacy cutover evidence.
 > The current Tokscale/Electron collection path is a legacy source slice to be
 > removed; see [ADR 0005](docs/adr/0005-permanent-tokentracker-sidecar-adapter.md).
 
@@ -107,8 +108,8 @@ go directly from the device to the selected provider.
 
 | Area | Current source slice | Release status |
 | --- | --- | --- |
-| Local companion (sidecar path) | Lightweight localhost UI, four-choice onboarding inside the compact pet, real UTC today/7/28 totals, and a daily trend | The exact local rc.12 tarball passes clean Linux installed smoke and a loopback-only trace; registry publication and native Windows/macOS smoke of the same tarball remain |
-| Collector | Exact-pinned `tokentracker-cli@0.80.0` child, local-only refresh, strict loopback adapter/gateway; the legacy slice still contains `tokscale@4.5.2` | The rc.12 install verifies the exact 41-package sidecar closure and Linux zstd prebuild; registry publication, Windows/macOS CI smoke, and cutover remain |
+| Local companion (sidecar path) | Lightweight localhost UI, four-choice onboarding inside the compact pet, real UTC today/7/28 totals, and a daily trend | Superseded rc.12 bytes retain historical clean-Linux installed-smoke and loopback-only-trace evidence; a new post-hardening version must repeat clean install, registry gates, and native Windows/macOS smoke |
+| Collector | Exact-pinned `tokentracker-cli@0.80.0` child, local-only refresh, strict loopback adapter/gateway; the legacy slice still contains `tokscale@4.5.2` | The historical rc.12 install verified the exact 41-package sidecar closure and Linux zstd prebuild; the next unique version must repeat closure, registry, Windows/macOS CI-smoke, and cutover evidence |
 | Legacy Electron companion | Local SQLite, old 7/28-day trends, traits/fixed lines, share card, and export/reset | Migration-only; no longer the supported install or collection path, and removed or reduced to a thin shell after cutover |
 | Characters | Eleven switchable characters; local starter selection and monotonic unlocks, 20 themes plus pose art and 50 prerecorded voice refs for ten characters, and GLM letter mode | Fixed-pack consent/verification/repair/removal and letter fallback are complete; the user reports GLM approval is granted, while formal evidence transcription, a non-null authority, and optional art-pack publication remain pending and do not block the letter-mode application release |
 | BYOK | Companion main process calls OpenAI Responses directly with `store: false`, `background: false`, and no tools/files/conversation IDs | Implemented; a manual real-key network smoke on a safe release host remains |
@@ -117,7 +118,7 @@ go directly from the device to the selected provider.
 | Cloud data | Guarded D1 mutations, deletion, projection, retention, Durable Object rate limits/suppression | Implemented and locally tested; real D1 migrations, capacity, and failure rehearsals remain |
 | Anonymous compaction | Complete UTC-day `day-all-v1`, `k = 20` gate, mapping-free rollups, commit-time race guards | Implemented and locally tested; no staging/production E2E yet |
 | Scheduled maintenance | Deletion → compaction → retention → projection; retention preserves compaction-owned input to prevent partial-day loss | Implemented and locally tested; not yet verified against real Cron Triggers/D1 |
-| Installers/update feed | The local rc.12 unsigned Linux ZIP passes ASAR/fuse/maker/collector/sidecar verification; Windows release tooling strictly binds `RELEASES` to one full `.nupkg` and emits a deterministic `latest`/`next` promotion plan | Not a public installer; packaged boot fails closed under this workstation's Chromium sandbox policy, while signing, notarization, DMG, Squirrel current-channel retrieval/credentialed deployment/public readback, and native install-update smoke remain STOP gates |
+| Installers/update feed | The historical rc.12 unsigned Linux ZIP passed ASAR/fuse/maker/collector/sidecar verification but cannot be promoted; Windows release tooling strictly binds `RELEASES` to one full `.nupkg` and emits a deterministic `latest`/`next` promotion plan | No post-hardening installer exists; packaged boot fails closed under this workstation's Chromium sandbox policy, while a new version's signing, notarization, DMG, Squirrel current-channel retrieval/credentialed deployment/public readback, and native install-update smoke remain STOP gates |
 
 ## Accepted target architecture
 
@@ -313,7 +314,8 @@ whenever a required binding is missing.
 ### Internal companion package
 
 ```sh
-TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.12 npm run make:companion:internal
+: "${TOKENMONSTER_NEXT_RELEASE_VERSION:?set a new, unused SemVer prerelease}"
+TOKENMONSTER_RELEASE_VERSION="$TOKENMONSTER_NEXT_RELEASE_VERSION" npm run make:companion:internal
 npm run verify:companion-package
 ```
 
@@ -367,8 +369,11 @@ Electron main process:
 - The API key prefers OS-backed Electron `safeStorage`; an insecure or
   unavailable backend permits a RAM-only session and does not write the key to
   disk.
-- Prompts/responses stay in bounded memory and are cleared on character change,
-  key removal, window close, and process shutdown.
+- Prompts/responses stay in bounded memory. The default pet clears them when
+  its chat drawer is collapsed or closed, on character change, key removal, or
+  process shutdown; an OS window close only hides the pet to the tray and does
+  not claim to clear the live session. Closing a legacy window suspends BYOK
+  and clears that window's conversation.
 - Requests explicitly use `store: false` and `background: false`, with files,
   tools, hosted search, conversation IDs, and redirects disabled.
 - The TokenMonster Worker, D1, analytics, and public API never receive provider

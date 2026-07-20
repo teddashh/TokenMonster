@@ -17,15 +17,18 @@ earlier snapshot only. Their current bytes/hashes differ from the recorded
 values, so neither artifact may be promoted, published, or used as proof for
 the post-candidate changes. At takeover, a fresh candidate still needed all
 repository gates, a new clean-install/network trace, package verification,
-Electron make, hashes, and the native release matrix. The local rc.12 portion
-is now recorded below; native, signing, and publication gates remain.
+Electron make, hashes, and the native release matrix. A local rc.12 candidate
+was subsequently produced, but later hardening superseded it; it is historical
+evidence only and must not be resumed, relabeled, or published. Native, signing,
+and publication gates were never completed for it.
 
-Recovered and revalidated:
+Recovered and revalidated at commit `b5f16f6`:
 
 - Root TypeScript failures caused by the new contribution v2 union were fixed
-  without widening the migration-only collector. The recovered current tree
+  without widening the migration-only collector. That recovered snapshot
   passes typecheck across all 21 workspaces and the full root test run passes
-  137 test files and 1,661/1,661 tests.
+  137 test files and 1,661/1,661 tests. These figures describe the recovered
+  pre-hardening checkpoint, not the later credential-host work.
 - Permanent UI reminders are wired through a narrow Electron bridge. They are
   default-off and local-only, use a migrated revision/CAS store to prevent
   cross-window overwrites, preserve unchanged pending reminders, bound
@@ -99,6 +102,94 @@ be called production-usable until a fresh signed feed is promoted and rehearsed
 on native Windows. These gaps are not reasons to weaken the local-first or
 consent contracts.
 
+## Post-rc.12 credential-host audit and fail-closed hardening
+
+The local rc.12 artifacts below remain immutable evidence for commit `4f807a3`,
+but they are no longer a current candidate after this shared runtime hardening.
+Do not relabel or rebuild them in place.
+
+The contribution runtime no longer trusts a credential host merely because its
+initial snapshot says persistence is available. `activePersistence` is now a
+required secret-slot status field. Initialize, set, and clear accept only exact
+plain snapshots whose capability, active persistence, backend, configured bit,
+`slot.status()`, and `slot.get()` agree. A missing field, a write whose own
+status reports a RAM downgrade, a clear that leaves stale readable authority,
+or any rejected/timed-out mutation makes secure storage unavailable until a
+newly created service instance or restarted process initializes successfully.
+Entry guards then block authority-expanding and data-bearing cloud work;
+representative regressions cover initialization, enrollment preparation,
+recovery, deletion, and quiescence. A best-effort remote pause, an already
+started protective cloud deletion, and local authority removal may still run
+to reduce exposure after a failure.
+Snapshot checks cannot prove physical durability against a host that lies
+consistently, so native provenance and real restart tests remain mandatory.
+
+Making `SecretSlotStatus.activePersistence` required is a source-level contract
+change for implementors of the private `@tokenmonster/secret-vault` package.
+It does not change a persisted document, cloud contract, or loopback DTO, so it
+requires implementor updates and recompilation but no data migration.
+
+The loopback gateway and legacy Electron main-process BYOK service now apply
+equivalent exact return/status/readback checks, pin the initialized host
+identity, validate the key before provider use, serialize bounded control work,
+and revalidate immediately before each fixed-destination provider request.
+`persist: false` cannot be misreported as OS-backed, while an honest
+`persist: true` RAM downgrade remains usable and is reported as memory-only.
+Contradiction, rejection, or timeout latches provider work unavailable for the
+service instance; verified local clear remains available without reviving it.
+Gateway close additionally aborts and joins accepted initialization, late
+mutation, and protective-cleanup work. In the legacy Electron slice, window
+close now suspends the conversation without disposing credential authority, so
+macOS activation can create another usable window. Permanent and fatal shutdown
+both use the same `before-quit` drain: all local owners stop accepting work
+first; active legacy collector scans, raw BYOK initialization/control/
+protective-cleanup work, and contribution workers are joined; the store is
+closed; and only then is the runtime lease released. Local-source reset also
+joins the collector before clearing its authority. A stopped collector
+authority cannot be rewritten as degraded by a late directory-check failure.
+Fatal startup or window-creation errors first request the same graceful quit
+and use `app.exit(1)` only as the terminal step after that ordering completes,
+so the OS still receives a nonzero status without bypassing cleanup.
+Legacy startup itself is fenced across lease acquisition, directory/SQLite
+opens, credential initialization, collector setup, and renderer loading. Quit
+stops and disposes current owners, joins the startup, captures any late-opened
+owner, then quiesces before store and lease release. A genuine renderer load
+failure records fatal intent before Electron synchronously emits
+`window-all-closed`; a user-requested close is normalized as cancellation, and
+a window destroyed by an already requested shutdown remains non-fatal.
+The default pet has the equivalent early-quit handoff and retry fence: its
+bounded BYOK result retains a joinable raw safeStorage worker, and a sidecar or
+gateway that finishes starting after shutdown is closed rather than adopted.
+Current and late pet owners plus raw credential work settle before its runtime
+lease is released. The existing dual-gated CI smoke mode alone retains its
+10-second forced-exit fallback after first attempting this wind-down.
+
+No third-party native keychain package was added. The audit found no package
+that can currently satisfy the complete cross-platform proof. In particular,
+the reviewed `@napi-rs/keyring` 1.3.0 tag (tag object
+`875e452d75c7f1f2579e25ef10a598109852fa75`, commit
+`e46be75c3ba8d5fde6b88a17c6153b87ffe4b946`) [silently falls back from Linux
+Secret Service to kernel keyutils](https://github.com/Brooooooklyn/keyring-node/blob/e46be75c3ba8d5fde6b88a17c6153b87ffe4b946/src/linux_credential_builder.rs)
+and its [async API collapses important lookup/delete errors](https://github.com/Brooooooklyn/keyring-node/blob/e46be75c3ba8d5fde6b88a17c6153b87ffe4b946/src/async_entry.rs),
+so it does not expose enough backend evidence for this boundary. General shell
+or PATH-discovered command helpers are also rejected because some platforms
+cannot keep secrets out of argv and their discovery/timeout behavior is
+ambiguous. A future fixed-path, TokenMonster-owned macOS helper is acceptable
+only if it is audited, signed/notarized, exact-pinned, and passes the same
+bounded-operation and provenance gates as an in-process binding.
+
+The implementation direction is a TokenMonster-owned, exact-pinned native
+bridge behind the existing `AsyncSafeStoragePort` and encrypted vault: user-
+scoped DPAPI on Windows; an audited Keychain binding or fixed signed/notarized
+helper on macOS; and a Secret-Service-only Linux binding with no
+keyutils, session collection, plaintext, file, environment, or runtime-download
+fallback. It must add bounded read-only preflight before contribution SQLite is
+opened, join native work before the runtime lease is released, use fixed opaque
+service/item identifiers rather than paths, and pass real process-restart,
+locked/headless, crash-boundary, canary-scan, binary inventory/hash/provenance,
+and native OS/architecture tests. Until then the normal CLI remains unavailable,
+default-off, and zero-cloud.
+
 ## Continuation verification status — 2026-07-20
 
 By the final recovery pass, the interrupted tree contained 183 modified and two
@@ -137,10 +228,13 @@ zero vulnerabilities.
 - `npm run audit:zstd-native-prebuild`: Linux x64, macOS arm64, and Windows x64
   archives/bindings plus the pinned MongoDB signer all pass
 
-A fresh **local-only** `0.1.0-rc.12` candidate was then built from exact clean
-commit `4f807a3` (whose only change after the fully tested `b5f16f6` snapshot is
-this handoff evidence). It is not tagged, pushed, signed, published, or a public
-release. The old rc.11 artifacts remain superseded and must never be reused.
+At that checkpoint, a fresh **local-only** `0.1.0-rc.12` candidate was built
+from exact clean commit `4f807a3` (whose only change after the fully tested
+`b5f16f6` snapshot is this handoff evidence). It was not tagged, pushed,
+signed, published, or a public release. Subsequent credential-host hardening
+superseded it, so the following bytes are historical immutable evidence only
+and must not be promoted or relabeled. The old rc.11 artifacts also remain
+superseded and must never be reused.
 
 - `tokenmonster-0.1.0-rc.12.tgz`: 1,179,164 bytes, 1,027 portable entries,
   SHA-256
@@ -171,11 +265,13 @@ release. The old rc.11 artifacts remain superseded and must never be reused.
   `sysctl` workaround was used. Repeat this gate on the correctly isolated CI
   or release host.
 
-The same immutable CLI tarball still needs macOS and Windows installed smoke.
-A real signed Squirrel candidate, sandbox-enabled packaged boot, public feed
-readback, and the native release matrix remain outstanding. The feed
-verifier/planner/executor has deterministic local coverage, including
-response-loss recovery and rollback, but no credentialed R2/CDN run occurred.
+At creation time, the same immutable CLI tarball still lacked macOS and Windows
+installed smoke. Do not complete or promote that obsolete candidate now. The
+next versioned candidate must be built from the post-hardening commit and repeat
+clean install, artifact, sandbox-enabled packaged boot, signed Squirrel, public
+feed readback, and the native release matrix. The feed verifier/planner/executor
+has deterministic local coverage, including response-loss recovery and
+rollback, but no credentialed R2/CDN run occurred.
 
 ## Shipped baseline
 
@@ -555,10 +651,13 @@ source-merged hourly data.
 
 - **Native contribution credential host:** recoverable v2, the shared runtime,
   gateway/UI preview-enable-stop-delete-recover controls, and conditional CLI
-  composition are complete. The normal pure-Node CLI still needs an audited
-  OS-backed credential provider. Keep contribution unavailable, default-off,
-  and zero-cloud until that authority exists; never fall back to plaintext,
-  memory-only, environment-variable, or provider-key persistence.
+  composition are complete, including exact mutation-postcondition checks
+  against dishonest or downgraded hosts. The normal pure-Node CLI still needs
+  the audited, exact-pinned platform bridge and native matrix described above.
+  Keep contribution unavailable, default-off, and zero-cloud until that
+  authority exists; never fall back to plaintext, memory-only, keyutils/session
+  storage, environment-variable, general shell/PATH helper, or provider-key
+  persistence.
 - **Cloud staging and privacy rehearsal:** create the isolated staging Worker,
   D1 database, domain bindings, and protected secrets only in the approved
   environment. Then run the real Wrangler migration and staging E2E, exercise
@@ -571,16 +670,18 @@ source-merged hourly data.
   prompt, verify the fixed provider destination and `store: false` request,
   and prove the key and conversation never enter logs, disk state, or
   TokenMonster cloud. This operational proof remains outstanding.
-- **Native Windows rc.12 candidate:** transfer and re-verify the exact rc.12 CLI
-  tarball above, build/sign the same source version on the Windows release host,
-  install it as a clean user, choose
+- **Native Windows next-version candidate:** after this hardening is reviewed
+  and committed, choose a new version, build fresh immutable CLI and desktop
+  artifacts from that exact commit, and verify the hashes on the Windows
+  release host. Install it as a clean user, choose
   each starter across repeated runs, restart to verify selection/unlocks, tap a
   character, save the real PNG,
   exercise the refreshed quota panel, and run the existing Squirrel `.nupkg`
   sidecar byte-verification. Also exercise the Windows locale-store branch,
-  where lstat/open-handle identity checks replace POSIX `O_NOFOLLOW`. Retesting
-  rc.7 is no longer sufficient for this worktree. Linux cross-packaging is not
-  a substitute: this host has no Wine/Mono toolchain, and the collector
+  where lstat/open-handle identity checks replace POSIX `O_NOFOLLOW`. Neither
+  retesting rc.7 nor finishing the obsolete rc.12 bytes is sufficient for this
+  worktree. Linux cross-packaging is not a substitute: this host has no
+  Wine/Mono toolchain, and the collector
   packaging hook deliberately rejects a target platform that differs from the
   native host so it can execute and verify the exact platform binary.
 - **Windows Squirrel feed execution:** verifier, monotonic plan, authoritative
@@ -589,7 +690,7 @@ source-merged hourly data.
   a freshly versioned signed tag in the protected single-writer environment;
   preserve the emitted evidence and complete native install/update rehearsal
   before treating the connected updater surface as production-usable. No
-  current rc.12 candidate artifact has been published.
+  post-hardening candidate artifact has been built or published.
 - **Signed/GA packaging dependency gate:** the exact `@electron/rebuild 4.2.0`
   and `tmp 0.2.7` overrides pass the local Forge package/build verifier and
   `npm audit` reports zero vulnerabilities. A 2026-07-19 native-range lock for
@@ -611,10 +712,11 @@ source-merged hourly data.
   native smoke are not complete. Internal unsigned packaging evidence is not a
   substitute for this gate.
 - **Integrator publication:** the scoped recovery commits are integrated into
-  local `fable/integration` but remain unpushed. Push only after reviewing this
-  rc.12 evidence and arranging the native release matrix.
+  local `fable/integration` but remain unpushed. Push only after reviewing the
+  historical rc.12 evidence, this post-hardening change, and the native release
+  plan.
   Configure the protected signing/npm/CDN release environments and the four
   exact public download bindings only after the immutable Windows bytes exist;
-  never call the current local rc.12 artifacts shipped.
+  never call the historical local rc.12 artifacts shipped.
 - **Legal owner:** choose the project license, privacy-policy/terms publication,
   TokenMonster name/trademark position, and protected release approvals.

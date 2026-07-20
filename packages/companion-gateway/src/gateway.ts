@@ -1228,6 +1228,7 @@ export function createCompanionGateway(
   const sessionToken = randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
   const bootstrapPath = `${BOOTSTRAP_PREFIX}${bootstrapToken}`;
   let state: "idle" | "starting" | "listening" | "closed" = "idle";
+  let closePromise: Promise<void> | null = null;
   let origin: string | null = null;
   let activeApiRequests = 0;
   let bootstrapAvailable = true;
@@ -2241,29 +2242,38 @@ export function createCompanionGateway(
     },
 
     async close(): Promise<void> {
-      if (state === "closed") return;
-      byokService.dispose();
-      if (state === "idle") {
-        state = "closed";
+      if (closePromise !== null) {
+        await closePromise;
         return;
       }
+      if (state === "closed") return;
       if (state === "starting") {
+        byokService.dispose();
         throw new CompanionGatewayError("already-started");
       }
-      state = "closed";
-      origin = null;
-      await assetPackService.close();
-      const serverClosed = new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error === undefined) resolve();
-          else reject(error);
+      closePromise = (async () => {
+        if (state === "idle") {
+          state = "closed";
+          await byokService.quiesce();
+          return;
+        }
+        state = "closed";
+        origin = null;
+        await byokService.quiesce();
+        await assetPackService.close();
+        const serverClosed = new Promise<void>((resolve, reject) => {
+          server.close((error) => {
+            if (error === undefined) resolve();
+            else reject(error);
+          });
+          server.closeAllConnections();
         });
-        server.closeAllConnections();
-      });
-      while (contributionOperations.size > 0) {
-        await Promise.allSettled([...contributionOperations]);
-      }
-      await serverClosed;
+        while (contributionOperations.size > 0) {
+          await Promise.allSettled([...contributionOperations]);
+        }
+        await serverClosed;
+      })();
+      await closePromise;
     },
   });
 }

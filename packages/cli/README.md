@@ -38,6 +38,16 @@ memory-only, environment-variable, or provider-key storage for contribution
 credentials. The implemented control surface becomes available only after an
 audited native host is explicitly composed and tested.
 
+That future host must preserve the shared encrypted-file vault and its exact
+mutation postconditions. It also needs a fixed, exact-pinned native bridge,
+bounded startup preflight and shutdown quiescence, installed-package restart
+tests, and platform-specific binary hash/provenance gates. General shell or
+PATH-discovered helpers and backends that silently fall back to process-session
+storage are not acceptable; an unavailable, locked, ambiguous, or unsupported
+OS store stays unavailable and zero-cloud. A fixed-path TokenMonster-owned
+macOS helper would still require exact pinning, audit, signing/notarization, and
+the same bounded-operation and provenance matrix as an in-process binding.
+
 The package remains private during the source-slice migration. Publishing is
 blocked until TokenMonster's own license and release gates are decided; users
 should not yet expect the registry command to exist.
