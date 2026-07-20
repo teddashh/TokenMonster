@@ -20,6 +20,7 @@ import {
   assertSidecarClosuresMatch,
   packageNameFromLockPath,
 } from "./sidecar-lock.mjs";
+import { requireDisabledRemoteLimitsResponse } from "./smoke-installed-policy.mjs";
 import { verifyInstalledZstdNative } from "./zstd-native-verifier.mjs";
 
 const BOOTSTRAP_TIMEOUT_MS = 120_000;
@@ -695,16 +696,26 @@ async function proveRemoteHelperSuppression(installDirectory, isolatedHome) {
       "disabled upstream remote-limits capability",
     );
     const status = response.status;
-    await getJson(response, "disabled upstream remote-limits capability");
-    if (status !== 200) {
-      fail(`upstream remote-limits drill returned HTTP ${status}`);
-    }
     if (await exists(fixture.marker)) {
       fail("upstream remote-limits drill launched a native provider helper");
     }
+    const body = await getJson(
+      response,
+      "disabled upstream remote-limits capability",
+    );
+    if (await exists(fixture.marker)) {
+      fail("upstream remote-limits drill launched a native provider helper");
+    }
+    const outcome = requireDisabledRemoteLimitsResponse({
+      body,
+      platform: process.platform,
+      status,
+    });
     step(
       "remote helper suppression",
-      "active upstream limits route could not launch the PATH canary",
+      outcome === "macos-native-helper-blocked"
+        ? "exact macOS native helper probe remained fail-closed"
+        : "active upstream limits route could not launch the PATH canary",
     );
   } catch (error) {
     failure = error;

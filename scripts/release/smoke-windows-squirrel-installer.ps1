@@ -107,9 +107,10 @@ function Invoke-BoundedProcess {
   }
 }
 
-$nodeCommand = (Get-Command node -CommandType Application -ErrorAction Stop).Source
+$nodeCommand = Get-Command node -CommandType Application -ErrorAction Stop |
+  Select-Object -First 1
 $nodeExecutable = (
-  Get-PhysicalFile -LiteralPath $nodeCommand -Label "Node.js executable"
+  Get-PhysicalFile -LiteralPath $nodeCommand.Source -Label "Node.js executable"
 ).FullName
 $installedVerifier = (
   Get-PhysicalFile `
