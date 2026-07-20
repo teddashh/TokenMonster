@@ -542,6 +542,15 @@ describe("companion release policy", () => {
       ),
       "utf8"
     );
+    const squirrelTemplate = await readFile(
+      join(
+        rootDirectory,
+        "node_modules",
+        "electron-winstaller",
+        "template.nuspectemplate"
+      ),
+      "utf8"
+    );
     const releaseScriptTsconfig = await readFile(
       join(rootDirectory, "tsconfig.release-scripts.json"),
       "utf8"
@@ -587,6 +596,12 @@ describe("companion release policy", () => {
     expect(windowsSmoke).toContain("Select-Object -First 1");
     expect(windowsSmoke).toContain("-LiteralPath $nodeCommand.Source");
     expect(windowsSmoke).toContain(
+      "$executableSmoke $installedApplicationExecutable.FullName"
+    );
+    expect(windowsSmoke).not.toContain(
+      "$executableSmoke $installedEntryPoint.FullName"
+    );
+    expect(windowsSmoke).toContain(
       '$squirrelLogCulture.Name -cne "en-US"'
     );
     expect(windowsSmoke).toContain(
@@ -614,6 +629,9 @@ describe("companion release policy", () => {
     );
     expect(installedVerifier).toContain(
       'const PACKAGED_UPDATE_EXECUTABLE = "squirrel.exe"'
+    );
+    expect(squirrelTemplate).toContain(
+      '<file src="Squirrel.exe" target="lib\\net45\\squirrel.exe" />'
     );
     expect(installedVerifier).toContain(
       "await rename(logPath, quarantinePath)"
