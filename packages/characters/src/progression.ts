@@ -6,12 +6,9 @@ import {
 import { z } from "zod";
 
 import { CharacterIdSchema, type CharacterId } from "./catalog.js";
-import {
-  STARTER_CHARACTER_BY_PROVIDER_FAMILY,
-  selectStarterCharacter,
-} from "./starter-selection.js";
+import { STARTER_CHARACTER_BY_PROVIDER_FAMILY } from "./starter-selection.js";
 
-export const PROGRESSION_SCHEMA_VERSION = "1" as const;
+export const PROGRESSION_SCHEMA_VERSION = "2" as const;
 
 export const PROGRESSION_PROVIDER_IDS = [
   "openai",
@@ -75,6 +72,35 @@ export const WARDROBE_THEME_IDS = [
 
 export type WardrobeThemeId = (typeof WARDROBE_THEME_IDS)[number];
 export const WardrobeThemeIdSchema = z.enum(WARDROBE_THEME_IDS);
+
+/**
+ * GLM joins the roster at five million lifetime tokens. Its early wardrobe
+ * rewards arrive in small 250k steps, then widen gradually so the ladder keeps
+ * meaningful long-term milestones without unlocking the existing 20-theme
+ * provider ladder all at once.
+ */
+export const GLM_WARDROBE_LIFETIME_THRESHOLDS = Object.freeze([
+  5_000_000,
+  5_250_000,
+  5_500_000,
+  5_750_000,
+  6_000_000,
+  6_500_000,
+  7_000_000,
+  7_500_000,
+  8_000_000,
+  9_000_000,
+  10_000_000,
+  11_000_000,
+  12_000_000,
+  13_500_000,
+  15_000_000,
+  17_000_000,
+  19_000_000,
+  22_000_000,
+  25_000_000,
+  30_000_000,
+] as const satisfies readonly number[]);
 
 export const PROGRESSION_POSE_SET_IDS = [
   "supported",
@@ -198,6 +224,28 @@ export const CharacterUnlockRuleSchema = z.discriminatedUnion("signal", [
 ]);
 export type CharacterUnlockRule = z.infer<typeof CharacterUnlockRuleSchema>;
 
+const ProviderCumulativeWardrobeRuleSchema = z
+  .object({
+    signal: z.literal("provider-cumulative-total"),
+    providerId: ProgressionProviderIdSchema,
+  })
+  .strict();
+
+const LifetimeTotalWardrobeRuleSchema = z
+  .object({
+    signal: z.literal("lifetime-total"),
+    thresholds: z
+      .array(SafeCountSchema.positive())
+      .length(WARDROBE_THEME_IDS.length),
+  })
+  .strict();
+
+export const WardrobeUnlockRuleSchema = z.discriminatedUnion("signal", [
+  ProviderCumulativeWardrobeRuleSchema,
+  LifetimeTotalWardrobeRuleSchema,
+]);
+export type WardrobeUnlockRule = z.infer<typeof WardrobeUnlockRuleSchema>;
+
 const ProgressionCharacterDefinitionSchema = z
   .object({
     id: ProgressionCharacterIdSchema,
@@ -205,6 +253,7 @@ const ProgressionCharacterDefinitionSchema = z
     kind: z.enum(["sister", "friend", "reserved"]),
     providerId: ProgressionProviderIdSchema,
     unlockRule: CharacterUnlockRuleSchema,
+    wardrobeRule: WardrobeUnlockRuleSchema,
   })
   .strict();
 
@@ -278,6 +327,49 @@ export const ProgressionManifestSchema = z
       });
     }
 
+    for (const [index, character] of manifest.characters.entries()) {
+      if (character.id === "glm") {
+        if (
+          character.unlockRule.signal !== "lifetime-total" ||
+          character.unlockRule.threshold !==
+            GLM_WARDROBE_LIFETIME_THRESHOLDS[0] ||
+          character.wardrobeRule.signal !== "lifetime-total"
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["characters", index, "wardrobeRule"],
+            message:
+              "GLM wardrobe must use a lifetime ladder beginning at character unlock.",
+          });
+          continue;
+        }
+        const thresholds = character.wardrobeRule.thresholds;
+        if (
+          thresholds.some(
+            (threshold, thresholdIndex) =>
+              threshold !== GLM_WARDROBE_LIFETIME_THRESHOLDS[thresholdIndex] ||
+              (thresholdIndex > 0 && threshold <= thresholds[thresholdIndex - 1]!),
+          )
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["characters", index, "wardrobeRule", "thresholds"],
+            message: "GLM wardrobe lifetime thresholds must retain the v2 ladder.",
+          });
+        }
+      } else if (
+        character.wardrobeRule.signal !== "provider-cumulative-total" ||
+        character.wardrobeRule.providerId !== character.providerId
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["characters", index, "wardrobeRule"],
+          message:
+            "Every non-GLM character must retain its own provider-cumulative wardrobe rule.",
+        });
+      }
+    }
+
     const themeIds = manifest.wardrobe.themes.map(({ themeId }) => themeId);
     const tiers = manifest.wardrobe.themes.map(({ tier }) => tier);
     if (
@@ -320,6 +412,10 @@ const RAW_PROGRESSION_MANIFEST = {
         providerId: "openai",
         threshold: 1,
       },
+      wardrobeRule: {
+        signal: "provider-cumulative-total",
+        providerId: "openai",
+      },
     },
     {
       id: "claude",
@@ -330,6 +426,10 @@ const RAW_PROGRESSION_MANIFEST = {
         signal: "provider-cumulative-total",
         providerId: "anthropic",
         threshold: 1,
+      },
+      wardrobeRule: {
+        signal: "provider-cumulative-total",
+        providerId: "anthropic",
       },
     },
     {
@@ -342,6 +442,10 @@ const RAW_PROGRESSION_MANIFEST = {
         providerId: "google",
         threshold: 1,
       },
+      wardrobeRule: {
+        signal: "provider-cumulative-total",
+        providerId: "google",
+      },
     },
     {
       id: "grok",
@@ -352,6 +456,10 @@ const RAW_PROGRESSION_MANIFEST = {
         signal: "provider-cumulative-total",
         providerId: "xai",
         threshold: 1,
+      },
+      wardrobeRule: {
+        signal: "provider-cumulative-total",
+        providerId: "xai",
       },
     },
     {
@@ -364,6 +472,10 @@ const RAW_PROGRESSION_MANIFEST = {
         providerId: "deepseek",
         threshold: 100_000,
       },
+      wardrobeRule: {
+        signal: "provider-cumulative-total",
+        providerId: "deepseek",
+      },
     },
     {
       id: "qwen",
@@ -375,6 +487,10 @@ const RAW_PROGRESSION_MANIFEST = {
         providerId: "qwen",
         threshold: 250_000,
       },
+      wardrobeRule: {
+        signal: "provider-cumulative-total",
+        providerId: "qwen",
+      },
     },
     {
       id: "mistral",
@@ -382,6 +498,10 @@ const RAW_PROGRESSION_MANIFEST = {
       kind: "friend",
       providerId: "mistral",
       unlockRule: { signal: "active-day-streak", threshold: 3 },
+      wardrobeRule: {
+        signal: "provider-cumulative-total",
+        providerId: "mistral",
+      },
     },
     {
       id: "venice",
@@ -389,6 +509,10 @@ const RAW_PROGRESSION_MANIFEST = {
       kind: "friend",
       providerId: "venice",
       unlockRule: { signal: "lifetime-total", threshold: 500_000 },
+      wardrobeRule: {
+        signal: "provider-cumulative-total",
+        providerId: "venice",
+      },
     },
     {
       id: "sakana",
@@ -399,6 +523,10 @@ const RAW_PROGRESSION_MANIFEST = {
         signal: "distinct-active-provider-breadth",
         threshold: 4,
       },
+      wardrobeRule: {
+        signal: "provider-cumulative-total",
+        providerId: "sakana",
+      },
     },
     {
       id: "perplexity",
@@ -406,6 +534,10 @@ const RAW_PROGRESSION_MANIFEST = {
       kind: "friend",
       providerId: "perplexity",
       unlockRule: { signal: "active-day-streak", threshold: 7 },
+      wardrobeRule: {
+        signal: "provider-cumulative-total",
+        providerId: "perplexity",
+      },
     },
     {
       id: "glm",
@@ -413,6 +545,10 @@ const RAW_PROGRESSION_MANIFEST = {
       kind: "friend",
       providerId: "glm",
       unlockRule: { signal: "lifetime-total", threshold: 5_000_000 },
+      wardrobeRule: {
+        signal: "lifetime-total",
+        thresholds: GLM_WARDROBE_LIFETIME_THRESHOLDS,
+      },
     },
     {
       id: "reserved",
@@ -422,6 +558,10 @@ const RAW_PROGRESSION_MANIFEST = {
       unlockRule: {
         signal: "distinct-active-provider-breadth",
         threshold: 8,
+      },
+      wardrobeRule: {
+        signal: "provider-cumulative-total",
+        providerId: "other",
       },
     },
   ],
@@ -893,8 +1033,6 @@ function characterRuleProgress(
 
 function resolveSelection(
   selection: PersistedSelection,
-  counters: ReturnType<typeof deriveLifetimeCounters>,
-  evaluatedAt: string,
 ): z.infer<typeof SelectedSisterSchema> | null {
   if (selection.manualCharacterId !== null) {
     return {
@@ -910,20 +1048,11 @@ function resolveSelection(
       selectedAt: selection.autoStarterSelectedAt!,
     };
   }
-  const candidate = selectStarterCharacter({
-    providerTotals28Days: {
-      openai: counters.providerTotals.openai,
-      anthropic: counters.providerTotals.anthropic,
-      google: counters.providerTotals.google,
-      xai: counters.providerTotals.xai,
-    },
-  });
-  if (candidate.outcome !== "selected") return null;
-  return {
-    characterId: candidate.characterId,
-    selectedBy: "unique-provider-total",
-    selectedAt: evaluatedAt,
-  };
+  // Historical usage may unlock one or more starters, but a new installation
+  // never turns that usage into consent to choose a companion.  The separate
+  // summary DTO may still explain a local usage-based recommendation; only an
+  // explicit choice (or a legacy persisted auto selection) becomes active.
+  return null;
 }
 
 interface UnlockCandidate {
@@ -943,7 +1072,7 @@ export function evaluateProgression(input: unknown): ProgressionState {
     baselineActiveDays: parsed.baselineActiveDays,
     evaluationUtcDate: parsed.evaluationUtcDate,
   });
-  const selection = resolveSelection(parsed.selection, counters, parsed.evaluatedAt);
+  const selection = resolveSelection(parsed.selection);
   const traitIds = new Set(parsed.traitIds);
   const lockedCandidates: UnlockCandidate[] = [];
 
@@ -985,30 +1114,46 @@ export function evaluateProgression(input: unknown): ProgressionState {
       });
     }
 
-    const providerTotal = counters.providerTotals[character.providerId];
     const themes = PROGRESSION_MANIFEST.wardrobe.themes.map((theme, index) => {
       const fastTrackedByTrait = theme.recommendedWhenTraitAny.some((trait) =>
         traitIds.has(trait),
       );
       const effectiveIndex = fastTrackedByTrait ? Math.max(0, index - 1) : index;
-      const threshold =
-        PROGRESSION_MANIFEST.wardrobe.themes[effectiveIndex]!
-          .providerCumulativeThreshold;
-      const requirementMet = unlocked && providerTotal >= threshold;
+      const wardrobeRule = character.wardrobeRule;
+      const signalValue =
+        wardrobeRule.signal === "provider-cumulative-total"
+          ? counters.providerTotals[wardrobeRule.providerId]
+          : counters.lifetimeTotal;
+      const selectedThreshold =
+        wardrobeRule.signal === "provider-cumulative-total"
+          ? PROGRESSION_MANIFEST.wardrobe.themes[effectiveIndex]!
+              .providerCumulativeThreshold
+          : wardrobeRule.thresholds[effectiveIndex]!;
+      const characterUnlockFloor =
+        wardrobeRule.signal === "lifetime-total" &&
+        character.unlockRule.signal === "lifetime-total"
+          ? character.unlockRule.threshold
+          : 0;
+      const threshold = Math.max(selectedThreshold, characterUnlockFloor);
+      const requirementMet = unlocked && signalValue >= threshold;
       const themeUnlockedAt = resolveUnlockedAt(
         itemUnlockKey("theme", character.id, theme.themeId),
         requirementMet,
         parsed.evaluatedAt,
         parsed.persistedUnlockedAt,
       );
-      const remaining = Math.max(0, threshold - providerTotal);
+      const remaining = Math.max(0, threshold - signalValue);
       const currentThemeProgress: UnlockProgress = {
-        value: unlocked ? ratio(providerTotal, threshold) : 0,
+        value: unlocked ? ratio(signalValue, threshold) : 0,
         explanation: !unlocked
           ? `先解鎖 ${character.displayName}，才能解鎖服裝主題。`
           : remaining === 0
-            ? `本機 ${character.providerId} 已達第 ${effectiveIndex + 1} 階，解鎖 ${theme.themeId} 主題。`
-            : `已累積 ${formatCount(providerTotal)} 個本機 ${character.providerId} token，再 ${formatCount(remaining)} 個即可解鎖 ${character.displayName} 的 ${theme.themeId} 主題。`,
+            ? wardrobeRule.signal === "provider-cumulative-total"
+              ? `本機 ${character.providerId} 已達第 ${effectiveIndex + 1} 階，解鎖 ${theme.themeId} 主題。`
+              : `本機總用量已達第 ${effectiveIndex + 1} 階，解鎖 ${theme.themeId} 主題。`
+            : wardrobeRule.signal === "provider-cumulative-total"
+              ? `已累積 ${formatCount(signalValue)} 個本機 ${character.providerId} token，再 ${formatCount(remaining)} 個即可解鎖 ${character.displayName} 的 ${theme.themeId} 主題。`
+              : `本機累積總用量已達 ${formatCount(signalValue)} tokens，再 ${formatCount(remaining)} tokens 即可解鎖 ${character.displayName} 的 ${theme.themeId} 主題。`,
       };
       const themeProgress = monotonicProgress(
         themeUnlockedAt,

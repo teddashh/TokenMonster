@@ -45,7 +45,11 @@ describe("release artifact privacy and rights boundary", () => {
         commit: string;
         externalCandidateLibrary: { logicalRoot: string };
       };
-      cloudDelivery: { objectPrefix: string; manifestObject: string };
+      cloudDelivery: {
+        objectPrefix: string;
+        manifestObjectPattern: string;
+        packObjectPattern: string;
+      };
       wardrobe: {
         externalCandidateBank: {
           relativePathTemplates: Record<string, string>;
@@ -61,7 +65,8 @@ describe("release artifact privacy and rights boundary", () => {
       sourceMap.source.commit,
       sourceMap.source.externalCandidateLibrary.logicalRoot,
       sourceMap.cloudDelivery.objectPrefix,
-      sourceMap.cloudDelivery.manifestObject,
+      sourceMap.cloudDelivery.manifestObjectPattern,
+      sourceMap.cloudDelivery.packObjectPattern,
       ...Object.values(
         sourceMap.wardrobe.externalCandidateBank.relativePathTemplates,
       ),

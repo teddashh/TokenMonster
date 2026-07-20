@@ -2,6 +2,12 @@ import { Buffer } from "node:buffer";
 import { TextDecoder } from "node:util";
 
 import {
+  FOOTPRINT_WINDOW_DAYS_V1,
+  FootprintWindowV1Schema,
+  MonsterCharacterIdV1Schema
+} from "@tokenmonster/monster-engine";
+
+import {
   DEFAULT_TOKEN_TRACKER_BASE_URL,
   DEFAULT_TOKEN_TRACKER_TIMEOUT_MS,
   MAX_TOKEN_TRACKER_MODEL_USAGE_LIMIT,
@@ -15,6 +21,12 @@ import {
 } from "./constants.js";
 import { TokenTrackerAdapterError } from "./errors.js";
 import {
+  personalActiveUtcDates,
+  projectDailyContentBlindFootprint
+} from "./profile-footprint.js";
+import {
+  UpstreamPersonalDailyResponseSchema,
+  UpstreamPersonalModelBreakdownResponseSchema,
   UpstreamDailyResponseSchema,
   UpstreamModelBreakdownResponseSchema,
   UpstreamSummaryResponseSchema,
@@ -27,6 +39,8 @@ import {
   projectUsageFamilyTotals,
   type UpstreamDailyResponse,
   type UpstreamModelBreakdownResponse,
+  type UpstreamPersonalDailyResponse,
+  type UpstreamPersonalModelBreakdownResponse,
   type UpstreamSummaryResponse
 } from "./schemas.js";
 import type {
@@ -43,6 +57,7 @@ import type {
   TokenTrackerFetchRequestInit,
   TokenTrackerFetchResponse,
   TokenTrackerModelUsageQuery,
+  TokenTrackerProfileFootprintQuery,
   TokenTrackerProbe,
   TokenTrackerStreamReader
 } from "./types.js";
@@ -206,6 +221,39 @@ function normalizeModelUsageQuery(
   });
 }
 
+function normalizeProfileFootprintQuery(
+  query: TokenTrackerProfileFootprintQuery
+): Readonly<TokenTrackerProfileFootprintQuery> {
+  if (
+    !isPlainRecord(query) ||
+    Reflect.ownKeys(query).length !== 3 ||
+    !Reflect.ownKeys(query).includes("fromUtcDate") ||
+    !Reflect.ownKeys(query).includes("toUtcDate") ||
+    !Reflect.ownKeys(query).includes("characterId")
+  ) {
+    throw new TokenTrackerAdapterError("invalid-range");
+  }
+  const range = normalizeRange({
+    fromUtcDate: ownDataValue(query, "fromUtcDate") as string,
+    toUtcDate: ownDataValue(query, "toUtcDate") as string
+  });
+  const characterId = MonsterCharacterIdV1Schema.safeParse(
+    ownDataValue(query, "characterId")
+  );
+  const window = FootprintWindowV1Schema.safeParse({
+    from: range.fromUtcDate,
+    to: range.toUtcDate,
+    timezone: "UTC"
+  });
+  if (!characterId.success || !window.success) {
+    throw new TokenTrackerAdapterError("invalid-range");
+  }
+  if (eachUtcDate(range).length !== FOOTPRINT_WINDOW_DAYS_V1) {
+    throw new TokenTrackerAdapterError("invalid-range");
+  }
+  return Object.freeze({ ...range, characterId: characterId.data });
+}
+
 function eachUtcDate(range: TokenTrackerAggregateRange): readonly string[] {
   const fromDay = utcDayNumber(range.fromUtcDate)!;
   const toDay = utcDayNumber(range.toUtcDate)!;
@@ -240,12 +288,13 @@ async function mapWithConcurrency<T, R>(
 function buildEndpoint(
   baseUrl: string,
   path: string,
-  range: TokenTrackerAggregateRange
+  range: TokenTrackerAggregateRange,
+  scope: "all" | "personal" = "all"
 ): string {
   const query = new URLSearchParams({
     from: range.fromUtcDate,
     to: range.toUtcDate,
-    scope: "all",
+    scope,
     tz: "UTC"
   });
   return `${baseUrl}${path}?${query.toString()}`;
@@ -494,6 +543,50 @@ export function createTokenTrackerAdapter(
     return parsed.data;
   };
 
+  const fetchPersonalDaily = async (
+    rangeInput: TokenTrackerAggregateRange
+  ): Promise<UpstreamPersonalDailyResponse> => {
+    const range = normalizeRange(rangeInput);
+    const raw = await requestJson(
+      normalized.fetch,
+      normalized.timeoutMs,
+      buildEndpoint(
+        normalized.baseUrl,
+        TOKEN_TRACKER_USAGE_DAILY_PATH,
+        range,
+        "personal"
+      )
+    );
+    const parsed = UpstreamPersonalDailyResponseSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new TokenTrackerAdapterError("incompatible-schema");
+    }
+    requireMatchingRange(parsed.data, range);
+    return parsed.data;
+  };
+
+  const fetchPersonalModelBreakdown = async (
+    rangeInput: TokenTrackerAggregateRange
+  ): Promise<UpstreamPersonalModelBreakdownResponse> => {
+    const range = normalizeRange(rangeInput);
+    const raw = await requestJson(
+      normalized.fetch,
+      normalized.timeoutMs,
+      buildEndpoint(
+        normalized.baseUrl,
+        TOKEN_TRACKER_USAGE_MODEL_BREAKDOWN_PATH,
+        range,
+        "personal"
+      )
+    );
+    const parsed = UpstreamPersonalModelBreakdownResponseSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new TokenTrackerAdapterError("incompatible-schema");
+    }
+    requireMatchingRange(parsed.data, range);
+    return parsed.data;
+  };
+
   return Object.freeze({
     async probe(): Promise<TokenTrackerProbe> {
       await fetchSummary(PROBE_RANGE);
@@ -561,6 +654,34 @@ export function createTokenTrackerAdapter(
         })
       );
       return Object.freeze({ days: Object.freeze(days) });
+    },
+
+    async getDailyContentBlindFootprint(
+      query: TokenTrackerProfileFootprintQuery
+    ) {
+      const normalizedQuery = normalizeProfileFootprintQuery(query);
+      const range = {
+        fromUtcDate: normalizedQuery.fromUtcDate,
+        toUtcDate: normalizedQuery.toUtcDate
+      } as const;
+      const daily = await fetchPersonalDaily(range);
+      const activeDates = personalActiveUtcDates(daily);
+      const breakdowns = await mapWithConcurrency(
+        activeDates,
+        MAX_CONCURRENT_FAMILY_REQUESTS,
+        async (utcDate) =>
+          fetchPersonalModelBreakdown({
+            fromUtcDate: utcDate,
+            toUtcDate: utcDate
+          })
+      );
+      return projectDailyContentBlindFootprint(
+        normalizedQuery.characterId,
+        daily,
+        new Map(
+          activeDates.map((utcDate, index) => [utcDate, breakdowns[index]!])
+        )
+      );
     },
 
     async getModelUsage(

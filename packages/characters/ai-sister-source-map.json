@@ -1,10 +1,10 @@
 {
   "$schema": "./ai-sister-source-map.schema.json",
   "schemaVersion": 1,
-  "auditedAt": "2026-07-15",
+  "auditedAt": "2026-07-18",
   "source": {
     "repository": "https://github.com/teddashh/Multi-Ai-Chatapp.git",
-    "commit": "0325b0489130116b9ddc597accc7e521434b6c2e",
+    "commit": "77b317b95b6047f1de330d5d41e4edab38de3b44",
     "externalCandidateLibrary": {
       "logicalRoot": "VOICE_LAB_MVP_DIR/tachie",
       "kind": "local-only-candidate-bank",
@@ -16,11 +16,13 @@
     "storage": "cloudflare-r2",
     "publicDelivery": "ai-sister-cdn",
     "objectPrefix": "tokenmonster/characters/v1",
-    "manifestObject": "tokenmonster/characters/v1/manifest.json",
+    "manifestObjectPattern": "tokenmonster/characters/v1/releases/{releaseId}/asset-release-manifest-v2.json",
+    "packObjectPattern": "tokenmonster/characters/v1/packs/{releaseId}/{packSha256}.zip",
     "manifestTrust": "release-embedded-approved-copy",
     "publisherRunsIn": "ai-sister",
     "tokenMonsterRole": "manifest-consumer-and-local-cache",
-    "downloadMode": "on-demand",
+    "downloadMode": "explicit-consent-single-fixed-pack",
+    "requestCardinality": "one-get-independent-of-local-state",
     "objectImmutability": "versioned-path-no-overwrite",
     "cachePolicy": "content-addressed-local-cache",
     "integrity": "sha256-per-object",
@@ -59,16 +61,16 @@
       "google": "gemini",
       "xai": "grok"
     },
-    "window": "latest-28-utc-days",
-    "signal": "local-provider-total-tokens",
-    "rule": "unique-highest-positive-total",
+    "window": "not-applicable",
+    "signal": "explicit-player-choice",
+    "rule": "choose-one-of-four",
     "tieOutcome": "explicit-user-choice",
     "noDataOutcome": "explicit-user-choice",
     "manualOverride": "always",
     "persistence": "local-preference-only",
     "usedForProgression": true,
     "leavesDevice": false,
-    "adapterReadiness": "implemented-safe-provider-breakdown-projection"
+    "adapterReadiness": "not-required-for-choice"
   },
   "characters": [
     {
@@ -139,7 +141,7 @@
       "sourceId": "deepseek",
       "displayName": "DeepSeek",
       "kind": "friend",
-      "tokenMonsterCharacterId": null,
+      "tokenMonsterCharacterId": "deepseek",
       "heroThemeId": "spring",
       "trackedArt": {
         "avatar": "web/public/avatars/deepseek.webp",
@@ -158,7 +160,7 @@
       "sourceId": "qwen",
       "displayName": "Qwen",
       "kind": "friend",
-      "tokenMonsterCharacterId": null,
+      "tokenMonsterCharacterId": "qwen",
       "heroThemeId": "summer",
       "trackedArt": {
         "avatar": "web/public/avatars/qwen.webp",
@@ -177,7 +179,7 @@
       "sourceId": "mistral",
       "displayName": "Mistral",
       "kind": "friend",
-      "tokenMonsterCharacterId": null,
+      "tokenMonsterCharacterId": "mistral",
       "heroThemeId": "fall",
       "trackedArt": {
         "avatar": "web/public/avatars/mistral.webp",
@@ -196,7 +198,7 @@
       "sourceId": "venice",
       "displayName": "Llama",
       "kind": "friend",
-      "tokenMonsterCharacterId": null,
+      "tokenMonsterCharacterId": "venice",
       "heroThemeId": "winter",
       "trackedArt": {
         "avatar": "web/public/avatars/venice.webp",
@@ -215,7 +217,7 @@
       "sourceId": "sakana",
       "displayName": "Sakana",
       "kind": "friend",
-      "tokenMonsterCharacterId": null,
+      "tokenMonsterCharacterId": "sakana",
       "heroThemeId": "sakana",
       "trackedArt": {
         "avatar": "web/public/avatars/sakana.webp",
@@ -234,7 +236,7 @@
       "sourceId": "perplexity",
       "displayName": "Perplexity",
       "kind": "friend",
-      "tokenMonsterCharacterId": null,
+      "tokenMonsterCharacterId": "perplexity",
       "heroThemeId": "perplexity",
       "trackedArt": {
         "avatar": "web/public/avatars/perplexity.webp",
@@ -253,16 +255,19 @@
       "sourceId": "glm",
       "displayName": "GLM",
       "kind": "friend",
-      "tokenMonsterCharacterId": null,
+      "tokenMonsterCharacterId": "glm",
       "heroThemeId": "glm",
       "trackedArt": {
         "avatar": "web/public/avatars/glm.webp",
         "hero": "web/public/hero/glm.webp",
-        "personaReferences": []
+        "personaReferences": [
+          "server/persona-refs/GLM.png",
+          "server/persona-refs/GLM_Profile.png"
+        ]
       },
       "externalWardrobe": {
         "sourceKey": "glm",
-        "coverage": "missing"
+        "coverage": "complete-candidate-bank"
       }
     }
   ],
@@ -402,7 +407,8 @@
         "mistral",
         "venice",
         "sakana",
-        "perplexity"
+        "perplexity",
+        "glm"
       ],
       "candidateAssetStates": [
         "outfit",
@@ -411,11 +417,11 @@
         "victory"
       ],
       "observedCounts": {
-        "personas": 10,
+        "personas": 11,
         "themesPerPersona": 20,
-        "outfits": 200,
-        "reactionPoses": 600,
-        "layeredPartSets": 200
+        "outfits": 220,
+        "reactionPoses": 660,
+        "layeredPartSets": 220
       },
       "relativePathTemplates": {
         "outfit": "tachie/outfits_v2_norm/doll_{persona}__{theme}.png",
@@ -545,7 +551,7 @@
       "provider-brand-review",
       "content-rating-review",
       "reviewed-browser-renderer",
-      "optimized-lazy-asset-delivery",
+      "explicit-consent-fixed-pack-delivery",
       "ai-sister-r2-publisher-and-cache-smoke"
     ],
     "fallbackRenderer": "tokenmonster-letter-avatar-v1"

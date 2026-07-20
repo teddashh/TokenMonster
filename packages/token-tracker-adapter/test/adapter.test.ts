@@ -447,7 +447,7 @@ describe("content-blind TokenMonster projection", () => {
     });
   });
 
-  it("projects all progression families and aggregates unknown source IDs as other", async () => {
+  it("projects audited progression sources and aggregates unknown IDs as other", async () => {
     const sources = [
       modelBreakdownSource("codex", 11),
       modelBreakdownSource("claude", 12),
@@ -480,8 +480,7 @@ describe("content-blind TokenMonster projection", () => {
       mistral: "mistral",
       venice: "venice",
       sakana: "sakana",
-      perplexity: "perplexity",
-      glm: "glm"
+      perplexity: "perplexity"
     });
     expect(result).toEqual({
       openai: 11,
@@ -494,12 +493,32 @@ describe("content-blind TokenMonster projection", () => {
       venice: 18,
       sakana: 19,
       perplexity: 20,
-      glm: 21,
-      other: 45
+      glm: 0,
+      other: 66
     });
     expect(Object.isFrozen(result)).toBe(true);
     expect(JSON.stringify(result)).not.toContain("future-tool");
     expect(JSON.stringify(result)).not.toContain("Codex");
+  });
+
+  it("keeps ZCode and an unsupported raw GLM source in other", async () => {
+    const result = await createTokenTrackerAdapter({
+      fetch: injectedFetch(
+        modelBreakdownBody({
+          sources: [
+            modelBreakdownSource("zcode", 37),
+            modelBreakdownSource("glm", 41)
+          ]
+        })
+      )
+    }).getProgressionFamilyTotals({
+      fromUtcDate: "2026-07-01",
+      toUtcDate: "2026-07-02"
+    });
+
+    expect(result.glm).toBe(0);
+    expect(result.other).toBe(78);
+    expect(JSON.stringify(result)).not.toContain("zcode");
   });
 
   it("rejects duplicate raw sources in the progression projection", async () => {

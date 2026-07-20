@@ -12,11 +12,19 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { parseAssetManifest } from "../src/index.js";
+import {
+  AssetBuildProvenanceV1Schema,
+  AssetRightsLedgerV2Schema,
+  AssetSourceEvidenceBundleV1Schema,
+  parseAssetManifest,
+} from "../src/index.js";
 import {
   createPcm16Wav,
+  runBuildProvenance,
   runPipeline,
+  runPrepareRightsLedger,
   SOLID_COLOR_PNG,
+  writeSourceEvidenceFixture,
 } from "./asset-pipeline-fixture.js";
 
 async function createPipelineFixture() {
@@ -75,9 +83,291 @@ describe("asset pipeline", () => {
     }
   }, 180_000);
 
+  it("emits exact image build provenance and rejects a stale object", async () => {
+    const { fixtureRoot, bank, out } = await createPipelineFixture();
+    const poses = join(bank, "poses", "react");
+    const receiptRoot = join(fixtureRoot, "private-receipts");
+    const sourceEvidencePath = join(fixtureRoot, "source-evidence-v1.json");
+    const provenancePath = join(fixtureRoot, "build-provenance-v1.json");
+    const rightsLedgerPath = join(fixtureRoot, "private-rights-ledger-v2.json");
+    const staleProvenancePath = join(
+      fixtureRoot,
+      "stale-build-provenance-v1.json",
+    );
+    const partialProvenancePath = join(
+      fixtureRoot,
+      "partial-build-provenance-v1.json",
+    );
+    const forgedProvenancePath = join(
+      fixtureRoot,
+      "forged-build-provenance-v1.json",
+    );
+    const staleReceiptProvenancePath = join(
+      fixtureRoot,
+      "stale-receipt-build-provenance-v1.json",
+    );
+    const incompleteEvidencePath = join(
+      fixtureRoot,
+      "incomplete-source-evidence-v1.json",
+    );
+    const incompleteEvidenceProvenancePath = join(
+      fixtureRoot,
+      "incomplete-evidence-build-provenance-v1.json",
+    );
+
+    try {
+      await mkdir(poses, { recursive: true });
+      for (const state of ["supported", "challenged", "victory"]) {
+        await writeFile(
+          join(poses, `doll_qwen__tech__${state}.png`),
+          SOLID_COLOR_PNG,
+        );
+      }
+      const sourceEvidence = await writeSourceEvidenceFixture(
+        bank,
+        receiptRoot,
+        sourceEvidencePath,
+      );
+      const build = await runPipeline(bank, out, "qwen");
+      expect(build.status, `${build.stdout}\n${build.stderr}`).toBe(0);
+      const report = JSON.parse(
+        await readFile(join(out, "report.json"), "utf8"),
+      ) as { encoder: string; encoderVersion: string | null };
+      const provenance = await runBuildProvenance(
+        bank,
+        join(out, "manifest.json"),
+        sourceEvidencePath,
+        receiptRoot,
+        provenancePath,
+      );
+
+      if (report.encoder !== "webp") {
+        expect(provenance.status).not.toBe(0);
+        expect(provenance.stderr).toContain(
+          "complete metadata-stripped WebP report",
+        );
+        await expect(readFile(provenancePath)).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+        return;
+      }
+
+      expect(report.encoderVersion).toMatch(/^[A-Za-z0-9][A-Za-z0-9._+-]*$/u);
+      expect(
+        provenance.status,
+        `${provenance.stdout}\n${provenance.stderr}`,
+      ).toBe(0);
+      const parsed = AssetBuildProvenanceV1Schema.parse(
+        JSON.parse(await readFile(provenancePath, "utf8")) as unknown,
+      );
+      expect(parsed.entries).toHaveLength(5);
+      expect(
+        new Set(parsed.entries.map(({ source }) => source.inventoryRevision))
+          .size,
+      ).toBe(1);
+      expect(
+        parsed.entries.every(
+          ({ generationHistory }) => generationHistory.metadataStripped,
+        ),
+      ).toBe(true);
+      expect(
+        parsed.entries.every(
+          ({ source, upstream }) =>
+            upstream.repository.repositoryId === "test-source-repository" &&
+            upstream.steps.at(-1)?.outputSha256 === source.sha256,
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(parsed)).not.toMatch(
+        /(?:prompt|\/home\/|[A-Z]:\\)/u,
+      );
+
+      const unsafeEvidence = structuredClone(sourceEvidence) as unknown as {
+        entries: Array<{
+          upstream: { steps: Array<Record<string, unknown>> };
+        }>;
+      };
+      unsafeEvidence.entries[0]!.upstream.steps[0]!["prompt"] =
+        "must stay private";
+      expect(
+        AssetSourceEvidenceBundleV1Schema.safeParse(unsafeEvidence).success,
+      ).toBe(false);
+      delete unsafeEvidence.entries[0]!.upstream.steps[0]!["prompt"];
+      unsafeEvidence.entries[0]!.upstream.steps[0]!["receipt"] = {
+        path: "/private/receipt.json",
+        sha256: "a".repeat(64),
+      };
+      expect(
+        AssetSourceEvidenceBundleV1Schema.safeParse(unsafeEvidence).success,
+      ).toBe(false);
+
+      const brokenChain = structuredClone(sourceEvidence) as unknown as {
+        entries: Array<{
+          sha256: string;
+          upstream: { steps: Array<Record<string, unknown>> };
+        }>;
+      };
+      const finalStep = brokenChain.entries[0]!.upstream.steps[0]!;
+      brokenChain.entries[0]!.upstream.steps = [
+        { ...finalStep, outputSha256: "a".repeat(64) },
+        {
+          ...finalStep,
+          inputs: ["b".repeat(64)],
+          outputSha256: brokenChain.entries[0]!.sha256,
+        },
+      ];
+      expect(
+        AssetSourceEvidenceBundleV1Schema.safeParse(brokenChain).success,
+      ).toBe(false);
+
+      const incompleteEvidence = structuredClone(sourceEvidence);
+      incompleteEvidence.entries.pop();
+      await writeFile(
+        incompleteEvidencePath,
+        `${JSON.stringify(incompleteEvidence, null, 2)}\n`,
+      );
+      const incomplete = await runBuildProvenance(
+        bank,
+        join(out, "manifest.json"),
+        incompleteEvidencePath,
+        receiptRoot,
+        incompleteEvidenceProvenancePath,
+      );
+      expect(incomplete.status).not.toBe(0);
+      expect(incomplete.stderr).toContain("source evidence missing for");
+      await expect(
+        readFile(incompleteEvidenceProvenancePath),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+
+      const preparedLedger = await runPrepareRightsLedger(
+        provenancePath,
+        rightsLedgerPath,
+      );
+      expect(
+        preparedLedger.status,
+        `${preparedLedger.stdout}\n${preparedLedger.stderr}`,
+      ).toBe(0);
+      const ledger = AssetRightsLedgerV2Schema.parse(
+        JSON.parse(await readFile(rightsLedgerPath, "utf8")) as unknown,
+      );
+      expect(ledger.release.approvedAt).toBeNull();
+      expect(ledger.entries).toHaveLength(parsed.entries.length);
+      expect(
+        ledger.entries.every(
+          (entry) =>
+            entry.rights.licenseStatus === "pending" &&
+            entry.review.brandStatus === "pending" &&
+            entry.review.contentStatus === "pending" &&
+            entry.releaseStatus === "pending",
+        ),
+      ).toBe(true);
+
+      const firstReceiptPath =
+        sourceEvidence.entries[0]!.upstream.steps[0]!.receipt.path;
+      const firstReceipt = join(receiptRoot, ...firstReceiptPath.split("/"));
+      const originalReceipt = await readFile(firstReceipt);
+      await writeFile(firstReceipt, `${originalReceipt.toString("utf8")} `);
+      const staleReceipt = await runBuildProvenance(
+        bank,
+        join(out, "manifest.json"),
+        sourceEvidencePath,
+        receiptRoot,
+        staleReceiptProvenancePath,
+      );
+      expect(staleReceipt.status).not.toBe(0);
+      expect(staleReceipt.stderr).toContain("receipt digest does not match");
+      await expect(readFile(staleReceiptProvenancePath)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await writeFile(firstReceipt, originalReceipt);
+
+      const manifest = parseAssetManifest(
+        JSON.parse(
+          await readFile(join(out, "manifest.json"), "utf8"),
+        ) as unknown,
+      );
+
+      const partialManifest = structuredClone(manifest) as unknown as {
+        characters: Array<{
+          themes: Array<{ poses: { victory?: unknown } }>;
+        }>;
+      };
+      delete partialManifest.characters[0]!.themes[0]!.poses.victory;
+      const partialManifestPath = join(out, "partial-manifest.json");
+      await writeFile(
+        partialManifestPath,
+        `${JSON.stringify(partialManifest, null, 2)}\n`,
+      );
+      const partial = await runBuildProvenance(
+        bank,
+        partialManifestPath,
+        sourceEvidencePath,
+        receiptRoot,
+        partialProvenancePath,
+      );
+      expect(partial.status).not.toBe(0);
+      expect(partial.stderr).toContain(
+        "Controlled asset pipeline rebuild does not match the integrity manifest",
+      );
+      await expect(readFile(partialProvenancePath)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+
+      const forgedBytes = Buffer.from("this is not a WebP image", "utf8");
+      const forgedHash = createHash("sha256").update(forgedBytes).digest("hex");
+      await writeFile(join(out, "objects", `${forgedHash}.webp`), forgedBytes);
+      const forgedManifest = structuredClone(manifest) as unknown as {
+        characters: Array<{
+          avatar: { path: string; bytes: number; sha256: string };
+        }>;
+      };
+      Object.assign(forgedManifest.characters[0]!.avatar, {
+        path: `objects/${forgedHash}.webp`,
+        bytes: forgedBytes.length,
+        sha256: forgedHash,
+      });
+      const forgedManifestPath = join(out, "forged-manifest.json");
+      await writeFile(
+        forgedManifestPath,
+        `${JSON.stringify(forgedManifest, null, 2)}\n`,
+      );
+      const forged = await runBuildProvenance(
+        bank,
+        forgedManifestPath,
+        sourceEvidencePath,
+        receiptRoot,
+        forgedProvenancePath,
+      );
+      expect(forged.status).not.toBe(0);
+      expect(forged.stderr).toContain(
+        "Controlled asset pipeline rebuild does not match the integrity manifest",
+      );
+      await expect(readFile(forgedProvenancePath)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+
+      await writeFile(
+        join(out, manifest.characters[0]!.avatar.path),
+        "stale-object",
+      );
+      const stale = await runBuildProvenance(
+        bank,
+        join(out, "manifest.json"),
+        sourceEvidencePath,
+        receiptRoot,
+        staleProvenancePath,
+      );
+      expect(stale.status).not.toBe(0);
+      expect(stale.stderr).toContain("integrity object bytes do not match");
+      await expect(readFile(staleProvenancePath)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  }, 180_000);
+
   it("ingests valid PCM16 mono voice clips", async () => {
-    const { fixtureRoot, bank, out, voiceDir } =
-      await createPipelineFixture();
+    const { fixtureRoot, bank, out, voiceDir } = await createPipelineFixture();
     const wav = createPcm16Wav({ frameCount: 441 });
 
     try {
@@ -151,6 +441,38 @@ describe("asset pipeline", () => {
     }
   }, 180_000);
 
+  it("stages GLM image and voice objects when approved sources are present", async () => {
+    const { fixtureRoot, bank, out, voiceDir } = await createPipelineFixture();
+    const wav = createPcm16Wav();
+
+    try {
+      await writeFile(
+        join(bank, "outfits_v2_norm", "doll_glm__tech.png"),
+        SOLID_COLOR_PNG,
+      );
+      await writeFile(join(voiceDir, "glm__greeting.wav"), wav);
+      const build = await runPipeline(bank, out, "glm", { voiceDir });
+      expect(build.status, `${build.stdout}\n${build.stderr}`).toBe(0);
+
+      const manifest = parseAssetManifest(
+        JSON.parse(
+          await readFile(join(out, "manifest.json"), "utf8"),
+        ) as unknown,
+      );
+      expect(manifest.characters.map(({ characterId }) => characterId)).toEqual(
+        ["glm"],
+      );
+      expect(manifest.voice).toMatchObject([
+        {
+          characterId: "glm",
+          lines: [{ id: "glm-greeting", trigger: "greeting" }],
+        },
+      ]);
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  }, 180_000);
+
   it.each([
     {
       label: "the wrong sample rate",
@@ -177,19 +499,25 @@ describe("asset pipeline", () => {
       filename: "openai-greeting.wav",
       wav: createPcm16Wav(),
     },
-  ])("rejects $label without writing a manifest", async ({ filename, wav }) => {
-    const { fixtureRoot, bank, out, voiceDir } =
-      await createPipelineFixture();
+  ])(
+    "rejects $label without writing a manifest",
+    async ({ filename, wav }) => {
+      const { fixtureRoot, bank, out, voiceDir } =
+        await createPipelineFixture();
 
-    try {
-      await writeFile(join(voiceDir, filename), wav);
-      const build = await runPipeline(bank, out, "qwen", { voiceDir });
-      expect(build.status).not.toBe(0);
-      await expect(readFile(join(out, "manifest.json"))).rejects.toMatchObject({
-        code: "ENOENT",
-      });
-    } finally {
-      await rm(fixtureRoot, { recursive: true, force: true });
-    }
-  }, 180_000);
+      try {
+        await writeFile(join(voiceDir, filename), wav);
+        const build = await runPipeline(bank, out, "qwen", { voiceDir });
+        expect(build.status).not.toBe(0);
+        await expect(
+          readFile(join(out, "manifest.json")),
+        ).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      } finally {
+        await rm(fixtureRoot, { recursive: true, force: true });
+      }
+    },
+    180_000,
+  );
 });

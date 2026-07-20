@@ -1,3 +1,8 @@
+import type {
+  DailyContentBlindFootprintV1,
+  MonsterCharacterIdV1
+} from "@tokenmonster/monster-engine";
+
 import type { SUPPORTED_TOKEN_TRACKER_VERSION } from "./constants.js";
 
 export interface TokenTrackerFetchHeaders {
@@ -123,6 +128,14 @@ export interface TokenTrackerModelUsageQuery extends TokenTrackerAggregateRange 
   readonly limit: number;
 }
 
+export interface TokenTrackerProfileFootprintQuery
+  extends TokenTrackerAggregateRange {
+  readonly characterId: MonsterCharacterIdV1;
+}
+
+export type TokenMonsterDailyContentBlindFootprint =
+  DailyContentBlindFootprintV1;
+
 export interface TokenMonsterModelUsageEntry {
   readonly model: string;
   readonly family: TokenMonsterUsageFamily;
@@ -152,6 +165,9 @@ export interface TokenTrackerAdapter {
   getDailyFamilySeries(
     range: TokenTrackerAggregateRange
   ): Promise<TokenMonsterDailyFamilySeries>;
+  getDailyContentBlindFootprint(
+    query: TokenTrackerProfileFootprintQuery
+  ): Promise<TokenMonsterDailyContentBlindFootprint>;
   getModelUsage(
     query: TokenTrackerModelUsageQuery
   ): Promise<TokenMonsterModelUsageResponse>;

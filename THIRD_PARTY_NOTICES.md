@@ -32,6 +32,21 @@ before any public release. It is not a license for TokenMonster itself.
   or cloud-sync controls. Every upgrade requires reviewed contract, privacy,
   lifecycle, and cross-platform smoke tests before changing the exact pin.
 
+## yauzl and pend
+
+- Sources: <https://github.com/thejoshwolfe/yauzl> and
+  <https://github.com/andrewrk/node-pend>
+- Pinned production closure: `yauzl@3.4.0` -> `pend@1.2.0`, resolved with exact
+  registry integrity in `package-lock.json`
+- License: MIT for both packages
+- Intended use: streaming, lazy ZIP parsing for the dormant, explicitly
+  consented fixed character-pack verifier. Neither package contains native code
+  or an install script.
+- Required action: preserve each package's upstream `LICENSE` file in any
+  artifact that physically bundles this closure. The release verifier must
+  continue to bind their exact names, versions, resolved registries, integrity,
+  dependency identities, and physical package bytes.
+
 ## token-monitor
 
 - Source: <https://github.com/Javis603/token-monitor>

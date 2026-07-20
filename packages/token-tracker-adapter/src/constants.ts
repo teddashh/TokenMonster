@@ -1,5 +1,6 @@
 import type { TokenMonsterUsageFamily } from "./types.js";
 
+export const TOKEN_TRACKER_ADAPTER_VERSION = "0.1.0" as const;
 export const SUPPORTED_TOKEN_TRACKER_VERSION = "0.80.0" as const;
 
 export const DEFAULT_TOKEN_TRACKER_BASE_URL =
@@ -31,8 +32,7 @@ export const TOKEN_TRACKER_PROGRESSION_SOURCE_MAP = Object.freeze({
   mistral: "mistral",
   venice: "venice",
   sakana: "sakana",
-  perplexity: "perplexity",
-  glm: "glm"
+  perplexity: "perplexity"
 } as const);
 
 export const TOKEN_MONSTER_USAGE_FAMILIES = Object.freeze([

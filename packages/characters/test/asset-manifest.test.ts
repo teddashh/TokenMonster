@@ -51,7 +51,7 @@ function validManifest() {
         characterId: "chatgpt",
         lines: [
           {
-            id: "chatgpt/greeting/hello",
+            id: "chatgpt-greeting-hello",
             trigger: "greeting",
             object: {
               path: `objects/${WAV_SHA256}.wav`,
@@ -69,6 +69,14 @@ function validManifest() {
 describe("asset manifest schema", () => {
   it("parses a complete v1 manifest", () => {
     expect(parseAssetManifest(validManifest())).toEqual(validManifest());
+  });
+
+  it("allows GLM image and voice assets without requiring them in a release", () => {
+    const manifest = structuredClone(validManifest());
+    manifest.characters[0]!.characterId = "glm";
+    manifest.voice[0]!.characterId = "glm";
+
+    expect(parseAssetManifest(manifest)).toEqual(manifest);
   });
 
   it("rejects invalid integrity, dimensions, and identifiers", () => {
@@ -129,7 +137,7 @@ describe("asset manifest schema", () => {
     const themesManifest = structuredClone(validManifest());
     const theme = themesManifest.characters[0]!.themes[0]!;
     themesManifest.characters[0]!.themes = Array.from(
-      { length: 33 },
+      { length: 21 },
       (_, index) => ({ ...structuredClone(theme), themeId: `theme-${index}` }),
     );
 
@@ -143,7 +151,7 @@ describe("asset manifest schema", () => {
     const line = linesManifest.voice[0]!.lines[0]!;
     linesManifest.voice[0]!.lines = Array.from({ length: 9 }, (_, index) => ({
       ...structuredClone(line),
-      id: `chatgpt/greeting/line-${index}`,
+      id: `chatgpt-greeting-line-${index}`,
     }));
 
     for (const [manifest, path] of [
@@ -169,6 +177,21 @@ describe("asset manifest schema", () => {
     manifest.characters[0]!.avatar.path = `objects/${WEBP_SHA256}.png`;
 
     expect(parseAssetManifest(manifest)).toEqual(manifest);
+  });
+
+  it("keeps theme and voice identifiers inside the renderer contract", () => {
+    const unknownTheme = structuredClone(validManifest());
+    unknownTheme.characters[0]!.themes[0]!.themeId = "not-approved";
+
+    const pathLikeVoiceId = structuredClone(validManifest());
+    pathLikeVoiceId.voice[0]!.lines[0]!.id = "chatgpt/greeting";
+
+    const overlongVoiceId = structuredClone(validManifest());
+    overlongVoiceId.voice[0]!.lines[0]!.id = "a".repeat(81);
+
+    for (const manifest of [unknownTheme, pathLikeVoiceId, overlongVoiceId]) {
+      expect(() => parseAssetManifest(manifest)).toThrow();
+    }
   });
 
   it("rejects extension and kind inconsistencies", () => {

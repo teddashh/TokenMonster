@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FOOTPRINT_WINDOW_DAYS_V1 } from "@tokenmonster/monster-engine";
 
 import {
   MAX_TOKEN_TRACKER_MODEL_NAME_LENGTH,
@@ -37,6 +38,20 @@ const UtcDateSchema = z
   });
 
 const EmptyExcludedSourcesSchema = z.array(z.never()).max(0);
+
+// tokentracker-cli@0.80.0 has exactly one account-level source (`cursor`).
+// `scope=personal` filters it from usage rows and reports this bounded metadata
+// in `excluded_sources`. A new account-level source is compatibility drift and
+// must be reviewed alongside a future exact sidecar pin.
+const PersonalExcludedSourcesSchema = z
+  .array(
+    z.strictObject({
+      source: z.literal("cursor"),
+      source_scope: z.literal("account"),
+      reason: z.literal("account_level_source")
+    })
+  )
+  .max(1);
 
 const UpstreamTokenFields = {
   total_tokens: SafeCountSchema,
@@ -109,6 +124,14 @@ const UpstreamModelBreakdownSourceSchema = z.strictObject({
   models: z.array(UpstreamModelBreakdownModelSchema).min(1).max(512)
 });
 
+const UpstreamPersonalModelBreakdownSourceSchema =
+  UpstreamModelBreakdownSourceSchema.extend({
+    source_scope: z.literal("local")
+  }).refine((source) => source.source !== "cursor", {
+    path: ["source"],
+    message: "scope=personal must exclude TokenTracker account sources."
+  });
+
 const UpstreamDailyRowSchema = z.strictObject({
   day: UtcDateSchema,
   ...UpstreamTokenFields,
@@ -142,6 +165,16 @@ export const UpstreamDailyResponseSchema = z.strictObject({
   data: z.array(UpstreamDailyRowSchema).max(MAX_TOKEN_TRACKER_RANGE_DAYS)
 });
 
+export const UpstreamPersonalDailyResponseSchema = z.strictObject({
+  from: UtcDateSchema,
+  to: UtcDateSchema,
+  scope: z.literal("personal"),
+  excluded_sources: PersonalExcludedSourcesSchema,
+  data: z
+    .array(UpstreamDailyRowSchema)
+    .max(FOOTPRINT_WINDOW_DAYS_V1)
+});
+
 export const UpstreamModelBreakdownResponseSchema = z.strictObject({
   from: UtcDateSchema,
   to: UtcDateSchema,
@@ -149,6 +182,21 @@ export const UpstreamModelBreakdownResponseSchema = z.strictObject({
   scope: z.literal("all"),
   excluded_sources: EmptyExcludedSourcesSchema,
   sources: z.array(UpstreamModelBreakdownSourceSchema).max(128),
+  pricing: z.strictObject({
+    model: z.literal("per-model"),
+    pricing_mode: z.literal("per_token_type"),
+    source: z.literal("litellm"),
+    effective_from: UtcDateSchema
+  })
+});
+
+export const UpstreamPersonalModelBreakdownResponseSchema = z.strictObject({
+  from: UtcDateSchema,
+  to: UtcDateSchema,
+  days: z.literal(0),
+  scope: z.literal("personal"),
+  excluded_sources: PersonalExcludedSourcesSchema,
+  sources: z.array(UpstreamPersonalModelBreakdownSourceSchema).max(128),
   pricing: z.strictObject({
     model: z.literal("per-model"),
     pricing_mode: z.literal("per_token_type"),
@@ -167,6 +215,14 @@ export type UpstreamDailyResponse = z.infer<
 
 export type UpstreamModelBreakdownResponse = z.infer<
   typeof UpstreamModelBreakdownResponseSchema
+>;
+
+export type UpstreamPersonalDailyResponse = z.infer<
+  typeof UpstreamPersonalDailyResponseSchema
+>;
+
+export type UpstreamPersonalModelBreakdownResponse = z.infer<
+  typeof UpstreamPersonalModelBreakdownResponseSchema
 >;
 
 export function projectTokenLedger(fields: {
