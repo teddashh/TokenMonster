@@ -9,7 +9,11 @@ import { resolve, win32 } from "node:path";
 const SMOKE_TIMEOUT_MS = 180_000;
 const FORCE_CLOSE_GRACE_MS = 15_000;
 const MAX_CAPTURE_BYTES = 1024 * 1024;
-const WINDOWS_SMOKE_SUCCESS_EXIT_CODE = 86;
+const WINDOWS_SMOKE_EXIT_CODES = Object.freeze({
+  ok: 86,
+  gateway: 87,
+  sidecar: 88,
+});
 const [inputPath, ...extraArguments] = process.argv.slice(2);
 
 if (
@@ -197,8 +201,20 @@ if (result.failure === "stream" || !result.closed) {
   throw new Error("Packaged companion startup smoke did not close cleanly.");
 }
 const expectedExitCode =
-  process.platform === "win32" ? WINDOWS_SMOKE_SUCCESS_EXIT_CODE : 0;
+  process.platform === "win32" ? WINDOWS_SMOKE_EXIT_CODES.ok : 0;
 if (result.code !== expectedExitCode || result.signal !== null) {
+  if (process.platform === "win32" && result.signal === null) {
+    if (result.code === WINDOWS_SMOKE_EXIT_CODES.gateway) {
+      throw new Error(
+        "Packaged companion startup smoke reported a gateway failure.",
+      );
+    }
+    if (result.code === WINDOWS_SMOKE_EXIT_CODES.sidecar) {
+      throw new Error(
+        "Packaged companion startup smoke reported a sidecar failure.",
+      );
+    }
+  }
   throw new Error("Packaged companion startup smoke exited unsuccessfully.");
 }
 if (process.platform !== "win32") {

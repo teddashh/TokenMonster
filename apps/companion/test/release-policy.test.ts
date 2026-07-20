@@ -651,10 +651,12 @@ describe("companion release policy", () => {
       "tsc -p tsconfig.release-scripts.json"
     );
     expect(executableSmoke).toContain("TOKENMONSTER_SMOKE_OK");
-    expect(executableSmoke).toContain("WINDOWS_SMOKE_SUCCESS_EXIT_CODE = 86");
+    expect(executableSmoke).toContain("WINDOWS_SMOKE_EXIT_CODES");
     expect(executableSmoke).toContain(
-      'process.platform === "win32" ? WINDOWS_SMOKE_SUCCESS_EXIT_CODE : 0'
+      'process.platform === "win32" ? WINDOWS_SMOKE_EXIT_CODES.ok : 0'
     );
+    expect(executableSmoke).toContain("reported a gateway failure");
+    expect(executableSmoke).toContain("reported a sidecar failure");
     expect(executableSmoke).toContain('child.kill("SIGKILL")');
     expect(executableSmoke).toContain("FORCE_CLOSE_GRACE_MS");
     expect(executableSmoke).toContain('spawnSync(taskkillPath');
