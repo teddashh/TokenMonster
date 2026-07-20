@@ -39,6 +39,9 @@ load-bearing product requirement, not an implementation detail.
   strict TokenMonster gateway DTOs and contains no collector logic.
 - `packages/companion-gateway`: TokenMonster-owned loopback session and fixed
   browser API/static routes. It never proxies arbitrary upstream endpoints.
+- `packages/contribution-runtime`: host-neutral opt-in lifecycle, content-blind
+  preview/outbox sync, pause/deletion, and strict sidecar daily projection. It
+  owns no collector, Electron, renderer, gateway, or cloud transport handler.
 - `packages/contracts`: versioned schemas shared by local and cloud code.
 - `packages/token-tracker-adapter`: the only aggregate data boundary. It talks
   to the exact-tested sidecar through fixed loopback HTTP routes, validates all
