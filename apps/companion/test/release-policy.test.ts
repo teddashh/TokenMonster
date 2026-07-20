@@ -657,6 +657,8 @@ describe("companion release policy", () => {
     );
     expect(executableSmoke).toContain("reported a gateway failure");
     expect(executableSmoke).toContain("reported a sidecar failure");
+    expect(executableSmoke).toContain("WINDOWS_SIDECAR_FAILURE_EXIT_CODES");
+    expect(executableSmoke).toContain("sidecar ${sidecarFailure}");
     expect(executableSmoke).toContain('child.kill("SIGKILL")');
     expect(executableSmoke).toContain("FORCE_CLOSE_GRACE_MS");
     expect(executableSmoke).toContain('spawnSync(taskkillPath');

@@ -17,6 +17,7 @@ export const UTILITY_PROCESS_COMMAND = "electron:utility-process";
 // app's failure page hides all detail by design, so without this a field
 // report of "sidecar 無法啟動" is undiagnosable.
 const SIDECAR_DEBUG = process.env["TOKENMONSTER_SIDECAR_DEBUG"] === "1";
+const UTILITY_STREAM_DRAIN_GRACE_MS = 250;
 
 function debugLog(message: string): void {
   if (SIDECAR_DEBUG) process.stderr.write(`[sidecar] ${message}\n`);
@@ -57,6 +58,7 @@ class UtilityChildProcess extends EventEmitter {
   private observedExitCode: number | null = null;
   private stdoutEnded: boolean;
   private stderrEnded: boolean;
+  private streamDrainTimer: NodeJS.Timeout | null = null;
 
   public constructor(
     private readonly utility: UtilityProcessLike,
@@ -109,20 +111,23 @@ class UtilityChildProcess extends EventEmitter {
       // child exits — no 'end'/'close' on the parent-side streams, and even
       // destroy() emits nothing (observed on Electron 43/linux). Waiting on
       // those events would leave 'close' unemitted forever. The shim flushes
-      // before exiting and chunks were observed to arrive before the exit
-      // event, so give in-flight data one turn to deliver, then complete the
-      // state machine directly instead of trusting foreign stream events.
-      setImmediate(() => {
-        for (const stream of [this.stdout, this.stderr]) {
-          if (stream !== null && !stream.destroyed) stream.destroy();
-        }
-        if (!this.stdoutEnded || !this.stderrEnded) {
-          debugLog("force-releasing streams after exit");
-          this.stdoutEnded = true;
-          this.stderrEnded = true;
-          this.emitCloseIfReady();
-        }
-      });
+      // before exiting, but Windows may deliver its final pipe chunk after the
+      // exit event. Give in-flight data one short bounded drain, then complete
+      // the state machine directly instead of trusting foreign stream events.
+      if (!this.closeEmitted) {
+        this.streamDrainTimer = setTimeout(() => {
+          this.streamDrainTimer = null;
+          for (const stream of [this.stdout, this.stderr]) {
+            if (stream !== null && !stream.destroyed) stream.destroy();
+          }
+          if (!this.stdoutEnded || !this.stderrEnded) {
+            debugLog("force-releasing streams after bounded exit drain");
+            this.stdoutEnded = true;
+            this.stderrEnded = true;
+            this.emitCloseIfReady();
+          }
+        }, UTILITY_STREAM_DRAIN_GRACE_MS);
+      }
     });
   }
 
@@ -179,6 +184,10 @@ class UtilityChildProcess extends EventEmitter {
       return;
     }
     this.closeEmitted = true;
+    if (this.streamDrainTimer !== null) {
+      clearTimeout(this.streamDrainTimer);
+      this.streamDrainTimer = null;
+    }
     this.emit("close", this.observedExitCode, null);
   }
 }

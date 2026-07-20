@@ -65,7 +65,8 @@ import {
   PetStartupError,
   closePetServices,
   startPetServices,
-  type PetServices
+  type PetServices,
+  type PetStartupError as PetStartupErrorType
 } from "./services.js"
 import {
   adoptPetStartupOwner,
@@ -100,10 +101,27 @@ const WINDOWS_SMOKE_EXIT_CODES = Object.freeze({
   gateway: 87,
   sidecar: 88
 })
+type SidecarSmokeCode = NonNullable<PetStartupErrorType["sidecarCode"]>
+const WINDOWS_SIDECAR_SMOKE_EXIT_CODES: Readonly<
+  Record<SidecarSmokeCode, number>
+> = Object.freeze({
+  unknown: WINDOWS_SMOKE_EXIT_CODES.sidecar,
+  "invalid-configuration": 89,
+  "runtime-not-found": 90,
+  "version-mismatch": 91,
+  "spawn-failed": 92,
+  "startup-timeout": 93,
+  "sidecar-exited": 94,
+  "sidecar-unavailable": 95,
+  "sidecar-incompatible": 96,
+  "refresh-failed": 97,
+  "refresh-timeout": 98
+})
 
 function reportSmokeOutcome(
   outcome: "ok" | "gateway" | "sidecar",
-  windDown: () => Promise<void>
+  windDown: () => Promise<void>,
+  sidecarCode: SidecarSmokeCode = "unknown"
 ): void {
   if (!SMOKE_MODE) return
   // A packaged Electron executable uses the Windows GUI subsystem, where
@@ -119,7 +137,9 @@ function reportSmokeOutcome(
   }
   const code =
     process.platform === "win32"
-      ? WINDOWS_SMOKE_EXIT_CODES[outcome]
+      ? outcome === "sidecar"
+        ? WINDOWS_SIDECAR_SMOKE_EXIT_CODES[sidecarCode]
+        : WINDOWS_SMOKE_EXIT_CODES[outcome]
       : outcome === "ok"
         ? 0
         : 1
@@ -579,10 +599,13 @@ export async function startPetCompanion(
   })
   automaticUpdateService = readyAutomaticUpdateService
 
-  const showFailure = async (kind: "gateway" | "sidecar"): Promise<void> => {
+  const showFailure = async (
+    kind: "gateway" | "sidecar",
+    sidecarCode: SidecarSmokeCode = "unknown"
+  ): Promise<void> => {
     if (startupLifecycle.shutdownRequested()) return
     if (SMOKE_MODE) {
-      reportSmokeOutcome(kind, stopOwnedRuntime)
+      reportSmokeOutcome(kind, stopOwnedRuntime, sidecarCode)
       return
     }
     await stopActiveServices()
@@ -699,7 +722,10 @@ export async function startPetCompanion(
         console.error("TokenMonster pet startup failed:", error)
         try {
           await showFailure(
-            error instanceof PetStartupError ? error.kind : "gateway"
+            error instanceof PetStartupError ? error.kind : "gateway",
+            error instanceof PetStartupError
+              ? (error.sidecarCode ?? "unknown")
+              : "unknown"
           )
         } catch (failure: unknown) {
           await drainPetStartupAttemptFailure(

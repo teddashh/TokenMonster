@@ -175,6 +175,33 @@ describe("Electron utility-process facade", () => {
     expect(child.exitCode).toBe(0);
   });
 
+  it("drains a Windows-style stdout chunk delivered after exit", async () => {
+    const utility = new FakeUtility();
+    const child = createUtilityChildProcess(
+      utility.asUtilityProcess(),
+      utility.stdout,
+      utility.stderr
+    );
+    const chunks: string[] = [];
+    child.stdout?.on("data", (chunk: Buffer) => {
+      chunks.push(chunk.toString("utf8"));
+    });
+    child.stderr?.resume();
+    const close = vi.fn();
+    child.on("close", close);
+    const closed = once(child, "close");
+
+    utility.emitExit(0);
+    expect(close).not.toHaveBeenCalled();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    utility.stdout.write("v0.80.0\n");
+
+    expect(await closed).toEqual([0, null]);
+    expect(chunks).toEqual(["v0.80.0\n"]);
+    expect(utility.stdout.destroyed).toBe(true);
+    expect(utility.stderr.destroyed).toBe(true);
+  });
+
   it("closes immediately after exit when stdio is ignored", () => {
     const utility = new FakeUtility();
     const spawn = createUtilityProcessSpawn(

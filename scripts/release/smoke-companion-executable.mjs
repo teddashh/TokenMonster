@@ -14,6 +14,18 @@ const WINDOWS_SMOKE_EXIT_CODES = Object.freeze({
   gateway: 87,
   sidecar: 88,
 });
+const WINDOWS_SIDECAR_FAILURE_EXIT_CODES = new Map([
+  [89, "invalid-configuration"],
+  [90, "runtime-not-found"],
+  [91, "version-mismatch"],
+  [92, "spawn-failed"],
+  [93, "startup-timeout"],
+  [94, "sidecar-exited"],
+  [95, "sidecar-unavailable"],
+  [96, "sidecar-incompatible"],
+  [97, "refresh-failed"],
+  [98, "refresh-timeout"],
+]);
 const [inputPath, ...extraArguments] = process.argv.slice(2);
 
 if (
@@ -212,6 +224,14 @@ if (result.code !== expectedExitCode || result.signal !== null) {
     if (result.code === WINDOWS_SMOKE_EXIT_CODES.sidecar) {
       throw new Error(
         "Packaged companion startup smoke reported a sidecar failure.",
+      );
+    }
+    const sidecarFailure = WINDOWS_SIDECAR_FAILURE_EXIT_CODES.get(
+      result.code ?? -1,
+    );
+    if (sidecarFailure !== undefined) {
+      throw new Error(
+        `Packaged companion startup smoke reported sidecar ${sidecarFailure}.`,
       );
     }
   }
