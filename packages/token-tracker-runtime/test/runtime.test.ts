@@ -164,11 +164,13 @@ function executable() {
 }
 
 describe("managed environment", () => {
-  it("keeps path discovery while dropping credentials, proxies, and port authority", () => {
+  it("denies command discovery while dropping credentials, proxies, and port authority", () => {
     const environment = buildTokenTrackerEnvironment({
       HOME: "/home/person",
       CODEX_HOME: "/custom/codex",
       APPDATA: "C:\\Users\\person\\AppData",
+      PATH: PATH_CANARY,
+      PATHEXT: ".EXE;.CMD",
       HTTP_PROXY: "http://proxy.invalid",
       HTTPS_PROXY: "https://proxy.invalid",
       NODE_OPTIONS: `--require=${PATH_CANARY}`,
@@ -197,6 +199,9 @@ describe("managed environment", () => {
     expect(environment).not.toHaveProperty("ZCODE_CREDENTIAL_SECRET");
     expect(environment).not.toHaveProperty("TOKENTRACKER_DEVICE_TOKEN");
     expect(environment).not.toHaveProperty("PORT");
+    expect(environment["PATH"]).toMatch(/network-deny\.cjs$/u);
+    expect(environment["PATH"]).not.toContain(PATH_CANARY);
+    expect(environment).not.toHaveProperty("PATHEXT");
     expect(Object.isFrozen(environment)).toBe(true);
   });
 
@@ -248,8 +253,20 @@ describe("managed sidecar lifecycle", () => {
     expect(probe).toHaveBeenCalledTimes(1);
     expect(probe.mock.calls[0]?.[0]).toBe("http://127.0.0.1:7680");
     expect(processQueue.calls.map((call) => call.arguments_)).toEqual([
-      [PUBLIC_BIN, "--version"],
-      [PUBLIC_BIN, "serve", "--no-open", "--no-sync"]
+      [
+        "--require",
+        expect.stringMatching(/network-deny\.cjs$/u),
+        PUBLIC_BIN,
+        "--version"
+      ],
+      [
+        "--require",
+        expect.stringMatching(/network-deny\.cjs$/u),
+        PUBLIC_BIN,
+        "serve",
+        "--no-open",
+        "--no-sync"
+      ]
     ]);
     for (const call of processQueue.calls) {
       expect(call.command).toBe("/node");
@@ -260,6 +277,13 @@ describe("managed sidecar lifecycle", () => {
       });
       expect(call.options.env).not.toHaveProperty("PORT");
       expect(call.options.env).not.toHaveProperty("TOKENTRACKER_DEVICE_TOKEN");
+      expect(call.options.env["NODE_OPTIONS"]).toMatch(
+        /^--require=".*network-deny\.cjs"$/u
+      );
+      expect(call.options.env["NODE_OPTIONS"]).not.toContain(PATH_CANARY);
+      expect(call.options.env["PATH"]).toMatch(/network-deny\.cjs$/u);
+      expect(call.options.env["PATH"]).not.toContain(PATH_CANARY);
+      expect(call.options.env).not.toHaveProperty("PATHEXT");
     }
 
     const firstStop = runtime.stop();
@@ -380,6 +404,8 @@ describe("local-only refresh", () => {
     const second = runtime.refreshLocalUsage();
     expect(second).toBe(first);
     expect(processQueue.calls[2]?.arguments_).toEqual([
+      "--require",
+      expect.stringMatching(/network-deny\.cjs$/u),
       PUBLIC_BIN,
       "sync",
       "--auto",

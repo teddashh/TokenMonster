@@ -1,9 +1,26 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { spawn, spawnSync } from "node:child_process";
+import {
+  access,
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
+import { pathToFileURL } from "node:url";
+
+import {
+  assertSidecarClosuresMatch,
+  packageNameFromLockPath,
+} from "./sidecar-lock.mjs";
+import { verifyInstalledZstdNative } from "./zstd-native-verifier.mjs";
 
 const BOOTSTRAP_TIMEOUT_MS = 120_000;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -11,6 +28,21 @@ const SHUTDOWN_TIMEOUT_MS = 15_000;
 const BOOTSTRAP_URL_PATTERN = /http:\/\/127\.0\.0\.1:\d+\/\S+/u;
 const SESSION_COOKIE_PATTERN =
   /(?:^|;\s*)tokenmonster_session=([A-Za-z0-9_-]+)(?:;|$)/u;
+const DEFAULT_UNAVAILABLE_CONTRIBUTION_STATUS = Object.freeze({
+  status: "ok",
+  availability: "unavailable",
+  unavailableReason: "secure-storage-unavailable",
+  secureStorage: "unavailable",
+  state: "unavailable",
+  enabled: false,
+  canPreview: false,
+  canStop: false,
+  canDelete: false,
+  canRecover: false,
+  outboxPending: 0,
+  deletionStatus: null,
+  anonymousHistoricalTotalsRetained: null,
+});
 
 function step(name, detail) {
   console.log(`SMOKE ${name}: PASS${detail === undefined ? "" : ` (${detail})`}`);
@@ -18,6 +50,671 @@ function step(name, detail) {
 
 function fail(message) {
   throw new Error(message);
+}
+
+async function readJson(path, label) {
+  try {
+    return JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    fail(`${label} is missing or invalid`);
+  }
+}
+
+function hasExactKeys(value, keys) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    JSON.stringify(Object.keys(value)) === JSON.stringify(keys)
+  );
+}
+
+function isDefaultUnavailableContributionStatus(value) {
+  return (
+    hasExactKeys(value, Object.keys(DEFAULT_UNAVAILABLE_CONTRIBUTION_STATUS)) &&
+    JSON.stringify(value) ===
+      JSON.stringify(DEFAULT_UNAVAILABLE_CONTRIBUTION_STATUS)
+  );
+}
+
+function isUtcDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) {
+    return false;
+  }
+  const instant = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(instant.getTime()) && instant.toISOString().slice(0, 10) === value;
+}
+
+function isIsoInstantWithMilliseconds(value) {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value)
+  ) {
+    return false;
+  }
+  const instant = new Date(value);
+  return Number.isFinite(instant.getTime()) && instant.toISOString() === value;
+}
+
+const CLEAN_LEARNING_PROFILE_REASONS = [
+  {
+    subject: "identity",
+    reasonCode: "IDENTITY_LEARNING_COVERAGE_28D",
+    templateId: "monster.identity.learning.v1",
+    inputs: [
+      {
+        metric: "observed-days",
+        valueBand: "insufficient",
+        coverage: "insufficient",
+      },
+      {
+        metric: "active-days",
+        valueBand: "insufficient",
+        coverage: "insufficient",
+      },
+    ],
+  },
+  {
+    subject: "mood",
+    reasonCode: "MOOD_LEARNING_COVERAGE_28D",
+    templateId: "monster.mood.learning.v1",
+    inputs: [
+      {
+        metric: "relative-daily-activity",
+        valueBand: "insufficient",
+        coverage: "insufficient",
+      },
+    ],
+  },
+  {
+    subject: "evolution",
+    reasonCode: "EVOLUTION_AWAITING_COVERAGE",
+    templateId: "monster.evolution.awaitingCoverage.v1",
+    inputs: [
+      {
+        metric: "trait-structure",
+        valueBand: "insufficient",
+        coverage: "insufficient",
+      },
+    ],
+  },
+];
+
+function isCleanLearningCharacterProfile(value) {
+  if (
+    !hasExactKeys(value, [
+      "status",
+      "schemaVersion",
+      "generatedAt",
+      "freshness",
+      "dataQuality",
+      "window",
+      "identity",
+      "mood",
+      "evolution",
+      "reasons",
+    ]) ||
+    value.status !== "ok" ||
+    value.schemaVersion !== "1" ||
+    !isIsoInstantWithMilliseconds(value.generatedAt) ||
+    value.freshness !== "fresh" ||
+    value.dataQuality !== "estimated-positive-days" ||
+    !hasExactKeys(value.window, ["fromUtcDate", "toUtcDate", "timezone"]) ||
+    !isUtcDate(value.window.fromUtcDate) ||
+    !isUtcDate(value.window.toUtcDate) ||
+    value.window.timezone !== "UTC" ||
+    value.generatedAt.slice(0, 10) !== value.window.toUtcDate ||
+    Date.parse(`${value.window.toUtcDate}T00:00:00.000Z`) -
+      Date.parse(`${value.window.fromUtcDate}T00:00:00.000Z`) !==
+      27 * 86_400_000 ||
+    !hasExactKeys(value.identity, [
+      "status",
+      "coverageBand",
+      "provisional",
+      "traitIds",
+    ]) ||
+    value.identity.status !== "learning" ||
+    value.identity.coverageBand !== "insufficient" ||
+    value.identity.provisional !== false ||
+    !Array.isArray(value.identity.traitIds) ||
+    value.identity.traitIds.length !== 0 ||
+    !hasExactKeys(value.mood, ["id", "energyBand"]) ||
+    value.mood.id !== "learning" ||
+    value.mood.energyBand !== "dormant" ||
+    !hasExactKeys(value.evolution, ["cadence", "event"]) ||
+    value.evolution.cadence !== "event" ||
+    value.evolution.event !== "awaiting-coverage"
+  ) {
+    return false;
+  }
+  return JSON.stringify(value.reasons) === JSON.stringify(CLEAN_LEARNING_PROFILE_REASONS);
+}
+
+async function verifyInstalledSidecarClosure(installDirectory) {
+  const tokenMonsterRoot = join(
+    installDirectory,
+    "node_modules",
+    "tokenmonster",
+  );
+  const releaseManifest = await readJson(
+    join(tokenMonsterRoot, "package.json"),
+    "installed tokenmonster package manifest",
+  );
+  const shrinkwrap = await readJson(
+    join(tokenMonsterRoot, "npm-shrinkwrap.json"),
+    "installed tokenmonster shrinkwrap",
+  );
+  const installedLock = await readJson(
+    join(installDirectory, "package-lock.json"),
+    "install-directory package lock",
+  );
+  const sidecarPin = releaseManifest?.dependencies?.["tokentracker-cli"];
+  if (typeof sidecarPin !== "string") {
+    fail("installed tokenmonster manifest has no exact sidecar pin");
+  }
+
+  let closure;
+  try {
+    closure = assertSidecarClosuresMatch({
+      expectedLock: shrinkwrap,
+      actualLock: installedLock,
+      actualParentPath: "node_modules/tokenmonster",
+      sidecarPin,
+    });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : "sidecar closure check failed");
+  }
+
+  for (const identity of closure) {
+    const packageRoot = join(installDirectory, ...identity.path.split("/"));
+    const metadata = await lstat(packageRoot).catch(() => null);
+    if (
+      metadata === null ||
+      !metadata.isDirectory() ||
+      metadata.isSymbolicLink()
+    ) {
+      fail(`installed sidecar package is missing or linked: ${identity.name}`);
+    }
+    const manifest = await readJson(
+      join(packageRoot, "package.json"),
+      `installed ${identity.name} package manifest`,
+    );
+    if (
+      packageNameFromLockPath(identity.path) !== identity.name ||
+      manifest?.name !== identity.name ||
+      manifest?.version !== identity.version
+    ) {
+      fail(`installed sidecar package identity mismatch: ${identity.name}`);
+    }
+  }
+  step(
+    "sidecar closure",
+    `${closure.length} exact registry packages match shrinkwrap integrity records`,
+  );
+  return Object.freeze({ closure, releaseManifest, tokenMonsterRoot });
+}
+
+function verifyInstalledCliVersion(binary, releaseManifest, environment) {
+  const version = releaseManifest?.version;
+  if (
+    typeof version !== "string" ||
+    version.length < 1 ||
+    version.length > 64 ||
+    version.includes("\0")
+  ) {
+    fail("installed tokenmonster manifest has no valid release version");
+  }
+  const result = spawnSync(process.execPath, [binary, "--version"], {
+    encoding: "utf8",
+    env: environment,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 15_000,
+    windowsHide: true,
+  });
+  if (
+    result.error !== undefined ||
+    result.status !== 0 ||
+    result.signal !== null ||
+    result.stdout !== `v${version}\n` ||
+    result.stderr !== ""
+  ) {
+    fail("installed CLI --version differs from its staged package manifest");
+  }
+  step("release version", `CLI and package manifest agree on ${version}`);
+}
+
+async function verifyInstalledPlayerFeatureArtifacts(tokenMonsterRoot) {
+  const featureFiles = [
+    {
+      path: join(tokenMonsterRoot, "dist", "cli.js"),
+      markers: ["createMemorySecretSlot", "byok: createMemorySecretSlot()"],
+    },
+    {
+      path: join(tokenMonsterRoot, "dist", "contribution-host.js"),
+      markers: [
+        "TOKENMONSTER_CONTRIBUTION_API_ORIGIN",
+        '"contribution-v2.sqlite"',
+        "createContributionSyncScheduler",
+      ],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "secret-vault",
+        "dist",
+        "memory-vault.js",
+      ),
+      markers: ["createMemorySecretSlot", 'persistence: "memory-only"'],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "byok-openai",
+        "dist",
+        "adapter.js",
+      ),
+      markers: ["background: false", "store: false"],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "byok-openai",
+        "dist",
+        "constants.js",
+      ),
+      markers: ["OPENAI_BYOK_MODELS", '"gpt-5.6-luna"'],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "companion-ui",
+        "dist",
+        "public",
+        "index.html",
+      ),
+      markers: [
+        "data-character-profile",
+        "data-character-tap-hint",
+        "data-share-card-hide-total",
+        "data-contribution-control",
+        "data-contribution-preview-payload",
+        "data-contribution-confirm-enable",
+      ],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "companion-ui",
+        "dist",
+        "public",
+        "contribution-control.js",
+      ),
+      markers: [
+        '"/api/contribution/status"',
+        '"enable-anonymous-contribution"',
+        "startContributionControl",
+      ],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "companion-ui",
+        "dist",
+        "public",
+        "main.js",
+      ),
+      markers: [
+        "createCharacterProfileRequestGate",
+        "requestCharacterInteraction",
+      ],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "companion-ui",
+        "dist",
+        "public",
+        "share-card.js",
+      ),
+      markers: ["tokenmonster-local-share-card.png"],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "companion-gateway",
+        "dist",
+        "byok-service.js",
+      ),
+      markers: [
+        "MAX_BYOK_HISTORY_MESSAGES",
+        "DEFAULT_OPENAI_BYOK_MODEL",
+        "currentUserMessage",
+      ],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "companion-gateway",
+        "dist",
+        "character-service.js",
+      ),
+      markers: ["LETTER_WARDROBE_CATALOG", "selectTapLine"],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "companion-gateway",
+        "dist",
+        "contribution-control.js",
+      ),
+      markers: [
+        "prepareCompanionContributionPreview",
+        "runCompanionContributionAction",
+        '"runtime-unavailable"',
+      ],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "companion-gateway",
+        "dist",
+        "character-profile-service.js",
+      ),
+      markers: ["CHARACTER_PROFILE_FILE", "deriveMonsterState"],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "characters",
+        "dist",
+        "letter-wardrobe.js",
+      ),
+      markers: ["LETTER_WARDROBE_CATALOG", "festival"],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "characters",
+        "dist",
+        "tap-lines.js",
+      ),
+      markers: ["tokenmonster-friend-tap-lines-v1", "selectTapLine"],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "monster-engine",
+        "dist",
+        "schemas.js",
+      ),
+      markers: ["IDENTITY_LEARNING_EVIDENCE_28D"],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "contribution-runtime",
+        "dist",
+        "contribution-service.js",
+      ),
+      markers: [
+        "createContributionService",
+        "CONTRIBUTION_CREDENTIAL_OPERATION_TIMEOUT_MS",
+        '"deletion-status-updated"',
+      ],
+    },
+    {
+      path: join(
+        tokenMonsterRoot,
+        "node_modules",
+        "@tokenmonster",
+        "contribution-runtime",
+        "dist",
+        "credential-host.js",
+      ),
+      markers: [
+        "createContributionCredentialHost",
+        '"contribution-upload.vault.json"',
+        '"contribution-enrollment-pending.vault.json"',
+      ],
+    },
+  ];
+  for (const feature of featureFiles) {
+    const metadata = await lstat(feature.path).catch(() => null);
+    if (
+      metadata === null ||
+      !metadata.isFile() ||
+      metadata.isSymbolicLink() ||
+      metadata.size < 1 ||
+      metadata.size > 4 * 1_024 * 1_024
+    ) {
+      fail(`installed player feature artifact is missing or invalid: ${feature.path}`);
+    }
+    const contents = await readFile(feature.path, "utf8");
+    const missingMarker = feature.markers.find(
+      (marker) => !contents.includes(marker),
+    );
+    if (missingMarker !== undefined) {
+      fail(
+        `installed player feature artifact is stale: ${feature.path} lacks ${JSON.stringify(missingMarker)}`,
+      );
+    }
+  }
+  step(
+    "player feature artifacts",
+    `${featureFiles.length} compiled UI, character, and profile files are current`,
+  );
+}
+
+async function exists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function createHermeticSmokeEnvironment(isolatedHome, pathOverride) {
+  const configDirectory = join(isolatedHome, "config");
+  const cacheDirectory = join(isolatedHome, "cache");
+  const dataDirectory = join(isolatedHome, "data");
+  const stateDirectory = join(isolatedHome, "state");
+  const appDataDirectory = join(isolatedHome, "appdata");
+  const localAppDataDirectory = join(isolatedHome, "local-appdata");
+  const temporaryDirectory = join(isolatedHome, "tmp");
+  await Promise.all(
+    [
+      configDirectory,
+      cacheDirectory,
+      dataDirectory,
+      stateDirectory,
+      appDataDirectory,
+      localAppDataDirectory,
+      temporaryDirectory,
+    ].map((directory) => mkdir(directory, { recursive: true })),
+  );
+
+  const environment = {
+    HOME: isolatedHome,
+    USERPROFILE: isolatedHome,
+    XDG_CONFIG_HOME: configDirectory,
+    XDG_CACHE_HOME: cacheDirectory,
+    XDG_DATA_HOME: dataDirectory,
+    XDG_STATE_HOME: stateDirectory,
+    APPDATA: appDataDirectory,
+    LOCALAPPDATA: localAppDataDirectory,
+    TMPDIR: temporaryDirectory,
+    TMP: temporaryDirectory,
+    TEMP: temporaryDirectory,
+    PATH:
+      pathOverride ??
+      (process.platform === "win32" ? "" : ["/usr/bin", "/bin"].join(delimiter)),
+    NO_COLOR: "1",
+  };
+  for (const key of [
+    "PATHEXT",
+    "SystemRoot",
+    "SYSTEMROOT",
+    "WINDIR",
+    "ComSpec",
+    "COMSPEC",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+  ]) {
+    const value = process.env[key];
+    if (typeof value === "string" && value.length > 0 && !value.includes("\0")) {
+      environment[key] = value;
+    }
+  }
+  return Object.freeze(environment);
+}
+
+async function createNativeEgressFixture(isolatedHome) {
+  const directory = join(isolatedHome, "native-helper-fixture");
+  const marker = join(isolatedHome, "native-helper-was-invoked");
+  await mkdir(directory, { recursive: true });
+  if (process.platform === "win32") {
+    await writeFile(
+      join(directory, "kiro-cli.cmd"),
+      `@echo off\r\n>"${marker}" echo invoked\r\nexit /b 97\r\n`,
+      "utf8",
+    );
+  } else {
+    const helper = join(directory, "kiro-cli");
+    await writeFile(
+      helper,
+      [
+        "#!/usr/bin/python3",
+        "import pathlib",
+        "import socket",
+        `pathlib.Path(${JSON.stringify(marker)}).write_text("invoked", encoding="utf-8")`,
+        "sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)",
+        "sock.setblocking(False)",
+        "sock.connect_ex((\"198.51.100.1\", 9))",
+        "sock.close()",
+        "",
+      ].join("\n"),
+      { encoding: "utf8", mode: 0o700 },
+    );
+    await chmod(helper, 0o700);
+  }
+  return Object.freeze({
+    marker,
+    path:
+      process.platform === "win32"
+        ? directory
+        : [directory, "/usr/bin", "/bin"].join(delimiter),
+  });
+}
+
+async function proveRemoteHelperSuppression(installDirectory, isolatedHome) {
+  const tokenMonsterRoot = join(
+    installDirectory,
+    "node_modules",
+    "tokenmonster",
+  );
+  const runtimeEntry = join(
+    tokenMonsterRoot,
+    "node_modules",
+    "@tokenmonster",
+    "token-tracker-runtime",
+    "dist",
+    "index.js",
+  );
+  const adapterEntry = join(
+    tokenMonsterRoot,
+    "node_modules",
+    "@tokenmonster",
+    "token-tracker-adapter",
+    "dist",
+    "index.js",
+  );
+  const [{ startManagedTokenTracker }, { createTokenTrackerAdapter }] =
+    await Promise.all([
+      import(pathToFileURL(runtimeEntry).href),
+      import(pathToFileURL(adapterEntry).href),
+    ]);
+  if (
+    typeof startManagedTokenTracker !== "function" ||
+    typeof createTokenTrackerAdapter !== "function"
+  ) {
+    fail("installed runtime capability probe could not load exact APIs");
+  }
+
+  const fixture = await createNativeEgressFixture(isolatedHome);
+  const sourceEnvironment = await createHermeticSmokeEnvironment(
+    isolatedHome,
+    fixture.path,
+  );
+  let runtime;
+  let failure;
+  try {
+    runtime = await startManagedTokenTracker({
+      readinessProbe: async (baseUrl, signal) => {
+        if (signal.aborted) throw new Error("aborted");
+        await createTokenTrackerAdapter({ baseUrl }).probe();
+      },
+      dataAvailabilityProbe: () => false,
+      refreshIntervalMs: false,
+      sourceEnvironment,
+    });
+    const response = await request(
+      `${runtime.baseUrl}/functions/tokentracker-usage-limits?refresh=1`,
+      { redirect: "manual" },
+      "disabled upstream remote-limits capability",
+    );
+    const status = response.status;
+    await getJson(response, "disabled upstream remote-limits capability");
+    if (status !== 200) {
+      fail(`upstream remote-limits drill returned HTTP ${status}`);
+    }
+    if (await exists(fixture.marker)) {
+      fail("upstream remote-limits drill launched a native provider helper");
+    }
+    step(
+      "remote helper suppression",
+      "active upstream limits route could not launch the PATH canary",
+    );
+  } catch (error) {
+    failure = error;
+  }
+  try {
+    await runtime?.stop();
+  } catch (error) {
+    failure ??= error;
+  }
+  if (failure !== undefined) throw failure;
 }
 
 function waitForBootstrapUrl(child, captured) {
@@ -103,24 +800,80 @@ async function request(url, options, label) {
   }
 }
 
+async function postJson(origin, cookie, path, body, label) {
+  return request(
+    `${origin}${path}`,
+    {
+      method: "POST",
+      headers: {
+        Cookie: cookie,
+        Origin: origin,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+    label,
+  );
+}
+
 async function runSmoke(installDirectory, isolatedHome) {
+  const { closure, releaseManifest, tokenMonsterRoot } =
+    await verifyInstalledSidecarClosure(installDirectory);
+  const sidecarIdentities = closure.filter(
+    ({ name }) => name === "tokentracker-cli",
+  );
+  const zstdIdentities = closure.filter(
+    ({ name }) => name === "@mongodb-js/zstd",
+  );
+  if (sidecarIdentities.length !== 1 || zstdIdentities.length !== 1) {
+    fail("installed sidecar closure has an ambiguous zstd package chain");
+  }
+  let nativeEvidence;
+  try {
+    nativeEvidence = await verifyInstalledZstdNative({
+      sidecarPackageDirectory: join(
+        installDirectory,
+        ...sidecarIdentities[0].path.split("/"),
+      ),
+      zstdPackageDirectory: join(
+        installDirectory,
+        ...zstdIdentities[0].path.split("/"),
+      ),
+    });
+  } catch (error) {
+    fail(
+      error instanceof Error
+        ? error.message
+        : "installed zstd native verification failed",
+    );
+  }
+  step(
+    "zstd native prebuild",
+    `${nativeEvidence.platformKey}, ${nativeEvidence.bindingBytes} authenticated bytes`,
+  );
+  const smokeEnvironment = await createHermeticSmokeEnvironment(isolatedHome);
+  const progressionDirectory = join(isolatedHome, ".tokenmonster");
+  const staleStoreLock = join(
+    progressionDirectory,
+    "progression-v1.json.lock",
+  );
+  await mkdir(progressionDirectory, { recursive: true, mode: 0o700 });
+  await writeFile(staleStoreLock, "", { flag: "wx", mode: 0o600 });
+  const staleLockTime = new Date(Date.now() - 60_000);
+  await utimes(staleStoreLock, staleLockTime, staleLockTime);
   const binary = join(
-    installDirectory,
-    "node_modules",
-    "tokenmonster",
+    tokenMonsterRoot,
     "dist",
     "bin.js",
   );
+  verifyInstalledCliVersion(binary, releaseManifest, smokeEnvironment);
+  await verifyInstalledPlayerFeatureArtifacts(tokenMonsterRoot);
   const captured = { stdout: "", stderr: "" };
   const child = spawn(
     process.execPath,
-    [binary, "--no-open", "--no-character-downloads"],
+    [binary, "--no-open"],
     {
-      env: {
-        ...process.env,
-        HOME: isolatedHome,
-        USERPROFILE: isolatedHome,
-      },
+      env: smokeEnvironment,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
     },
@@ -167,6 +920,215 @@ async function runSmoke(installDirectory, isolatedHome) {
     }
     step("companion status", `HTTP ${statusResponse.status}, phase is a string`);
 
+    const contributionStatusResponse = await request(
+      `${origin}/api/contribution/status`,
+      { headers: { Cookie: cookie } },
+      "initial contribution status",
+    );
+    const contributionStatus = await getJson(
+      contributionStatusResponse,
+      "initial contribution status",
+    );
+    if (
+      contributionStatusResponse.status !== 200 ||
+      !isDefaultUnavailableContributionStatus(contributionStatus)
+    ) {
+      fail(
+        "installed default CLI did not expose the exact unavailable, default-off contribution status",
+      );
+    }
+
+    const contributionMutationCases = [
+      {
+        action: "preview",
+        path: "/api/contribution/preview",
+        body: { confirmation: "preview-contribution-data" },
+      },
+      {
+        action: "enable",
+        path: "/api/contribution/enable",
+        body: {
+          previewId: "00000000-0000-4000-8000-000000000001",
+          confirmation: "enable-anonymous-contribution",
+        },
+      },
+      {
+        action: "stop",
+        path: "/api/contribution/stop",
+        body: { confirmation: "stop-anonymous-contribution" },
+      },
+      {
+        action: "delete",
+        path: "/api/contribution/delete",
+        body: { confirmation: "delete-contribution-data" },
+      },
+      {
+        action: "recover",
+        path: "/api/contribution/recover",
+        body: { confirmation: "recover-contribution-state" },
+      },
+    ];
+    for (const mutation of contributionMutationCases) {
+      const mutationResponse = await postJson(
+        origin,
+        cookie,
+        mutation.path,
+        mutation.body,
+        `default-off contribution ${mutation.action}`,
+      );
+      const mutationResult = await getJson(
+        mutationResponse,
+        `default-off contribution ${mutation.action}`,
+      );
+      if (
+        mutationResponse.status !== 503 ||
+        !hasExactKeys(mutationResult, [
+          "status",
+          "action",
+          "code",
+          "contribution",
+        ]) ||
+        mutationResult.status !== "error" ||
+        mutationResult.action !== mutation.action ||
+        mutationResult.code !== "runtime-unavailable" ||
+        !isDefaultUnavailableContributionStatus(mutationResult.contribution)
+      ) {
+        fail(
+          `installed default CLI contribution ${mutation.action} did not fail closed`,
+        );
+      }
+    }
+
+    const contributionCredentialDirectory = join(
+      progressionDirectory,
+      "contribution-v2",
+    );
+    const unexpectedContributionState = [
+      join(progressionDirectory, "contribution-v2.sqlite"),
+      join(progressionDirectory, "contribution-v2.sqlite-journal"),
+      join(progressionDirectory, "contribution-v2.sqlite-shm"),
+      join(progressionDirectory, "contribution-v2.sqlite-wal"),
+      contributionCredentialDirectory,
+      join(contributionCredentialDirectory, "contribution-upload.vault.json"),
+      join(contributionCredentialDirectory, "contribution-deletion.vault.json"),
+      join(contributionCredentialDirectory, "contribution-status.vault.json"),
+      join(
+        contributionCredentialDirectory,
+        "contribution-enrollment-pending.vault.json",
+      ),
+    ];
+    if (
+      (await Promise.all(unexpectedContributionState.map((path) => exists(path))))
+        .some(Boolean)
+    ) {
+      fail("installed default CLI created contribution SQLite or vault state");
+    }
+    step(
+      "contribution default-off",
+      "exact status, five authenticated mutations fail closed, no SQLite/vault state",
+    );
+
+    const initialByokResponse = await request(
+      `${origin}/api/byok/status`,
+      { headers: { Cookie: cookie } },
+      "initial BYOK status",
+    );
+    if (initialByokResponse.status !== 200) {
+      fail(`initial BYOK status returned HTTP ${initialByokResponse.status}, expected 200`);
+    }
+    const initialByok = await getJson(initialByokResponse, "initial BYOK status");
+    const byokStatusKeys = [
+      "status",
+      "availability",
+      "configured",
+      "persistence",
+      "canPersist",
+      "provider",
+      "model",
+    ];
+    if (
+      !hasExactKeys(initialByok, byokStatusKeys) ||
+      initialByok.status !== "ok" ||
+      initialByok.availability !== "available" ||
+      initialByok.configured !== false ||
+      initialByok.persistence !== "memory-only" ||
+      initialByok.canPersist !== false ||
+      initialByok.provider !== "OpenAI" ||
+      initialByok.model !== "gpt-5.6-luna"
+    ) {
+      fail("installed CLI did not expose the exact initial memory-only BYOK status");
+    }
+    const byokKeyCanary = ["sk", "installed_1234567890abcdef_KEY_CANARY"].join("-");
+    const configuredByokResponse = await postJson(
+      origin,
+      cookie,
+      "/api/byok/configure",
+      { apiKey: byokKeyCanary, persist: true },
+      "configure installed memory-only BYOK",
+    );
+    if (configuredByokResponse.status !== 200) {
+      fail(`installed BYOK configure returned HTTP ${configuredByokResponse.status}, expected 200`);
+    }
+    const configuredByok = await getJson(
+      configuredByokResponse,
+      "configured installed BYOK status",
+    );
+    if (
+      !hasExactKeys(configuredByok, byokStatusKeys) ||
+      configuredByok.configured !== true ||
+      configuredByok.persistence !== "memory-only" ||
+      configuredByok.canPersist !== false ||
+      JSON.stringify(configuredByok).includes(byokKeyCanary)
+    ) {
+      fail("installed BYOK configure was not exact, memory-only, and key-free");
+    }
+    const clearedByokResponse = await postJson(
+      origin,
+      cookie,
+      "/api/byok/clear",
+      { confirmation: "clear-openai-byok" },
+      "clear installed memory-only BYOK",
+    );
+    const clearedByok = await getJson(clearedByokResponse, "cleared installed BYOK status");
+    if (
+      clearedByokResponse.status !== 200 ||
+      !hasExactKeys(clearedByok, byokStatusKeys) ||
+      clearedByok.configured !== false ||
+      JSON.stringify(clearedByok).includes(byokKeyCanary)
+    ) {
+      fail("installed BYOK clear did not remove the key authority");
+    }
+    step("BYOK memory slot", "configure/status/clear stayed RAM-only and key-free");
+
+    const profileResponse = await request(
+      `${origin}/api/characters/profile`,
+      { headers: { Cookie: cookie } },
+      "clean character profile",
+    );
+    if (profileResponse.status !== 200) {
+      fail(
+        `clean character profile returned HTTP ${profileResponse.status}, expected 200`,
+      );
+    }
+    const profile = await getJson(profileResponse, "clean character profile");
+    if (!isCleanLearningCharacterProfile(profile)) {
+      fail("clean character profile did not match the exact learning DTO");
+    }
+    if (
+      isCleanLearningCharacterProfile({ ...profile, status: "unexpected" }) ||
+      isCleanLearningCharacterProfile({ ...profile, unexpected: true }) ||
+      isCleanLearningCharacterProfile({
+        ...profile,
+        reasons: profile.reasons.slice(0, -1),
+      })
+    ) {
+      fail("clean character profile validator accepted a mutated DTO");
+    }
+    step(
+      "clean character profile",
+      "HTTP 200, exact 28-day learning DTO and mutation controls",
+    );
+
     const charactersResponse = await request(
       `${origin}/api/characters`,
       { headers: { Cookie: cookie } },
@@ -180,11 +1142,154 @@ async function runSmoke(installDirectory, isolatedHome) {
       characters === null ||
       typeof characters !== "object" ||
       !Array.isArray(characters.characters) ||
-      characters.characters.length !== 11
+      characters.characters.length !== 11 ||
+      characters.selection === null ||
+      typeof characters.selection !== "object" ||
+      characters.selection.characterId !== null ||
+      characters.selection.selectedBy !== null
     ) {
-      fail("characters JSON did not contain exactly 11 characters");
+      fail("clean characters JSON did not expose 11 unselected characters");
     }
-    step("characters", `HTTP ${charactersResponse.status}, 11 characters`);
+    const initialStarter = characters.characters.find(
+      (character) => character?.characterId === "chatgpt",
+    );
+    if (
+      initialStarter === undefined ||
+      initialStarter.isStarter !== true ||
+      initialStarter.unlocked !== false
+    ) {
+      fail("clean install did not expose chatgpt as a locked starter choice");
+    }
+    step(
+      "characters",
+      `HTTP ${charactersResponse.status}, 11 characters and no forced starter`,
+    );
+
+    const blockedSelectResponse = await postJson(
+      origin,
+      cookie,
+      "/api/characters/select",
+      { characterId: "chatgpt" },
+      "starter selection behind stale rc.7 lock",
+    );
+    if (blockedSelectResponse.status !== 409) {
+      fail(
+        `starter selection behind stale rc.7 lock returned HTTP ${blockedSelectResponse.status}, expected 409`,
+      );
+    }
+    const blockedSelection = await getJson(
+      blockedSelectResponse,
+      "blocked starter selection",
+    );
+    if (
+      blockedSelection?.status !== "error" ||
+      blockedSelection?.error !== "store-busy" ||
+      Reflect.ownKeys(blockedSelection).length !== 2
+    ) {
+      fail("stale rc.7 lock did not return the exact store-busy contract");
+    }
+    const repairResponse = await postJson(
+      origin,
+      cookie,
+      "/api/characters/progression-lock/repair",
+      { confirmedOldVersionsClosed: true },
+      "explicit stale rc.7 lock repair",
+    );
+    if (repairResponse.status !== 200) {
+      fail(`stale rc.7 repair returned HTTP ${repairResponse.status}, expected 200`);
+    }
+    const repair = await getJson(repairResponse, "explicit stale rc.7 lock repair");
+    if (
+      repair?.status !== "ok" ||
+      repair?.outcome !== "repaired" ||
+      Reflect.ownKeys(repair).length !== 2
+    ) {
+      fail("stale rc.7 repair did not return the exact repaired contract");
+    }
+
+    const selectResponse = await postJson(
+      origin,
+      cookie,
+      "/api/characters/select",
+      { characterId: "chatgpt" },
+      "starter selection after explicit repair",
+    );
+    if (selectResponse.status !== 200) {
+      fail(`starter selection returned HTTP ${selectResponse.status}, expected 200`);
+    }
+    const selection = await getJson(selectResponse, "starter selection");
+    if (
+      selection === null ||
+      typeof selection !== "object" ||
+      selection.status !== "ok" ||
+      selection.selection === null ||
+      typeof selection.selection !== "object" ||
+      selection.selection.characterId !== "chatgpt" ||
+      selection.selection.selectedBy !== "manual"
+    ) {
+      fail("starter selection did not return the exact manual chatgpt choice");
+    }
+
+    const selectedCharactersResponse = await request(
+      `${origin}/api/characters`,
+      { headers: { Cookie: cookie } },
+      "selected characters",
+    );
+    if (selectedCharactersResponse.status !== 200) {
+      fail(
+        `selected characters returned HTTP ${selectedCharactersResponse.status}, expected 200`,
+      );
+    }
+    const selectedCharacters = await getJson(
+      selectedCharactersResponse,
+      "selected characters",
+    );
+    const selectedStarter = selectedCharacters?.characters?.find?.(
+      (character) => character?.characterId === "chatgpt",
+    );
+    if (
+      selectedCharacters?.selection?.characterId !== "chatgpt" ||
+      selectedCharacters?.selection?.selectedBy !== "manual" ||
+      selectedStarter?.unlocked !== true
+    ) {
+      fail("starter choice was not persisted as the unlocked active companion");
+    }
+    if (await exists(staleStoreLock)) {
+      fail("stale zero-byte progression lock was not recovered");
+    }
+
+    const interactionResponse = await postJson(
+      origin,
+      cookie,
+      "/api/characters/interact",
+      { characterId: "chatgpt", action: "tap", locale: "zh-TW" },
+      "starter interaction",
+    );
+    if (interactionResponse.status !== 200) {
+      fail(
+        `starter interaction returned HTTP ${interactionResponse.status}, expected 200`,
+      );
+    }
+    const interaction = await getJson(
+      interactionResponse,
+      "starter interaction",
+    );
+    if (
+      interaction?.status !== "ok" ||
+      interaction?.action !== "tap" ||
+      interaction?.characterId !== "chatgpt" ||
+      interaction?.locale !== "zh-TW" ||
+      interaction?.outcome !== "line" ||
+      typeof interaction?.line?.lineId !== "string" ||
+      typeof interaction?.line?.text !== "string" ||
+      interaction.line.text.length < 1
+    ) {
+      fail("starter tap did not return a local scripted companion line");
+    }
+    step(
+      "starter player loop",
+      "recover crash lock, choose chatgpt, persist unlock, and tap for a line",
+    );
 
     const missingAssetResponse = await request(
       `${origin}/assets/characters/objects/${"0".repeat(64)}.webp`,
@@ -221,6 +1326,7 @@ async function runSmoke(installDirectory, isolatedHome) {
   }
 
   if (failure !== undefined) throw failure;
+  await proveRemoteHelperSuppression(installDirectory, isolatedHome);
 }
 
 const installDirectory = process.argv[2];

@@ -5,6 +5,28 @@ resolves the public npm `bin` declaration for `tokentracker-cli@0.80.0`, starts
 it without a shell, waits for its announced loopback URL, and stops only child
 processes that it created.
 
+The package also exposes the user-scoped runtime lease shared by the CLI and
+Electron entry points. Linux uses an abstract Unix socket, Windows uses a named
+pipe, and macOS uses one deterministic `127.0.0.1` TCP listener whose handshake
+is bound to the opaque scope identifier. Before deriving that identifier, the
+runtime creates and verifies the private state directory and uses its native
+canonical path; symlink spellings therefore converge, and Windows path casing
+is folded. Root, special-file, replaced, and—where the platform exposes a
+numeric UID—foreign-owned scopes fail closed. These authorities are released by
+the OS after a crash. An occupied macOS port that does not return the exact
+scoped protocol fails closed instead of selecting a second authority. Callers
+acquire the lease before spawning the sidecar and release it only after the
+gateway and managed child have stopped.
+
+Before any child spawn, the runtime also resolves the exact zstd dependency as
+the sidecar would and checks `@mongodb-js/zstd@2.0.1`'s
+`build/Release/zstd.node` byte length and SHA-256 against the shipped
+`zstd-native-policy.json` entry for Linux x64, macOS arm64, or Windows x64.
+This check is local-only and fail-closed: a missing, substituted, source-built,
+or unsupported native binding becomes the sanitized `sidecar-incompatible`
+startup error. Network signature re-auditing is a separate release-owner
+command and is never part of player startup.
+
 The managed server is deliberately launched as:
 
 ```text

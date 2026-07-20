@@ -6,6 +6,7 @@ import {
 import { readFile, realpath, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { TextDecoder } from "node:util";
 
 import {
@@ -21,6 +22,7 @@ import {
   PINNED_TOKEN_TRACKER_VERSION
 } from "./constants.js";
 import { TokenTrackerRuntimeError } from "./errors.js";
+import { verifyInstalledZstdNativeFromSidecarManifest } from "./zstd-native-verifier.js";
 import type {
   ManagedTokenTracker,
   ManagedTokenTrackerExit,
@@ -45,6 +47,17 @@ const MAX_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 const VERSION_TIMEOUT_MS = 5_000;
 const ANNOUNCED_URL_PATTERN =
   /http:\/\/127\.0\.0\.1:([1-9]\d{0,4})(?=[/\s])/u;
+const NETWORK_DENY_PRELOAD_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "network-deny.cjs"
+);
+const NETWORK_DENY_NODE_OPTIONS = `--require=${JSON.stringify(
+  NETWORK_DENY_PRELOAD_PATH
+)}`;
+// An existing non-directory is an intentionally unusable executable search
+// path on every supported platform. The managed sidecar is invoked by an
+// absolute Node path and has no approved reason to discover provider CLIs.
+const NO_EXTERNAL_COMMAND_PATH = NETWORK_DENY_PRELOAD_PATH;
 
 const SAFE_ENVIRONMENT_KEYS = Object.freeze([
   "HOME",
@@ -203,6 +216,8 @@ export function buildTokenTrackerEnvironment(
   environment["TOKENTRACKER_AUTO_RETRY_NO_SPAWN"] = "1";
   environment["TOKENTRACKER_NO_STAR_PROMPT"] = "1";
   environment["NO_COLOR"] = "1";
+  environment["PATH"] = NO_EXTERNAL_COMMAND_PATH;
+  delete environment["PATHEXT"];
   return Object.freeze(environment);
 }
 
@@ -358,15 +373,32 @@ export async function resolveTokenTrackerExecutable(): Promise<TokenTrackerExecu
   try {
     const require = createRequire(import.meta.url);
     const manifestPath = require.resolve("tokentracker-cli/package.json");
-    const entry = await resolveTokenTrackerEntry(manifestPath);
-    return Object.freeze({
-      command: process.execPath,
-      argumentPrefix: Object.freeze([entry])
-    });
+    return await resolveTokenTrackerExecutableFromManifest(manifestPath);
   } catch (error) {
     if (error instanceof TokenTrackerRuntimeError) throw error;
     throw new TokenTrackerRuntimeError("runtime-not-found");
   }
+}
+
+export async function resolveTokenTrackerExecutableFromManifest(
+  manifestPath: string,
+  platform: string = process.platform,
+  arch: string = process.arch
+): Promise<TokenTrackerExecutable> {
+  const entry = await resolveTokenTrackerEntry(manifestPath);
+  try {
+    await verifyInstalledZstdNativeFromSidecarManifest({
+      sidecarManifestPath: manifestPath,
+      platform,
+      arch
+    });
+  } catch {
+    throw new TokenTrackerRuntimeError("sidecar-incompatible");
+  }
+  return Object.freeze({
+    command: process.execPath,
+    argumentPrefix: Object.freeze([entry])
+  });
 }
 
 function normalizeExecutable(value: TokenTrackerExecutable): TokenTrackerExecutable {
@@ -396,7 +428,13 @@ function spawnOwned(
   stdio: readonly ["ignore", "pipe", "pipe"] | "ignore"
 ): ChildProcess {
   const options: TokenTrackerSpawnOptions = Object.freeze({
-    env: { ...normalized.environment },
+    // The explicit argv preload secures this owned process. NODE_OPTIONS is
+    // generated here (never copied from the caller) so Node descendants
+    // spawned by the exact-reviewed sidecar inherit the same guard.
+    env: {
+      ...normalized.environment,
+      NODE_OPTIONS: NETWORK_DENY_NODE_OPTIONS
+    },
     shell: false,
     detached: false,
     windowsHide: true,
@@ -405,7 +443,12 @@ function spawnOwned(
   try {
     return normalized.spawn(
       executable.command,
-      [...executable.argumentPrefix, ...arguments_],
+      [
+        "--require",
+        NETWORK_DENY_PRELOAD_PATH,
+        ...executable.argumentPrefix,
+        ...arguments_
+      ],
       options
     );
   } catch {
