@@ -111,6 +111,62 @@ function createScheduledHarness(
 }
 
 describe("single-worker API integration", () => {
+  it("distinguishes an initial missing release binding from an invalid one", async () => {
+    const notConfigured = await tokenMonsterWorker.fetch(
+      new Request("https://tokenmonster.example/v1/releases/current"),
+    );
+    expect(notConfigured.status).toBe(404);
+    await expect(notConfigured.json()).resolves.toEqual({
+      error: "PUBLIC_RELEASE_NOT_CONFIGURED",
+    });
+
+    const unavailable = await tokenMonsterWorker.fetch(
+      new Request("https://tokenmonster.example/v1/releases/current"),
+      { TOKENMONSTER_PUBLIC_RELEASE_JSON: "not-json" },
+    );
+    expect(unavailable.status).toBe(503);
+    await expect(unavailable.json()).resolves.toEqual({
+      error: "PUBLIC_RELEASE_UNAVAILABLE",
+    });
+  });
+
+  it("serves an exact configured public release binding", async () => {
+    const available = await tokenMonsterWorker.fetch(
+      new Request("https://tokenmonster.example/v1/releases/current"),
+      {
+        TOKENMONSTER_PUBLIC_RELEASE_JSON: JSON.stringify({
+          contractVersion: 1,
+          platform: "windows-x64",
+          version: "0.1.0-rc.11",
+          downloadUrl:
+            "https://cdn.ted-h.com/tokenmonster/releases/windows/v0.1.0-rc.11/TokenMonsterSetup.exe",
+          sha256: "a".repeat(64),
+          bytes: 142_387_012,
+        }),
+      },
+    );
+    expect(available.status).toBe(200);
+    await expect(available.json()).resolves.toMatchObject({
+      contractVersion: 1,
+      platform: "windows-x64",
+      version: "0.1.0-rc.11",
+    });
+  });
+
+  it("rejects release queries and non-GET methods", async () => {
+    const query = await tokenMonsterWorker.fetch(
+      new Request("https://tokenmonster.example/v1/releases/current?platform=windows"),
+    );
+    expect(query.status).toBe(404);
+    const post = await tokenMonsterWorker.fetch(
+      new Request("https://tokenmonster.example/v1/releases/current", {
+        method: "POST",
+      }),
+    );
+    expect(post.status).toBe(405);
+    expect(post.headers.get("Allow")).toBe("GET");
+  });
+
   it("serves the API health endpoint from the shared worker", async () => {
     const response = await tokenMonsterWorker.fetch(
       new Request("https://tokenmonster.example/healthz"),

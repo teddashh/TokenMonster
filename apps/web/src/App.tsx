@@ -14,9 +14,14 @@ import {
   publicTotalsAreFresh,
   type PublicCounterState,
 } from "./public-totals.js";
+import {
+  fetchPublicRelease,
+  type PublicReleaseState,
+} from "./public-release.js";
 
 export interface AppProps {
   readonly counterState?: PublicCounterState;
+  readonly releaseState?: PublicReleaseState;
 }
 
 interface PublicCounterProps {
@@ -97,6 +102,29 @@ function usePublicCounter(): readonly [PublicCounterState, () => void] {
   return [state, retry] as const;
 }
 
+function usePublicRelease(): PublicReleaseState {
+  const [state, setState] = useState<PublicReleaseState>({ status: "loading" });
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    const timeout = globalThis.setTimeout(() => controller.abort(), 8_000);
+    void fetchPublicRelease(globalThis.fetch, controller.signal)
+      .then((snapshot) => {
+        if (active) setState({ status: "available", snapshot });
+      })
+      .catch(() => {
+        if (active) setState({ status: "unavailable" });
+      })
+      .finally(() => globalThis.clearTimeout(timeout));
+    return () => {
+      active = false;
+      globalThis.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, []);
+  return state;
+}
+
 function LetterMonster({ character, size = "compact" }: LetterMonsterProps) {
   return (
     <span
@@ -175,8 +203,10 @@ export function PublicCounter({ state, onRetry }: PublicCounterProps) {
   );
 }
 
-export function App({ counterState }: AppProps) {
+export function App({ counterState, releaseState }: AppProps) {
   const [liveCounterState, retryCounter] = usePublicCounter();
+  const liveReleaseState = usePublicRelease();
+  const currentRelease = releaseState ?? liveReleaseState;
   const [selectedCharacterId, setSelectedCharacterId] =
     useState<CharacterId>("chatgpt");
   const selectedCharacter =
@@ -403,16 +433,53 @@ export function App({ counterState }: AppProps) {
         <section className="section download-section" id="download" aria-labelledby="download-title">
           <div>
             <p className="eyebrow">SIGNED ALPHA</p>
-            <h2 id="download-title">下載入口還沒開放</h2>
-            <p>
-              我們會等 macOS／Windows 簽署、更新與回復流程通過驗證後才提供 Alpha 檔案。現在沒有可安全推薦的安裝包。
-            </p>
+            <h2 id="download-title">
+              {currentRelease.status === "available"
+                ? "Windows Alpha 可以下載"
+                : "下載入口還沒開放"}
+            </h2>
+            {currentRelease.status === "available" ? (
+              <p>
+                這是通過三平台 CLI smoke 與原生 Windows
+                簽署驗證的 x64 安裝檔。macOS 正式版仍在 notarization gate；不會拿未簽版本充數。
+              </p>
+            ) : (
+              <p>
+                我們會等原生簽署、安裝、更新與回復流程通過驗證後才提供 Alpha 檔案。現在沒有可安全推薦的安裝包。
+              </p>
+            )}
           </div>
           <div className="download-action">
-            <button className="button button--disabled" type="button" disabled aria-describedby="download-status">
-              簽署版 Alpha 尚未開放下載
-            </button>
-            <p id="download-status" role="status">Release status: not available</p>
+            {currentRelease.status === "available" ? (
+              <a
+                className="button button--primary"
+                href={currentRelease.snapshot.downloadUrl}
+                aria-describedby="download-status"
+              >
+                下載 Windows x64 v{currentRelease.snapshot.version}
+              </a>
+            ) : (
+              <button
+                className="button button--disabled"
+                type="button"
+                disabled
+                aria-describedby="download-status"
+              >
+                {currentRelease.status === "loading"
+                  ? "正在確認簽署版 Alpha"
+                  : "簽署版 Alpha 尚未開放下載"}
+              </button>
+            )}
+            <p id="download-status" role="status">
+              {currentRelease.status === "available"
+                ? `Release status: verified · ${(
+                    currentRelease.snapshot.bytes /
+                    (1_024 * 1_024)
+                  ).toFixed(1)} MB · SHA-256 ${currentRelease.snapshot.sha256}`
+                : currentRelease.status === "loading"
+                  ? "Release status: checking"
+                  : "Release status: not available"}
+            </p>
           </div>
         </section>
 

@@ -7,6 +7,7 @@ import {
   PUBLIC_COUNTER_LABEL,
   type PublicCounterState,
 } from "../src/public-totals.js";
+import type { PublicReleaseState } from "../src/public-release.js";
 
 const UNAVAILABLE_STATE = {
   status: "unavailable",
@@ -25,6 +26,23 @@ const VERIFIED_STATE = {
     dataRevision: "revision-7",
   },
 } as const satisfies PublicCounterState;
+
+const RELEASE_UNAVAILABLE = {
+  status: "unavailable",
+} as const satisfies PublicReleaseState;
+
+const RELEASE_AVAILABLE = {
+  status: "available",
+  snapshot: {
+    contractVersion: 1,
+    platform: "windows-x64",
+    version: "0.1.0-rc.11",
+    downloadUrl:
+      "https://cdn.ted-h.com/tokenmonster/releases/windows/v0.1.0-rc.11/TokenMonsterSetup.exe",
+    sha256: "a".repeat(64),
+    bytes: 142_387_012,
+  },
+} as const satisfies PublicReleaseState;
 
 describe("honest public counter", () => {
   it("renders an unavailable state without a made-up counter value", () => {
@@ -53,7 +71,12 @@ describe("honest public counter", () => {
 
 describe("public landing semantics and release gates", () => {
   it("ships landmark navigation and all method, privacy, control, download, and support sections", () => {
-    const markup = renderToStaticMarkup(<App counterState={UNAVAILABLE_STATE} />);
+    const markup = renderToStaticMarkup(
+      <App
+        counterState={UNAVAILABLE_STATE}
+        releaseState={RELEASE_UNAVAILABLE}
+      />,
+    );
 
     expect(markup).toContain('<main id="main-content">');
     expect(markup).toContain('aria-label="主要導覽"');
@@ -70,7 +93,12 @@ describe("public landing semantics and release gates", () => {
   });
 
   it("renders four code-native letter placeholders and no blocked raster reference", () => {
-    const markup = renderToStaticMarkup(<App counterState={UNAVAILABLE_STATE} />);
+    const markup = renderToStaticMarkup(
+      <App
+        counterState={UNAVAILABLE_STATE}
+        releaseState={RELEASE_UNAVAILABLE}
+      />,
+    );
 
     expect(markup.match(/aria-pressed=/g)).toHaveLength(4);
     expect(markup.match(/字母 placeholder/g)?.length).toBeGreaterThanOrEqual(5);
@@ -84,12 +112,29 @@ describe("public landing semantics and release gates", () => {
   });
 
   it("keeps the unsigned Alpha CTA visibly unavailable", () => {
-    const markup = renderToStaticMarkup(<App counterState={UNAVAILABLE_STATE} />);
+    const markup = renderToStaticMarkup(
+      <App
+        counterState={UNAVAILABLE_STATE}
+        releaseState={RELEASE_UNAVAILABLE}
+      />,
+    );
 
     expect(markup).toContain("現在沒有可安全推薦的安裝包");
     expect(markup).toMatch(
       /<button[^>]*disabled=""[^>]*>簽署版 Alpha 尚未開放下載<\/button>/u,
     );
     expect(markup).toContain("Release status: not available");
+  });
+
+  it("opens only an exact configured signed Windows release", () => {
+    const markup = renderToStaticMarkup(
+      <App counterState={UNAVAILABLE_STATE} releaseState={RELEASE_AVAILABLE} />,
+    );
+
+    expect(markup).toContain("Windows Alpha 可以下載");
+    expect(markup).toContain("下載 Windows x64 v0.1.0-rc.11");
+    expect(markup).toContain(RELEASE_AVAILABLE.snapshot.downloadUrl);
+    expect(markup).toContain(`SHA-256 ${"a".repeat(64)}`);
+    expect(markup).not.toContain("現在沒有可安全推薦的安裝包");
   });
 });

@@ -22,8 +22,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Every public tag shares one non-cancelling writer lane across versions.
+  # Branch/PR runs retain per-ref cancellation for fast iteration.
+  group: ${{ github.ref_type == 'tag' && 'tokenmonster-public-tag-release' || format('ci-{0}-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
   # Job-level `if` cannot read the matrix context, so platform selection is
@@ -37,17 +39,36 @@ jobs:
     timeout-minutes: 5
     outputs:
       oses: ${{ steps.pick.outputs.oses }}
+      installer-oses: ${{ steps.pick.outputs.installer-oses }}
     steps:
       - name: Pick runner platforms
         id: pick
         env:
           PLATFORMS: ${{ inputs.platforms || (github.event_name == 'pull_request' && 'skip-macos') || 'all' }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          case "$PLATFORMS" in
-            linux-only) echo 'oses=["ubuntu-24.04"]' >> "$GITHUB_OUTPUT" ;;
-            skip-macos) echo 'oses=["ubuntu-24.04","windows-2025"]' >> "$GITHUB_OUTPUT" ;;
-            *) echo 'oses=["ubuntu-24.04","macos-15","windows-2025"]' >> "$GITHUB_OUTPUT" ;;
-          esac
+          if [[ "$EVENT_NAME" == "push" && "$REF_TYPE" == "tag" ]]; then
+            echo 'oses=["ubuntu-24.04","macos-15","windows-2025"]' >> "$GITHUB_OUTPUT"
+          else
+            case "$PLATFORMS" in
+              linux-only) echo 'oses=["ubuntu-24.04"]' >> "$GITHUB_OUTPUT" ;;
+              skip-macos) echo 'oses=["ubuntu-24.04","windows-2025"]' >> "$GITHUB_OUTPUT" ;;
+              *) echo 'oses=["ubuntu-24.04","macos-15","windows-2025"]' >> "$GITHUB_OUTPUT" ;;
+            esac
+          fi
+          # Public tag publication is wired only to the native Windows signed
+          # path. Linux has no artifact-signing policy yet, and the macOS
+          # collector/notarization verifier remains deliberately fail-closed.
+          if [[ "$REF_TYPE" == "tag" ]]; then
+            echo 'installer-oses=["windows-2025"]' >> "$GITHUB_OUTPUT"
+          else
+            case "$PLATFORMS" in
+              linux-only) echo 'installer-oses=["ubuntu-24.04"]' >> "$GITHUB_OUTPUT" ;;
+              skip-macos) echo 'installer-oses=["ubuntu-24.04","windows-2025"]' >> "$GITHUB_OUTPUT" ;;
+              *) echo 'installer-oses=["ubuntu-24.04","macos-15","windows-2025"]' >> "$GITHUB_OUTPUT" ;;
+            esac
+          fi
   sidecar-compatibility:
     name: Sidecar compatibility (${{ matrix.os }})
     needs: plan
@@ -77,30 +98,45 @@ jobs:
       # Build dependency-first so workspace package exports exist in a fresh checkout.
       - name: Build sidecar path
         run: |
+          npm run build --workspace @tokenmonster/byok-openai
+          npm run build --workspace @tokenmonster/contracts
+          npm run build --workspace @tokenmonster/secret-vault
           npm run build --workspace @tokenmonster/monster-engine
+          npm run build --workspace @tokenmonster/local-store
           npm run build --workspace @tokenmonster/characters
           npm run build --workspace @tokenmonster/token-tracker-adapter
           npm run build --workspace @tokenmonster/token-tracker-runtime
+          npm run build --workspace @tokenmonster/contribution-runtime
           npm run build --workspace @tokenmonster/companion-gateway
           npm run build --workspace @tokenmonster/companion-ui
           npm run build --workspace tokenmonster
 
       - name: Type-check sidecar path
         run: |
+          npm run typecheck --workspace @tokenmonster/byok-openai
+          npm run typecheck --workspace @tokenmonster/contracts
+          npm run typecheck --workspace @tokenmonster/secret-vault
           npm run typecheck --workspace @tokenmonster/monster-engine
+          npm run typecheck --workspace @tokenmonster/local-store
           npm run typecheck --workspace @tokenmonster/characters
           npm run typecheck --workspace @tokenmonster/token-tracker-adapter
           npm run typecheck --workspace @tokenmonster/token-tracker-runtime
+          npm run typecheck --workspace @tokenmonster/contribution-runtime
           npm run typecheck --workspace @tokenmonster/companion-gateway
           npm run typecheck --workspace @tokenmonster/companion-ui
           npm run typecheck --workspace tokenmonster
 
       - name: Test sidecar path without collection
         run: |
+          npm test --workspace @tokenmonster/byok-openai
+          npm test --workspace @tokenmonster/contracts
+          npm test --workspace @tokenmonster/secret-vault
           npm test --workspace @tokenmonster/monster-engine
+          npm test --workspace @tokenmonster/local-store
           npm test --workspace @tokenmonster/characters
           npm test --workspace @tokenmonster/token-tracker-adapter
           npm test --workspace @tokenmonster/token-tracker-runtime
+          npm test --workspace @tokenmonster/contribution-runtime
           npm test --workspace @tokenmonster/companion-gateway
           npm test --workspace @tokenmonster/companion-ui
           npm test --workspace tokenmonster
@@ -140,20 +176,20 @@ jobs:
         shell: bash
         run: npm test --workspace @tokenmonster/companion
 
-  # Expensive installer builds run only for tags, manual dispatch, or push
-  # commits marked [package].
+  # Unsigned internal installer builds never receive signing credentials and
+  # never publish GitHub Release assets.
   companion-installers:
     name: Companion installers [package] (${{ matrix.os }})
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[package]')
+    if: github.ref_type != 'tag' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[package]'))
     needs: plan
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     permissions:
-      contents: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(needs.plan.outputs.oses) }}
+        os: ${{ fromJSON(needs.plan.outputs.installer-oses) }}
 
     steps:
       - name: Check out repository
@@ -173,7 +209,13 @@ jobs:
         shell: bash
         run: node scripts/run-workspaces.mjs build @tokenmonster/companion
 
-      - name: Make unsigned desktop installers
+      - name: Bind one desktop release version
+        shell: bash
+        run: |
+          release_version="$(node scripts/derive-companion-release-version.mjs)"
+          echo "TOKENMONSTER_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+
+      - name: Make internal desktop installers
         shell: bash
         run: node scripts/package-companion.mjs make internal
 
@@ -211,22 +253,100 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Attach desktop installers to GitHub Release
-        if: github.ref_type == 'tag'
+  # Signing-key use is itself an external trust action. A tag cannot read the
+  # PFX/password until a reviewer approves the protected release-signing
+  # environment. Keep these secrets environment-scoped, never repository-wide.
+  signed-windows-installer:
+    name: Signed Windows installer
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: plan
+    runs-on: windows-2025
+    timeout-minutes: 30
+    environment: release-signing
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Install exact dependencies
+        shell: bash
+        run: npm ci
+
+      - name: Build desktop dependency closure
+        shell: bash
+        run: node scripts/run-workspaces.mjs build @tokenmonster/companion
+
+      - name: Bind one desktop release version
+        shell: bash
+        run: |
+          release_version="$(node scripts/derive-companion-release-version.mjs)"
+          echo "TOKENMONSTER_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+
+      - name: Require explicit public-release approval
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLIC_RELEASE_APPROVED: ${{ vars.TOKENMONSTER_PUBLIC_RELEASE_APPROVED }}
         run: |
-          # macOS runners ship bash 3.2, which lacks mapfile.
-          files=()
-          while IFS= read -r -d '' file; do
-            files+=("$file")
-          done < <(find apps/companion/out/make -type f -print0)
-          if [[ "${#files[@]}" -eq 0 ]]; then
-            echo "No desktop installer artifacts found" >&2
+          if [[ "$PUBLIC_RELEASE_APPROVED" != "true" ]]; then
+            echo "Tag signing is blocked until the legal, privacy, and rights gates are explicitly approved." >&2
             exit 1
           fi
-          gh release upload "$GITHUB_REF_NAME" --clobber -- "${files[@]}"
+
+      - name: Materialize audited Windows signing certificate
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.TOKENMONSTER_WINDOWS_CERTIFICATE_PFX_BASE64 }}
+        run: |
+          if ([String]::IsNullOrWhiteSpace($env:PFX_BASE64)) {
+            throw "Signed tag release requires TOKENMONSTER_WINDOWS_CERTIFICATE_PFX_BASE64."
+          }
+          try {
+            $certificateBytes = [Convert]::FromBase64String($env:PFX_BASE64)
+          } catch {
+            throw "TOKENMONSTER_WINDOWS_CERTIFICATE_PFX_BASE64 is not valid base64."
+          }
+          if ($certificateBytes.Length -lt 1 -or $certificateBytes.Length -gt 1048576) {
+            throw "The decoded Windows signing certificate has an invalid size."
+          }
+          $certificatePath = Join-Path $env:RUNNER_TEMP "tokenmonster-release.pfx"
+          [IO.File]::WriteAllBytes($certificatePath, $certificateBytes)
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "TOKENMONSTER_WINDOWS_CERTIFICATE_PATH=$certificatePath"
+
+      - name: Make and verify signed Windows installers
+        shell: bash
+        env:
+          TOKENMONSTER_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.TOKENMONSTER_WINDOWS_CERTIFICATE_PASSWORD }}
+          TOKENMONSTER_WINDOWS_SIGNER_SUBJECT: ${{ vars.TOKENMONSTER_WINDOWS_SIGNER_SUBJECT }}
+        run: node scripts/package-companion.mjs make signed
+
+      - name: Remove ephemeral Windows signing certificate
+        if: always()
+        shell: pwsh
+        run: |
+          $certificatePath = Join-Path $env:RUNNER_TEMP "tokenmonster-release.pfx"
+          Remove-Item -LiteralPath $certificatePath -Force -ErrorAction SilentlyContinue
+
+      - name: Re-verify Windows Squirrel sidecar payload
+        shell: bash
+        env:
+          TOKENMONSTER_WINDOWS_SIGNER_SUBJECT: ${{ vars.TOKENMONSTER_WINDOWS_SIGNER_SUBJECT }}
+        run: node scripts/verify-companion-package.mjs --mode signed --require-maker
+
+      - name: Upload verified signed installer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tokenmonster-desktop-windows-2025
+          path: apps/companion/out/make/squirrel.windows/x64/
+          if-no-files-found: error
+          retention-days: 7
 
   verify:
     name: Verify (Node 24)
@@ -288,6 +408,12 @@ jobs:
           npm run verify:packaging-toolchain
           npm run verify:artifacts
 
+      - name: Bind verification desktop release version
+        shell: bash
+        run: |
+          release_version="$(node scripts/derive-companion-release-version.mjs)"
+          echo "TOKENMONSTER_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+
       - name: Package and inspect unsigned companion
         run: npm run make:companion:internal
 
@@ -298,7 +424,8 @@ jobs:
         run: |
           mkdir -p release-evidence
           # Release evidence covers shipped (production) dependencies; dev-only
-          # toolchains (electron-forge) carry override pins npm flags as invalid.
+          # Forge's upstream ranges reject the reviewed safe override pins, which
+          # npm flags as invalid. This gate is not an application runtime dependency.
           npm sbom --sbom-format cyclonedx --omit dev > release-evidence/sbom.cdx.json
           npm pack --dry-run --json --workspaces > release-evidence/npm-pack-inventory.json
           LC_ALL=C find apps/web/dist apps/api/dist apps/companion/out/make packages/*/dist \
@@ -318,9 +445,61 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # Assemble the public CLI candidate exactly once. Platform jobs below must
+  # smoke these bytes; rebuilding independently on each runner would test three
+  # different artifacts and leave the eventual publish digest unidentified.
+  release-candidate:
+    name: Build release candidate once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.bind-version.outputs.version }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Pin npm
+        run: npm install --global npm@11.12.1
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Bind the CLI candidate to this tag or CI run
+        id: bind-version
+        shell: bash
+        run: |
+          release_version="$(node scripts/derive-cli-release-version.mjs)"
+          echo "version=$release_version" >> "$GITHUB_OUTPUT"
+          echo "TOKENMONSTER_CLI_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+
+      - name: Build release artifact
+        run: node scripts/release/build-release.mjs --version "$TOKENMONSTER_CLI_RELEASE_VERSION"
+
+      - name: Verify candidate digest and inventory
+        run: node scripts/release/verify-release-digest.mjs dist-release --expected-version "$TOKENMONSTER_CLI_RELEASE_VERSION"
+
+      - name: Upload immutable candidate bytes
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tokenmonster-release-candidate-${{ github.sha }}
+          path: |
+            dist-release/*.tgz
+            dist-release/SHASUMS256.txt
+          if-no-files-found: error
+          retention-days: 7
+
   release-smoke:
     name: Release smoke (${{ matrix.os }})
-    needs: plan
+    needs:
+      - plan
+      - release-candidate
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -337,29 +516,17 @@ jobs:
           node-version: 24.15.0
           cache: npm
 
-      - name: Install exact dependencies
-        shell: bash
-        run: npm ci
+      - name: Pin npm
+        run: npm install --global npm@11.12.1
 
-      - name: Build release artifact
-        shell: bash
-        run: node scripts/release/build-release.mjs --version-suffix "ci.${{ github.run_id }}"
+      - name: Download the single release candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: tokenmonster-release-candidate-${{ github.sha }}
+          path: dist-release
 
-      - name: Reject binary assets in release tarball
-        shell: bash
-        run: |
-          tarballs=(dist-release/tokenmonster-*.tgz)
-          if [[ "${#tarballs[@]}" -ne 1 || ! -f "${tarballs[0]}" ]]; then
-            echo "Expected exactly one release tarball" >&2
-            exit 1
-          fi
-          archive_entries="${{ runner.temp }}/tokenmonster-release-entries.txt"
-          tar -tzf "${tarballs[0]}" > "$archive_entries"
-          if forbidden_entries="$(grep -E '\.(webp|png|jpg|jpeg|gif|wav|mp3|node)$' "$archive_entries")"; then
-            echo "Release tarball contains forbidden binary assets:" >&2
-            echo "$forbidden_entries" >&2
-            exit 1
-          fi
+      - name: Verify downloaded candidate digest and inventory
+        run: node scripts/release/verify-release-digest.mjs dist-release --expected-version "${{ needs.release-candidate.outputs.version }}"
 
       - name: Install release tarball locally
         shell: bash
@@ -372,18 +539,706 @@ jobs:
           tarball="$(cd "$(dirname "${tarballs[0]}")" && pwd)/$(basename "${tarballs[0]}")"
           install_dir="${{ runner.temp }}/tokenmonster-install"
           mkdir -p "$install_dir"
-          cd "$install_dir"
-          npm install "$tarball"
+          # Bind npm to this exact empty prefix. A package.json in an ancestor
+          # of runner.temp must never redirect the installed smoke elsewhere.
+          npm install --prefix "$install_dir" "$tarball"
 
       - name: Smoke-test installed release
         shell: bash
         run: node scripts/release/smoke-installed.mjs "${{ runner.temp }}/tokenmonster-install"
 
-      - name: Upload release artifact
+      - name: Install Linux syscall tracer
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes strace
+
+      - name: Prove installed runtime is loopback-only
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        run: |
+          trace_path="${{ runner.temp }}/tokenmonster-installed-network.strace"
+          strace -f -s 256 -e trace=network -o "$trace_path" \
+            node scripts/release/smoke-installed.mjs "${{ runner.temp }}/tokenmonster-install"
+          node scripts/release/assert-loopback-network-trace.mjs "$trace_path"
+
+  # Stage exact assets on the draft, but never publish it here. This protected
+  # transition is rerun-safe: existing assets are downloaded and byte-compared;
+  # missing assets are added only while the release is still a draft.
+  stage-companion-release:
+    name: Stage verified signed companion draft
+    if: github.event_name == 'push' && github.ref_type == 'tag' && vars.TOKENMONSTER_PUBLIC_RELEASE_APPROVED == 'true'
+    needs:
+      - signed-windows-installer
+      - release-candidate
+      - verify
+      - release-smoke
+      - sidecar-compatibility
+      - companion-desktop
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: release-staging
+    permissions:
+      contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Check out release verification code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up exact release Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+
+      - name: Download the verified signed Windows artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: tokenmonster-desktop-windows-2025
+          path: release-artifacts
+
+      - name: Download the cross-platform-smoked CLI artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: tokenmonster-release-candidate-${{ github.sha }}
+          path: release-cli
+
+      - name: Re-verify the exact tag-bound CLI bytes
+        run: node scripts/release/verify-release-digest.mjs release-cli --expected-version "${{ needs.release-candidate.outputs.version }}"
+
+      - name: Assemble immutable draft bytes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          release_json="$(gh release view "$GITHUB_REF_NAME" --json isDraft,isPrerelease,assets,tagName)"
+          if [[ "$(jq -r '.tagName' <<< "$release_json")" != "$GITHUB_REF_NAME" ]]; then
+            echo "The draft release tag does not exactly match the pushed tag." >&2
+            exit 1
+          fi
+          release_is_draft="$(jq -r '.isDraft' <<< "$release_json")"
+          expected_prerelease="false"
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            expected_prerelease="true"
+          fi
+          if [[ "$(jq -r '.isPrerelease' <<< "$release_json")" != "$expected_prerelease" ]]; then
+            echo "The draft prerelease flag must exactly match the pushed tag version." >&2
+            exit 1
+          fi
+          file_count="$(find release-artifacts -type f | wc -l | tr -d ' ')"
+          if [[ "$file_count" -lt 1 ]]; then
+            echo "No verified signed installer artifact was downloaded." >&2
+            exit 1
+          fi
+          if find release-artifacts ! -type d ! -type f -print -quit | grep -q .; then
+            echo "Signed installer artifact contains a non-regular entry." >&2
+            exit 1
+          fi
+          upload_dir="${RUNNER_TEMP}/release-upload"
+          mkdir "$upload_dir"
+          checksum_name="TokenMonster-windows-SHA256SUMS.txt"
+          checksum_path="${RUNNER_TEMP}/${checksum_name}.tmp"
+          declare -A seen_basenames=()
+          while IFS= read -r -d '' file; do
+            basename="$(basename "$file")"
+            if [[ ! "$basename" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
+              echo "Release asset has an unsafe filename: $basename" >&2
+              exit 1
+            fi
+            if [[ -n "${seen_basenames[$basename]:-}" ]]; then
+              echo "Release artifact contains a duplicate basename: $basename" >&2
+              exit 1
+            fi
+            if [[ "$basename" == "$checksum_name" ]]; then
+              echo "Release artifact uses the reserved checksum filename." >&2
+              exit 1
+            fi
+            seen_basenames[$basename]=1
+            cp -- "$file" "$upload_dir/$basename"
+          done < <(find release-artifacts -type f -print0)
+          (
+            cd "$upload_dir"
+            find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum \
+              > "$checksum_path"
+          )
+          mv -- "$checksum_path" "$upload_dir/$checksum_name"
+          cli_tarballs=(release-cli/tokenmonster-*.tgz)
+          if [[ "${#cli_tarballs[@]}" -ne 1 || ! -f "${cli_tarballs[0]}" ]]; then
+            echo "Expected exactly one verified CLI tarball." >&2
+            exit 1
+          fi
+          cli_basename="$(basename "${cli_tarballs[0]}")"
+          if [[ -n "${seen_basenames[$cli_basename]:-}" ]]; then
+            echo "CLI tarball collides with a desktop release asset." >&2
+            exit 1
+          fi
+          cp -- "${cli_tarballs[0]}" "$upload_dir/$cli_basename"
+          cp -- release-cli/SHASUMS256.txt "$upload_dir/TokenMonster-cli-SHA256SUMS.txt"
+          expected_count="$(find "$upload_dir" -type f | wc -l | tr -d ' ')"
+          if [[ "$expected_count" -lt 6 ]]; then
+            echo "Signed installer inventory or checksum evidence is incomplete." >&2
+            exit 1
+          fi
+          remote_names="${RUNNER_TEMP}/remote-asset-names.txt"
+          jq -r '.assets[].name' <<< "$release_json" | LC_ALL=C sort > "$remote_names"
+          while IFS= read -r remote_name; do
+            if [[ -n "$remote_name" && ! -f "$upload_dir/$remote_name" ]]; then
+              echo "GitHub Release contains an unknown or stale asset: $remote_name" >&2
+              exit 1
+            fi
+          done < "$remote_names"
+          while IFS= read -r -d '' file; do
+            name="$(basename "$file")"
+            remote_count="$(jq --arg name "$name" '[.assets[] | select(.name == $name)] | length' <<< "$release_json")"
+            if [[ "$remote_count" -eq 0 ]]; then
+              if [[ "$release_is_draft" != "true" ]]; then
+                echo "A public rerun is missing the verified asset $name." >&2
+                exit 1
+              fi
+              gh release upload "$GITHUB_REF_NAME" -- "$file"
+            elif [[ "$remote_count" -ne 1 ]]; then
+              echo "GitHub Release asset name is not unique: $name" >&2
+              exit 1
+            fi
+          done < <(find "$upload_dir" -type f -print0)
+          remote_dir="${RUNNER_TEMP}/remote-release-assets"
+          mkdir "$remote_dir"
+          gh release download "$GITHUB_REF_NAME" --dir "$remote_dir" --pattern '*'
+          remote_count="$(find "$remote_dir" -type f | wc -l | tr -d ' ')"
+          if [[ "$remote_count" -ne "$expected_count" ]]; then
+            echo "Remote GitHub Release asset count differs from staging." >&2
+            exit 1
+          fi
+          while IFS= read -r -d '' expected; do
+            name="$(basename "$expected")"
+            if [[ ! -f "$remote_dir/$name" ]] || ! cmp --silent "$expected" "$remote_dir/$name"; then
+              echo "Remote GitHub Release bytes differ for $name." >&2
+              exit 1
+            fi
+          done < <(find "$upload_dir" -type f -print0)
+
+      - name: Preserve exact staged release set
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: tokenmonster-release-${{ matrix.os }}
-          path: |
-            dist-release/*.tgz
-            dist-release/SHASUMS256.txt
+          name: tokenmonster-github-release-staging-${{ github.sha }}
+          path: ${{ runner.temp }}/release-upload/
+          if-no-files-found: error
           retention-days: 7
+
+  # npm publication is a separate protected transition because package
+  # ownership and registry credentials are not implied by GitHub Release
+  # approval. A rerun accepts only the exact bytes already at that version.
+  publish-cli-npm:
+    name: Publish verified CLI to npm
+    if: github.event_name == 'push' && github.ref_type == 'tag' && vars.TOKENMONSTER_PUBLIC_RELEASE_APPROVED == 'true' && vars.TOKENMONSTER_NPM_PUBLISH_APPROVED == 'true'
+    needs:
+      - stage-companion-release
+      - release-candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: npm-release
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out release verification code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node.js and npm registry
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin npm
+        run: npm install --global npm@11.12.1
+
+      # Internal packaging and signed candidate review may use the exact audited
+      # overrides. Public npm/CDN/GitHub transitions stay fail-closed until a
+      # stable Forge release natively accepts the safe dependency versions.
+      - name: Install exact publication policy dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Require an upstream-compatible stable Forge toolchain
+        run: npm run verify:packaging-toolchain -- --require-upstream-compatible
+
+      - name: Download the cross-platform-smoked CLI artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: tokenmonster-release-candidate-${{ github.sha }}
+          path: release-cli
+
+      - name: Re-verify the exact npm candidate
+        run: node scripts/release/verify-release-digest.mjs release-cli --expected-version "${{ needs.release-candidate.outputs.version }}"
+
+      - name: Plan a monotonic npm publication
+        id: plan-npm
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.release-candidate.outputs.version }}
+        run: |
+          tarballs=(release-cli/tokenmonster-*.tgz)
+          if [[ "${#tarballs[@]}" -ne 1 || ! -f "${tarballs[0]}" ]]; then
+            echo "Expected exactly one verified npm tarball." >&2
+            exit 1
+          fi
+          registry_before="${RUNNER_TEMP}/npm-registry-before.json"
+          set +e
+          registry_status="$(curl --silent --show-error --max-redirs 0 \
+            --output "$registry_before" --write-out '%{http_code}' \
+            https://registry.npmjs.org/tokenmonster)"
+          registry_exit=$?
+          set -e
+          if [[ "$registry_exit" -ne 0 ]]; then
+            echo "The authoritative npm registry lookup failed." >&2
+            exit 1
+          fi
+          if [[ "$registry_status" == "200" ]]; then
+            registry_args=(--metadata "$registry_before")
+          elif [[ "$registry_status" == "404" ]]; then
+            registry_args=(--missing)
+          else
+            echo "The npm registry lookup returned HTTP $registry_status." >&2
+            exit 1
+          fi
+          plan_file="${RUNNER_TEMP}/npm-publication-plan.json"
+          node scripts/release/plan-npm-publication.mjs \
+            "${registry_args[@]}" \
+            --tarball "${tarballs[0]}" \
+            --version "$RELEASE_VERSION" > "$plan_file"
+          echo "decision=$(jq -r '.decision' "$plan_file")" >> "$GITHUB_OUTPUT"
+          echo "candidate_state=$(jq -r '.candidateState' "$plan_file")" >> "$GITHUB_OUTPUT"
+          echo "target_tag=$(jq -r '.targetTag' "$plan_file")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish bytes or monotonically repair the expected npm dist-tag
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.TOKENMONSTER_NPM_TOKEN }}
+          RELEASE_VERSION: ${{ needs.release-candidate.outputs.version }}
+          PUBLICATION_DECISION: ${{ steps.plan-npm.outputs.decision }}
+          CANDIDATE_STATE: ${{ steps.plan-npm.outputs.candidate_state }}
+          TARGET_TAG: ${{ steps.plan-npm.outputs.target_tag }}
+        run: |
+          if [[ -z "$NODE_AUTH_TOKEN" ]]; then
+            echo "TOKENMONSTER_NPM_TOKEN is required in the npm-release environment." >&2
+            exit 1
+          fi
+          npm whoami >/dev/null
+          tarballs=(release-cli/tokenmonster-*.tgz)
+          if [[ "$PUBLICATION_DECISION" == "idempotent" ]]; then
+            echo "npm already serves the exact candidate from $TARGET_TAG."
+          elif [[ "$PUBLICATION_DECISION" == "advance" && "$CANDIDATE_STATE" == "missing" ]]; then
+            npm publish "${tarballs[0]}" --access public --tag "$TARGET_TAG"
+          elif [[ "$PUBLICATION_DECISION" == "advance" && "$CANDIDATE_STATE" == "exact" ]]; then
+            npm dist-tag add "tokenmonster@${RELEASE_VERSION}" "$TARGET_TAG"
+          else
+            echo "The npm publication plan is not actionable." >&2
+            exit 1
+          fi
+
+      - name: Verify authoritative npm bytes and dist-tags after publication
+        shell: bash
+        run: |
+          tarballs=(release-cli/tokenmonster-*.tgz)
+          registry_after="${RUNNER_TEMP}/npm-registry-after.json"
+          verified="false"
+          for attempt in {1..6}; do
+            set +e
+            registry_status="$(curl --silent --show-error --max-redirs 0 \
+              --output "$registry_after" --write-out '%{http_code}' \
+              https://registry.npmjs.org/tokenmonster)"
+            registry_exit=$?
+            set -e
+            if [[ "$registry_exit" -eq 0 && "$registry_status" == "200" ]] && \
+              node scripts/release/verify-npm-publication.mjs \
+                --metadata "$registry_after" \
+                --plan "${RUNNER_TEMP}/npm-publication-plan.json" \
+                --tarball "${tarballs[0]}"; then
+              verified="true"
+              break
+            fi
+            sleep 5
+          done
+          if [[ "$verified" != "true" ]]; then
+            echo "npm did not converge to the exact monotonic publication plan." >&2
+            exit 1
+          fi
+
+      - name: Smoke the exact and public-channel npx deliverables
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.release-candidate.outputs.version }}
+          TARGET_TAG: ${{ steps.plan-npm.outputs.target_tag }}
+        run: |
+          public_smoke_dir="${RUNNER_TEMP}/tokenmonster-public-npx-smoke"
+          mkdir "$public_smoke_dir"
+          expected_cli_version="v${RELEASE_VERSION}"
+          actual_version="$(cd "$public_smoke_dir" && npm exec --yes --prefer-online --package "tokenmonster@${RELEASE_VERSION}" -- tokenmonster --version)"
+          if [[ "$actual_version" != "$expected_cli_version" ]]; then
+            echo "The exact public npx deliverable reported the wrong version." >&2
+            exit 1
+          fi
+          if [[ "$TARGET_TAG" == "latest" ]]; then
+            channel_version="$(cd "$public_smoke_dir" && npx --yes --prefer-online tokenmonster --version)"
+          else
+            channel_version="$(cd "$public_smoke_dir" && npm exec --yes --prefer-online --package tokenmonster@next -- tokenmonster --version)"
+          fi
+          if [[ "$channel_version" != "$expected_cli_version" ]]; then
+            echo "The public npm $TARGET_TAG channel reported the wrong version." >&2
+            exit 1
+          fi
+
+  # The CTA can open only from bytes promoted by this protected chain. It
+  # creates the versioned immutable object, recalls the complete public object,
+  # compares SHA-256 and bytes, then writes the generated canonical JSON as the
+  # Worker's single release binding and reads the Worker response back.
+  promote-windows-release:
+    name: Promote signed Windows bytes to CDN and web
+    if: github.event_name == 'push' && github.ref_type == 'tag' && vars.TOKENMONSTER_PUBLIC_RELEASE_APPROVED == 'true' && vars.TOKENMONSTER_NPM_PUBLISH_APPROVED == 'true'
+    needs:
+      - publish-cli-npm
+      - release-candidate
+      - signed-windows-installer
+    runs-on: ubuntu-24.04
+    # The feed executor has a 60-minute aggregate deadline and refuses to
+    # enter the mutable RELEASES commit without a 30-minute recovery window.
+    # Keep job-level headroom so GitHub cannot kill that critical section.
+    timeout-minutes: 90
+    environment: release-promotion
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out release promotion code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up exact release Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Install repo-pinned Wrangler
+        run: npm ci
+
+      - name: Download the verified signed Windows artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: tokenmonster-desktop-windows-2025
+          path: release-artifacts
+
+      - name: Generate the exact installer binding and Squirrel candidate
+        shell: bash
+        env:
+          PUBLIC_RELEASE_ENDPOINT_URL: ${{ vars.TOKENMONSTER_PUBLIC_RELEASE_ENDPOINT_URL }}
+        run: |
+          if [[ -z "$PUBLIC_RELEASE_ENDPOINT_URL" || "$PUBLIC_RELEASE_ENDPOINT_URL" == *$'\n'* || "$PUBLIC_RELEASE_ENDPOINT_URL" == *$'\r'* ]]; then
+            echo "PUBLIC_RELEASE_ENDPOINT_URL is required in the protected release-promotion environment." >&2
+            exit 1
+          fi
+          node --input-type=module -e "const url = new URL(process.env.PUBLIC_RELEASE_ENDPOINT_URL); if (url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.search !== '' || url.hash !== '' || url.pathname !== '/v1/releases/current') throw new Error('TOKENMONSTER_PUBLIC_RELEASE_ENDPOINT_URL must be the exact HTTPS release endpoint')"
+          node scripts/release/prepare-windows-promotion.mjs \
+            --artifact-dir release-artifacts \
+            --output-dir release-promotion \
+            --version "${{ needs.release-candidate.outputs.version }}"
+
+      # This is deliberately local and credential-free. Every candidate byte,
+      # key, cache policy, and RELEASES reference is fixed before the protected
+      # executor can retrieve or mutate public state.
+      - name: Verify the deterministic Squirrel feed candidate
+        shell: bash
+        run: |
+          squirrel_evidence="${RUNNER_TEMP}/windows-squirrel-candidate-verification-v1.json"
+          node scripts/release/verify-windows-squirrel-candidate.mjs \
+            --prepared-dir release-promotion \
+            --version "${{ needs.release-candidate.outputs.version }}" \
+            > "$squirrel_evidence"
+          mv -- "$squirrel_evidence" \
+            release-promotion/windows-squirrel-candidate-verification-v1.json
+
+      # Wrangler has no atomic create-only R2 operation. The protected
+      # release-promotion environment plus the workflow's one global,
+      # non-cancelling tag lane supplies the single writer; authoritative R2
+      # reads immediately before and after the put make drift fail closed.
+      - name: Authoritatively create or verify the immutable R2 object
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.TOKENMONSTER_CLOUDFLARE_RELEASE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.TOKENMONSTER_CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_R2_BUCKET: ${{ vars.TOKENMONSTER_WINDOWS_RELEASE_R2_BUCKET }}
+        run: |
+          for required in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID RELEASE_R2_BUCKET; do
+            if [[ -z "${!required}" || "${!required}" == *$'\n'* || "${!required}" == *$'\r'* ]]; then
+              echo "$required is required in the protected release-promotion environment." >&2
+              exit 1
+            fi
+          done
+          wrangler_version="$(cd apps/web && npx --no-install wrangler --version)"
+          if [[ "$wrangler_version" != "4.111.0" ]]; then
+            echo "R2 publication requires the audited Wrangler 4.111.0 diagnostics." >&2
+            exit 1
+          fi
+          public_release_json="$(< release-promotion/public-release-v1.json)"
+          object_key="$(node -e "const value = JSON.parse(process.argv[1]); process.stdout.write(new URL(value.downloadUrl).pathname.slice(1))" "$public_release_json")"
+          download_url="$(node -e "process.stdout.write(JSON.parse(process.argv[1]).downloadUrl)" "$public_release_json")"
+          bucket_info="${RUNNER_TEMP}/r2-bucket-info.json"
+          (
+            cd apps/web
+            npx --no-install wrangler r2 bucket info "$RELEASE_R2_BUCKET" --json
+          ) > "$bucket_info"
+          node --input-type=module -e "import { readFileSync } from 'node:fs'; const value = JSON.parse(readFileSync(process.argv[1], 'utf8')); if (value === null || typeof value !== 'object' || Array.isArray(value) || value.name !== process.env.RELEASE_R2_BUCKET) throw new Error('R2 bucket authority returned unexpected metadata')" "$bucket_info"
+          r2_before="${RUNNER_TEMP}/r2-object-before.exe"
+          r2_get_stdout="${RUNNER_TEMP}/r2-get-before.stdout"
+          r2_get_stderr="${RUNNER_TEMP}/r2-get-before.stderr"
+          set +e
+          (
+            cd apps/web
+            npx --no-install wrangler r2 object get \
+              "$RELEASE_R2_BUCKET/$object_key" \
+              --file "$r2_before" \
+              --remote
+          ) > "$r2_get_stdout" 2> "$r2_get_stderr"
+          r2_get_exit=$?
+          set -e
+          r2_state="$(node scripts/release/classify-wrangler-r2-get.mjs "$r2_get_exit" "$r2_get_stderr")"
+          if [[ "$r2_state" == "present" ]]; then
+            if ! cmp --silent release-promotion/TokenMonsterSetup.exe "$r2_before"; then
+              echo "The immutable R2 key already exists with different bytes." >&2
+              exit 1
+            fi
+          elif [[ "$r2_state" == "missing" ]]; then
+            rm -f -- "$r2_before"
+            (
+              cd apps/web
+              npx --no-install wrangler r2 object put \
+                "$RELEASE_R2_BUCKET/$object_key" \
+                --file ../../release-promotion/TokenMonsterSetup.exe \
+                --content-type application/vnd.microsoft.portable-executable \
+                --remote
+            )
+          else
+            echo "The authoritative R2 lookup returned an unknown decision." >&2
+            exit 1
+          fi
+          r2_after="${RUNNER_TEMP}/r2-object-after.exe"
+          (
+            cd apps/web
+            npx --no-install wrangler r2 object get \
+              "$RELEASE_R2_BUCKET/$object_key" \
+              --file "$r2_after" \
+              --remote
+          )
+          if ! cmp --silent release-promotion/TokenMonsterSetup.exe "$r2_after"; then
+            echo "The authoritative R2 readback differs from the signed installer." >&2
+            exit 1
+          fi
+          recalled_file="${RUNNER_TEMP}/cdn-full-get.exe"
+          curl --fail --silent --show-error --max-redirs 0 \
+            --header 'Cache-Control: no-cache' \
+            --output "$recalled_file" "$download_url"
+          node scripts/release/verify-windows-promotion.mjs \
+            --prepared-dir release-promotion \
+            --recalled-file "$recalled_file" \
+            --version "${{ needs.release-candidate.outputs.version }}"
+
+      # The workflow-wide non-cancelling tag concurrency group is the single
+      # writer from the first authoritative channel GET through metadata
+      # commit and readback. The executor treats only the pinned Wrangler
+      # missing-key diagnostic as absent; every other lookup failure is
+      # unknown and stops before a channel write. Version-named packages are
+      # retained after commit for clients that fetched the prior RELEASES.
+      - name: Promote and verify the exact Squirrel feed
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.TOKENMONSTER_CLOUDFLARE_RELEASE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.TOKENMONSTER_CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_R2_BUCKET: ${{ vars.TOKENMONSTER_WINDOWS_RELEASE_R2_BUCKET }}
+        run: |
+          if [[ -z "$RELEASE_R2_BUCKET" || "$RELEASE_R2_BUCKET" == *$'\n'* || "$RELEASE_R2_BUCKET" == *$'\r'* ]]; then
+            echo "RELEASE_R2_BUCKET is required in the protected release-promotion environment." >&2
+            exit 1
+          fi
+          squirrel_evidence="${RUNNER_TEMP}/windows-squirrel-promotion-evidence-v1.json"
+          node scripts/release/promote-windows-squirrel-feed.mjs \
+            --prepared-dir release-promotion \
+            --candidate release-promotion/windows-squirrel-candidate-v1.json \
+            --bucket "$RELEASE_R2_BUCKET" \
+            > "$squirrel_evidence"
+          mv -- "$squirrel_evidence" \
+            release-promotion/windows-squirrel-promotion-evidence-v1.json
+
+      - name: Plan a monotonic Worker release binding
+        id: plan-worker
+        shell: bash
+        env:
+          PUBLIC_RELEASE_ENDPOINT_URL: ${{ vars.TOKENMONSTER_PUBLIC_RELEASE_ENDPOINT_URL }}
+        run: |
+          worker_before="${RUNNER_TEMP}/worker-release-before.json"
+          set +e
+          worker_status="$(curl --silent --show-error --max-redirs 0 \
+            --output "$worker_before" --write-out '%{http_code}' \
+            --header 'Accept: application/json' \
+            --header 'Cache-Control: no-cache' \
+            "$PUBLIC_RELEASE_ENDPOINT_URL")"
+          worker_exit=$?
+          set -e
+          if [[ "$worker_exit" -ne 0 ]]; then
+            echo "The current public Worker release lookup failed." >&2
+            exit 1
+          fi
+          if [[ "$worker_status" == "200" ]]; then
+            current_args=(--current "$worker_before")
+          elif [[ "$worker_status" == "404" && "$(< "$worker_before")" == '{"error":"PUBLIC_RELEASE_NOT_CONFIGURED"}' ]]; then
+            current_args=(--missing)
+          else
+            echo "The current public Worker release returned an unexpected response (HTTP $worker_status)." >&2
+            exit 1
+          fi
+          worker_plan="${RUNNER_TEMP}/worker-publication-plan.json"
+          node scripts/release/plan-worker-publication.mjs \
+            "${current_args[@]}" \
+            --candidate release-promotion/public-release-v1.json \
+            > "$worker_plan"
+          echo "decision=$(jq -r '.decision' "$worker_plan")" >> "$GITHUB_OUTPUT"
+
+      - name: Promote only a monotonic generated Worker binding
+        if: steps.plan-worker.outputs.decision == 'advance'
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.TOKENMONSTER_CLOUDFLARE_RELEASE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.TOKENMONSTER_CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_WORKER_NAME: ${{ vars.TOKENMONSTER_WEB_WORKER_NAME }}
+        run: |
+          for required in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID RELEASE_WORKER_NAME; do
+            if [[ -z "${!required}" || "${!required}" == *$'\n'* || "${!required}" == *$'\r'* ]]; then
+              echo "$required is required in the protected release-promotion environment." >&2
+              exit 1
+            fi
+          done
+          public_release_json="$(< release-promotion/public-release-v1.json)"
+          printf '%s' "$public_release_json" | (
+            cd apps/web
+            npx --no-install wrangler secret put TOKENMONSTER_PUBLIC_RELEASE_JSON \
+              --name "$RELEASE_WORKER_NAME"
+          )
+
+      - name: Read back the exact public Worker binding
+        shell: bash
+        env:
+          PUBLIC_RELEASE_ENDPOINT_URL: ${{ vars.TOKENMONSTER_PUBLIC_RELEASE_ENDPOINT_URL }}
+        run: |
+          public_release_json="$(< release-promotion/public-release-v1.json)"
+          verified="false"
+          for attempt in {1..6}; do
+            if worker_response="$(curl --fail --silent --show-error --max-redirs 0 \
+              --header 'Accept: application/json' \
+              --header 'Cache-Control: no-cache' \
+              "$PUBLIC_RELEASE_ENDPOINT_URL")" && \
+              [[ "$worker_response" == "$public_release_json" ]]; then
+              verified="true"
+              break
+            fi
+            sleep 5
+          done
+          if [[ "$verified" != "true" ]]; then
+            echo "The public Worker did not return the exact promoted release binding." >&2
+            exit 1
+          fi
+
+      - name: Preserve promotion evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tokenmonster-windows-promotion-evidence-${{ github.sha }}
+          path: |
+            release-promotion/public-release-v1.json
+            release-promotion/promotion-manifest-v1.json
+            release-promotion/promotion-evidence-v1.json
+            release-promotion/windows-squirrel-candidate-v1.json
+            release-promotion/windows-squirrel-candidate-verification-v1.json
+            release-promotion/windows-squirrel-promotion-evidence-v1.json
+          if-no-files-found: error
+          retention-days: 30
+
+  # This is the only draft-to-public transition. npm has already served the
+  # exact npx bytes and the CDN/Worker chain has already recalled and exposed
+  # the exact signed Setup bytes. A completed rerun only re-verifies the public
+  # release; it never uploads or replaces public assets.
+  publish-companion-release:
+    name: Publish fully promoted GitHub Release
+    if: github.event_name == 'push' && github.ref_type == 'tag' && vars.TOKENMONSTER_PUBLIC_RELEASE_APPROVED == 'true' && vars.TOKENMONSTER_NPM_PUBLISH_APPROVED == 'true'
+    needs:
+      - promote-windows-release
+      - publish-cli-npm
+      - stage-companion-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Check out release verification code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up exact release Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+
+      - name: Download exact staged release set
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: tokenmonster-github-release-staging-${{ github.sha }}
+          path: expected-release-assets
+
+      - name: Verify exact remote bytes and publish once
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          release_json="$(gh release view "$GITHUB_REF_NAME" --json isDraft,isPrerelease,assets,tagName)"
+          if [[ "$(jq -r '.tagName' <<< "$release_json")" != "$GITHUB_REF_NAME" ]]; then
+            echo "The GitHub Release tag changed after staging." >&2
+            exit 1
+          fi
+          expected_prerelease="false"
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+            expected_prerelease="true"
+          fi
+          if [[ "$(jq -r '.isPrerelease' <<< "$release_json")" != "$expected_prerelease" ]]; then
+            echo "The GitHub Release prerelease flag changed after staging." >&2
+            exit 1
+          fi
+          remote_dir="${RUNNER_TEMP}/final-release-assets"
+          mkdir "$remote_dir"
+          gh release download "$GITHUB_REF_NAME" --dir "$remote_dir" --pattern '*'
+          expected_count="$(find expected-release-assets -type f | wc -l | tr -d ' ')"
+          remote_count="$(find "$remote_dir" -type f | wc -l | tr -d ' ')"
+          if [[ "$expected_count" -ne "$remote_count" ]]; then
+            echo "The final GitHub Release asset count changed after staging." >&2
+            exit 1
+          fi
+          while IFS= read -r -d '' expected; do
+            name="$(basename "$expected")"
+            if [[ ! -f "$remote_dir/$name" ]] || ! cmp --silent "$expected" "$remote_dir/$name"; then
+              echo "The final GitHub Release bytes changed for $name." >&2
+              exit 1
+            fi
+          done < <(find expected-release-assets -type f -print0)
+          is_draft="$(jq -r '.isDraft' <<< "$release_json")"
+          if [[ "$is_draft" == "true" ]]; then
+            gh release edit "$GITHUB_REF_NAME" --draft=false
+          else
+            echo "The exact GitHub Release is already public; rerun is idempotent."
+          fi
+          published_json="$(gh release view "$GITHUB_REF_NAME" --json isDraft,isPrerelease,tagName)"
+          if [[ "$(jq -r '.tagName' <<< "$published_json")" != "$GITHUB_REF_NAME" || \
+                "$(jq -r '.isDraft' <<< "$published_json")" != "false" || \
+                "$(jq -r '.isPrerelease' <<< "$published_json")" != "$expected_prerelease" ]]; then
+            echo "The published GitHub Release metadata does not match the pushed tag." >&2
+            exit 1
+          fi

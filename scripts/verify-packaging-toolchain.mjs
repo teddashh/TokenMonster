@@ -4,6 +4,19 @@ import { join } from "node:path";
 
 import { rootDirectory } from "./repository-files.mjs";
 
+const arguments_ = process.argv.slice(2);
+if (
+  arguments_.length > 1 ||
+  (arguments_.length === 1 &&
+    arguments_[0] !== "--require-upstream-compatible")
+) {
+  throw new Error(
+    "Usage: verify-packaging-toolchain.mjs [--require-upstream-compatible]"
+  );
+}
+const requireUpstreamCompatible =
+  arguments_[0] === "--require-upstream-compatible";
+
 const expectedProblems = [
   /^invalid: @electron\/rebuild@4\.2\.0 .+[\\/]node_modules[\\/]@electron[\\/]rebuild$/u,
   /^invalid: tmp@0\.2\.7 .+[\\/]node_modules[\\/]tmp$/u
@@ -65,6 +78,31 @@ async function runNpmList() {
 }
 
 const rootManifest = await readJson(join(rootDirectory, "package.json"));
+const companionManifest = await readJson(
+  join(rootDirectory, "apps", "companion", "package.json")
+);
+const expectedCompanionToolchainPins = {
+  "@electron-forge/cli": "7.11.2",
+  "@electron-forge/maker-dmg": "7.11.2",
+  "@electron-forge/maker-squirrel": "7.11.2",
+  "@electron-forge/maker-zip": "7.11.2",
+  "@electron-forge/plugin-fuses": "7.11.2",
+  "@electron/fuses": "1.8.0"
+};
+for (const [name, version] of Object.entries(expectedCompanionToolchainPins)) {
+  if (companionManifest.devDependencies?.[name] !== version) {
+    throw new Error(`${name} must remain exact at reviewed version ${version}.`);
+  }
+}
+for (const transitiveTool of ["@electron/rebuild", "external-editor", "tmp"]) {
+  for (const dependencyGroup of ["dependencies", "devDependencies"]) {
+    if (companionManifest[dependencyGroup]?.[transitiveTool] !== undefined) {
+      throw new Error(
+        `${transitiveTool} must remain a transitive Forge tool, not a companion ${dependencyGroup} entry.`
+      );
+    }
+  }
+}
 const expectedOverrides = {
   "@electron-forge/cli@7.11.2": {
     "@electron/rebuild": "4.2.0",
@@ -122,6 +160,12 @@ if (typeof rebuildModule.rebuild !== "function") {
   throw new Error("Overridden @electron/rebuild does not expose the Forge API.");
 }
 
+if (requireUpstreamCompatible && problems.length > 0) {
+  throw new Error(
+    "Signed/GA publication is blocked until stable Forge ranges accept the reviewed safe dependency versions."
+  );
+}
+
 process.stdout.write(
-  "Verified exact Forge toolchain overrides; signed/GA remains blocked until upstream semver ranges no longer require this exception.\n"
+  "Verified exact Forge toolchain overrides. Classification: external dev-tool supply-chain semver gate, not an application/runtime defect; signed/GA remains blocked until a stable upstream range accepts the safe versions.\n"
 );
