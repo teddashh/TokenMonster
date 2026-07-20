@@ -17,10 +17,11 @@ TokenMonster 是一個 local-first 的 AI 使用量夥伴：它在本機整理 t
 > `tokentracker-cli@0.80.0` 子程序負責 hooks、parsers、去重與跨平台收集，TokenMonster
 > 只透過 loopback aggregate API 取用資料。目標使用方式是單一指令
 > `npx tokenmonster`，不需要 clone repository、另裝 Electron 或手動啟動 collector。
-> 本機 `0.1.0-rc.12` exact tarball 已在空 prefix 安裝，並以隔離 HOME 完成真實
+> 歷史 `0.1.0-rc.12` exact tarball 曾在空 prefix 安裝，並以隔離 HOME 完成真實
 > Linux installed smoke；系統層 trace 只出現 loopback socket，沒有外部目的地。
-> 此候選版尚未發布；同一份 tarball 的 Windows／macOS smoke、npm registry 發布與
-> legacy cutover 尚未完成。目前的 Tokscale／Electron
+> 後續 credential-host hardening 已淘汰該候選，禁止補測、重標或發布那些 bytes。
+> 下一個唯一版本仍須重做 clean install、Windows／macOS smoke、registry gate 與
+> legacy cutover。目前的 Tokscale／Electron
 > 收集鏈是待移除的 legacy source slice，詳見
 > [ADR 0005](docs/adr/0005-permanent-tokentracker-sidecar-adapter.md)。
 
@@ -81,8 +82,8 @@ provider。
 
 | 區域 | 目前 source slice | 上線前狀態 |
 | --- | --- | --- |
-| Local companion（sidecar path） | 輕量 localhost UI、compact pet 內的四選一起始流程、真實 UTC 今日／7／28 日 totals 與每日趨勢 | 本機 rc.12 exact tarball 的 clean Linux installed smoke 與 loopback-only trace 已完成；registry 發布及同一 tarball 的原生 Windows／macOS smoke 待完成 |
-| Collector | exact-pinned `tokentracker-cli@0.80.0` child、local-only refresh、strict loopback adapter／gateway；legacy slice 仍含 `tokscale@4.5.2` | rc.12 安裝包已驗證 exact 41-package sidecar closure 與 Linux zstd prebuild；registry publish、Windows／macOS CI smoke 與 cutover 待完成 |
+| Local companion（sidecar path） | 輕量 localhost UI、compact pet 內的四選一起始流程、真實 UTC 今日／7／28 日 totals 與每日趨勢 | 已淘汰的 rc.12 bytes 留有 clean Linux installed smoke 與 loopback-only trace 歷史證據；post-hardening 的新版本仍須重做 clean install、registry gate 與原生 Windows／macOS smoke |
+| Collector | exact-pinned `tokentracker-cli@0.80.0` child、local-only refresh、strict loopback adapter／gateway；legacy slice 仍含 `tokscale@4.5.2` | 歷史 rc.12 安裝包曾驗證 exact 41-package sidecar closure 與 Linux zstd prebuild；下一個唯一版本須重做 closure、registry、Windows／macOS CI smoke 與 cutover 證據 |
 | Legacy Electron companion | 本機 SQLite、舊 7／28 日趨勢、traits／固定台詞、share card、export／reset | Migration-only；不再作為支援的安裝或 collection 路徑，sidecar cutover 後移除或降為 thin shell |
 | Characters | 11 位可切換角色；本機起始角色、單向解鎖、10 位的 20 種衣櫥與 pose art／50 條預錄 voice refs，GLM 使用 letter mode | 固定整包同意／驗證／修復／移除與 letter fallback 已完成；使用者回報 GLM 已獲核准，正式證據轉錄、非空 authority 與可選圖包發布仍待完成，但不阻擋 letter-mode 主程式發布 |
 | BYOK | Companion main process 直接呼叫 OpenAI Responses API；`store: false`、`background: false`，不使用 tools／files／conversation IDs | 已實作；仍需安全 release host 與真實 key 的人工 network smoke |
@@ -91,7 +92,7 @@ provider。
 | Cloud data | D1 guarded mutation、deletion、projection、retention、Durable Object rate limit／suppression | 已實作及本機測試；仍需真實 D1 migration、容量及故障演練 |
 | 匿名 compaction | 完整 UTC day 的 `day-all-v1`、`k = 20` gate、mapping-free rollup、commit-time race guards | 已實作及本機測試；尚未有 staging／production E2E |
 | Scheduled maintenance | deletion → compaction → retention → projection；retention 保留 compaction-owned input，避免部分日期被先刪除 | 已實作及本機測試；尚未在真實 Cron Trigger／D1 驗證 |
-| 安裝包／更新 feed | 本機 rc.12 unsigned Linux ZIP 已通過 ASAR／fuse／maker／collector／sidecar 驗證；Windows release tooling 會嚴格驗證單一 full `.nupkg` 的 `RELEASES` hash/bytes，並產生 deterministic `latest`／`next` promotion plan | 不是公開 installer；此工作站的 packaged boot 因 Chromium sandbox 主機政策而 fail closed，實際 signing、notarization、DMG、Squirrel current-channel 回讀／credential deploy／公開 readback與原生 install-update smoke 仍為 STOP |
+| 安裝包／更新 feed | 歷史 rc.12 unsigned Linux ZIP 曾通過 ASAR／fuse／maker／collector／sidecar 驗證，但已不可晉升；Windows release tooling 會嚴格驗證單一 full `.nupkg` 的 `RELEASES` hash/bytes，並產生 deterministic `latest`／`next` promotion plan | 尚無 post-hardening installer；此工作站的 packaged boot 因 Chromium sandbox 主機政策而 fail closed，新版本的 signing、notarization、DMG、Squirrel current-channel 回讀／credential deploy／公開 readback 與原生 install-update smoke 仍為 STOP |
 
 ## 已接受的目標架構
 
@@ -277,7 +278,8 @@ flag；缺少任何必要 binding 時，cloud write path 必須 fail closed。
 ### Internal companion package
 
 ```sh
-TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.12 npm run make:companion:internal
+: "${TOKENMONSTER_NEXT_RELEASE_VERSION:?請設定全新且未使用的 SemVer prerelease}"
+TOKENMONSTER_RELEASE_VERSION="$TOKENMONSTER_NEXT_RELEASE_VERSION" npm run make:companion:internal
 npm run verify:companion-package
 ```
 
@@ -322,8 +324,10 @@ Responses API：
 
 - API key 優先放入 OS-backed Electron `safeStorage`；不安全或不可用的 backend
   只允許 RAM-only session，不寫入磁碟。
-- Prompt／response 只存在 bounded memory，切換角色、移除 key、關窗或 process
-  結束時清除。
+- Prompt／response 只存在 bounded memory。預設 pet 在收起／關閉對話抽屜、
+  切換角色、移除 key 或 process 結束時清除；作業系統關窗只會把 pet 隱藏到
+  系統匣，不宣稱已清除仍在執行中的 session。Legacy 視窗關閉則會 suspend
+  BYOK 並清除該視窗的對話。
 - Request 明確使用 `store: false`、`background: false`，並停用 files、tools、
   hosted search、conversation IDs 與 redirect。
 - TokenMonster Worker、D1、analytics 與 public API 永遠不接收 provider key 或

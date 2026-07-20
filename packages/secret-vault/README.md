@@ -14,12 +14,12 @@ RAM fallback also preserves that ciphertext; only an explicit `persist: false`
 replacement or `clear()` removes the prior persisted authority.
 
 Status reports persistence capability separately from active storage:
-`persistence` says whether the host can use an approved OS backend, while
-`activePersistence` says where the currently configured value lives. An
-explicit `persist: false` choice therefore remains `memory-only` across local
-gateway/sidecar restart while that in-memory slot remains alive, even on an
-OS-backed host. `createMemorySecretSlot()` provides the same bounded validation
-and idempotent clear contract without disk I/O.
+`persistence` says whether the host can use an approved OS backend, while the
+required `activePersistence` field says where the currently configured value
+lives. An explicit `persist: false` choice therefore remains `memory-only`
+across local gateway/sidecar restart while that in-memory slot remains alive,
+even on an OS-backed host. `createMemorySecretSlot()` provides the same bounded
+validation and idempotent clear contract without disk I/O.
 
 Encrypted documents are strict, bounded JSON containing only a schema version
 and base64 ciphertext. Writes use a `0600` temporary file, fsync, atomic rename,

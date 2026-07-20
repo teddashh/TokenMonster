@@ -121,9 +121,11 @@ authoritative R2 reads immediately before and after a put. For example, after
 creating and pushing the reviewed tag, create the empty draft before the CI
 gates complete:
 
-```
-git push origin v0.1.0-rc.11
-gh release create v0.1.0-rc.11 --draft --prerelease --verify-tag --title "v0.1.0-rc.11"
+```sh
+: "${TOKENMONSTER_NEXT_RELEASE_VERSION:?set a new, unused SemVer prerelease}"
+TOKENMONSTER_NEXT_RELEASE_TAG="v$TOKENMONSTER_NEXT_RELEASE_VERSION"
+git push origin "$TOKENMONSTER_NEXT_RELEASE_TAG"
+gh release create "$TOKENMONSTER_NEXT_RELEASE_TAG" --draft --prerelease --verify-tag --title "$TOKENMONSTER_NEXT_RELEASE_TAG"
 ```
 
 Tag publication additionally requires repository variables
@@ -202,10 +204,11 @@ identity. Prereleases use a label and an optional numeric component such as
 dot, so ambiguous forms such as `rc8` and `a1.2` are rejected. Numeric
 components must fit Windows version resources. Build metadata (`+...`) is
 rejected because Squirrel drops it and could silently reuse an earlier package
-identity. For example:
+identity. Require a deliberately chosen, previously unused identity:
 
-```
-TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.12 npm run make:companion:internal
+```sh
+: "${TOKENMONSTER_NEXT_RELEASE_VERSION:?set a new, unused SemVer prerelease}"
+TOKENMONSTER_RELEASE_VERSION="$TOKENMONSTER_NEXT_RELEASE_VERSION" npm run make:companion:internal
 ```
 
 The source package remains `0.1.0`. Forge injects the candidate into the staged
@@ -234,8 +237,11 @@ Signed mode runs only on the matching native host. Windows uses the modern
 `electron-winstaller`, with SHA-256 only and the fixed HTTPS RFC3161 endpoint
 `https://timestamp.digicert.com`. Configure a native Windows shell with:
 
-```
-$env:TOKENMONSTER_RELEASE_VERSION = "0.1.0-rc.12"
+```powershell
+if (-not $env:TOKENMONSTER_NEXT_RELEASE_VERSION) {
+  throw "Set TOKENMONSTER_NEXT_RELEASE_VERSION to a new, unused SemVer prerelease"
+}
+$env:TOKENMONSTER_RELEASE_VERSION = $env:TOKENMONSTER_NEXT_RELEASE_VERSION
 $env:TOKENMONSTER_WINDOWS_CERTIFICATE_PATH = "C:\secure\tokenmonster.pfx"
 $env:TOKENMONSTER_WINDOWS_CERTIFICATE_PASSWORD = "<secret>"
 $env:TOKENMONSTER_WINDOWS_SIGNER_SUBJECT = "CN=..., O=..."
@@ -325,13 +331,15 @@ both engines with `engine-strict`, so `npm ci` rejects any other version.
 Adapt path quoting to the current shell; all invoked Node/npm tools are
 cross-platform.
 
-```
+```sh
 git clone <repo> && cd TokenMonster
 npm ci
-node scripts/release/build-release.mjs --version 0.1.0-rc.12 --out dist-release/rc.12
-node scripts/release/verify-release-digest.mjs dist-release/rc.12 --expected-version 0.1.0-rc.12
+: "${TOKENMONSTER_NEXT_RELEASE_VERSION:?set a new, unused SemVer prerelease}"
+candidate_dir="dist-release/$TOKENMONSTER_NEXT_RELEASE_VERSION"
+node scripts/release/build-release.mjs --version "$TOKENMONSTER_NEXT_RELEASE_VERSION" --out "$candidate_dir"
+node scripts/release/verify-release-digest.mjs "$candidate_dir" --expected-version "$TOKENMONSTER_NEXT_RELEASE_VERSION"
 mkdir tokenmonster-app
-npm install --prefix tokenmonster-app dist-release/rc.12/tokenmonster-0.1.0-rc.12.tgz
+npm install --prefix tokenmonster-app "$candidate_dir/tokenmonster-$TOKENMONSTER_NEXT_RELEASE_VERSION.tgz"
 node scripts/release/smoke-installed.mjs tokenmonster-app
 ```
 

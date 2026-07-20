@@ -1,5 +1,12 @@
 import { Buffer } from "node:buffer";
-import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,7 +16,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PET_BYOK_SECRET_FILE,
   PET_BYOK_INITIALIZATION_TIMEOUT_MS,
-  createPetByokSecretSlot
+  createPetByokSecretSlot,
+  startPetByokSecretSlot
 } from "../src/main/pet/byok-vault.js";
 
 const KEY_CANARY = ["sk", "pet_vault_1234567890abcdef_KEY_CANARY"].join("-");
@@ -43,7 +51,10 @@ class FakeSafeStorage implements AsyncSafeStoragePort {
   }
 
   public async encryptStringAsync(plainText: string): Promise<Uint8Array> {
-    return Uint8Array.from(Buffer.from(plainText, "utf8"), (value) => value ^ 0x5a);
+    return Uint8Array.from(
+      Buffer.from(plainText, "utf8"),
+      (value) => value ^ 0x5a
+    );
   }
 
   public async decryptStringAsync(
@@ -164,11 +175,7 @@ describe("default pet BYOK vault composition", () => {
       platform: "linux"
     });
     await writer!.set(KEY_CANARY, { persist: true });
-    const secretPath = join(
-      userDataDirectory,
-      "secrets",
-      PET_BYOK_SECRET_FILE
-    );
+    const secretPath = join(userDataDirectory, "secrets", PET_BYOK_SECRET_FILE);
     const oldCiphertext = await readFile(secretPath, "utf8");
     let announceProbe!: () => void;
     let releaseProbe!: (available: boolean) => void;
@@ -206,6 +213,47 @@ describe("default pet BYOK vault composition", () => {
     expect(await readFile(secretPath, "utf8")).toBe(oldCiphertext);
   });
 
+  it("aborts the bounded result but keeps raw policy work quiescent", async () => {
+    const userDataDirectory = await temporaryUserData();
+    let announceProbe!: () => void;
+    let releaseProbe!: (available: boolean) => void;
+    const probeStarted = new Promise<void>((resolve) => {
+      announceProbe = resolve;
+    });
+    const probeGate = new Promise<boolean>((resolve) => {
+      releaseProbe = resolve;
+    });
+    const startup = startPetByokSecretSlot({
+      userDataDirectory,
+      safeStorage: Object.freeze({
+        isAsyncEncryptionAvailable: async () => {
+          announceProbe();
+          return await probeGate;
+        },
+        getSelectedStorageBackend: () => "basic_text",
+        encryptStringAsync: async () => Uint8Array.of(1),
+        decryptStringAsync: async () => ({
+          result: KEY_CANARY,
+          shouldReEncrypt: false
+        })
+      }),
+      platform: "linux"
+    });
+    await probeStarted;
+    let quiesced = false;
+    const quiescence = startup.quiesce().then(() => {
+      quiesced = true;
+    });
+
+    startup.abort();
+    await expect(startup.result).resolves.toBeNull();
+    expect(quiesced).toBe(false);
+
+    releaseProbe(true);
+    await quiescence;
+    expect(quiesced).toBe(true);
+  });
+
   it("bounds a hanging vault decrypt without exposing a late authority", async () => {
     const userDataDirectory = await temporaryUserData();
     const writer = await createPetByokSecretSlot({
@@ -214,11 +262,7 @@ describe("default pet BYOK vault composition", () => {
       platform: "linux"
     });
     await writer!.set(KEY_CANARY, { persist: true });
-    const secretPath = join(
-      userDataDirectory,
-      "secrets",
-      PET_BYOK_SECRET_FILE
-    );
+    const secretPath = join(userDataDirectory, "secrets", PET_BYOK_SECRET_FILE);
     const oldCiphertext = await readFile(secretPath, "utf8");
     let announceDecrypt!: () => void;
     let releaseDecrypt!: () => void;

@@ -141,8 +141,11 @@ const forbiddenAssetTransportMarkers = [
   "asset fetch failed"
 ];
 const requiredDefaultPetByokMarkers = [
-  "createPetByokSecretSlot",
+  "startPetByokSecretSlot",
   "createElectronAsyncSafeStoragePort",
+  "createPetStartupLifecycle",
+  "drainPetStartupLifecycle",
+  "adoptPetStartupOwner",
   'PET_BYOK_SECRET_FILE = "openai-byok.json"',
   "startPetServices(petByokSecretSlot)",
   'var BYOK_STATUS_PATH = "/api/byok/status"',

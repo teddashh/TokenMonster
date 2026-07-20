@@ -22,16 +22,17 @@ function initializeWithinDeadline(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      controller.signal.removeEventListener("abort", onAbort);
       resolve(result);
     };
-    const timer = setTimeout(
-      () => {
-        controller.abort();
-        finish(null);
-      },
-      PET_BYOK_INITIALIZATION_TIMEOUT_MS
-    );
+    const onAbort = (): void => finish(null);
+    const timer = setTimeout(() => {
+      controller.abort();
+      finish(null);
+    }, PET_BYOK_INITIALIZATION_TIMEOUT_MS);
     timer.unref?.();
+    if (controller.signal.aborted) onAbort();
+    else controller.signal.addEventListener("abort", onAbort, { once: true });
     void operation.then(
       (slot) => finish(slot),
       () => finish(null)
@@ -52,6 +53,13 @@ export interface PetByokSecretSlotOptions {
   readonly userDataDirectory: string;
   readonly safeStorage: AsyncSafeStoragePort;
   readonly platform: NodeJS.Platform;
+  readonly signal?: AbortSignal;
+}
+
+export interface PetByokSecretSlotStartup {
+  readonly result: Promise<EncryptedSecretSlot | null>;
+  abort(): void;
+  quiesce(): Promise<void>;
 }
 
 export function createElectronAsyncSafeStoragePort(
@@ -73,15 +81,19 @@ export function createElectronAsyncSafeStoragePort(
 }
 
 /**
- * Creates the default pet's legacy-compatible OpenAI slot without making BYOK
- * a startup dependency. A private-directory, safeStorage-policy, or vault-load
- * failure returns null so the gateway remains usable and reports unavailable.
+ * Starts the default pet's legacy-compatible OpenAI slot without making BYOK
+ * a startup dependency. The handle keeps raw work joinable after its bounded
+ * public result returns null or shutdown aborts the attempt.
  */
-export async function createPetByokSecretSlot(
+export function startPetByokSecretSlot(
   options: PetByokSecretSlotOptions
-): Promise<EncryptedSecretSlot | null> {
+): PetByokSecretSlotStartup {
   const controller = new AbortController();
+  const forwardAbort = (): void => controller.abort();
+  if (options.signal?.aborted === true) forwardAbort();
+  else options.signal?.addEventListener("abort", forwardAbort, { once: true });
   const operation = (async (): Promise<EncryptedSecretSlot | null> => {
+    if (controller.signal.aborted) return null;
     const secretsDirectory = await ensurePrivateChildDirectory(
       options.userDataDirectory,
       ["secrets"]
@@ -119,5 +131,23 @@ export async function createPetByokSecretSlot(
     if (controller.signal.aborted) return null;
     return slot;
   })();
-  return initializeWithinDeadline(operation, controller);
+  const result = initializeWithinDeadline(operation, controller).finally(() => {
+    options.signal?.removeEventListener("abort", forwardAbort);
+  });
+  let quiescence: Promise<void> | null = null;
+  return Object.freeze({
+    result,
+    abort: () => controller.abort(),
+    quiesce: () => {
+      quiescence ??= Promise.allSettled([operation]).then(() => undefined);
+      return quiescence;
+    }
+  });
+}
+
+/** Convenience wrapper for callers without an owned shutdown lifecycle. */
+export async function createPetByokSecretSlot(
+  options: PetByokSecretSlotOptions
+): Promise<EncryptedSecretSlot | null> {
+  return await startPetByokSecretSlot(options).result;
 }

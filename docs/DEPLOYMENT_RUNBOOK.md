@@ -118,17 +118,18 @@ npm run verify:packaging-toolchain
 npm audit --audit-level=high
 npm ls --depth=0
 test -f apps/web/dist/client/index.html
-candidate_dir="dist-release/rc.12"
+: "${TOKENMONSTER_NEXT_RELEASE_VERSION:?設定全新且未使用的 SemVer prerelease}"
+candidate_dir="dist-release/$TOKENMONSTER_NEXT_RELEASE_VERSION"
 test ! -e "$candidate_dir"
 node scripts/release/build-release.mjs \
-  --version 0.1.0-rc.12 \
+  --version "$TOKENMONSTER_NEXT_RELEASE_VERSION" \
   --out "$candidate_dir"
 node scripts/release/verify-release-digest.mjs \
   "$candidate_dir" \
-  --expected-version 0.1.0-rc.12
+  --expected-version "$TOKENMONSTER_NEXT_RELEASE_VERSION"
 release_install_dir="$(mktemp -d)"
 npm install --prefix "$release_install_dir" \
-  "$candidate_dir/tokenmonster-0.1.0-rc.12.tgz"
+  "$candidate_dir/tokenmonster-$TOKENMONSTER_NEXT_RELEASE_VERSION.tgz"
 node scripts/release/smoke-installed.mjs "$release_install_dir"
 ```
 
@@ -152,7 +153,8 @@ integrity替換都必須 fail closed。
 Internal companion bundle review可另外執行：
 
 ```sh
-TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.12 npm run make:companion:internal
+: "${TOKENMONSTER_NEXT_RELEASE_VERSION:?設定全新且未使用的 SemVer prerelease}"
+TOKENMONSTER_RELEASE_VERSION="$TOKENMONSTER_NEXT_RELEASE_VERSION" npm run make:companion:internal
 test -f release-evidence/companion-package.json
 ```
 

@@ -51,7 +51,8 @@ import {
 } from "./bounds-store.js"
 import {
   createElectronAsyncSafeStoragePort,
-  createPetByokSecretSlot
+  startPetByokSecretSlot,
+  type PetByokSecretSlotStartup
 } from "./byok-vault.js"
 import { originNavigationGuard, petViewUrl } from "./navigation.js"
 import {
@@ -66,14 +67,19 @@ import {
   startPetServices,
   type PetServices
 } from "./services.js"
+import {
+  adoptPetStartupOwner,
+  createPetStartupLifecycle,
+  drainPetStartupAttemptFailure,
+  drainPetStartupLifecycle,
+  runPetStartupAttempt
+} from "./startup-lifecycle.js"
 import { petShellDataUrl, type PetShellStatus } from "./shell-page.js"
 import {
   COMPANION_PNG_SAVE_CHANNEL,
   type CompanionPngSaveResponse
 } from "../../shared/companion-png.js"
-import {
-  type ReminderNotification
-} from "../../shared/reminders.js"
+import { type ReminderNotification } from "../../shared/reminders.js"
 
 const PET_DRAG_BAR_HEIGHT = 32
 const PET_SESSION_PARTITION = "persist:tokenmonster-pet"
@@ -249,9 +255,10 @@ export async function startPetCompanion(
   let pinned = restored.pinned
   let services: PetServices | null = null
   let petByokSecretSlot: EncryptedSecretSlot | null = null
+  let petByokStartup: PetByokSecretSlotStartup | null = null
   let gatewayView: WebContentsView | null = null
   let shellStatus: PetShellStatus = Object.freeze({ kind: "loading" })
-  let startupOperation: Promise<void> | null = null
+  const startupLifecycle = createPetStartupLifecycle()
   let shutdownOperation: Promise<void> | null = null
   let quittingAllowed = false
   let updateWindowCloseAllowed = false
@@ -260,6 +267,7 @@ export async function startPetCompanion(
   let removeReminderIpcHandlers = (): void => undefined
   let removeAutomaticUpdateIpcHandlers = (): void => undefined
   const dashboardWindows = new Set<BrowserWindow>()
+  let stopServicesTail = Promise.resolve()
 
   const shellWindow = new BrowserWindow({
     ...restored.bounds,
@@ -392,44 +400,65 @@ export async function startPetCompanion(
     )
   }
 
-  const stopActiveServices = async (): Promise<void> => {
+  const stopActiveServices = (): Promise<void> => {
     const activeServices = services
     services = null
     // Orphaned dashboards would keep polling the old origin; once that port
     // is freed, any local process could reclaim it and harvest the session
     // cookie (host-only cookies on 127.0.0.1 are not port-scoped).
     for (const dashboard of dashboardWindows) {
-      if (!dashboard.isDestroyed()) dashboard.destroy()
+      try {
+        if (!dashboard.isDestroyed()) dashboard.destroy()
+      } catch {
+        // UI teardown failure cannot skip gateway and runtime closure.
+      }
     }
     dashboardWindows.clear()
-    closeView(shellWindow, gatewayView)
-    gatewayView = null
-    // Clear the cookie while we still own the loopback port, so nothing can
-    // present it to whoever reclaims that port after closePetServices.
     try {
-      await session
-        .fromPartition(PET_SESSION_PARTITION)
-        .clearStorageData({ storages: ["cookies"] })
+      closeView(shellWindow, gatewayView)
     } catch {
-      // Best effort: the next bootstrap overwrites the session cookie anyway.
+      // The local services remain the authoritative shutdown owners below.
     }
-    await closePetServices(activeServices)
+    gatewayView = null
+    const stop = stopServicesTail
+      .catch(() => undefined)
+      .then(async () => {
+        // Clear the cookie while we still own the loopback port, so nothing can
+        // present it to whoever reclaims that port after closePetServices.
+        try {
+          await session
+            .fromPartition(PET_SESSION_PARTITION)
+            .clearStorageData({ storages: ["cookies"] })
+        } catch {
+          // Best effort: the next bootstrap overwrites the session cookie anyway.
+        }
+        await closePetServices(activeServices)
+      })
+    stopServicesTail = stop
+    return stop
   }
 
   const stopOwnedRuntime = async (): Promise<void> => {
-    await closeCompanionRuntimeLeaseAfter(stopActiveServices, runtimeLease)
+    startupLifecycle.requestShutdown()
+    await closeCompanionRuntimeLeaseAfter(
+      () => drainPetStartupLifecycle(startupLifecycle, stopActiveServices),
+      runtimeLease
+    )
   }
 
   const beginShutdown = (): void => {
     if (shutdownOperation !== null) return
+    startupLifecycle.requestShutdown()
     shutdownOperation = (async (): Promise<void> => {
       await closeCompanionRuntimeLeaseAfter(async () => {
+        let statePersistence = Promise.resolve()
         try {
-          await persistState()
+          statePersistence = persistState().catch(() => undefined)
         } catch {
           // Persistence failure must not strand the loopback services.
         }
-        await stopActiveServices()
+        await drainPetStartupLifecycle(startupLifecycle, stopActiveServices)
+        await statePersistence
         for (const channel of Object.values(PET_SHELL_CHANNELS)) {
           ipcMain.removeHandler(channel)
         }
@@ -535,44 +564,73 @@ export async function startPetCompanion(
   automaticUpdateService = readyAutomaticUpdateService
 
   const showFailure = async (kind: "gateway" | "sidecar"): Promise<void> => {
+    if (startupLifecycle.shutdownRequested()) return
     if (SMOKE_MODE) {
       reportSmokeOutcome(kind, stopOwnedRuntime)
       return
     }
     await stopActiveServices()
+    if (startupLifecycle.shutdownRequested()) return
     shellStatus = Object.freeze({
       kind: "error",
       message: PET_STARTUP_MESSAGES[kind]
     })
     await loadShell()
+    if (startupLifecycle.shutdownRequested()) return
     showWindow()
   }
 
   const startServices = (): Promise<void> => {
-    if (startupOperation !== null) return startupOperation
-    startupOperation = (async (): Promise<void> => {
-      shellStatus = Object.freeze({ kind: "loading" })
-      await loadShell()
-      await stopActiveServices()
-      try {
+    const currentStartup = startupLifecycle.currentStartup()
+    if (currentStartup !== null) return currentStartup
+    if (startupLifecycle.shutdownRequested()) return Promise.resolve()
+    const startupOperation = runPetStartupAttempt(
+      startupLifecycle,
+      async () => {
+        shellStatus = Object.freeze({ kind: "loading" })
+        await loadShell()
+        startupLifecycle.assertRunning()
+        await stopActiveServices()
+        startupLifecycle.assertRunning()
         // Keep a successfully initialized RAM-only slot across a sidecar retry;
         // retry a null result so a transient keychain/directory failure can heal.
-        petByokSecretSlot ??= await createPetByokSecretSlot({
-          userDataDirectory,
-          safeStorage: createElectronAsyncSafeStoragePort({
-            isAsyncEncryptionAvailable: () =>
-              safeStorage.isAsyncEncryptionAvailable(),
-            getSelectedStorageBackend: () =>
-              safeStorage.getSelectedStorageBackend(),
-            encryptStringAsync: (plainText: string) =>
-              safeStorage.encryptStringAsync(plainText),
-            decryptStringAsync: (encrypted: Buffer) =>
-              safeStorage.decryptStringAsync(encrypted)
-          }),
-          platform: process.platform
-        })
+        if (petByokSecretSlot === null) {
+          if (petByokStartup === null) {
+            const byokStartup = startPetByokSecretSlot({
+              userDataDirectory,
+              safeStorage: createElectronAsyncSafeStoragePort({
+                isAsyncEncryptionAvailable: () =>
+                  safeStorage.isAsyncEncryptionAvailable(),
+                getSelectedStorageBackend: () =>
+                  safeStorage.getSelectedStorageBackend(),
+                encryptStringAsync: (plainText: string) =>
+                  safeStorage.encryptStringAsync(plainText),
+                decryptStringAsync: (encrypted: Buffer) =>
+                  safeStorage.decryptStringAsync(encrypted)
+              }),
+              platform: process.platform,
+              signal: startupLifecycle.signal
+            })
+            petByokStartup = byokStartup
+            const quiescence = byokStartup.quiesce().finally(() => {
+              if (petByokStartup === byokStartup) petByokStartup = null
+            })
+            startupLifecycle.trackCredentialWorker(quiescence)
+          }
+          const candidate = await petByokStartup.result
+          startupLifecycle.assertRunning()
+          petByokSecretSlot ??= candidate
+        }
         const started = await startPetServices(petByokSecretSlot)
-        services = started
+        const adopted = await adoptPetStartupOwner(
+          startupLifecycle,
+          started,
+          (owner) => {
+            services = owner
+          },
+          closePetServices
+        )
+        if (!adopted) return
         const view = new WebContentsView({
           webPreferences: {
             contextIsolation: true,
@@ -595,31 +653,48 @@ export async function startPetCompanion(
         // The gateway rejects query strings on the bootstrap path, so the
         // layout selector must not ride on it.
         await view.webContents.loadURL(started.bootstrapUrl)
-        if (services !== started) return
+        if (startupLifecycle.shutdownRequested() || services !== started) {
+          return
+        }
         // The bootstrap redirect targets `/`, so a second navigation gives the
         // authenticated page its pet layout selector without replaying bootstrap.
         await view.webContents.loadURL(petViewUrl(`${started.origin}/`))
-        if (services !== started) return
+        if (startupLifecycle.shutdownRequested() || services !== started) {
+          return
+        }
         shellStatus = Object.freeze({ kind: "ready" })
         await loadShell()
+        if (startupLifecycle.shutdownRequested() || services !== started) return
         reportSmokeOutcome("ok", stopOwnedRuntime)
 
         void started.runtime.closed.then((exit) => {
-          if (services === started && !exit.expected) {
+          if (
+            !startupLifecycle.shutdownRequested() &&
+            services === started &&
+            !exit.expected
+          ) {
             void showFailure("sidecar")
           }
         })
-      } catch (error: unknown) {
+      },
+      async (error: unknown) => {
         // Local stderr only: the failure page hides every detail by design,
         // which would make packaged-app startup failures undiagnosable.
         console.error("TokenMonster pet startup failed:", error)
-        await showFailure(
-          error instanceof PetStartupError ? error.kind : "gateway"
-        )
+        try {
+          await showFailure(
+            error instanceof PetStartupError ? error.kind : "gateway"
+          )
+        } catch (failure: unknown) {
+          await drainPetStartupAttemptFailure(
+            startupLifecycle,
+            stopActiveServices
+          )
+          throw failure
+        }
       }
-    })().finally(() => {
-      startupOperation = null
-    })
+    )
+    startupLifecycle.trackStartup(startupOperation)
     return startupOperation
   }
 

@@ -52,8 +52,11 @@ const companionPreloadPath = join(
 // fixed asset-pack installer then fails only after a player enables art.
 const mainSource = await readFile(mainPath, "utf8");
 const defaultPetByokMarkers = [
-  "createPetByokSecretSlot",
+  "startPetByokSecretSlot",
   "createElectronAsyncSafeStoragePort",
+  "createPetStartupLifecycle",
+  "drainPetStartupLifecycle",
+  "adoptPetStartupOwner",
   'PET_BYOK_SECRET_FILE = "openai-byok.json"',
   "startPetServices(petByokSecretSlot)",
   'var BYOK_STATUS_PATH = "/api/byok/status"',

@@ -52,6 +52,7 @@ class TestSlot implements EncryptedSecretSlot {
   value: string | null = null;
   failSet = false;
   failClear = false;
+  failGet = false;
 
   constructor(readonly persistence: SecretPersistence = "os-backed") {}
 
@@ -59,6 +60,10 @@ class TestSlot implements EncryptedSecretSlot {
     return Object.freeze({
       configured: this.value !== null,
       persistence: this.persistence,
+      activePersistence:
+        this.value !== null && this.persistence === "os-backed"
+          ? "os-backed"
+          : "memory-only",
       backend: this.persistence === "os-backed" ? "keychain" : "basic_text",
     });
   }
@@ -79,6 +84,7 @@ class TestSlot implements EncryptedSecretSlot {
   }
 
   get(): string | null {
+    if (this.failGet) throw new Error("SLOT_READ_FAILED");
     return this.value;
   }
 
@@ -116,13 +122,81 @@ class HangingSetSlot extends TestSlot {
 class HangingInitializeSlot extends TestSlot {
   observedSignal: AbortSignal | undefined;
   complete: (() => void) | undefined;
+  initializeCalls = 0;
 
   override initialize(
     options?: Readonly<{ signal?: AbortSignal }>,
   ): Promise<SecretSlotStatus> {
+    this.initializeCalls += 1;
     this.observedSignal = options?.signal;
     return new Promise<SecretSlotStatus>((resolve) => {
       this.complete = () => resolve(this.status());
+    });
+  }
+}
+
+class MissingActivePersistenceSlot extends TestSlot {
+  override initialize(): Promise<SecretSlotStatus> {
+    const { activePersistence: _activePersistence, ...incomplete } =
+      this.status();
+    return Promise.resolve(incomplete as SecretSlotStatus);
+  }
+}
+
+class InvalidSecretTypeSlot extends TestSlot {
+  override get(): string | null {
+    return 123 as unknown as string;
+  }
+}
+
+class DowngradingSetSlot extends TestSlot {
+  private downgraded = false;
+
+  override set(secret: string): Promise<SecretSlotStatus> {
+    this.value = secret;
+    this.downgraded = true;
+    return Promise.resolve(this.status());
+  }
+
+  override status(): SecretSlotStatus {
+    if (!this.downgraded) return super.status();
+    return Object.freeze({
+      configured: true,
+      persistence: "os-backed",
+      activePersistence: "memory-only",
+      backend: "keychain",
+    });
+  }
+}
+
+class StatusDowngradingSlot extends TestSlot {
+  downgraded = false;
+
+  override status(): SecretSlotStatus {
+    const current = super.status();
+    if (!this.downgraded || this.value === null) return current;
+    return Object.freeze({
+      ...current,
+      activePersistence: "memory-only",
+    });
+  }
+}
+
+class DishonestClearSlot extends TestSlot {
+  private claimedCleared = false;
+
+  override clear(): Promise<SecretSlotStatus> {
+    this.claimedCleared = true;
+    return Promise.resolve(this.status());
+  }
+
+  override status(): SecretSlotStatus {
+    if (!this.claimedCleared) return super.status();
+    return Object.freeze({
+      configured: false,
+      persistence: "os-backed",
+      activePersistence: "memory-only",
+      backend: "keychain",
     });
   }
 }
@@ -370,6 +444,37 @@ describe("companion contribution service", () => {
     }
   });
 
+  it("single-flights initialization and quiesces the underlying credential operation", async () => {
+    store = await openLocalStore({ path: ":memory:" });
+    const hanging = new HangingInitializeSlot();
+    const fetcher = vi.fn<typeof fetch>();
+    const instance = service(fetcher, { pending: hanging });
+
+    const first = instance.contribution.initialize();
+    const second = instance.contribution.initialize();
+    expect(second).toBe(first);
+    await Promise.resolve();
+    expect(hanging.initializeCalls).toBe(1);
+
+    let quiesced = false;
+    const closing = instance.contribution.quiesce().then(() => {
+      quiesced = true;
+    });
+    await Promise.resolve();
+    expect(hanging.observedSignal?.aborted).toBe(true);
+    expect(quiesced).toBe(false);
+
+    hanging.complete?.();
+    await Promise.all([first, second, closing]);
+    expect(quiesced).toBe(true);
+    expect(instance.contribution.status()).toMatchObject({
+      secureStorage: "unavailable",
+      state: "unavailable",
+      enabled: false,
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("aborts a hung credential write, releases busy, and blocks a late commit", async () => {
     vi.useFakeTimers();
     try {
@@ -390,16 +495,61 @@ describe("companion contribution service", () => {
       await expect(enabling).resolves.toMatchObject({
         ok: false,
         code: "secure-storage-failed",
-        status: { state: "off", enabled: false, canRecover: false },
+        status: {
+          secureStorage: "unavailable",
+          state: "unavailable",
+          enabled: false,
+          canRecover: false,
+        },
       });
       expect(pending.observedSignal?.aborted).toBe(true);
       expect(pending.value).toBeNull();
       await expect(instance.contribution.recover()).resolves.toMatchObject({
         ok: false,
-        code: "state-conflict",
+        code: "secure-storage-unavailable",
       });
       pending.complete?.();
       await Promise.resolve();
+      expect(pending.value).toBeNull();
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("quiesces a timed-out credential write only after its host operation settles", async () => {
+    vi.useFakeTimers();
+    try {
+      store = await openLocalStore({
+        path: ":memory:",
+        clock: () => new Date(NOW),
+      });
+      const pending = new HangingSetSlot();
+      const fetcher = vi.fn<typeof fetch>(async () => json(consentDocument()));
+      const instance = service(fetcher, { pending });
+      await instance.contribution.initialize();
+      const preview = await instance.contribution.preparePreview();
+      const enabling = instance.contribution.enable(preview.previewId);
+      await vi.advanceTimersByTimeAsync(
+        CONTRIBUTION_CREDENTIAL_OPERATION_TIMEOUT_MS,
+      );
+      await expect(enabling).resolves.toMatchObject({
+        ok: false,
+        code: "secure-storage-failed",
+      });
+
+      let quiesced = false;
+      const closing = instance.contribution.quiesce().then(() => {
+        quiesced = true;
+      });
+      await Promise.resolve();
+      expect(pending.observedSignal?.aborted).toBe(true);
+      expect(quiesced).toBe(false);
+      expect(pending.value).toBeNull();
+
+      pending.complete?.();
+      await closing;
+      expect(quiesced).toBe(true);
       expect(pending.value).toBeNull();
       expect(fetcher).toHaveBeenCalledTimes(1);
     } finally {
@@ -439,6 +589,216 @@ describe("companion contribution service", () => {
       "secure-storage-unavailable",
     );
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["incomplete snapshot", () => new MissingActivePersistenceSlot()],
+    ["non-string secret", () => new InvalidSecretTypeSlot()],
+  ])(
+    "rejects a native initialization with %s before network",
+    async (_case, slot) => {
+      store = await openLocalStore({ path: ":memory:" });
+      const fetcher = vi.fn<typeof fetch>();
+      const instance = service(fetcher, {
+        pending: slot(),
+      });
+
+      await instance.contribution.initialize();
+
+      expect(instance.contribution.status()).toMatchObject({
+        secureStorage: "unavailable",
+        state: "unavailable",
+        enabled: false,
+        canEnable: false,
+        canRecover: false,
+      });
+      await expect(instance.contribution.preparePreview()).rejects.toThrow(
+        "secure-storage-unavailable",
+      );
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it("hard-pauses when a credential getter becomes unavailable", async () => {
+    store = await openLocalStore({ path: ":memory:" });
+    const pending = new TestSlot();
+    const fetcher = vi.fn<typeof fetch>();
+    const instance = service(fetcher, { pending });
+    await instance.contribution.initialize();
+
+    pending.failGet = true;
+    expect(instance.contribution.status()).toMatchObject({
+      secureStorage: "unavailable",
+      state: "unavailable",
+      enabled: false,
+      canRecover: false,
+    });
+    await expect(instance.contribution.recover()).resolves.toMatchObject({
+      ok: false,
+      code: "secure-storage-unavailable",
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("fences an in-flight sync when a credential getter fails before ingest", async () => {
+    store = await openLocalStore({
+      path: ":memory:",
+      clock: () => new Date(NOW),
+    });
+    store.upsertDailyAggregate(aggregate("2026-07-14T00:00:00.000Z"));
+    completeDay(store, "2026-07-14");
+    const consentStarted = deferred<void>();
+    const consentResponse = deferred<Response>();
+    const paths: string[] = [];
+    const observed: { signal: AbortSignal | null } = { signal: null };
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const request = new Request(input, init);
+      const path = new URL(request.url).pathname;
+      paths.push(path);
+      if (path !== "/v1/consent-documents/current") {
+        throw new Error("UNEXPECTED_REQUEST");
+      }
+      observed.signal = request.signal;
+      consentStarted.resolve();
+      return consentResponse.promise;
+    });
+    const pending = new TestSlot();
+    const instance = service(fetcher, {
+      ...activeCredentialSlots(),
+      pending,
+    });
+    await instance.contribution.initialize();
+
+    const syncing = instance.contribution.sync();
+    await consentStarted.promise;
+    pending.failGet = true;
+    expect(instance.contribution.status()).toMatchObject({
+      secureStorage: "unavailable",
+      state: "unavailable",
+      enabled: false,
+    });
+    expect(observed.signal?.aborted).toBe(true);
+    consentResponse.resolve(json(consentDocument()));
+
+    await expect(syncing).resolves.toMatchObject({
+      ok: false,
+      code: "secure-storage-unavailable",
+      uploadedBatches: 0,
+      status: {
+        secureStorage: "unavailable",
+        state: "unavailable",
+        enabled: false,
+      },
+    });
+    expect(paths).toEqual(["/v1/consent-documents/current"]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks sync when an active credential status downgrades after initialization", async () => {
+    store = await openLocalStore({
+      path: ":memory:",
+      clock: () => new Date(NOW),
+    });
+    store.upsertDailyAggregate(aggregate("2026-07-14T00:00:00.000Z"));
+    completeDay(store, "2026-07-14");
+    const active = activeCredentialSlots();
+    const upload = new StatusDowngradingSlot();
+    upload.value = active.upload.value;
+    const fetcher = vi.fn<typeof fetch>();
+    const instance = service(fetcher, {
+      upload,
+      deletion: active.deletion,
+    });
+    await instance.contribution.initialize();
+    expect(instance.contribution.status()).toMatchObject({
+      secureStorage: "os-backed",
+      state: "active",
+      enabled: true,
+    });
+
+    upload.downgraded = true;
+    expect(instance.contribution.status()).toMatchObject({
+      secureStorage: "unavailable",
+      state: "unavailable",
+      enabled: false,
+    });
+    await expect(instance.contribution.sync()).resolves.toMatchObject({
+      ok: false,
+      code: "secure-storage-unavailable",
+      uploadedBatches: 0,
+      status: {
+        secureStorage: "unavailable",
+        state: "unavailable",
+        enabled: false,
+      },
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("hard-pauses when a credential write silently downgrades to RAM", async () => {
+    store = await openLocalStore({ path: ":memory:" });
+    const pending = new DowngradingSetSlot();
+    const fetcher = vi.fn<typeof fetch>(async () => json(consentDocument()));
+    const instance = service(fetcher, { pending });
+    await instance.contribution.initialize();
+    const preview = await instance.contribution.preparePreview();
+
+    await expect(
+      instance.contribution.enable(preview.previewId),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "secure-storage-failed",
+      status: {
+        secureStorage: "unavailable",
+        state: "unavailable",
+        enabled: false,
+        canRecover: false,
+      },
+    });
+    await expect(instance.contribution.recover()).resolves.toMatchObject({
+      ok: false,
+      code: "secure-storage-unavailable",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(new URL(String(fetcher.mock.calls[0]?.[0])).pathname).toBe(
+      "/v1/consent-documents/current",
+    );
+    expect(store.getDiagnosticSummary().counts.cloudOutboxEntries).toBe(0);
+  });
+
+  it("does not delete remotely when a credential clear lies about completion", async () => {
+    store = await openLocalStore({ path: ":memory:" });
+    const upload = new DishonestClearSlot();
+    const deletion = new TestSlot();
+    upload.value = JSON.stringify({
+      schemaVersion: 1,
+      kind: "upload",
+      token: UPLOAD_TOKEN,
+      consentDocumentRevision: "contribution-2026-07-15",
+    });
+    deletion.value = JSON.stringify({
+      schemaVersion: 1,
+      kind: "deletion",
+      token: DELETE_TOKEN,
+      idempotencyKey: IDS[4],
+    });
+    const fetcher = vi.fn<typeof fetch>();
+    const instance = service(fetcher, { upload, deletion });
+    await instance.contribution.initialize();
+
+    await expect(
+      instance.contribution.requestDeletion(),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "secure-storage-failed",
+      status: {
+        secureStorage: "unavailable",
+        state: "unavailable",
+        enabled: false,
+      },
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(store.getDiagnosticSummary().counts.cloudOutboxEntries).toBe(0);
   });
 
   it("fails closed when the atomic pending-enrollment slot is not OS-backed", async () => {
@@ -1818,6 +2178,7 @@ describe("companion contribution service", () => {
     expect(first.deletion.value).toBeNull();
     expect(first.pending.value).toContain(V2_RECOVERY_TOKEN);
 
+    deletion.failSet = false;
     const recoveryFetcher = vi.fn<typeof fetch>(async () =>
       json(enrollmentResponse(), 201),
     );
@@ -1829,16 +2190,11 @@ describe("companion contribution service", () => {
     });
     await restarted.contribution.initialize();
     expect(restarted.contribution.status()).toMatchObject({
-      state: "unavailable",
-      canRecover: true,
+      state: "active",
+      enabled: true,
+      canRecover: false,
     });
-
-    deletion.failSet = false;
-    await expect(restarted.contribution.recover()).resolves.toMatchObject({
-      ok: true,
-      code: "enabled",
-      status: { state: "active", canRecover: false },
-    });
+    expect(recoveryFetcher).toHaveBeenCalledTimes(1);
     expect(restarted.upload.value).toContain(V2_UPLOAD_TOKEN);
     expect(restarted.deletion.value).toContain(V2_DELETE_TOKEN);
     expect(restarted.pending.value).toBeNull();
@@ -1864,7 +2220,11 @@ describe("companion contribution service", () => {
     ).resolves.toMatchObject({
       ok: false,
       code: "secure-storage-failed",
-      status: { state: "active", enabled: true },
+      status: {
+        secureStorage: "unavailable",
+        state: "unavailable",
+        enabled: false,
+      },
     });
     expect(first.upload.value).toContain(V2_UPLOAD_TOKEN);
     expect(first.deletion.value).toContain(V2_DELETE_TOKEN);
@@ -1903,7 +2263,11 @@ describe("companion contribution service", () => {
     ).resolves.toMatchObject({
       ok: false,
       code: "secure-storage-failed",
-      status: { state: "active", enabled: true },
+      status: {
+        secureStorage: "unavailable",
+        state: "unavailable",
+        enabled: false,
+      },
     });
     expect(first.pending.value).toContain(V2_RECOVERY_TOKEN);
 
@@ -1921,7 +2285,7 @@ describe("companion contribution service", () => {
     expect(restarted.contribution.status()).toMatchObject({ state: "active" });
   });
 
-  it("reports a recovered matching enrollment as stopped when its upload lifecycle is paused", async () => {
+  it("reports a recovered matching enrollment as stopped when its durable upload is paused", async () => {
     store = await openLocalStore({
       path: ":memory:",
       clock: () => new Date(NOW),
@@ -1944,19 +2308,37 @@ describe("companion contribution service", () => {
     ).resolves.toMatchObject({
       ok: false,
       code: "secure-storage-failed",
-      status: { state: "active", canRecover: true },
-    });
-    await expect(instance.contribution.stop()).resolves.toMatchObject({
-      ok: true,
-      code: "stopped",
-      status: { state: "stopped", canRecover: true },
+      status: {
+        secureStorage: "unavailable",
+        state: "unavailable",
+        canRecover: false,
+      },
     });
 
+    const durableUpload = JSON.parse(instance.upload.value ?? "null") as Record<
+      string,
+      unknown
+    > | null;
+    if (durableUpload === null) throw new Error("UPLOAD_AUTHORITY_MISSING");
+    instance.upload.value = JSON.stringify({
+      ...durableUpload,
+      lifecycle: "paused",
+    });
     pending.failClear = false;
-    await expect(instance.contribution.recover()).resolves.toMatchObject({
-      ok: true,
-      code: "stopped",
-      status: { state: "stopped", enabled: false, canRecover: false },
+    const noNetwork = vi.fn<typeof fetch>();
+    const restarted = service(noNetwork, {
+      upload: instance.upload,
+      deletion: instance.deletion,
+      status: instance.status,
+      pending,
+    });
+    await restarted.contribution.initialize();
+    expect(noNetwork).not.toHaveBeenCalled();
+    expect(restarted.pending.value).toBeNull();
+    expect(restarted.contribution.status()).toMatchObject({
+      state: "stopped",
+      enabled: false,
+      canRecover: false,
     });
   });
 
@@ -2282,12 +2664,21 @@ describe("companion contribution service", () => {
     expect(fetcher).not.toHaveBeenCalled();
 
     slots.upload.failClear = false;
-    await expect(first.contribution.requestDeletion()).resolves.toMatchObject({
+    const restarted = service(fetcher, {
+      upload: first.upload,
+      deletion: first.deletion,
+      status: first.status,
+      pending: first.pending,
+    });
+    await restarted.contribution.initialize();
+    await expect(
+      restarted.contribution.requestDeletion(),
+    ).resolves.toMatchObject({
       ok: true,
       code: "deletion-requested",
       status: { state: "deletion-pending", canRecover: true },
     });
-    await expect(first.contribution.recover()).resolves.toMatchObject({
+    await expect(restarted.contribution.recover()).resolves.toMatchObject({
       ok: true,
       code: "deletion-status-updated",
       status: {
@@ -2296,6 +2687,55 @@ describe("companion contribution service", () => {
         canRecover: false,
       },
     });
+  });
+
+  it("normalizes a rejected deletion-status write and retries only after restart", async () => {
+    store = await openLocalStore({
+      path: ":memory:",
+      clock: () => new Date(NOW),
+    });
+    const slots = activeCredentialSlots();
+    const status = new TestSlot();
+    status.failSet = true;
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      if (String(input).endsWith("/v1/me/data")) {
+        return json(deletionAccepted(), 202);
+      }
+      throw new Error("UNEXPECTED_REQUEST");
+    });
+    const first = service(fetcher, { ...slots, status });
+    await first.contribution.initialize();
+
+    await expect(first.contribution.requestDeletion()).resolves.toMatchObject({
+      ok: false,
+      code: "secure-storage-failed",
+      status: {
+        secureStorage: "unavailable",
+        state: "unavailable",
+        enabled: false,
+      },
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(first.upload.value).toBeNull();
+    expect(first.deletion.value).not.toBeNull();
+    expect(status.value).toBeNull();
+
+    status.failSet = false;
+    const restarted = service(fetcher, {
+      upload: first.upload,
+      deletion: first.deletion,
+      status,
+      pending: first.pending,
+    });
+    await restarted.contribution.initialize();
+    await expect(
+      restarted.contribution.requestDeletion(),
+    ).resolves.toMatchObject({
+      ok: true,
+      code: "deletion-requested",
+      status: { state: "deletion-pending", canRecover: true },
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("retries legacy terminal deletion cleanup before allowing a fresh opt-in", async () => {

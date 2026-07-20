@@ -11,6 +11,7 @@ import type { TokenTrackerAdapter } from "@tokenmonster/token-tracker-adapter";
 import {
   createMemorySecretSlot,
   type EncryptedSecretSlot,
+  type SecretSlotStatus,
 } from "@tokenmonster/secret-vault";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -484,6 +485,83 @@ describe("companion BYOK gateway", () => {
     });
   });
 
+  it("waits for a timed-out late write and its cleanup before gateway close resolves", async () => {
+    let secret: string | null = null;
+    let activePersistence: "os-backed" | "memory-only" = "memory-only";
+    let announceSet!: () => void;
+    let finishSet!: () => void;
+    let announceClear!: () => void;
+    let finishClear!: () => void;
+    const setStarted = new Promise<void>((resolve) => {
+      announceSet = resolve;
+    });
+    const setGate = new Promise<void>((resolve) => {
+      finishSet = resolve;
+    });
+    const clearStarted = new Promise<void>((resolve) => {
+      announceClear = resolve;
+    });
+    const clearGate = new Promise<void>((resolve) => {
+      finishClear = resolve;
+    });
+    const snapshot = (): SecretSlotStatus =>
+      Object.freeze({
+        configured: secret !== null,
+        persistence: "os-backed" as const,
+        activePersistence,
+        backend: "test-os-vault",
+      });
+    const slot: EncryptedSecretSlot = Object.freeze({
+      initialize: async () => snapshot(),
+      set: async (value: string) => {
+        announceSet();
+        await setGate;
+        // Deliberately ignore abort to model a non-conforming native host.
+        secret = value;
+        activePersistence = "os-backed";
+        return snapshot();
+      },
+      get: () => secret,
+      clear: async () => {
+        announceClear();
+        await clearGate;
+        secret = null;
+        activePersistence = "memory-only";
+        return snapshot();
+      },
+      status: snapshot,
+    });
+    const { gateway, address } = await startByokGateway(slot);
+    const cookie = await bootstrap(address);
+    vi.useFakeTimers();
+
+    const configuring = byokPost(address, cookie, "configure", {
+      apiKey: API_KEY_CANARY,
+      persist: true,
+    });
+    await setStarted;
+    await vi.advanceTimersByTimeAsync(BYOK_STORAGE_OPERATION_TIMEOUT_MS);
+    await expect(configuring).resolves.toMatchObject({ status: 503 });
+
+    let closeResolved = false;
+    const closing = gateway.close().then(() => {
+      closeResolved = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(closeResolved).toBe(false);
+
+    finishSet();
+    await clearStarted;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(secret).toBe(API_KEY_CANARY);
+    expect(closeResolved).toBe(false);
+
+    finishClear();
+    await closing;
+    expect(secret).toBeNull();
+    expect(closeResolved).toBe(true);
+  });
+
   it("sends exact store:false requests and leaves all history with the UI caller", async () => {
     const slot = createMemorySecretSlot();
     const { address } = await startByokGateway(slot);
@@ -780,6 +858,400 @@ describe("companion BYOK gateway", () => {
 });
 
 describe("companion BYOK service lifecycle", () => {
+  it("treats a malformed secret-slot status as unavailable", async () => {
+    let secret: string | null = null;
+    const malformed = (): SecretSlotStatus =>
+      Object.freeze({
+        configured: secret !== null,
+        persistence: "os-backed" as const,
+        backend: "test-os-vault",
+      }) as SecretSlotStatus;
+    const slot: EncryptedSecretSlot = Object.freeze({
+      initialize: async () => malformed(),
+      set: async (value: string) => {
+        secret = value;
+        return malformed();
+      },
+      get: () => secret,
+      clear: async () => {
+        secret = null;
+        return malformed();
+      },
+      status: malformed,
+    });
+    const service = createCompanionByokService(slot);
+
+    await service.initialize();
+    expect(service.status()).toMatchObject({
+      availability: "unavailable",
+      configured: false,
+      persistence: "memory-only",
+      canPersist: false,
+    });
+    await expect(
+      service.configure(API_KEY_CANARY, true),
+    ).resolves.toMatchObject({
+      status: 503,
+      body: { status: "error", error: "storage-failed" },
+    });
+    expect(service.status()).toMatchObject({
+      availability: "unavailable",
+      configured: false,
+    });
+    service.dispose();
+  });
+
+  it("requires initialization return, status, and readback evidence to agree", async () => {
+    let secret: string | null = null;
+    let contradictInitialization = true;
+    const snapshot = (value: string | null): SecretSlotStatus =>
+      Object.freeze({
+        configured: value !== null,
+        persistence: "memory-only" as const,
+        activePersistence: "memory-only" as const,
+        backend: "memory-only",
+      });
+    const slot: EncryptedSecretSlot = Object.freeze({
+      initialize: async () => snapshot(null),
+      set: async (value: string) => {
+        secret = value;
+        return snapshot(secret);
+      },
+      get: () => (contradictInitialization ? API_KEY_CANARY : secret),
+      clear: async () => {
+        secret = null;
+        return snapshot(secret);
+      },
+      status: () =>
+        snapshot(contradictInitialization ? API_KEY_CANARY : secret),
+    });
+    const failed = createCompanionByokService(slot);
+
+    await failed.initialize();
+    expect(failed.status()).toMatchObject({
+      availability: "unavailable",
+      configured: false,
+    });
+
+    contradictInitialization = false;
+    await failed.initialize();
+    await expect(
+      failed.configure(API_KEY_CANARY, false),
+    ).resolves.toMatchObject({
+      status: 503,
+      body: { status: "error", error: "storage-failed" },
+    });
+
+    const restarted = createCompanionByokService(slot);
+    await restarted.initialize();
+    await expect(
+      restarted.configure(API_KEY_CANARY, false),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { availability: "available", configured: true },
+    });
+    failed.dispose();
+    restarted.dispose();
+  });
+
+  it("accepts and accurately reports an honest persist:true memory-only downgrade", async () => {
+    let secret: string | null = null;
+    const snapshot = (): SecretSlotStatus =>
+      Object.freeze({
+        configured: secret !== null,
+        persistence: "os-backed" as const,
+        activePersistence: "memory-only" as const,
+        backend: "test-os-vault",
+      });
+    const slot: EncryptedSecretSlot = Object.freeze({
+      initialize: async () => snapshot(),
+      set: async (value: string) => {
+        secret = value;
+        return snapshot();
+      },
+      get: () => secret,
+      clear: async () => {
+        secret = null;
+        return snapshot();
+      },
+      status: snapshot,
+    });
+    const service = createCompanionByokService(slot);
+    await service.initialize();
+
+    await expect(service.configure(API_KEY_CANARY, true)).resolves.toMatchObject({
+      status: 200,
+      body: {
+        availability: "available",
+        configured: true,
+        persistence: "memory-only",
+        canPersist: true,
+      },
+    });
+    expect(service.status()).toMatchObject({
+      availability: "available",
+      configured: true,
+      persistence: "memory-only",
+      canPersist: true,
+    });
+    await expect(
+      service.configure(API_KEY_CANARY, false),
+    ).resolves.toMatchObject({ status: 200 });
+    service.dispose();
+  });
+
+  it("latches a clean set rejection without deleting the previously valid key", async () => {
+    let secret: string | null = API_KEY_CANARY;
+    let setCalls = 0;
+    let clearCalls = 0;
+    const snapshot = (): SecretSlotStatus =>
+      Object.freeze({
+        configured: secret !== null,
+        persistence: "os-backed" as const,
+        activePersistence:
+          secret === null ? ("memory-only" as const) : ("os-backed" as const),
+        backend: "test-os-vault",
+      });
+    const slot: EncryptedSecretSlot = Object.freeze({
+      initialize: async () => snapshot(),
+      set: async () => {
+        setCalls += 1;
+        throw new Error("clean storage rejection");
+      },
+      get: () => secret,
+      clear: async () => {
+        clearCalls += 1;
+        secret = null;
+        return snapshot();
+      },
+      status: snapshot,
+    });
+    const service = createCompanionByokService(slot);
+    await service.initialize();
+
+    await expect(
+      service.configure(`${API_KEY_CANARY}_replacement`, true),
+    ).resolves.toMatchObject({
+      status: 503,
+      body: { status: "error", error: "storage-failed" },
+    });
+    expect(setCalls).toBe(1);
+    expect(clearCalls).toBe(0);
+    expect(secret).toBe(API_KEY_CANARY);
+    expect(service.status()).toMatchObject({
+      availability: "unavailable",
+      configured: false,
+    });
+
+    await expect(service.clear("clear-openai-byok")).resolves.toMatchObject({
+      status: 200,
+      body: { availability: "unavailable", configured: false },
+    });
+    expect(clearCalls).toBe(1);
+    expect(secret).toBeNull();
+    service.dispose();
+  });
+
+  it("rejects a dishonest persisted set for persist:false and keeps the failure latched after cleanup", async () => {
+    let secret: string | null = null;
+    let activePersistence: "os-backed" | "memory-only" = "memory-only";
+    let setCalls = 0;
+    let clearCalls = 0;
+    const snapshot = (): SecretSlotStatus =>
+      Object.freeze({
+        configured: secret !== null,
+        persistence: "os-backed" as const,
+        activePersistence,
+        backend: "test-os-vault",
+      });
+    const slot: EncryptedSecretSlot = Object.freeze({
+      initialize: async () => snapshot(),
+      set: async (value: string) => {
+        setCalls += 1;
+        secret = value;
+        activePersistence = "os-backed";
+        return snapshot();
+      },
+      get: () => secret,
+      clear: async () => {
+        clearCalls += 1;
+        secret = null;
+        activePersistence = "memory-only";
+        return snapshot();
+      },
+      status: snapshot,
+    });
+    const failed = createCompanionByokService(slot);
+    await failed.initialize();
+
+    await expect(
+      failed.configure(API_KEY_CANARY, false),
+    ).resolves.toMatchObject({
+      status: 503,
+      body: { status: "error", error: "storage-failed" },
+    });
+    expect(setCalls).toBe(1);
+    expect(clearCalls).toBe(1);
+    expect(secret).toBeNull();
+    expect(failed.status()).toMatchObject({
+      availability: "unavailable",
+      configured: false,
+    });
+
+    await expect(failed.clear("clear-openai-byok")).resolves.toMatchObject({
+      status: 200,
+      body: { availability: "unavailable", configured: false },
+    });
+    expect(clearCalls).toBe(2);
+    await expect(failed.configure(API_KEY_CANARY, true)).resolves.toMatchObject(
+      {
+        status: 503,
+        body: { status: "error", error: "storage-failed" },
+      },
+    );
+    expect(setCalls).toBe(1);
+
+    const restarted = createCompanionByokService(slot);
+    await restarted.initialize();
+    await expect(
+      restarted.configure(API_KEY_CANARY, true),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { availability: "available", persistence: "os-backed" },
+    });
+    failed.dispose();
+    restarted.dispose();
+  });
+
+  it("rejects a dishonest clear whose status hides a stale readback", async () => {
+    let secret: string | null = API_KEY_CANARY;
+    let reportsConfigured = true;
+    const snapshot = (): SecretSlotStatus =>
+      Object.freeze({
+        configured: reportsConfigured,
+        persistence: "memory-only" as const,
+        activePersistence: "memory-only" as const,
+        backend: "memory-only",
+      });
+    const slot: EncryptedSecretSlot = Object.freeze({
+      initialize: async () => snapshot(),
+      set: async (value: string) => {
+        secret = value;
+        reportsConfigured = true;
+        return snapshot();
+      },
+      get: () => secret,
+      clear: async () => {
+        reportsConfigured = false;
+        return snapshot();
+      },
+      status: snapshot,
+    });
+    const respond = vi.fn(async () => Object.freeze({ text: "不應送出" }));
+    const service = createCompanionByokService(
+      slot,
+      Object.freeze({ respond }),
+    );
+    await service.initialize();
+
+    await expect(service.clear("clear-openai-byok")).resolves.toMatchObject({
+      status: 503,
+      body: { status: "error", error: "storage-failed" },
+    });
+    expect(secret).toBe(API_KEY_CANARY);
+    expect(service.status()).toMatchObject({
+      availability: "unavailable",
+      configured: false,
+    });
+    await expect(
+      service.chat({
+        characterId: "chatgpt",
+        history: [],
+        message: "must remain local",
+      }),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { status: "error", error: "unavailable" },
+    });
+    expect(respond).not.toHaveBeenCalled();
+    service.dispose();
+  });
+
+  it("revalidates current status and readback before every provider call", async () => {
+    let secret: string | null = null;
+    let staleReadback = false;
+    const snapshot = (): SecretSlotStatus =>
+      Object.freeze({
+        configured: secret !== null,
+        persistence: "memory-only" as const,
+        activePersistence: "memory-only" as const,
+        backend: "memory-only",
+      });
+    const slot: EncryptedSecretSlot = Object.freeze({
+      initialize: async () => snapshot(),
+      set: async (value: string) => {
+        secret = value;
+        return snapshot();
+      },
+      get: () => (staleReadback ? null : secret),
+      clear: async () => {
+        secret = null;
+        return snapshot();
+      },
+      status: snapshot,
+    });
+    const respond = vi.fn(async () => Object.freeze({ text: "不應送出" }));
+    const service = createCompanionByokService(
+      slot,
+      Object.freeze({ respond }),
+    );
+    await service.initialize();
+    await expect(
+      service.chat({
+        characterId: "chatgpt",
+        history: [],
+        message: "not configured",
+      }),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { status: "error", error: "not-configured" },
+    });
+    expect(respond).not.toHaveBeenCalled();
+    await expect(
+      service.configure(API_KEY_CANARY, false),
+    ).resolves.toMatchObject({ status: 200 });
+
+    staleReadback = true;
+    await expect(
+      service.chat({
+        characterId: "chatgpt",
+        history: [],
+        message: "must remain local",
+      }),
+    ).resolves.toMatchObject({
+      status: 200,
+      body: { status: "error", error: "unavailable" },
+    });
+    expect(respond).not.toHaveBeenCalled();
+    expect(service.status()).toMatchObject({
+      availability: "unavailable",
+      configured: false,
+    });
+
+    staleReadback = false;
+    await expect(
+      service.chat({
+        characterId: "chatgpt",
+        history: [],
+        message: "still must remain local",
+      }),
+    ).resolves.toMatchObject({
+      body: { status: "error", error: "unavailable" },
+    });
+    expect(respond).not.toHaveBeenCalled();
+    service.dispose();
+  });
+
   it("bounds initialization and fences a late vault result", async () => {
     vi.useFakeTimers();
     let finishInitialize!: () => void;
@@ -829,15 +1301,23 @@ describe("companion BYOK service lifecycle", () => {
     let clearCalls = 0;
     let announceSet!: () => void;
     let finishSet!: () => void;
-    let announceClear!: () => void;
+    let announceClearStarted!: () => void;
+    let finishClear!: () => void;
+    let announceClearFinished!: () => void;
     const setStarted = new Promise<void>((resolve) => {
       announceSet = resolve;
     });
     const setGate = new Promise<void>((resolve) => {
       finishSet = resolve;
     });
+    const clearStarted = new Promise<void>((resolve) => {
+      announceClearStarted = resolve;
+    });
+    const clearGate = new Promise<void>((resolve) => {
+      finishClear = resolve;
+    });
     const clearFinished = new Promise<void>((resolve) => {
-      announceClear = resolve;
+      announceClearFinished = resolve;
     });
     const snapshot = () =>
       Object.freeze({
@@ -861,8 +1341,10 @@ describe("companion BYOK service lifecycle", () => {
       get: () => secret,
       clear: async () => {
         clearCalls += 1;
+        announceClearStarted();
+        await clearGate;
         secret = null;
-        announceClear();
+        announceClearFinished();
         return snapshot();
       },
       status: snapshot,
@@ -896,12 +1378,25 @@ describe("companion BYOK service lifecycle", () => {
       status: 503,
       body: { status: "error", error: "storage-failed" },
     });
-    service.dispose();
-    finishSet();
-    await clearFinished;
+    let quiesced = false;
+    const quiescing = service.quiesce().then(() => {
+      quiesced = true;
+    });
     await vi.advanceTimersByTimeAsync(0);
+    expect(quiesced).toBe(false);
+
+    finishSet();
+    await clearStarted;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(slot.get()).toBe(API_KEY_CANARY);
+    expect(quiesced).toBe(false);
+
+    finishClear();
+    await clearFinished;
+    await quiescing;
 
     expect(clearCalls).toBe(1);
+    expect(quiesced).toBe(true);
     expect(slot.get()).toBeNull();
     expect(service.status()).toMatchObject({
       availability: "unavailable",

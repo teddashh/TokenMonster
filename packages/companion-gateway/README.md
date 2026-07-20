@@ -66,6 +66,13 @@ provider request when the browser disconnects or the gateway closes. API keys
 remain in the injected local secret slot, are never returned, and are sent only
 to the fixed OpenAI Responses endpoint. Provider requests force `store: false`;
 the gateway does not persist conversation history, prompts, or responses.
+Initialize, configure, and clear accept only exact plain status snapshots whose
+return value, current status, and readable key agree. A rejected, timed-out, or
+contradictory mutation latches BYOK unavailable for that service instance;
+verified clear may still remove local authority but cannot re-enable provider
+work. Chat revalidates the configured status and key immediately before every
+provider request. Gateway close aborts and joins accepted BYOK initialization,
+control, late-write, and protective-cleanup work before resolving.
 
 Character objects are cache-only. Configuration accepts exactly
 `cdnBaseUrl: null`; there is no fetch hook or per-object downloader. An

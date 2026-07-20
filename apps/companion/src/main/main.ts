@@ -68,8 +68,21 @@ import { showPetWindow, startPetCompanion } from "./pet/pet.js"
 import { acquireCompanionRuntimeLease } from "./runtime-lease.js"
 import {
   closeLegacyOwnedServices,
-  createLegacyShutdownCoordinator
+  createLegacyStartupFence,
+  createLegacyShutdownCoordinator,
+  disposeLegacyOwnedServices,
+  startLegacyRuntimeWithOwnedLease
 } from "./legacy-shutdown.js"
+import {
+  createFatalQuitController,
+  createPetStartupQuitBridge,
+  handleModeAwareBeforeQuit,
+  runPetStartupWithOwnedLease
+} from "./graceful-fatal-quit.js"
+import {
+  closeLegacyAppWhenWindowless,
+  suspendLegacyWindowByok
+} from "./legacy-window-lifecycle.js"
 import {
   RENDERER_CSP,
   createIpcRequestGate,
@@ -108,17 +121,40 @@ function run(): void {
   const petMode = !process.argv.slice(1).includes("--legacy")
   const ownsSingleInstance = app.requestSingleInstanceLock()
   const ipcGate = createIpcRequestGate()
+  const fatalQuit = createFatalQuitController(app)
+  const petStartupQuit = createPetStartupQuitBridge(() => app.quit())
+  const legacyStartup = createLegacyStartupFence()
   let byokService: ByokChatService | null = null
   let collectorService: CompanionCollectorService | null = null
   let contributionService: ContributionService | null = null
   let contributionSyncScheduler: ContributionSyncScheduler | null = null
   let localStore: LocalStore | null = null
   let lastSuccessfulScanAt: string | null = null
+  let legacyWindow: BrowserWindow | null = null
   let legacyRuntimeLease:
     | import("@tokenmonster/token-tracker-runtime").TokenMonsterRuntimeLease
     | null = null
   const legacyShutdown = createLegacyShutdownCoordinator({
     closeOwnedServices: async () => {
+      legacyStartup.requestShutdown()
+      const startupScheduler = contributionSyncScheduler
+      disposeLegacyOwnedServices({
+        scheduler: startupScheduler,
+        detachScheduler:
+          startupScheduler === null
+            ? null
+            : () => powerMonitor.off("resume", startupScheduler.wake),
+        byok: byokService,
+        contribution: contributionService,
+        collector: collectorService,
+        store: localStore
+      })
+      const startupWindow = legacyWindow
+      legacyWindow = null
+      if (startupWindow !== null && !startupWindow.isDestroyed()) {
+        startupWindow.destroy()
+      }
+      await legacyStartup.join()
       const scheduler = contributionSyncScheduler
       const contribution = contributionService
       const services = Object.freeze({
@@ -144,7 +180,7 @@ function run(): void {
       legacyRuntimeLease = null
       await lease?.release()
     },
-    quit: () => app.quit()
+    quit: fatalQuit.completeLegacyShutdown
   })
 
   function trustedSender(event: IpcMainInvokeEvent): boolean {
@@ -353,6 +389,7 @@ function run(): void {
             throw error
           }
           collector.dispose()
+          await collector.quiesce()
           store.clearCollectorAuthority()
           lastSuccessfulScanAt = null
           return Object.freeze({
@@ -518,6 +555,11 @@ function run(): void {
       title: "TokenMonster",
       webPreferences: secureWebPreferences(preloadPath, !app.isPackaged)
     })
+    legacyWindow = window
+    let closeRequested = false
+    window.once("close", () => {
+      closeRequested = true
+    })
     window.webContents.on("will-navigate", (event, targetUrl) => {
       if (!isTrustedRendererUrl(targetUrl)) {
         event.preventDefault()
@@ -525,11 +567,18 @@ function run(): void {
     })
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }))
     window.once("ready-to-show", () => window.show())
-    window.once("closed", () => byokService?.dispose())
+    window.once("closed", () => {
+      if (legacyWindow === window) legacyWindow = null
+      suspendLegacyWindowByok(byokService)
+    })
     try {
       await window.loadURL(`${TOKENMONSTER_APP_ORIGIN}/index.html`)
     } catch {
-      window.destroy()
+      if (closeRequested) return window
+      if (!legacyStartup.shutdownRequested()) {
+        fatalQuit.markLegacyFatalIntent()
+      }
+      if (!window.isDestroyed()) window.destroy()
       throw new Error("RENDERER_START_FAILED")
     }
     return window
@@ -555,16 +604,20 @@ function run(): void {
   }
 
   async function startCompanion(): Promise<void> {
+    legacyStartup.assertRunning()
     hardenSession()
     await registerRendererProtocol()
+    legacyStartup.assertRunning()
     const userDataDirectory = app.getPath("userData")
     const dataDirectory = await ensurePrivateChildDirectory(userDataDirectory, [
       "data"
     ])
+    legacyStartup.assertRunning()
     const secretsDirectory = await ensurePrivateChildDirectory(
       userDataDirectory,
       ["secrets"]
     )
+    legacyStartup.assertRunning()
     if (dataDirectory === null || secretsDirectory === null) {
       throw new Error("PRIVATE_STORAGE_DIRECTORY_UNAVAILABLE")
     }
@@ -572,6 +625,7 @@ function run(): void {
       path: join(dataDirectory, "tokenmonster.sqlite")
     })
     localStore = store
+    legacyStartup.assertRunning()
     lastSuccessfulScanAt = store.getLastSuccessfulScanAt()
     const config = initializeLocalConfig(
       store,
@@ -592,8 +646,9 @@ function run(): void {
       secretSlot,
       initialCharacterId: config.selectedCharacterId
     })
-    await service.initialize()
     byokService = service
+    await service.initialize()
+    legacyStartup.assertRunning()
     const uploadCredential = createEncryptedSecretSlot({
       safeStorage: electronSafeStoragePort(),
       platform: process.platform,
@@ -622,18 +677,21 @@ function run(): void {
       pendingEnrollmentCredential,
       configuredBaseUrl: process.env["TOKENMONSTER_API_BASE_URL"]
     })
-    await contribution.initialize()
     contributionService = contribution
+    await contribution.initialize()
+    legacyStartup.assertRunning()
     const backgroundSync = createContributionSyncScheduler({ contribution })
     contributionSyncScheduler = backgroundSync
     const collectorConfigDirectory =
       await ensurePrivateCollectorDirectory(userDataDirectory)
+    legacyStartup.assertRunning()
     const packagedCollectorBinary = app.isPackaged
       ? await verifiedPackagedTokscaleBinary({
           appPath: app.getAppPath(),
           resourcesPath: process.resourcesPath
         })
       : undefined
+    legacyStartup.assertRunning()
     const collectorRuntimeReady =
       collectorConfigDirectory !== null &&
       (!app.isPackaged || packagedCollectorBinary !== null)
@@ -661,12 +719,15 @@ function run(): void {
     powerMonitor.on("resume", backgroundSync.wake)
     backgroundSync.start()
     await createWindow()
+    legacyStartup.assertRunning()
 
     app.on("activate", () => {
+      if (legacyStartup.shutdownRequested()) return
       if (BrowserWindow.getAllWindows().length === 0) {
         void createWindow().catch((error: unknown) => {
+          if (legacyStartup.shutdownRequested()) return
           console.error("TokenMonster window creation failed:", error)
-          app.exit(1)
+          fatalQuit.requestLegacyFatalQuit()
         })
       }
     })
@@ -697,29 +758,28 @@ function run(): void {
   }
 
   async function startRuntimeOwnedCompanion(): Promise<void> {
+    if (!petMode) legacyStartup.assertRunning()
     const result = await acquireCompanionRuntimeLease()
     if (result.kind !== "acquired") {
+      if (!petMode) legacyStartup.assertRunning()
       await showRuntimeLeaseFailure(result.kind)
       app.quit()
       return
     }
     if (petMode) {
-      try {
-        await startPetCompanion(result.lease)
-      } catch (error) {
-        await result.lease.release().catch(() => undefined)
-        throw error
-      }
+      await runPetStartupWithOwnedLease(result.lease, startPetCompanion)
       return
     }
-    legacyRuntimeLease = result.lease
-    try {
-      await startCompanion()
-    } catch (error) {
-      legacyRuntimeLease = null
-      await result.lease.release().catch(() => undefined)
-      throw error
-    }
+    await startLegacyRuntimeWithOwnedLease(
+      result.lease,
+      (lease) => {
+        legacyRuntimeLease = lease
+      },
+      async () => {
+        legacyStartup.assertRunning()
+        await startCompanion()
+      }
+    )
   }
 
   if (!ownsSingleInstance) {
@@ -736,27 +796,26 @@ function run(): void {
         window.focus()
       }
     })
-    void app
-      .whenReady()
-      .then(startRuntimeOwnedCompanion)
-      .catch((error: unknown) => {
-        // Local stderr only: a silent exit(1) is undiagnosable in the field.
-        console.error("TokenMonster startup failed:", error)
-        app.exit(1)
-      })
+    const startupOperation = app.whenReady().then(startRuntimeOwnedCompanion)
+    if (petMode) petStartupQuit.track(startupOperation)
+    else legacyStartup.track(startupOperation)
+    void startupOperation.catch((error: unknown) => {
+      if (!petMode && legacyStartup.shutdownRequested()) return
+      // Local stderr only: a silent exit(1) is undiagnosable in the field.
+      console.error("TokenMonster startup failed:", error)
+      if (petMode) fatalQuit.exitPetFatalAfterDrain()
+      else fatalQuit.requestLegacyFatalQuit()
+    })
   }
 
   app.on("before-quit", (event) => {
-    if (petMode) return
-    legacyShutdown.handleBeforeQuit(event)
+    if (petMode && petStartupQuit.handleBeforeQuit(event)) return
+    handleModeAwareBeforeQuit(petMode, legacyShutdown, event)
   })
 
   app.on("window-all-closed", () => {
     if (petMode) return
-    byokService?.dispose()
-    if (process.platform !== "darwin") {
-      app.quit()
-    }
+    closeLegacyAppWhenWindowless(process.platform, () => app.quit())
   })
 }
 
