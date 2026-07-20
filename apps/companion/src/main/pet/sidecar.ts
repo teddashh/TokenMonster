@@ -2,22 +2,24 @@ import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { type Readable } from "node:stream";
+import { PassThrough, type Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 
 import {
+  PINNED_TOKEN_TRACKER_VERSION,
   resolveTokenTrackerExecutableFromManifest,
   type TokenTrackerExecutable,
   type TokenTrackerSpawn
 } from "@tokenmonster/token-tracker-runtime";
 
 export const UTILITY_PROCESS_COMMAND = "electron:utility-process";
+export const UTILITY_VERSION_VERIFIED_EXIT_CODE = 42;
 
 // Local-stderr lifecycle tracing for the sidecar process facade. The packaged
 // app's failure page hides all detail by design, so without this a field
 // report of "sidecar 無法啟動" is undiagnosable.
 const SIDECAR_DEBUG = process.env["TOKENMONSTER_SIDECAR_DEBUG"] === "1";
-const UTILITY_STREAM_DRAIN_GRACE_MS = 250;
+const UTILITY_VERSION_STDOUT = `v${PINNED_TOKEN_TRACKER_VERSION}\n`;
 
 function debugLog(message: string): void {
   if (SIDECAR_DEBUG) process.stderr.write(`[sidecar] ${message}\n`);
@@ -58,12 +60,12 @@ class UtilityChildProcess extends EventEmitter {
   private observedExitCode: number | null = null;
   private stdoutEnded: boolean;
   private stderrEnded: boolean;
-  private streamDrainTimer: NodeJS.Timeout | null = null;
 
   public constructor(
     private readonly utility: UtilityProcessLike,
     stdout: Readable | null,
-    stderr: Readable | null
+    stderr: Readable | null,
+    private readonly versionTransport = false
   ) {
     super();
     this.stdout = stdout;
@@ -101,7 +103,27 @@ class UtilityChildProcess extends EventEmitter {
       // Electron reports null when the utility process dies abnormally, and
       // the facade cannot recover the signal. Reporting success (0) would let
       // the runtime misclassify a crash as a clean exit, so map unknown to 1.
-      const normalized = typeof code === "number" ? code : 1;
+      const versionVerified =
+        this.versionTransport &&
+        code === UTILITY_VERSION_VERIFIED_EXIT_CODE &&
+        this.stdout !== null;
+      const normalized = versionVerified
+        ? 0
+        : this.versionTransport && code === 0
+          ? 1
+          : typeof code === "number"
+            ? code
+            : 1;
+      if (versionVerified) {
+        // Electron 37+ terminates utility processes synchronously and removes
+        // pipe listeners as soon as this exit callback returns. The shim has
+        // already captured and byte-compared the real CLI version output, so
+        // translate its dedicated success code back to the generic runtime's
+        // existing stdout contract while listeners are still attached.
+        this.stdout?.push(Buffer.from(UTILITY_VERSION_STDOUT, "utf8"));
+        this.stdout?.push(null);
+        this.stderr?.push(null);
+      }
       this.observedExitCode = normalized;
       this.exitCode = normalized;
       this.signalCode = null;
@@ -111,22 +133,22 @@ class UtilityChildProcess extends EventEmitter {
       // child exits — no 'end'/'close' on the parent-side streams, and even
       // destroy() emits nothing (observed on Electron 43/linux). Waiting on
       // those events would leave 'close' unemitted forever. The shim flushes
-      // before exiting, but Windows may deliver its final pipe chunk after the
-      // exit event. Give in-flight data one short bounded drain, then complete
-      // the state machine directly instead of trusting foreign stream events.
+      // before exiting. Any data not delivered by the exit event is discarded
+      // by Electron itself, so complete on the next turn instead of trusting
+      // foreign stream events. Version output uses the explicit transport
+      // above and does not rely on that platform-dependent ordering.
       if (!this.closeEmitted) {
-        this.streamDrainTimer = setTimeout(() => {
-          this.streamDrainTimer = null;
+        setImmediate(() => {
           for (const stream of [this.stdout, this.stderr]) {
             if (stream !== null && !stream.destroyed) stream.destroy();
           }
           if (!this.stdoutEnded || !this.stderrEnded) {
-            debugLog("force-releasing streams after bounded exit drain");
+            debugLog("force-releasing streams after exit");
             this.stdoutEnded = true;
             this.stderrEnded = true;
             this.emitCloseIfReady();
           }
-        }, UTILITY_STREAM_DRAIN_GRACE_MS);
+        });
       }
     });
   }
@@ -184,10 +206,6 @@ class UtilityChildProcess extends EventEmitter {
       return;
     }
     this.closeEmitted = true;
-    if (this.streamDrainTimer !== null) {
-      clearTimeout(this.streamDrainTimer);
-      this.streamDrainTimer = null;
-    }
     this.emit("close", this.observedExitCode, null);
   }
 }
@@ -195,12 +213,14 @@ class UtilityChildProcess extends EventEmitter {
 export function createUtilityChildProcess(
   utilityLike: UtilityProcessLike,
   stdoutOrNull: Readable | null,
-  stderrOrNull: Readable | null
+  stderrOrNull: Readable | null,
+  versionTransport = false
 ): ChildProcess {
   return new UtilityChildProcess(
     utilityLike,
     stdoutOrNull,
-    stderrOrNull
+    stderrOrNull,
+    versionTransport
   ) as unknown as ChildProcess;
 }
 
@@ -236,23 +256,33 @@ export function createUtilityProcessSpawn(
     // drain their event loop, so run-to-completion commands would hang until
     // the runtime's timeout kills them. The shim exits when run() settles.
     const args = [guardPath, modulePath, ...cliArguments];
-    const stdio: UtilityProcessStdio =
+    const requestedStdio: UtilityProcessStdio =
       options.stdio === "ignore"
         ? "ignore"
         : ["ignore", "pipe", "pipe"];
+    const versionTransport =
+      requestedStdio !== "ignore" &&
+      cliArguments.length === 1 &&
+      cliArguments[0] === "--version";
+    const utilityStdio: UtilityProcessStdio = versionTransport
+      ? "ignore"
+      : requestedStdio;
     const environment = definedEnvironment(options.env);
     if (SIDECAR_DEBUG) environment["TOKENMONSTER_SIDECAR_DEBUG"] = "1";
     const shimPath = resolveShimPath();
-    debugLog(`fork ${shimPath} args=${JSON.stringify(args)} stdio=${JSON.stringify(stdio)}`);
+    debugLog(`fork ${shimPath} args=${JSON.stringify(args)} stdio=${JSON.stringify(utilityStdio)}`);
     const utility = fork(shimPath, args, {
-      stdio,
+      stdio: utilityStdio,
       env: environment,
       serviceName: "tokentracker-sidecar"
     });
+    const stdout = versionTransport ? new PassThrough() : utility.stdout;
+    const stderr = versionTransport ? new PassThrough() : utility.stderr;
     return createUtilityChildProcess(
       utility,
-      stdio === "ignore" ? null : utility.stdout,
-      stdio === "ignore" ? null : utility.stderr
+      requestedStdio === "ignore" ? null : stdout,
+      requestedStdio === "ignore" ? null : stderr,
+      versionTransport
     );
   };
 }
