@@ -221,10 +221,69 @@ clone passed the following gates:
 The strict
 `npm run verify:packaging-toolchain -- --require-upstream-compatible` gate exits
 1 as designed: signed/GA publication remains blocked until stable Forge ranges
-accept the reviewed safe dependency versions. No new release version was
-selected, no Electron make/package or candidate archive was produced, and
-`npm run verify:companion-package` remains a required next-candidate gate. No
-tag, push, signing, publication, CDN promotion, or public release occurred.
+accept the reviewed safe dependency versions. At that checkpoint no new release
+version had been selected, no Electron make/package or candidate archive had
+been produced, and `npm run verify:companion-package` remained a required
+next-candidate gate. No tag, push, signing, publication, CDN promotion, or
+public release occurred.
+
+### Local-only `0.1.0-rc.13` candidate evidence — unsigned and unpublished
+
+After the hardening and verification commits, `0.1.0-rc.13` was confirmed
+unused across local/origin tags, GitHub releases, and the public npm registry.
+Exact commit `4771bb4b1a3cedb1e67480f3a533f6bfb4372d99` was then cloned with
+`--no-hardlinks` into a new empty temporary directory. A fresh `npm ci` under
+Node 24.15.0/npm 11.12.1 added 589 packages, audited 611 packages, and reported
+zero vulnerabilities. That exact clean checkout repeated the 21-workspace
+typecheck, 140 test files and **1,727/1,727 tests** (including 37 companion
+files and 265 tests), lint, format, secret scan, diff check, build, release
+artifact verifier, default packaging-toolchain verifier, `npm audit`,
+`npm ls --depth=0`, and the installed/all-platform zstd verification gates.
+
+- `tokenmonster-0.1.0-rc.13.tgz`: 1,182,265 bytes, 1,027 safe entries,
+  SHA-256
+  `e2e619026753e76495e1acfdf44beb96316ecc8aa42f3aa8ca0557eb18c08e9d`.
+  The strict version/digest/inventory verifier passed both before and after
+  desktop make. `SHASUMS256.txt` is 95 bytes with SHA-256
+  `7ca46e3f65c3b1577d64f37f988b029c2d0c9904135b228f9600070aeaf69f43`.
+- A fresh empty-prefix install of those exact tarball bytes passed the complete
+  installed smoke. It verified the 41-package registry closure and integrities,
+  exact `tokentracker-cli@0.80.0`, the authenticated Linux zstd binding,
+  rc.13 CLI/package identity, all 18 player artifacts, launch/status, the
+  default-off contribution contract and five authenticated fail-closed
+  mutations with no SQLite/vault state, RAM-only key-free BYOK, the clean
+  profile, all 11 characters, starter interaction, fixed 404s, shutdown, and
+  remote-helper suppression.
+- A system `strace` of that same installed smoke passed the loopback-only
+  verifier: 3 loopback binds, 23 loopback connects, and no external
+  destination.
+- `TokenMonster-linux-x64-0.1.0-rc.13.zip`: 142,512,303 bytes and 1,052 ZIP
+  entries, SHA-256
+  `67da01f5b33fd9249ad05b7551e8c101c2495921647428668d7ec51b254272e5`.
+  Schema-v2 package evidence (9,249 bytes, SHA-256
+  `bd4ffdd9ae6b1f996bbf4fa275340f6c17634c8ae99ff0b23ca683e28b59dbbf`)
+  verified 39 ASAR files, one fuse wire, one maker artifact, collector 4.5.2,
+  and `tokentracker-cli@0.80.0` with 834 files and 13,754,682 bytes.
+- Exact-candidate packaged startup was attempted with an isolated HOME and the
+  repository's double-gated smoke flags. It failed closed with exit 133 before
+  application boot and emitted no `TOKENMONSTER_SMOKE_OK`: this host keeps
+  `kernel.apparmor_restrict_unprivileged_userns=1`, while the staged
+  `chrome-sandbox` is user-owned mode 0755. No `--no-sandbox` argument, global
+  `sysctl` change, or setuid workaround was used. Repeat on an appropriately
+  isolated Linux release host.
+- The documented Wrangler deploy dry-run passed against the built web Worker:
+  six assets, 419.66 KiB total/87.13 KiB gzip, then `--dry-run` exited without
+  remote mutation. This does not replace staging bindings or cloud rehearsal.
+- The strict upstream-compatible packaging verifier still exited 1 exactly as
+  designed. As of 2026-07-20, stable Forge 7.11.2 still requires rebuild
+  `^3.7.0`, and external-editor 3.1.0 still requires tmp `^0.0.33`; the reviewed
+  safe pins remain outside those ranges. Forge 8 remains prerelease-only.
+
+The immutable local bytes and machine evidence are preserved under the ignored
+`dist-release/0.1.0-rc.13` directory. They were not tagged, pushed, signed,
+published to npm/GitHub/CDN, or promoted to a public feed. This is a Linux
+unsigned internal candidate only; native Windows/macOS, signing/notarization,
+protected feed, credentialed staging, and legal approval remain open gates.
 
 ## Continuation verification status — 2026-07-20
 
@@ -706,10 +765,11 @@ source-merged hourly data.
   prompt, verify the fixed provider destination and `store: false` request,
   and prove the key and conversation never enter logs, disk state, or
   TokenMonster cloud. This operational proof remains outstanding.
-- **Native Windows next-version candidate:** after this hardening is reviewed
-  and committed, choose a new version, build fresh immutable CLI and desktop
-  artifacts from that exact commit, and verify the hashes on the Windows
-  release host. Install it as a clean user, choose
+- **Native Windows rc.13 candidate:** the local rc.13 CLI tarball and unsigned
+  Linux ZIP do not satisfy this gate. Build and verify the exact approved
+  release identity on the Windows release host only after the signed/GA
+  dependency gate and protected release scope are approved. Install it as a
+  clean user, choose
   each starter across repeated runs, restart to verify selection/unlocks, tap a
   character, save the real PNG,
   exercise the refreshed quota panel, and run the existing Squirrel `.nupkg`
@@ -725,8 +785,9 @@ source-merged hourly data.
   rollback, and exact R2/public readback are wired locally. Run them only with
   a freshly versioned signed tag in the protected single-writer environment;
   preserve the emitted evidence and complete native install/update rehearsal
-  before treating the connected updater surface as production-usable. No
-  post-hardening candidate artifact has been built or published.
+  before treating the connected updater surface as production-usable. A local
+  post-hardening rc.13 CLI tarball and unsigned Linux ZIP now exist, but no
+  signed Windows Squirrel artifact was built or published.
 - **Signed/GA packaging dependency gate:** the exact `@electron/rebuild 4.2.0`
   and `tmp 0.2.7` overrides pass the local Forge package/build verifier and
   `npm audit` reports zero vulnerabilities. A 2026-07-19 native-range lock for
@@ -749,8 +810,8 @@ source-merged hourly data.
   substitute for this gate.
 - **Integrator publication:** the scoped recovery commits are integrated into
   local `fable/integration` but remain unpushed. Push only after reviewing the
-  historical rc.12 evidence, this post-hardening change, and the native release
-  plan.
+  historical rc.12 evidence, this post-hardening change, the local-only rc.13
+  evidence, and the native release plan.
   Configure the protected signing/npm/CDN release environments and the four
   exact public download bindings only after the immutable Windows bytes exist;
   never call the historical local rc.12 artifacts shipped.
