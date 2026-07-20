@@ -1,0 +1,31 @@
+{
+  "name": "@tokenmonster/contribution-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tokenmonster/contracts": "0.1.0",
+    "@tokenmonster/local-store": "0.1.0",
+    "@tokenmonster/monster-engine": "0.1.0",
+    "@tokenmonster/secret-vault": "0.1.0",
+    "@tokenmonster/token-tracker-adapter": "0.1.0"
+  },
+  "devDependencies": {
+    "@tokenmonster/token-tracker-runtime": "0.1.0"
+  }
+}
