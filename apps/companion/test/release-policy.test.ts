@@ -501,7 +501,7 @@ describe("companion release policy", () => {
     expect(source).not.toContain("Promise.all(makers)");
     expect(source).toContain("prepareReviewedSquirrelVendorOverlay(");
     expect(source).toContain("requireReviewedSquirrelReleaseMode(");
-    expect(source).toContain("verifyReviewedSquirrelVendorOverlay(");
+    expect(source).toContain("finalizeReviewedSquirrelVendorOverlay(");
     expect(source).toContain('join(temporaryRoot, "application")');
     expect(source).toContain('join(temporaryRoot, "vendor")');
     expect(source.indexOf("...configuration.squirrel")).toBeLessThan(

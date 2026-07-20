@@ -1,11 +1,19 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
+import {
+  lstat,
+  mkdtemp,
+  readFile,
+  rm,
+  truncate,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  finalizeReviewedSquirrelVendorOverlay,
   prepareReviewedSquirrelVendorOverlay,
   requireReviewedSquirrelReleaseMode,
   REVIEWED_SQUIRREL_UPDATER,
@@ -76,6 +84,55 @@ describe("reviewed Squirrel updater", () => {
     await expect(verifyElectronWinstallerVendor()).resolves.toEqual(
       sourceBefore,
     );
+  });
+
+  it("removes only Squirrel's bounded releasify log before final verification", async () => {
+    const temporaryRoot = await mkdtemp(
+      join(tmpdir(), "tokenmonster-squirrel-finalize-test-"),
+    );
+    temporaryDirectories.push(temporaryRoot);
+    const overlayDirectory = join(temporaryRoot, "vendor");
+    await prepareReviewedSquirrelVendorOverlay(overlayDirectory, "internal");
+    const logPath = join(overlayDirectory, "Squirrel-Releasify.log");
+    await writeFile(logPath, "reviewed test diagnostic\n", "utf8");
+
+    await expect(
+      finalizeReviewedSquirrelVendorOverlay(overlayDirectory),
+    ).resolves.toEqual({
+      directory: overlayDirectory,
+      updaterSha256: REVIEWED_SQUIRREL_UPDATER.sha256,
+    });
+    await expect(lstat(logPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects any other maker residue", async () => {
+    const temporaryRoot = await mkdtemp(
+      join(tmpdir(), "tokenmonster-squirrel-residue-test-"),
+    );
+    temporaryDirectories.push(temporaryRoot);
+    const overlayDirectory = join(temporaryRoot, "vendor");
+    await prepareReviewedSquirrelVendorOverlay(overlayDirectory, "internal");
+    await writeFile(join(overlayDirectory, "unexpected.log"), "no\n", "utf8");
+
+    await expect(
+      finalizeReviewedSquirrelVendorOverlay(overlayDirectory),
+    ).rejects.toThrow(/unexpected file inventory/u);
+  });
+
+  it("rejects an oversized Squirrel releasify log", async () => {
+    const temporaryRoot = await mkdtemp(
+      join(tmpdir(), "tokenmonster-squirrel-log-bound-test-"),
+    );
+    temporaryDirectories.push(temporaryRoot);
+    const overlayDirectory = join(temporaryRoot, "vendor");
+    await prepareReviewedSquirrelVendorOverlay(overlayDirectory, "internal");
+    const logPath = join(overlayDirectory, "Squirrel-Releasify.log");
+    await writeFile(logPath, "", "utf8");
+    await truncate(logPath, 4 * 1024 * 1024 + 1);
+
+    await expect(
+      finalizeReviewedSquirrelVendorOverlay(overlayDirectory),
+    ).rejects.toThrow(/not a bounded physical file/u);
   });
 
   it("keeps signed/public packaging closed while redistribution review is open", () => {

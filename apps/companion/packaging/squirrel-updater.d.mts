@@ -29,6 +29,10 @@ export function verifyReviewedSquirrelVendorOverlay(
   directory: string,
 ): Promise<Readonly<{ directory: string; updaterSha256: string }>>;
 
+export function finalizeReviewedSquirrelVendorOverlay(
+  directory: string,
+): Promise<Readonly<{ directory: string; updaterSha256: string }>>;
+
 export function prepareReviewedSquirrelVendorOverlay(
   directory: string,
   releaseMode: unknown,
