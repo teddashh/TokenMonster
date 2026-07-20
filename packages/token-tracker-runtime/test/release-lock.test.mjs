@@ -6,6 +6,7 @@ import {
   assertSidecarClosuresMatch,
   collectSidecarClosure,
   createReleaseShrinkwrap,
+  exactSidecarDependencyPins,
   mergeSharedRegistryLockEntry,
 } from "../../../scripts/release/sidecar-lock.mjs";
 
@@ -73,6 +74,25 @@ describe("public CLI sidecar shrinkwrap", () => {
         ({ resolved, integrity }) =>
           resolved.startsWith("https://registry.npmjs.org/") &&
           integrity.startsWith("sha512-"),
+      ),
+    ).toBe(true);
+  });
+
+  it("promotes every unique sidecar package to an exact public-install pin", () => {
+    const pins = exactSidecarDependencyPins(rootLock, sidecarPin);
+
+    expect(Object.keys(pins)).toHaveLength(41);
+    expect(pins).toMatchObject({
+      "@mongodb-js/zstd": "2.0.1",
+      "tokentracker-cli": "0.80.0",
+      undici: "8.7.0",
+      yauzl: "3.4.0",
+    });
+    expect(
+      Object.values(pins).every((version) =>
+        /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$/u.test(
+          version,
+        ),
       ),
     ).toBe(true);
   });
