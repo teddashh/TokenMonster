@@ -1,7 +1,8 @@
 # TokenMonster character and wardrobe map
 
-Status: launch contract. Ten art-backed personas are release-allowlisted;
-GLM intentionally uses TokenMonster's built-in letter renderer.
+Status: integrity/runtime contract with public rights gate pending. Ten
+art-backed personas are schema-v1 integrity-allowlisted; GLM intentionally uses
+TokenMonster's built-in letter renderer.
 
 This document defines how TokenMonster may reuse the existing AI-Sister
 character work without copying its publishing pipeline or pretending that
@@ -48,11 +49,13 @@ is:
 - three reaction poses per cell = 600 pose slots;
 - one custom layered set per cell = 200 layered-set slots.
 
-The release-embedded manifest now covers those 200 wardrobe cells and their
-pose objects for the ten art-backed personas. The raw bank and layered files
+The release-embedded schema-v1 integrity manifest covers those 200 wardrobe
+cells, their pose objects, and 50 prerecorded WAV refs (five for each of the
+same ten personas). The raw bank and layered files
 remain outside the audited Git tree in AI-Sister's voice-lab workspace. GLM
 therefore stays in letter mode and has no downloadable wardrobe or pose
-objects.
+objects or voice lines. This inventory is not public rights approval; all 860
+associations still require the schema-v2 evidence in the technical spec.
 
 ## Stable theme map
 
@@ -183,10 +186,11 @@ The implemented TokenMonster adapter accepts only exact source IDs for these
 four families and never infers a provider from a model name. If that optional
 projection is missing, malformed, or unavailable, totals and charts continue
 to work and TokenMonster uses the manual picker.
-No provider totals or selection rationale are sent to the asset CDN or
-TokenMonster cloud. A bundle request necessarily identifies the requested
-public persona/theme object to the CDN; TokenMonster sends no separate
-selection record, user identifier, or usage-derived value with it.
+No provider totals, selection rationale, or usage-selected asset key are sent
+to an asset CDN or TokenMonster cloud. Current release entry points are
+cache-only. A future user-consented request may identify only a fixed pack and
+version; its object set and order must not vary with persona, theme, unlock,
+pose, trigger, or any usage-derived state.
 
 ## Unlock and progression rules
 
@@ -200,9 +204,13 @@ local-only, monotonic, explainable, and never purchasable:
 - DeepSeek and Qwen use their own cumulative family totals; Mistral and
   Perplexity use active-day streaks; Venice/Llama and GLM use lifetime totals;
   Sakana uses distinct active-provider breadth;
-- after a character unlocks, its 20 ordered wardrobe themes unlock from that
-  character's local provider-family cumulative total. A matching local trait
-  can move a theme ahead by one tier;
+- after a character unlocks, its 20 ordered wardrobe themes currently unlock
+  from that character's local provider-family cumulative total. A matching
+  local trait can move a theme ahead by one tier. This implementation cannot
+  advance GLM because pinned sidecar source `zcode` is co-mingled and remains
+  `other`; GLM art must not merge until a reviewed per-character lifetime
+  wardrobe rule and monotonic migration fixtures replace this target-contract
+  gap;
 - `supported` and `challenged` pose sets are available with character unlock;
   `victory` and allowlisted actions use active-day-streak milestones;
 - persisted unlock timestamps prevent rescans, corrections, or later quiet
@@ -213,18 +221,22 @@ assigning power or rank, or encouraging wasteful token burn.
 
 ## Publishing boundary
 
-Approved, pre-rendered, immutable objects live in AI-Sister's existing
-Cloudflare R2/CDN under the dedicated prefix:
+After the schema-v2 rights gate, approved pre-rendered immutable objects may be
+published to AI-Sister's existing Cloudflare R2/CDN under the dedicated prefix:
 
 ```text
 tokenmonster/characters/v1/
 ```
 
-Runtime public layout:
+Conditional publisher object layout:
 
 ```text
 tokenmonster/characters/v1/objects/<sha256>.<webp|png|wav>
 ```
+
+These per-object paths are publisher inventory, not a runtime lazy-fetch
+contract. Current TokenMonster entry points are network-disabled; any future
+runtime transport must use the consented fixed-pack boundary below.
 
 AI-Sister retains:
 
@@ -234,16 +246,20 @@ AI-Sister retains:
 - the publisher that validates, renders, packages, hashes, and uploads bundles;
 - rollback authority for a published asset version.
 
-TokenMonster receives only the public, approved output. It does not mount the
-voice-lab workspace, read AI-Sister databases, deep-import AI-Sister code, or
-become a second asset publisher.
+The target schema-v2 boundary lets TokenMonster receive only public,
+rights-approved output. The current schema-v1 runtime manifest is a historical
+integrity exception and remains a public-release STOP until migration. In
+either case TokenMonster does not mount the voice-lab workspace, read AI-Sister
+databases, deep-import AI-Sister code, or become a second asset publisher.
 
 ## Release manifest contract
 
-The strict manifest is embedded in the TokenMonster release rather than
-downloaded at runtime. It lists only objects that passed the release gate. Each
-object records at least its relative hash-named path, bytes, SHA-256, media
-shape, and its character/theme/pose or voice association:
+The target strict schema-v2 manifest is embedded in the TokenMonster release
+rather than downloaded at runtime and lists only objects that passed the public
+release gate. The current embedded schema-v1 manifest records integrity and
+association only and does not meet that approval contract. Each object records
+at least its relative hash-named path, bytes, SHA-256, media shape, and its
+character/theme/pose or voice association:
 
 ```json
 {
@@ -256,8 +272,10 @@ shape, and its character/theme/pose or voice association:
 ```
 
 Paths are relative and contain no local filesystem location, user identifier,
-prompt, credential, or arbitrary external URL. The current manifest contains
-ten characters with 20 themes each and an empty `voice` list.
+prompt, credential, or arbitrary external URL. The current schema-v1 runtime
+manifest contains ten characters with 20 themes each and 50 voice lines (five
+per character); GLM has neither image nor voice entries. These integrity rows
+lack structured public rights evidence and are not grandfathered into approval.
 
 Published manifest and bundle versions are immutable. Correction means
 publishing a new version and updating the top-level manifest; it never means
@@ -265,32 +283,42 @@ silently replacing bytes beneath an existing hash.
 
 ## Download, cache, and integrity behavior
 
-TokenMonster downloads an approved object only after its character/theme is
-unlocked. It uses the single configured HTTPS CDN origin and caches verified
-bytes under `~/.tokenmonster/asset-cache`, outside the repository.
+The gateway accepts only `cdnBaseUrl: null` and has no network fetch hook or
+per-object downloader. It may serve only integrity-verified bytes already under
+`~/.tokenmonster/asset-cache`; a miss returns a local letter fallback or silence
+without network access. `--no-character-downloads` is a backward-compatible
+no-op while this fail-closed policy is active.
 
-The client must:
+The previous per-object downloader is not a release-safe design. Public
+manifest associations let a CDN map a hash key back to a character, theme,
+pose, or voice trigger. Requests chosen by starter, unlock, today totals, or
+connection state would therefore disclose local usage-derived state even with
+no query string.
 
-1. fetch only fixed HTTPS URLs derived from the allowlisted CDN origin and
-   validated manifest fields;
-2. deny redirects and enforce a 10-second timeout and 4 MiB response cap;
-3. verify SHA-256 before making an object visible or writing it to cache;
-4. write through a mode-`0600` temporary file and atomically promote it;
-5. reverify every cache hit and delete corrupt or oversized entries;
-6. retain verified objects for offline use;
-7. return a local letter fallback when the CDN, manifest, or integrity check fails;
-8. never send token totals, provider totals, local paths, user IDs, credentials,
-   or collector data in an asset request, query string, or telemetry event.
+The dormant `@tokenmonster/characters/asset-pack` subpath now implements the
+verification/cache mechanics below, but no current runtime imports it. A real
+downloader remains blocked on a rights-approved schema-v2 manifest, embedded
+pack descriptor and exact origin/path allowlist, consent UI, and installed
+packet-capture review. When those release inputs exist, the wiring must:
 
-`--no-character-downloads` removes the CDN origin from the gateway
-configuration. No image or future voice download is then possible; verified
-cache objects and built-in letter mode remain available. Voice objects ship in
-a later manifest revision behind this same gate, and playback defaults off in
-the UI until the user enables it.
+1. run only after a separate, sufficiently disclosed user action;
+2. fetch one fixed, versioned pack whose request set and order are independent
+   of all local usage, selection, progression, pose, and trigger state;
+3. accept only an allowlisted HTTPS origin and reject redirects;
+4. enforce bounded transfer and extraction sizes;
+5. verify each schema-v2 entry's bytes, media type, and SHA-256 before display
+   or an atomic mode-`0600` cache write;
+6. reverify every cache hit and delete corrupt or oversized entries;
+7. retain verified objects for offline use and fall back locally on any error;
+8. perform all character, theme, pose, and voice selection only after the full
+   pack is local.
 
-The ordinary CDN layer can observe the requested static object and client IP,
-as with any asset request. TokenMonster must add no usage-derived parameters or
-identifiers. Character selection and starter scoring remain local.
+Prerecorded voice playback defaults off. The gateway exposes bounded lines
+only for unlocked characters: `greeting` is gesture-armed and once per
+character/UI session, `unlock` accompanies its toast, `quiet`/`active` reflect
+a healthy zero/nonzero today aggregate with a one-hour trigger throttle, and
+`error` fires only on entry to refresh-failed. Current entry points play these
+only from verified cache, so the trigger never becomes a network key.
 
 ## Rights and brand gate
 
@@ -308,11 +336,15 @@ same gate.
 
 ## Acceptance criteria for the first asset release
 
-- The release embeds an approved manifest for ten art-backed roster members,
-  each with 20 themes and pose art; GLM reliably uses letter mode.
+- A public release embeds a schema-v2 rights-approved manifest for ten
+  art-backed roster members, each with 20 themes and pose art; any included
+  voice has its independent evidence, and GLM reliably uses letter mode until
+  its own art and progression gates pass.
 - Every published file is immutable and integrity-addressed.
-- A clean TokenMonster install can download, validate, cache, render, and use an
-  offline fallback without access to AI-Sister source or voice-lab paths.
+- A clean TokenMonster install remains fully usable in letter/silent mode and
+  makes no asset request. After the separately reviewed fixed-pack flow exists,
+  an explicit download can validate, cache, and render without access to
+  AI-Sister source or voice-lab paths.
 - Tie, no-data, and missing-provider-dimension cases show the manual starter
   picker.
 - Reduced motion works for every published bundle.

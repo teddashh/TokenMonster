@@ -44,7 +44,8 @@ without a reviewed contract and inventory change.
 | OS secret store | OpenAI BYOK key plus separate contribution-upload and deletion bearer secrets | Never copied into app backup | Rotate/delete in companion |
 | Companion renderer memory | Current BYOK prompt/response and rendered state | Never backed up | Conversation clears when conversation/window closes |
 | `~/.tokenmonster/progression-v1.json` and character preferences | Local aggregate progression ledger, monotonic unlock timestamps, selected character, and active wardrobe choices | Local-only; mode `0600` in a mode `0700` directory | Rebuilt/fails closed to letter mode if invalid; never uploaded |
-| `~/.tokenmonster/asset-cache` | Approved, integrity-verified public raster/voice objects named by SHA-256 | Disposable, local-only cache; each read revalidates its digest | `--no-character-downloads` makes the cache read-only from the network's perspective; missing content falls back to letter mode |
+| `~/.tokenmonster/character-profile-v1.json` | Strict derived identity/mood/evolution state, banded explanations, UTC window, and computation instant; mood uses the latest complete UTC day, while today's partial bucket is excluded from mood; never the footprint or token components | Local-only; mode `0600` in a mode `0700` directory | Replaced after a fresh derivation; only a current/previous-date snapshot at most 48 hours old may serve as stale; never uploaded |
+| `~/.tokenmonster/asset-cache` | Integrity-verified raster/voice objects named by SHA-256; schema-v1 presence is not public rights approval | Disposable, local-only cache; each read revalidates its digest | Current CLI/Electron are unconditionally cache-only and network-disabled; missing content falls back to letter mode or silence |
 | Cloudflare Worker memory | Validated request and transaction state | Never intentionally persisted | Request-scoped |
 | D1 current tables | Hashed enrollment auth, consent, recent canonical buckets, optional shares | Time Travel plus independent logical export | Revoke/delete within stated window |
 | D1 anonymous rollups | Irreversibly compacted historical coarse totals | Daily logical export; rebuild tested | Not attributable after compaction |
@@ -122,7 +123,7 @@ loaded aggregate metrics.
 
 | Record | Allowed fields | Retention | Notes |
 | --- | --- | --- | --- |
-| Character profile | Character manifest ID, deterministic traits, explanation keys, 28-day normalized inputs | Until local reset | No prompt/content inference |
+| Character profile | Fixed analytical character ID, deterministic allowlisted traits, banded explanation keys, freshness/coverage, and 28-day UTC window metadata | Until local reset or replacement | Positive days are estimated; missing/empty dates stay unavailable; provider traits are suppressed; no prompt/content inference or persisted footprint |
 | Mood history | Coarse mood, explanation key, day/hour aggregate references | Default 30 days | User may clear independently |
 | Preferences | Locale, theme, reduced motion, reminder/quiet hours, source choice | Until reset | Cloud toggle defaults off |
 | Manual character choice | One allowlisted roster ID plus selection timestamp | Until locally changed/reset | Stored in local progression/preferences JSON; never sent to cloud |
@@ -134,28 +135,29 @@ Diagnostic exports must use an allowlist and a canary test. They may not copy
 the local database wholesale or include environment variables, home paths,
 process command lines, raw collector output, credentials, prompt, or response.
 
-### Character-asset delivery (implemented)
+### Character-asset delivery (cache-only implemented; network blocked)
 
-The release embeds the reviewed strict manifest that is authoritative for that
-build. Runtime GETs target only the configured fixed HTTPS CDN origin and
-immutable hash-named public object keys under `tokenmonster/characters/v1`;
-the runtime does not accept an origin or URL from a server response. An object
-is available only after its character/theme is locally unlocked. Each cache
-read and download must match the filename's SHA-256; downloads additionally
-enforce a 10-second timeout, a 4 MiB response cap, and an allowlisted media
-extension before an atomic cache write. A failed request or validation falls
-back to the code-native letter renderer or a previously verified cache entry
-without affecting local usage features.
+The release embeds a strict schema-v1 integrity manifest. The gateway accepts
+only `cdnBaseUrl: null`, rejects transport hooks, and contains no per-object
+downloader; CLI and legacy Electron also ignore the former override. Cache hits
+must match the filename's SHA-256; a miss or invalid entry falls back to the
+code-native letter renderer or silence without affecting local usage features.
+`--no-character-downloads` is retained only as a compatibility safety alias.
 
-The CDN necessarily observes the requested public object key and the client's
-IP address. The request is a redirect-denying `GET` with no query parameters,
-token/provider totals, starter rationale, user/account/install identifier,
-local filename or filesystem/project path, or other usage-derived data.
-`--no-character-downloads` sets the CDN origin to null and therefore disables
-all image and future voice downloads while retaining verified cache and letter
-fallbacks. The current manifest has no voice lines; the UI preference defaults
-voice off, and later voice objects must pass the same local unlock, manifest,
-hash, and cache gate.
+Per-object network delivery is prohibited because the public manifest maps
+each hash to a character/theme/pose or voice trigger. Even without query
+parameters or numeric totals, a request selected by starter, unlock, today
+usage, or refresh state would disclose usage-derived information to the CDN.
+Future delivery requires a separate explicit user action and one fixed,
+versioned pack whose network object set and order do not depend on any local
+usage, selection, progression, pose, or trigger. Pack entries still require
+bounded extraction and per-entry bytes/media/SHA-256 checks before atomic cache
+writes.
+
+The schema-v1 runtime integrity manifest contains 50 prerecorded voice refs
+for the ten art-backed characters and none for GLM; voice defaults off and can
+currently play only verified cache hits. These rows lack schema-v2 public
+rights/content evidence and must not be treated as approval.
 
 ## 5. BYOK interaction data
 
@@ -283,8 +285,10 @@ at the most recently confirmed value.
 - Starter-selection tests prove that the 28-day model breakdown becomes four
   request-scoped provider totals, only the decision crosses the gateway, and a
   projection failure falls back to manual choice without breaking metrics.
-- Until an approved asset runtime exists, packet capture shows no character
-  asset request. Before enablement, tests must pin the exact AI-Sister CDN
-  origin, embedded approved manifest, SHA-256/size/MIME checks, immutable cache,
-  no-query request shape, and local fallback.
+- Before any public asset network runtime is enabled, packet capture and tests
+  must pin the exact AI-Sister origin, embedded schema-v2 rights-approved
+  manifest, fixed pack/version, explicit consent, SHA-256/size/MIME/extraction
+  checks, immutable cache, and local fallback. They must also prove the request
+  set/order is independent of all local usage and progression. The existing
+  schema-v1 integrity runtime is not equivalent to either approval gate.
 - The production privacy page matches this inventory field-for-field.

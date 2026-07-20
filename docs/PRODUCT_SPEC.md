@@ -31,8 +31,8 @@
 
 ### 1.1 目前實作快照（2026-07-16）
 
-Local Companion、exact-pinned TokenTracker sidecar、11 位角色與本機進度引擎、按需角色
-asset downloader／cache、BYOK 對話、
+Local Companion、exact-pinned TokenTracker sidecar、11 位角色與本機進度引擎、角色
+asset integrity cache／letter fallback、BYOK 對話、
 本機圖表與 export/reset，以及預設關閉的匿名 contribution source slice（實際
 payload preview、enrollment、OS-backed scoped secrets、背景 sync／冪等 retry、停止、
 刪除與狀態查詢），已有可重跑的本機 source tests。Web/API、D1 mutation/deletion、
@@ -49,8 +49,9 @@ backup/restore與suppression replay、signed installer、平台實機smoke、專
 target；不得因列在本規格中就宣稱已部署或已對外提供。
 
 `tokentracker-cli@0.80.0` 是現有唯一 authoritative collector，Tokscale／Electron
-是 migration-only legacy slice。圖像不包在 npm artifact；release 只內嵌核准 manifest，
-由 companion 在解鎖後按需下載、驗證並快取。
+是 migration-only legacy slice。圖像不包在 npm artifact；release 只內嵌 integrity
+manifest，正式入口目前只讀取逐次驗證的本機 cache。先前依解鎖狀態按需下載的路徑已因
+object-key side channel 停用。
 
 ## 2. 產品摘要
 
@@ -67,9 +68,9 @@ TokenMonster 的差異化不是另一個成本報表，而是：
 ### 3.1 已驗證的工程基線
 
 - TokenMonster 採自有 monorepo，產品、雲端契約、角色引擎與 consent 邊界不繼承任何 collector 上游的產品架構。
-- 預設 collector 是 exact-pinned `tokscale@4.5.2`；首發驗證範圍是 Claude Code、Codex CLI、Gemini CLI 與 Grok Build。每次升級都必須重新跑 golden fixtures 與隱私測試。
-- `tokentracker-cli@0.79.8` 只作為尚未實作的相容性 target：未來若提供給已安裝 TokenTracker 的使用者，必須與 tokscale 模式互斥。Bridge 只可讀 loopback aggregate endpoint，強制上游 telemetry 關閉，且永不啟用上游 cloud sync。支援矩陣只反映當前選定 collector 中已通過 TokenMonster fixtures 的來源，不承接上游來源數量或支援清單。
-- 公開 fork `teddashh/tokenmonster-collector` 只承載無法在 adapter 解決的最小 parser／hook patch；TokenMonster 不整套搬入 TokenTracker 產品與原始碼作為基底。
+- 目前唯一 authoritative collector 是 exact-pinned `tokentracker-cli@0.80.0` managed child。TokenMonster 只透過固定 loopback aggregate routes、strict adapter 與 managed lifecycle 使用它；每次 pin upgrade 都必須重新跑 compatibility、privacy 與跨平台 lifecycle tests。
+- `tokscale@4.5.2`、`collector-core` 與舊 `tokentracker-bridge` contract 是 migration-only contribution slice，不是支援的 local collector，也不得接收新產品功能或與 sidecar totals 相加。
+- TokenMonster 不 fork、vendor、submodule、deep-import 或複製 TokenTracker parser／hook code，也不直接讀它的 queue files 或 provider databases。
 - AI-Sister / multi-ai-chat-app 現有角色設計是 raster 圖像資產，不是 Live2D 模型，也沒有可直接使用的 3D rig。
 - 四張候選核心角色圖在 owner public-use grant 與 brand review 完成前一律是 `blocked`。MVP 角色系統必須能以 placeholder 完整運作，不得把未清權素材包進公開 artifact。
 
@@ -200,7 +201,7 @@ Collector 狀態依序為 `starting` → `syncing` → `ready`；無支援資料
 3. collector 掃描可支援的本地來源，列出偵測結果與資料精確度。
 4. 初始 roster 顯示四位姊妹與七位朋友。系統可依下節規則建議一位 starter，但使用者選擇永遠優先；GLM 固定使用內建字母模式。
 5. 系統匯入並去重歷史 usage，建立本地 dashboard。
-6. 系統生成第一組 2 至 3 個主 traits，並為每個 trait 顯示原因。
+6. 證據足夠時，系統生成第一組 1 至 3 個主 traits，並為每個 trait 顯示原因；證據不足時維持「認識中」，不為了湊數猜測第二個 trait。
 7. 系統詢問是否開啟通知；預設不開。
 8. 系統另外詢問是否匿名分享；預設不開，且可先預覽 payload。
 
@@ -215,7 +216,7 @@ Collector 狀態依序為 `starting` → `syncing` → `ready`；無支援資料
 
 1. collector 在背景增量讀取新 usage。
 2. 本地資料更新後，dashboard 顯示今日、7 日、30 日與累積統計。
-3. 身份 traits 依較長時間窗更新；短期 mood 依當日或本機使用節奏相對個人基準更新。這些 hourly／session-like 細節只在本機計算，不進入 cloud wire。
+3. 身份 traits 依較長時間窗更新；短期 mood 依可證明完整的本機使用節奏相對個人基準更新。Exact-pin 0.80.0 只有 UTC 日桶時，今日尚未結束的桶不參與 mood，比較最近一個完整 UTC 日與更早可用日；未來有 attested hourly 能力後才改用同時段 rolling rhythm。這些細節只在本機計算，不進入 cloud wire。
 4. 使用者可從角色切到圖表，或點擊「為什麼」查看變化理由。
 5. 若使用者開啟提醒，系統依 quiet hours 顯示本地通知。
 
@@ -245,7 +246,7 @@ Collector 狀態依序為 `starting` → `syncing` → `ready`；無支援資料
 ### 8.5 分享角色
 
 1. 使用者點擊產生分享卡。
-2. 分享卡包含角色、2 至 3 個主 traits、簡短歸因句、時間範圍與 contributors counter。
+2. 已成形的分享卡包含角色、1 至 3 個有證據的主 traits、簡短歸因句與時間範圍；「認識中」的卡改顯示狀態與歸因，不虛構 trait。個人總量可由使用者隱藏。
 3. 使用者可在匯出前移除總量、工具名稱或公開 counter。
 4. 分享卡不得包含本機路徑、專案名稱、帳號、API key 或原始對話內容。
 
@@ -257,11 +258,11 @@ Collector 狀態依序為 `starting` → `syncing` → `ready`；無支援資料
 
 #### A. Local collector
 
-- 以 exact-pinned `tokscale@4.5.2` 的狹窄 adapter 作為預設路徑；可選 TokenTracker bridge 必須與它互斥，絕不可把兩者結果相加。
-- Claude Code、Codex CLI、Gemini CLI 與 Grok Build 是 Tier 1；每個正式支援來源都必須有無敏感內容的 fixture、欄位投影與重算測試。
-- adapter 只執行固定 argv、清洗環境變數、隔離上游設定目錄，並設定 timeout 與 stdout 上限；不可開放任意 shell、登入、遙測或 submit 指令。
-- 本地持久化 hourly absolute snapshots，支援離線、重掃與向下修正；雲端 queue 再聚合成 UTC daily snapshots。
-- 每筆 snapshot 標示 adapter／source 版本、時間窗、provider/model/tool、Token 類別與精確度；raw upstream JSON 不落盤、不進 log。
+- 以 exact-pinned `tokentracker-cli@0.80.0` managed child 作唯一 collection authority；CLI 組合、停止它建立的 child、strict adapter、gateway 與 UI。不得探索／終止其他 PID 或 port。
+- 正式支援只來自 exact-tested sidecar routes與 fixture；TokenMonster 不承接上游未驗證的來源數量或宣傳清單。
+- Runtime 只啟動固定 executable／argv、清洗環境、驗證 version/schema、套用 timeout／response cap，並把上游 JSON立即投影成 content-blind DTO；不接受任意 upstream URL、route、shell、登入、遙測或 cloud sync。
+- 現有精確資料是 UTC daily aggregates；0.80.0 的 hourly route合併所有 source且只有 whole-hour buckets，因此不能偽裝 2 h／5 h provider rolling windows。Hourly只在上游提供 exact source + canonical sub-hour boundary後加入，且永遠 local-only。
+- Raw upstream JSON只在 request memory完成驗證／投影，不落盤、不進 log；本機 progression／preferences只保存內容盲的每日 ledger、解鎖與使用者選擇。
 
 #### B. Local dashboard
 
@@ -273,10 +274,10 @@ Collector 狀態依序為 `starting` → `syncing` → `ready`；無支援資料
 
 #### C. AI 字母人
 
-- Launch roster 是 11 位角色；release-embedded strict manifest 為其中 10 位列出各 20 種衣櫥與 pose art，GLM 使用 letter mode。
+- Launch roster 是 11 位角色；release-embedded schema-v1 integrity manifest 為其中 10 位列出各 20 種衣櫥與 pose art，GLM 使用 letter mode。V1 不構成 public rights approval，schema-v2 gate仍為 STOP。
 - 使用圖像切換、裁切、色彩效果、配件 overlay、對話框與輕量 CSS/canvas 動畫呈現狀態。
 - 不要求 Live2D、3D rig 或即時嘴型。
-- 顯示 2 至 3 個可解釋主 traits。
+- 側寫成形時顯示 1 至 3 個可解釋主 traits；證據不足時保持「認識中」。
 - 顯示一個短期 mood 與至少一句變化原因。
 - 總 Token 可作為能量、光暈或成長背景值，但必須封頂或對數化，不形成戰力與排名。
 
@@ -381,7 +382,9 @@ TokenMonster adapter 必須在持久化前丟棄上游的 session、project labe
 
 ### 10.4 上傳 aggregate schema
 
-`IngestSnapshotV1` request body 是 strict object，唯一 allowlist 為：
+`IngestSnapshotV1` request body 是 strict object，唯一 allowlist 如下。它仍是
+migration-only contribution slice的legacy wire contract；永久sidecar尚未接上此
+upload mapper，因此不得把下列collector enum解讀成目前local runtime authority：
 
 - Envelope：`schemaVersion: "1"`、client 產生的 UUID `batchId`、UTC `generatedAt`、`collector` 與 `buckets`。`batchId` 只供 whole-request retry 去重，不是身份、憑證或 bucket key。
 - `collector`：`kind` 只能是 `tokscale` 或 `tokentracker-bridge`，並帶 TokenMonster `adapterVersion` 與 exact upstream `sourceVersion` SemVer。
@@ -405,7 +408,7 @@ Upload bearer secret 只存在 Authorization header；獨立 deletion secret 只
 | 層級 | 建議時間窗 | 目的 | 範例 |
 | --- | --- | --- | --- |
 | Identity | 28 日 rolling profile | 穩定、可辨識的主 traits | CLI-heavy、multi-model、night owl |
-| Mood | 今日／最近 24 小時相對個人基準 | 即時回饋 | 專注、過熱、好奇、休眠 |
+| Mood | 最近完整 UTC 日相對更早可用日；attested hourly 上游完成後升級為同時段 rolling rhythm | 穩定且不受部分日偏差的短期回饋 | 安靜、穩定、活躍、未知 |
 | Evolution | 每週或明確的本機結構變化 | 可看見的長期發展 | 新配件、色彩變化、台詞分支 |
 
 可用且 content-blind 的候選特徵：
@@ -423,17 +426,17 @@ Upload bearer secret 只存在 Authorization header；獨立 deletion secret 只
 ### 10.6 AI-Sister raster 角色呈現
 
 - Launch roster 有 11 位：ChatGPT、Claude、Gemini、Grok、DeepSeek、Qwen、Mistral、Venice／Llama、Sakana、Perplexity 與 GLM。
-- Release 內嵌 strict manifest，列出前 10 位角色各 20 種衣櫥與 `supported`、`challenged`、`victory` pose objects；GLM 使用 code-native letter mode。
-- 圖像不打包進 npm artifact。解鎖後所需的 hash-named object 才從固定 HTTPS CDN 按需 `GET`，經 SHA-256 驗證後 atomic 寫入 `~/.tokenmonster/asset-cache`。
-- `--no-character-downloads` 將 CDN origin 設為 null，只使用逐次驗證的本機 cache 與 letter fallback；用量、圖表與進度不受影響。
-- Asset request 沒有 query string、token／provider totals、starter rationale、user／install ID 或本機 path；CDN 仍可看到公開 object key 與 client IP。
+- Release 內嵌 schema-v1 integrity manifest，列出前 10 位角色各 20 種衣櫥與 `supported`、`challenged`、`victory` pose objects；GLM 使用 code-native letter mode。V1 只證 association／hash，不是 public rights approval；全部 entries仍需 schema-v2 migration。
+- 圖像不打包進 npm artifact。Gateway 設定只接受 `cdnBaseUrl: null`，沒有 fetch hook 或逐物件 downloader；CLI 與 legacy Electron 只使用逐次驗證的本機 cache 與 letter fallback。用量、圖表與進度不受影響，`--no-character-downloads` 暫時保留為相容參數。
+- 狀態式 lazy GET 不是可發布方案：即使沒有 query，hash-named object key 仍可映回自動角色、已解鎖衣裝、pose 或 voice trigger，從而揭露本機用量衍生狀態。
+- 未來 delivery 必須先通過 schema-v2 rights gate，並由使用者在充分揭露後明確啟動固定整包下載；整次網路物件集合不得依角色選擇、解鎖、token、provider 或 trigger 改變。下載後的顯示與反應選擇仍只在本機 cache 內完成。
 - 角色圖像不是 Live2D 或 3D rig；狀態透過核准的 pre-rendered pose 與輕量 UI 效果呈現。原始 parts、生成工具、prompt 與 publisher credential 不進入 TokenMonster。
-- 語音後續由同一 manifest、unlock、hash 與 cache gate 交付；目前 manifest 的 `voice` 為空，UI 預設關閉語音。
+- Schema-v1 runtime integrity manifest 已含前 10 位各五條、共 50 條預錄語音 refs；GLM 無語音，UI 預設關閉，且正式入口只播放已驗證 cache 命中。V1 rows 不含完整 rights evidence，全部 voice 在 schema-v2 獨立 consent／rights／content gate 與 privacy-safe fixed-pack delivery 完成前不得視為 public-approved。
 - 每個角色都應共用同一套 trait 意義，避免角色選擇本身改變 usage 分析結果。
 
 ### 10.7 BYOK 與固定台詞
 
-- MVP 先提供文字互動；語音是後續增強。
+- MVP 以文字互動為主；default-off 的本機預錄語音 playback 已存在，online TTS 才是後續增強。
 - MVP 的正式路徑是 companion main process 直接呼叫 OpenAI Responses API，並在每次 request 設 `store: false`；TokenMonster backend 不參與。
 - Desktop 環境使用 Electron `safeStorage` 的非同步 API 或等價 OS secret store。若 Linux 回報 `basic_text` backend，MVP 禁止持久化 key。
 - 純 Web 環境若無安全 bridge，key 只可存在記憶體或當次 session，不可預設寫入 localStorage。
@@ -470,7 +473,7 @@ Upload bearer secret 只存在 Authorization header；獨立 deletion secret 只
 
 - AI-Sister 角色圖。
 - 時間範圍。
-- 2 至 3 個主 traits。
+- 已成形時 1 至 3 個有證據的主 traits；認識中不虛構 trait。
 - 一句可讀歸因。
 - 可選的個人 Token 總量。
 - contributor wording。
@@ -529,7 +532,7 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 
 交付：
 
-- tokscale 4.5.2、可選 TokenTracker 0.79.8 bridge、依賴與四個 Tier-1 adapter 的安全／license 審查。
+- exact-pinned TokenTracker 0.80.0 managed-child／adapter／runtime 的 compatibility、privacy、lifecycle與license審查；legacy tokscale／collector-core只作移除前的migration audit。
 - AI-Sister raster asset inventory、checksum、授權與 brand review 狀態；未核准素材維持 blocked。
 - local snapshot 與 cloud `IngestSnapshotV1` schema。
 - threat model、privacy data map 與 contributor wording。
@@ -660,7 +663,7 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 - AC-COL-07：使用者可看見最近成功掃描時間、來源錯誤與修復建議。
 - AC-COL-08：停用某 adapter 後，不再讀取該來源，但既有本地歷史仍可查看或由使用者刪除。
 - AC-COL-09：adapter 子程序使用 fixed argv、`shell: false`、sanitized environment、isolated config、timeout 與 output cap；raw upstream output 不落盤或上傳。
-- AC-COL-10：若同時偵測 tokscale 與 TokenTracker bridge，UI 強制選一個資料來源，任何報表不得相加兩套 totals。
+- AC-COL-10：永久runtime只接受它自己managed的exact-pinned TokenTracker child；legacy tokscale／bridge不得與它同時成為authority、不得相加totals，並在cutover後移除。
 - AC-COL-11：所有 local／wire／public 計算都驗證 `reasoning <= output` 且 `total = input + output + cacheRead + cacheWrite + other`；圖表、修正與 recompute 均不再加 reasoning。
 
 ### AC-LOC：Local-first 與 dashboard
@@ -755,19 +758,19 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 | --- | --- | --- |
 | 產品形態 | 公開 web + local collector/desktop companion；不要純網頁承擔本機掃描 | Phase 0 |
 | 首發 OS | Electron companion 先完成 macOS；Windows 緊接。各平台未跑 CI、簽署與實機 smoke 前不宣稱 GA | Phase 0 |
-| Collector 支援承諾 | exact-pinned tokscale 4.5.2 為目前唯一 runtime 路徑；0.79.8 TokenTracker bridge 是尚未交付的互斥 target。兩者都只能展示通過 TokenMonster fixtures 的來源 | Phase 0 |
+| Collector 支援承諾 | exact-pinned tokentracker-cli 0.80.0 managed child為唯一runtime authority；legacy tokscale／bridge不得新增功能或與其相加。Pin升級須通過compatibility/privacy/cross-platform tests | Phase 0 |
 | Tier-1 tools | MVP 固定驗證 Claude Code、Codex CLI、Gemini CLI 與 Grok Build；任何擴充先加對應 fixture、privacy projection 與 compatibility test | Phase 0 |
 | 使用者帳號 | MVP 無使用者帳號；opt-in 時由 server 建立 enrollment，本機只保存隨機 bearer secret | Phase 0 |
 | 上傳 cadence | contribution queue 保存 UTC daily absolute snapshots；當日改變或 app 正常關閉時可重送較高 revision，離線安全重試 | Phase 1 |
 | Contributor auth | upload／deletion secrets 權限分離，只存本機 OS secret store，server 只存 verifier；request body 不帶 contributor ID、硬體指紋或 deletion secret | Phase 1 |
 | Retention／刪除 | 可識別 contributor buckets 保留 30 天以支援刪除與修正，之後只在匿名門檻達成時壓成無 contributor mapping 的 rollup；舊 rollup 無法個別移除並須事前揭露 | Phase 1 |
 | Breakdowns 匿名門檻 | 每一公開 bucket 至少 20 contributors | Phase 2 |
-| Identity cadence | 28 日 identity、24 小時 mood、每週／本機結構變化 evolution；hourly 與類 session 特徵不進 wire | Phase 1 |
-| 角色 roster | MVP 限 core-four 候選，四張 WebP 預設 `blocked`；只有 owner public-use grant 與 brand review 都通過才改為 `approved`，否則發布 placeholder | Phase 0 |
+| Identity cadence | 28 日 identity、最近完整 UTC 日 mood、每週／本機結構變化 evolution；有 attested hourly 上游後再升級 rolling mood，任何 hourly／類 session 特徵都不進 wire | Phase 1 |
+| 角色 roster | Runtime roster固定11位；10位有schema-v1 integrity inventory，GLM letter-only。任何圖像／語音公開啟用仍須schema-v2 rights與fixed-pack privacy gate | Phase 0 |
 | Raster 呈現 | 圖片切換＋overlay＋CSS/canvas 微動畫；不做假 Live2D | Phase 1 |
 | BYOK provider | OpenAI Responses API 直接由 companion 呼叫並設 `store: false`；其他 provider 後續以 adapter 擴充 | Phase 1 |
 | BYOK 儲存 | Electron async `safeStorage`／OS secret store；Linux `basic_text` 不持久化，純 web 不持久化 | Phase 1 |
-| 語音 | MVP 固定文字台詞；voice pack／TTS 後續，先完成素材與授權審查 | Phase 2 |
+| 語音 | 預錄 playback已存在且default-off，只播放verified cache；50個v1 refs不構成rights approval。Fixed-pack／voice rights gate完成前不公開啟用；online TTS仍是獨立opt-in/data-flow gate | Phase 2 |
 | 抽卡／收藏 | 後續改為純 cosmetic 或 style／seasonal discovery；不與無限 Token 總量掛鉤 | Post-MVP |
 | 公開怪物牆 | 先驗證單張分享卡；只有辨識與分享指標通過才做 | Post-MVP |
 | Product analytics | 最小化、獨立 opt-in；不用第三方 session replay | Phase 1 |
@@ -873,7 +876,7 @@ TokenMonster 可以稱為「已好好上線」，必須同時滿足：
    - opt-in、payload preview、BYOK secret handling、刪除與 threat model 完成。
    - 沒有 P0/P1 security issue。
 4. Assets／Legal：
-   - tokscale、可選 TokenTracker bridge、實際使用時才需的最小 collector fork patch，以及其餘依賴的 license／attribution 全部完成。
+   - exact-pinned TokenTracker sidecar及其dependency closure的license／attribution完成；不建立或散布TokenMonster collector fork，legacy migration dependencies在cutover後移除。
    - 只有 `approved` AI-Sister raster assets 可進入發布物，其 owner public-use grant／attribution／brand review 均有證據；`blocked` 資產必須被 placeholder 取代。
 5. Operations：
    - 有監控、備份、aggregate rebuild、rollback、incident contact 與狀態頁。

@@ -1,7 +1,142 @@
-# Engineering handoff — pending work after v0.1.0-rc.7
+# Engineering handoff — recovered post-rc.11 work and remaining gates
 
-Updated: 2026-07-17. Audience: the next implementation agent (codex) and the
+Updated: 2026-07-20. Audience: the next implementation agent (codex) and the
 integrator session that reviews, commits, and ships its work.
+
+## 2026-07-18 interrupted-batch takeover — NOT A RELEASE CANDIDATE
+
+The earlier agent and its three active child tasks were interrupted together at
+14:10:30 EDT. At takeover, this worktree was still at commit `ec2f397` with
+164 modified and 115 untracked files, nothing staged, and changes continuing
+for 98 files after this handoff's earlier rc.11 evidence was written. Preserve
+the dirty tree; do not reset it or substitute another clean worktree.
+
+The rc.11 tarball and Linux ZIP described below are historical evidence for an
+earlier snapshot only. Their current bytes/hashes differ from the recorded
+values, so neither artifact may be promoted, published, or used as proof for
+the post-candidate changes. A fresh candidate needs all repository gates, a new
+clean-install/network trace, package verification, Electron make, hashes, and
+the native release matrix after the work below is complete.
+
+Recovered and revalidated:
+
+- Root TypeScript failures caused by the new contribution v2 union were fixed
+  without widening the migration-only collector. The recovered current tree
+  passes typecheck across all 21 workspaces and the full root test run passes
+  137 test files and 1,661/1,661 tests.
+- Permanent UI reminders are wired through a narrow Electron bridge. They are
+  default-off and local-only, use a migrated revision/CAS store to prevent
+  cross-window overwrites, preserve unchanged pending reminders, bound
+  cross-midnight catch-up, deduplicate across restart, and dispose on quit.
+- The automatic-update path is now composed in the current Electron pet host
+  and permanent loopback UI/control path. The Electron shell itself remains a
+  retiring or optional thin host. Automatic checks use a private revision/CAS
+  preference store, default off, and perform no updater network action until an
+  enabled schedule fires or the player explicitly presses manual check. Fixed
+  IPC/preload DTOs
+  expose no renderer-controlled URL or channel; check/install are single-flight,
+  updater errors are reduced to fixed codes, and `before-quit-for-update`
+  enters the same sidecar/gateway/lease cleanup invariant as a normal pet quit.
+  The controller also reverses Squirrel's `rc.11` to `rc11` release-name
+  projection before monotonic comparison. Runtime/UI wiring and protected feed
+  publication automation are complete locally, but a freshly signed public
+  feed run plus native Windows install/update evidence remain release gates.
+- Windows Squirrel promotion tooling now rejects any signed-job inventory other
+  than exact `RELEASES`, Setup, and one version-bound full `.nupkg`; it verifies
+  SHA-1/name/bytes plus SHA-256 and emits deterministic immutable and
+  `latest`/`next` promotion plans. The protected executor now distinguishes
+  exact missing/present/unknown current state, re-reads state around mutation,
+  create-or-verifies immutable objects, commits package before no-store
+  `RELEASES`, verifies every R2/CDN object, rolls metadata back on stale public
+  readback, and retains old packages for client overlap. No remote mutation was
+  performed in this worktree. Pinned Wrangler 4.111.0 option/version output was
+  verified locally; native install/update rehearsal remains open.
+- Contribution v2 cloud contracts, policy, API, and D1 storage are implemented.
+  Review fixes preserve the exact v1 enrollment response, persist remote-resume
+  compensation across lost responses/restart, compose deletion-status reads in
+  the Cloudflare worker, and keep deletion authority usable when an independent
+  upload credential is corrupt. First-enrollment response loss is now closed by
+  strict `/v2/enrollments`: the native runtime persists one complete
+  client-generated u2/d2/r2 bundle before requesting, exact replay verifies all
+  three secrets and accepted consent, and D1 stores verifier material only.
+  Crash/restart tests cover every pending-to-active write boundary. The shared
+  runtime, permanent gateway/UI preview-enable-stop-delete-recover controls,
+  conditional CLI composition, and shutdown/quiescence boundary now exist.
+  Stop/delete hard-pause scheduling before mutation; deletion removes upload
+  authority before the first cloud request; accepted deletion and ambiguous
+  response loss remain recoverable. Consent drift also stops on the
+  GET/ingest race where an exact ingest `403 CONSENT_REQUIRED` arrives after a
+  matching consent read. The normal pure-Node entry point still injects no
+  credential host, so it honestly reports unavailable/default-off and performs
+  zero contribution-cloud work until an audited native OS-backed host exists.
+  Whole-day zero correction remains unavailable because the exact-pinned
+  sidecar cannot distinguish a complete zero day from unavailable data; never
+  convert `unavailable` into zero.
+- The permanent companion UI now has a complete typed zh-TW/en catalog,
+  locale-aware number/date/compact formatting, Canvas share output, structured
+  wardrobe/profile/progression copy, and Han-free English regressions. A strict
+  content-free revision/CAS preference is stored beside progression state.
+  Corrupt, linked, non-private, or noncanonical state fails closed; a storage
+  failure uses one of two authenticated fixed document paths to rerender the
+  entire tab in its session locale rather than leaving stale chart formatting.
+- BYOK gateway, CLI RAM slot, Electron OS-backed vault composition, installed
+  smoke markers, and UI exist. Client disconnects abort provider requests;
+  mutations and vault operations are bounded and single-flight; active
+  persistence is reported accurately; and timeout/dispose AbortSignal fences
+  prevent late policy, decrypt, rotation, or write work from publishing a key
+  or modifying a newer vault authority. Rotation failure clears plaintext RAM
+  state while retaining the old ciphertext for a safe retry.
+
+The permanent contribution protocol and player control surface are complete.
+The remaining platform gap is an audited native OS-backed credential host for
+the normal CLI; without one, contribution correctly remains unavailable,
+default-off, and zero-cloud. This does not block local tracking or an honestly
+scoped zero-cloud application release, but it does block claiming anonymous
+contribution is usable on that host. The update surface is connected but cannot
+be called production-usable until a fresh signed feed is promoted and rehearsed
+on native Windows. These gaps are not reasons to weaken the local-first or
+consent contracts.
+
+## Continuation verification status — 2026-07-20
+
+After preserving the interrupted tree outside the repository as a mode-0600
+binary patch plus an archive containing all 168 untracked files, the current
+tree was split into scoped local commits without using `git add -A`. Two test
+harness defects found during recovery were also fixed without changing
+production code: the progression child-start barrier now allows cold imports
+and awaits child teardown, while the asset-pack concurrency test follows the
+actual mutex winner instead of assuming invocation order.
+
+The resulting current source tree passed these bare root gates:
+
+- `npm run typecheck` across all 21 workspaces
+- `npm test`: 137 test files and **1,661/1,661 tests**
+- `npm run lint`
+- `npm run format:check`
+- `npm run verify:secrets`
+- `git diff --check`
+- `npm run build`, including the Electron main/preload/renderer bundle verifier
+- `npm run verify:artifacts`
+- `npm run verify:packaging-toolchain` (the exact reviewed override set passes;
+  the external dev-tool range exception remains a signed/GA gate, not an
+  application/runtime defect)
+- `npm audit --audit-level=high`: 0 vulnerabilities
+- `npm ls --depth=0` exited successfully; as on 2026-07-19, this reused
+  workspace reports optional `@emnapi/runtime`/`tslib` entries as extraneous,
+  so only a later `npm ci` clean checkout may count as clean-install evidence
+- `npm run verify:zstd-native-prebuild`
+- `npm run audit:zstd-native-prebuild`: Linux x64, macOS arm64, and Windows x64
+  archives/bindings plus the pinned MongoDB signer all pass
+
+No fresh post-takeover candidate artifact exists. The old rc.11 tgz and Linux
+ZIP no longer match their documented sizes or SHA-256 values. Artifact
+verification, installed-package smoke, external-network trace, Electron make
+and package verification, a real signed Squirrel candidate, public feed
+readback, and the native release matrix have not been refreshed for these
+bytes. The feed verifier/planner/executor has deterministic local coverage,
+including response-loss recovery and rollback, but no credentialed R2/CDN run.
+A future candidate must use a new version and regenerate every item; never
+reuse the rc.11 name or artifacts.
 
 ## Shipped baseline
 
@@ -19,15 +154,66 @@ integrator session that reviews, commits, and ships its work.
   `git push origin fable/integration:agent/permanent-sidecar-companion`.
   Never force-push, never rewrite history, never `git add -A`.
 
+## Previously verified rc.11 baseline — superseded by later dirty changes
+
+The items below describe the player-facing snapshot that was verified before
+the interrupted post-candidate batch. They remain useful implementation
+context, but no longer constitute current release evidence. All work is local
+and uncommitted; do not describe rc.11 as public until a fresh candidate is
+deliberately reviewed, committed, and green on the native release matrix.
+
+- Clean installs begin with no forced character. The player can choose any of
+  the four starter sisters; selection, unlock, restart persistence, concurrent
+  requests, and fixed-clock ordering all share one deterministic authority.
+  The compact Electron pet now turns into a focused 2×2 starter sheet until
+  that choice is complete, so a clean install never asks the player to choose
+  while hiding every choice behind the full-dashboard icon.
+- The collection now has 11 character interactions, a 1.6-second tap cooldown,
+  a 48-interaction daily cap, persisted local state, and bilingual scripted
+  fallback lines. Letter-mode characters have 20 code-native wardrobe themes
+  and visible collection/unlock feedback without waiting for binary art.
+- A strict local 28-day 「今日默契」 profile derives explainable traits from
+  aggregate usage only. It ignores the incomplete current UTC day, changes at
+  most one trait per full day, survives short evidence gaps, and returns to
+  learning only after the bounded retention window.
+- The companion creates a real 1200×630 PNG share card locally, optionally
+  hides the total, and saves through a narrow Electron preload/IPC bridge. The
+  browser fallback reports only that a download started. Share generation
+  rechecks the selected character, wardrobe, profile, usage snapshot, and
+  mutation revision before exporting.
+- UI mutations are single-flight and revision-gated: stale reads cannot undo a
+  newer selection, tap requests cannot overlap, profile freshness is bounded,
+  and visibility/offline/midnight transitions cannot leave a false-current
+  profile on screen. The actual production UI bundle was visually exercised
+  before and after first selection; the four-choice onboarding and resulting
+  1/11 collection state rendered correctly.
+- Quota plan writes now show saving/saved/retry feedback, usage refreshes update
+  the panel, and a failed background refresh keeps the last estimate while
+  explicitly labelling it 「暫時未更新」. Asset-pack response recovery likewise
+  refuses to call an unchanged pre-mutation GET a successful enable/revoke/
+  cleanup action.
+- The process-wide runtime lease uses one OS authority per canonical state
+  directory, including crash-safe macOS loopback ownership. Fixed-pack install
+  and startup residue recovery serialize on the canonical cache root; recovery
+  is zero-network and removes only strict TokenMonster markers.
+- Public release transitions are monotonic and rerun-safe: one non-cancelling
+  tag lane guards npm `latest`/`next`, immutable R2 bytes, the Worker release
+  binding, and final GitHub metadata. Older versions and same-version byte
+  drift fail instead of overwriting a public channel.
+
 ## Execution constraints every task inherits
 
-- The codex sandbox **cannot**: commit inside git worktrees (parent
-  `.git/worktrees/<name>` is read-only), bind loopback ports (`listen EPERM`
-  — gateway integration tests skip), or download Electron (no real forge
-  make). Leave changes uncommitted in the worktree; the integrator reviews
-  the diff, commits, runs the loopback-dependent tests, and — for any
-  packaging/verifier change — runs a real `npm run make:companion:internal`
-  plus `npm run verify:companion-package` locally before push.
+- Some codex runners cannot commit inside git worktrees (the parent
+  `.git/worktrees/<name>` is read-only), bind loopback ports (`listen EPERM`),
+  or download Electron. Leave changes uncommitted when those limits apply; the
+  integrator reviews the diff, commits, runs loopback-dependent tests, and —
+  for any packaging/verifier change — runs a real
+  `npm run make:companion:internal` plus
+  `npm run verify:companion-package` before push. The 2026-07-18 runner was
+  unrestricted: gateway tests, installed smoke, network trace, real Electron
+  context-bridge verification, and Linux forge make all ran. Do not assume the
+  next runner has that profile, and do not discard this evidence merely because
+  a later sandbox cannot reproduce it.
 - Local gate parity before any push:
   `npm run typecheck && npm run lint && npm run format:check && npm test`,
   each as a bare command (piping through `grep` masks exit codes).
@@ -55,40 +241,117 @@ integrator session that reviews, commits, and ships its work.
   r2.env` (mode 600); variable names may appear in code, values never leave
   that host. Never commit rasters, audio, or other binaries to this repo.
 
-## P1 — GLM character onboarding (W8-E) — BLOCKED on assets
+## P1 — GLM asset onboarding (W8-E) — APPROVAL REPORTED; EVIDENCE TRANSCRIPTION PENDING
 
-**Goal:** ship the already-designed GLM (Zhipu) 字母人 as a fifth character.
+GLM is already the eleventh roster character. It appears in the locked count,
+uses the built-in letter visual when no approved art exists, and unlocks at a
+cross-family `lifetime-total` milestone of 5,000,000 local tokens. It is a
+friend, so it intentionally does not belong in `catalog.ts`,
+`starter-selection.ts`, or `fixed-lines.ts`; those files cover only the four
+starter sisters.
 
-**Blocker:** the avatar + 九宮格 sprite sheet Ted uploaded cannot be located —
-not in the asset bank, not on oracle1, and the Google Drive connector is
-unauthorized. Unblock = Ted re-authorizes Drive in claude.ai settings or
-states the file location. No engineering work can start before that.
+The source art is now located and verified. The avatar is the tracked
+`web/public/avatars/glm.png` at AI-Sister commit
+`77b317b95b6047f1de330d5d41e4edab38de3b44`; the read-only tachie bank supplies
+20 normalized outfits and three poses for every outfit. The controlled build
+contains exactly 81 unique images (one avatar + 20 outfits + 60 poses), no
+voice, and 5,238,148 bytes of content-addressed WebP output. All 81 staged
+hashes match their source, and visual review found a consistent GLM identity
+and transparent output.
 
-Plan once assets are in hand:
+AI-Sister's README at that exact source commit says **personal use only**. That
+notice is evidence that upload/access alone is not a commercial or
+redistribution grant; it reinforces, rather than replaces, the explicit owner
+approval requirement below.
 
-1. *(integrator)* Stage the source art in a new writable directory — never
-   write into the read-only bank — and run the pipeline:
-   `ASSET_BANK_DIR=<staging> node scripts/asset-pipeline/build-manifest.mjs`
-   to produce the webp set + manifest entries.
-2. *(integrator)* Publish to R2 from oracle1 (bucket `oracle1-static`, prefix
-   `tokenmonster/characters/v1`), same flow as the core four.
-3. *(codex)* Add `glm` to `packages/characters/src/approved-manifest.json` /
-   `approved-manifest.ts`, `catalog.ts`, `starter-selection.ts`,
-   `fixed-lines.ts` (zh-TW lines), and unlock rules in `progression.ts`.
-4. **Open design question to settle first:** what usage signals GLM's
-   unlocks. The current four characters key off their provider families as
-   reported by tokentracker-cli. Confirm whether the sidecar reports a
-   GLM/Zhipu family at all; if not, gate GLM behind cross-family milestones
-   (total-usage tiers) instead. Do not invent a family the adapter never
-   emits — the projection layer is strict and will reject it.
-5. *(codex)* Tests: manifest schema fixtures, progression unlock coverage,
-   and the characters DTO key-order test if the roster shape changes.
+Rechecked after the owner's 2026-07-18 update: AI-Sister is clean at
+`46be94ec708c3a01676a599da527d3852b9a40ca`. The three commits after the pinned
+GLM source change only the reels review/outbox flow; they do not change the GLM
+asset set, README license notice, or rights evidence. Keep the content
+provenance pinned to the exact GLM source commit above rather than advancing it
+to an unrelated repository HEAD.
 
-**Acceptance:** GLM appears locked-by-default in the roster count, unlocks
-per the chosen rule, wardrobe/voice load lazily from CDN, and all four
-existing characters' unlock fixtures still pass unchanged.
+The mandatory prompt-free evidence chain is also complete: 81 public evidence
+rows, 161 upstream generation/normalization steps, and 101 owner-private raw
+receipts. Every output was rebuilt through the controlled ffmpeg invocation
+and compared byte-for-byte; provenance rejects renamed junk, stale manifests,
+partial sets, mutable encoder drift, broken receipt chains, symlinks, escapes,
+and source/output hash drift. Public evidence contains no prompt, local path,
+filesystem URI, or HTTP URL. The canonical build-provenance SHA-256 is
+`884a7841d04876f5dc2d6c1035dabfc264f4bb42ae5d2f5970c8293a8fbd5eb7`.
 
-## P2 — Quota estimation v2: real rolling windows
+The self-contained owner workspace is persisted outside the repository at
+`~/voice-lab/video-mvp/tokenmonster-release-work/glm-2026-07-18` (root and
+directories mode 700, files mode 600, 271 files, no symlinks). It contains the
+exact writable staging tree, 101 private receipts, 81 WebPs, manifest/report,
+source evidence, receipted provenance, reproducible evidence builder, and the
+pending rights ledger. The read-only source bank was not modified.
+
+The product acquisition path is no longer dormant. The current worktree has a
+strict v2 authority + descriptor + allowlist join, one complete fixed-pack
+request, persisted local consent, cache verification, and player-facing
+enable/repair/revoke UI. Art activates only after a complete verified cache;
+partial/failed installs remain letter mode, startup never retries the network,
+and revoke switches back in the same session and removes only this release's
+exact objects. CLI and Electron use this same path. Mobile layout and
+same-session letter → doll → letter transitions are tested. The embedded
+authority, descriptor, and allowlist remain `null`, so the current build still
+performs zero asset requests and cannot ship unapproved art.
+
+The current user reports that GLM approval already exists, so the approval
+decision is no longer treated as a product blocker. Evidence transcription is
+still incomplete: the owner-private workspace contains no grant receipt, and
+its pinned ledger still has 81 pending rows, all scopes false, no review
+reference IDs, and no approval time. This prevents only assembly/publication of
+the optional GLM art pack. It does **not** block a TokenMonster application
+release: the embedded authority remains `null`, GLM stays in code-native letter
+mode, and the release performs zero GLM asset requests.
+
+Do not invent reference IDs or silently broaden the reported approval. Before
+the optional art pack is assembled, transcribe the existing approval into the
+exact public/commercial/modify/redistribute, brand/content/disclosure,
+general-audience, transform, bilingual-alt-text, and timestamp fields required
+by the owner-review template. The assembler was run against the current
+pending ledger and correctly left no `asset-release-manifest-v2.json`.
+
+Resolved signal decision: the exact-pinned `tokentracker-cli@0.80.0` does have
+a ZCode/Z.ai collector and reports its rows as exact source `zcode`. That source
+is not an exact GLM attestation: ZCode intentionally retains non-OpenAI,
+non-Anthropic, non-Google custom-provider turns in the same bucket. The adapter
+therefore keeps `zcode` and unsupported raw `glm` IDs in `other`; it never
+infers family from model names. The existing lifetime-total character unlock
+remains correct. Do not map `zcode` to GLM. If a future exact pin adds a pure
+GLM source, add the mapping and compatibility tests in that same update.
+
+Minimum completion sequence to receipt and publish the existing approval:
+
+1. Record the owner's exact statement in an owner-private grant receipt and
+   fill the already-pinned pending ledger with the grant/review reference IDs,
+   all four image scopes, general content rating, non-official disclosure,
+   allowed transforms, bilingual alt text, release approval, and timestamp.
+   Do not alter any source/output snapshot.
+2. Run `assemble-release.mjs` with the persisted integrity manifest, receipted
+   provenance, and approved ledger. Require exactly 81 approved image rows and
+   zero voice rows. Then run `build-fixed-pack.mjs`; require two independent
+   builds to be byte-identical and production `installFixedAssetPack` to accept
+   the result.
+3. Publish only the generated manifest and immutable ZIP/descriptor to the
+   source-map's versioned R2 paths from `oracle1`; never publish staging,
+   prompts, private receipts, or the rights ledger. Embed the exact v2 authority,
+   descriptor, and HTTPS allowlist through the generated release slots—never
+   hand-author hashes or an alternate URL.
+4. Rebuild and run the installed packet trace. It must show exactly one fixed
+   asset request independent of local character, unlock, wardrobe, pose,
+   interaction, or usage state; default/revoked/offline runs must show zero.
+   Exercise enable, restart, repair, and revoke in the real installed UI.
+
+**Acceptance:** the existing letter fallback remains usable offline and on a
+clean install with zero asset egress; approved GLM art (and optional separately
+approved voice) renders only from verified cache until the consented fixed-pack
+flow passes privacy review; public assets carry schema-v2 rights evidence; and
+all prior character unlocks remain unchanged.
+
+## P2 — Quota estimation v2: real rolling windows — OPTIONAL UPSTREAM CAPABILITY
 
 **Current v1 (shipped in rc.7):** the estimator only has UTC-day buckets, so
 every plan honestly reports `windowKind: "utc-day"`, `windowHours: 24`, and
@@ -99,51 +362,218 @@ day-scaled via `dailyEquivalentBudget` in
 `windowKind === "utc-day"` — that pin is deliberate and must be relaxed in
 lockstep with the server or the panel breaks loudly.
 
-Plan:
+Investigation completed against the installed, integrity-locked 0.80.0 npm
+artifact and rechecked against the exact 0.81.1 through 0.81.3 artifacts on
+2026-07-18. It was re-audited against the newly published exact 0.82.1 registry
+artifact on 2026-07-19 at integrity
+`sha512-6mupPBHEDskwVsnfLznn8Jvr8st5020wfK6EJ8xUkMuEb13dmQLXBkU6DYZKLCXVUCisJ4PQqw3WK63/EjHy9Q==`:
 
-1. Investigate whether the pinned `tokentracker-cli`'s fixed loopback routes
-   expose sub-day (hourly) aggregates. Hourly data is allowed locally per
-   `AGENTS.md` (it must simply never be uploaded). If the sidecar cannot
-   serve it, this task is blocked upstream — do **not** approximate rolling
-   windows from day buckets and present them as real.
-2. If available: add an hourly usage query to
-   `packages/token-tracker-adapter` with the same strict projection
-   discipline as the daily path (exact-key validation, content-blind DTOs).
-3. Gateway: compute the true window (`quotaWindowStart` from
-   `plan.window.hours`, sum tokens inside it, remaining = budget − used) and
-   report the plan's real `windowKind`/`windowHours`. Keep the utc-day
-   fallback for plans/families where hourly data is absent.
-4. DTO change ⇒ full contract checklist (router untouched, but gateway
-   serializer + `dto.ts` parser + key-order test move together). UI copy:
-   「約剩 N%・視窗 5 小時」 etc.; keep the 「估算」/非官方 framing everywhere.
-5. Tests: window-boundary fixtures (tokens straddling the window edge),
-   fallback path, parser rejection of mixed shapes.
+- `/functions/tokentracker-usage-hourly` exists, but returns only one requested
+  calendar day of hourly buckets combined across every source. Its default day
+  key comes from UTC, while bucketing honors optional `tz` / `tz_offset_minutes`
+  and otherwise uses host-local time. Buckets contain no source/provider field.
+- The hourly handler ignores a `source` query parameter. Its `models` map is
+  already merged across sources, and model-name inference is forbidden.
+- The route also collapses the underlying source-keyed 30-minute data to
+  source-less whole-hour labels, so it cannot represent an exact arbitrary
+  2 h/5 h boundary.
+- `/functions/tokentracker-usage-limits` is not a safe substitute. A single
+  unscoped read discovers credentials for many providers, can refresh and
+  persist provider OAuth tokens, calls multiple third-party quota endpoints,
+  and returns plan/error metadata. It has no exact-source, no-network aggregate
+  mode. TokenMonster must not silently trigger that credential/network surface
+  from its aggregate-only adapter.
+- 0.81.1 through 0.82.1 have the same relevant public contract, so an exact-pin
+  bump alone does not unblock it. 0.82.1 still labels the route a day-view stub.
+  Its private collector state does retain source-keyed 30-minute buckets, which
+  proves the upstream change can be a narrow content-blind projection rather
+  than a new collector, but TokenMonster must not read that private state.
 
-## P3 — Quota panel refresh on usage updates (small)
+Keep v1 and the UI's strict 24 h/`utc-day` pin unchanged. The upstream unblock
+contract is a local-only UTC route with an attested exact source plus canonical
+bucket start, ideally accepting ISO-instant `from`/`to` and returning 30-minute
+or finer content-blind token totals. It must omit model, cost, conversation,
+identity, and content fields. After an upstream release: exact-pin it, add a
+strict adapter projection, prove hourly data never reaches cloud contribution,
+then update estimator + UI parser + key-order/boundary/fallback tests together.
 
-The panel (`packages/companion-ui/src/public/quota-panel.ts`) fetches on boot
-and after a plan change only; a collector rescan updates the usage panels but
-leaves the quota estimate stale until reload. Piggyback the existing
-usage-refresh trigger in the UI so the same cycle re-fetches
-`/api/usage/quota` — reuse the panel's `currentRequest` race guard; no new
-gateway surface. Test: a refreshed snapshot with changed totals re-renders
-the percentages.
+## P3 — Quota panel refresh on usage updates — COMPLETE IN LOCAL RC.11
 
-## P4 — Quota catalog drift guard (small)
+`packages/companion-ui/src/public/main.ts` now refreshes the quota panel on
+every successfully rendered usage snapshot. Tests cover changed percentages,
+preserve the last good panel on a transient background failure, abort stale
+reads, and serialize plan mutation against usage-driven refreshes so an older
+operation cannot overwrite newer state. No gateway surface changed.
 
-`QUOTA_PLAN_OPTIONS` in `packages/companion-ui/src/public/dto.ts` mirrors the
-server catalog in `packages/companion-gateway/src/quota-catalog.ts`. Drift
-already fails loudly (parse error), but only at runtime. Preferred fix: a
-cross-package test that imports both and asserts family/plan-id equality —
-cheaper than serving the catalog over a new DTO. Serving it via the quota GET
-response is the v2 alternative if plans start changing often; that route
-requires the full DTO checklist from P2 step 4.
+## P4 — Catalog drift guards — COMPLETE IN LOCAL RC.11
 
-## Waiting on Ted (not engineering tasks)
+`packages/companion-gateway/test/quota-catalog-drift.test.ts` imports the
+server catalog and UI options directly and asserts exact ordered
+family-to-plan-ID/label equality. The companion catalog guard likewise pins
+the exact ordered asset IDs, gateway roster IDs, UI IDs, progression themes,
+and UI themes. No production dependency, DTO, or route was added.
 
-- GLM avatar + 九宮格 location, or re-authorize the claude.ai Google Drive
-  connector (unblocks P1).
-- Interactive `agy` login (restores the second review CLI; grok remains
-  available for reviews meanwhile).
-- Windows retest of **rc.7** (`TokenMonsterSetup.exe`) covering the six W8
-  feedback items and the new quota panel.
+## Historical rc.11 verification evidence — superseded by takeover changes
+
+The earlier rc.11 snapshot passed the following gates after its
+player-onboarding, asset-settlement, runtime-race, publication, and Electron
+ESM packaging fixes. This evidence does not apply to the current dirty bytes;
+the current takeover verification is recorded above.
+
+- `npm run typecheck`
+- `npm run lint`
+- `npm run format:check`
+- `npm run verify:secrets`
+- `npm test`: **1,370 tests across all 20 workspaces** — contracts 62, usage 23,
+  api-domain 30, api-cloudflare 21, cloud-d1 99, api 59, BYOK 49, engine 50,
+  characters 183, collector-tokscale 49, local-store 39, collector-core 14,
+  adapter 67, gateway 75, companion UI 188, secret-vault 27, runtime 95,
+  Electron companion 180, web 39, and CLI 21.
+- `npm run build`
+- `npm run verify:artifacts`
+- `npm run verify:packaging-toolchain`
+- `npm run verify:zstd-native-prebuild`
+- `npm run audit:zstd-native-prebuild` for Linux x64, macOS arm64, and Windows
+  x64, including the pinned MongoDB signer fingerprint.
+
+The CLI candidate is
+`dist-release/rc.11/tokenmonster-0.1.0-rc.11.tgz` (1,039,365 bytes, 928 safe
+entries, SHA-256
+`38f1a2756b1e827ca28c06fe5d35fc8eff1645bfbe3a4afb5075547fc838b4dc`).
+A fresh isolated install passed the release smoke: exact 41-package sidecar
+closure, CLI/manifest version `0.1.0-rc.11`, current compiled player artifacts,
+bootstrap/status, exact clean-learning profile DTO, 11-character no-forced-
+starter roster, stale zero-byte crash-lock recovery,
+starter choice/persistence/tap loop, fail-closed asset routes, shutdown, and
+remote-helper suppression. A system `strace` of that same smoke
+recorded 3 loopback binds and 12 loopback connects with no external destination.
+
+The real Electron 43 renderer test passed the sandboxed
+`Uint8Array -> contextBridge -> ipcMain` PNG path. A full
+`TOKENMONSTER_RELEASE_VERSION=0.1.0-rc.11 npm run make:companion:internal`
+then passed dependency-closure build, Forge package/make, ASAR inventory, fuse,
+collector, and sidecar verification. Its Linux ZIP is
+`apps/companion/out/make/zip/linux/x64/TokenMonster-linux-x64-0.1.0-rc.11.zip`
+(142,425,601 bytes, SHA-256
+`95814beac59cf16ac6363cebdc8163eaea556db4fba5a2847e2d35d6ccf88648`):
+910 files, 1,052 ZIP entries, 33 ASAR inventory files, collector 4.5.2, and
+`tokentracker-cli@0.80.0` with 834 files. Machine-readable evidence is in
+`release-evidence/companion-package.json`.
+
+The Electron build originally exposed a real packaged-only failure: bundled
+`yauzl` received Vite browser stubs for Node builtins, and merely externalizing
+those builtins still left native ESM without `require`. The main bundle now
+binds `createRequire(import.meta.url)`, and the normal build/test verifier
+dynamically evaluates the exact production ESM bundle through every eager
+CommonJS factory after removing only the Electron display import and final app
+entry call. Browser stubs, a missing bridge, or an eager factory crash fail the
+gate before packaging.
+
+The final real packaged UI pass exposed another release-only player blocker:
+an old zero-byte `progression-v1.json.lock` let roster reads fall back safely
+but permanently returned `400 invalid-request` for the first starter choice
+and also blocked wardrobe/interaction writes. The store now recovers only a
+stale malformed legacy lock whose filesystem identity, timestamps, size, and
+bytes remain unchanged; fresh malformed locks stay busy. Current contenders
+publish complete UUID choosing/ticket records into a private Lamport bakery
+queue, and only the deterministic winner may touch the fixed compatibility
+interlock. Valid records are removed immediately only when their PID is
+definitely dead; a live/EPERM/reused PID remains busy even past the TTL. The v2
+fixed record is deliberately opaque to rc.7, while v2 never steals a valid bare
+JSON rc.7 record; this prevents cross-version stale cleaners from deleting one
+another's replacement. Six rounds of ten synchronized real Node processes
+preserved all unique updates while migrating a stale zero-byte lock. The actual
+stale 2026-07-16 lock self-recovered on startup, and the installed smoke
+deliberately seeds the same failure before running starter choice, persistence,
+and tap.
+
+For that rc.11 snapshot, earlier multi-model review rounds found and closed
+stale-read/profile races, trait-transition compaction, release-smoke gaps,
+preload chunking, sender hash handling, marker/symlink/stale-dist bypasses, and
+stale doll fallback. Later interrupted-batch reviews found additional issues in
+newer contribution, reminder, update, and BYOK work; those fixes and their
+current verification are recorded in the takeover section above. The last Grok
+4.5 attempt failed inside its terminal-tool configuration before producing a
+review, so it is not counted as agreement. Agy 1.1.4 required a fresh login and
+Fable 5 was blocked by the account USD budget; neither is review evidence.
+
+## Optional non-gating follow-ups
+
+**GLM art-pack evidence capture:** the user reports approval is already
+granted. This is not an application-release gate. Locate/reference the existing
+owner-private statement and transcribe every scope/review/presentation field
+described in P1 only before assembling or publishing the optional pack. GLM
+voice remains optional; the code-native letter fallback is release-safe.
+
+**Real 2 h/5 h quota windows:** this is not an application-release gate. The
+current strict 24 h UTC-day estimator is honest and release-safe. Keep it until
+TokenTracker exposes the exact-source, content-blind, no-credential/no-network
+aggregate route described in P2; never infer a rolling window from daily or
+source-merged hourly data.
+
+## Actual release gates and product gaps — exact minimum handoff
+
+- **Native contribution credential host:** recoverable v2, the shared runtime,
+  gateway/UI preview-enable-stop-delete-recover controls, and conditional CLI
+  composition are complete. The normal pure-Node CLI still needs an audited
+  OS-backed credential provider. Keep contribution unavailable, default-off,
+  and zero-cloud until that authority exists; never fall back to plaintext,
+  memory-only, environment-variable, or provider-key persistence.
+- **Cloud staging and privacy rehearsal:** create the isolated staging Worker,
+  D1 database, domain bindings, and protected secrets only in the approved
+  environment. Then run the real Wrangler migration and staging E2E, exercise
+  backup/restore with deletion-suppression replay, monitoring and incident
+  recovery, cloud-off packet capture, sleep/wake soak, and sandboxed packaged
+  E2E. These are operational release proofs, not unresolved application logic;
+  production mutation remains disabled until the evidence is reviewed.
+- **BYOK provider rehearsal:** on an approved release host, exercise
+  configure/status/chat/clear with a dedicated safe provider key and benign
+  prompt, verify the fixed provider destination and `store: false` request,
+  and prove the key and conversation never enter logs, disk state, or
+  TokenMonster cloud. This operational proof remains outstanding.
+- **Native Windows next candidate:** create a freshly versioned candidate and
+  build/sign it on the Windows release host, install it as a clean user, choose
+  each starter across repeated runs, restart to verify selection/unlocks, tap a
+  character, save the real PNG,
+  exercise the refreshed quota panel, and run the existing Squirrel `.nupkg`
+  sidecar byte-verification. Also exercise the Windows locale-store branch,
+  where lstat/open-handle identity checks replace POSIX `O_NOFOLLOW`. Retesting
+  rc.7 is no longer sufficient for this worktree. Linux cross-packaging is not
+  a substitute: this host has no Wine/Mono toolchain, and the collector
+  packaging hook deliberately rejects a target platform that differs from the
+  native host so it can execute and verify the exact platform binary.
+- **Windows Squirrel feed execution:** verifier, monotonic plan, authoritative
+  current-state retrieval, credential-scoped ordered mutation, cache policy,
+  rollback, and exact R2/public readback are wired locally. Run them only with
+  a freshly versioned signed tag in the protected single-writer environment;
+  preserve the emitted evidence and complete native install/update rehearsal
+  before treating the connected updater surface as production-usable. No
+  current dirty-tree or rc.11 artifact has been published.
+- **Signed/GA packaging dependency gate:** the exact `@electron/rebuild 4.2.0`
+  and `tmp 0.2.7` overrides pass the local Forge package/build verifier and
+  `npm audit` reports zero vulnerabilities. A 2026-07-19 native-range lock for
+  stable Forge 7.11.2 instead reported 25 findings (22 high, 3 low) through the
+  rejected rebuild/tar and external-editor/tmp paths. Forge 8.0.0-alpha.10
+  resolves those paths but is prerelease-only and requires the fuse 2 and
+  packager 20 breaking-change matrix. This is an external dev-only toolchain
+  semver gate, not an application/runtime bug. Keep signed/GA fail-closed until
+  a stable upstream range accepts the safe versions or a reviewed stable
+  replacement passes the full packaging, fuse, artifact, and native matrix.
+  The default verifier still permits internal packaging and signed-candidate
+  review with the exact audited overrides; `publish-cli-npm` now runs its
+  `--require-upstream-compatible` mode after installing the exact lock but
+  before any TokenMonster registry-state read or mutation, so npm, CDN/Squirrel,
+  and final GitHub publication remain mechanically blocked while non-public
+  candidate and draft evidence can still be produced.
+- **macOS signed artifact:** nested Tokscale Mach-O re-sign/hash binding,
+  hardened runtime/Team ID, notarization ticket, mounted-DMG verification, and
+  native smoke are not complete. Internal unsigned packaging evidence is not a
+  substitute for this gate.
+- **Integrator publication:** review the scoped local commits on the recovery
+  branch, integrate them intentionally into `fable/integration`, push only
+  after the final clean-checkout gates, and run the native release matrix.
+  Configure the protected signing/npm/CDN release environments and the four
+  exact public download bindings only after the immutable Windows bytes exist;
+  never call the current local rc.11 artifacts shipped.
+- **Legal owner:** choose the project license, privacy-policy/terms publication,
+  TokenMonster name/trademark position, and protected release approvals.
