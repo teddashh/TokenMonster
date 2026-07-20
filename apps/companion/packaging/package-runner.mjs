@@ -18,9 +18,9 @@ import packagingConfiguration, {
 import { squirrelVersionFor } from "./release-policy.mjs";
 import { verifySquirrelAwareExecutable } from "./squirrel-awareness.mjs";
 import {
+  finalizeReviewedSquirrelVendorOverlay,
   prepareReviewedSquirrelVendorOverlay,
   requireReviewedSquirrelReleaseMode,
-  verifyReviewedSquirrelVendorOverlay,
 } from "./squirrel-updater.mjs";
 
 /** @typedef {"make" | "package"} PackagingCommand */
@@ -162,7 +162,7 @@ export async function makeSquirrelArtifacts(
         vendorDirectory,
       }),
     );
-    await verifyReviewedSquirrelVendorOverlay(vendorDirectory);
+    await finalizeReviewedSquirrelVendorOverlay(vendorDirectory);
   } finally {
     await rm(temporaryRoot, { force: true, recursive: true });
   }

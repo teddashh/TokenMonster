@@ -3,7 +3,7 @@
 Updated: 2026-07-20. Audience: the next implementation agent (codex) and the
 integrator session that reviews, commits, and ships its work.
 
-## 2026-07-20 reviewed Squirrel updater — internal native gate next
+## 2026-07-20 reviewed Squirrel updater — first native run diagnosed
 
 The official `electron-winstaller@5.4.4` updater is Squirrel.Windows 2.0.1 with
 the upstream self-lock bug (SHA-256 `76359cd4b0349a83337b941332ad042c90351c2bb0a4628307740324c97984cc`).
@@ -29,7 +29,9 @@ record.
 Internal packaging verifies the complete 33-file
 `electron-winstaller@5.4.4` vendor inventory, copies it to a disposable sibling
 of the temporary application directory, replaces only `Squirrel.exe`, and
-verifies both the overlay and untouched `node_modules` again. The full `.nupkg`
+after maker execution accepts and unlinks only Squirrel's fixed-name, bounded
+`Squirrel-Releasify.log` without reading it. It then verifies both the exact
+overlay and untouched `node_modules` again. The full `.nupkg`
 verifier requires exact-case `lib/net45/squirrel.exe` and exact reviewed bytes
 for internal candidates. Signed mode deliberately fails closed before maker
 execution while redistribution review remains open.
@@ -44,11 +46,17 @@ behavior and assembly identity and therefore needs a new rebuild/audit rather
 than relabeling this binary. SharpCompress's embedded UnRAR/MS-PL notices and
 the rest of the full runtime attribution bundle also remain release gates.
 
-Next technical gate: push the integration commit, dispatch CI with
-`platforms=skip-macos`, and require the native Windows package verifier,
-clean install, packaged startup, lifecycle hook, silent uninstall, and
-zero-residue classification to pass. Only after that should the legal owner
-choose approval of exact XDT 2.1.1 terms or a separately reviewed 3.1.0 rebuild.
+Integration commit `bfc8d0a` was pushed and manual run `29775692315` exposed one
+precise integration issue: the maker succeeded, but upstream Squirrel writes
+`Squirrel-Releasify.log` beside its executable and the post-maker 33-file check
+correctly rejected the 34th entry. All other run jobs passed. The follow-up
+allows only that physical, bounded, privacy-sensitive diagnostic, unlinks it
+without reading or retaining it, and then repeats the strict 33-file overlay
+and source-vendor verification. Rerun `platforms=skip-macos` and require the
+native Windows package verifier, clean install, packaged startup, lifecycle
+hook, silent uninstall, and zero-residue classification to pass. Only after
+that should the legal owner choose approval of exact XDT 2.1.1 terms or a
+separately reviewed 3.1.0 rebuild.
 Do not tag, sign, publish npm/CDN assets, or make the GitHub Release public from
 the current internal candidate.
 
@@ -71,8 +79,8 @@ direct Electron packaging replacement. The companion uses exact
 `electron-installer-dmg 5.0.1`, `electron-winstaller 5.4.4`, and verifier
 `@electron/asar 4.2.0`. All Forge packages and root overrides were removed;
 the resulting Forge-free exact lock also contains none of `@electron/rebuild`,
-`external-editor`, or `tmp`. A fresh `npm ci`, both normal and
-the default toolchain verification, and `npm audit --audit-level=high` pass
+`external-editor`, or `tmp`. A fresh `npm ci`, the default toolchain
+verification, and `npm audit --audit-level=high` pass
 with zero vulnerabilities. The `--require-upstream-compatible` public mode now
 fails closed on the reviewed updater's redistribution status, as described in
 the current section above.
@@ -926,20 +934,22 @@ source-merged hourly data.
   post-hardening rc.13 CLI tarball and unsigned Linux ZIP now exist, but no
   signed Windows Squirrel artifact was built or published.
 - **Stable direct packaging native proof:** the Forge semver blocker is removed
-  in the Forge-free exact lock described above, and the strict public
-  toolchain gate now passes locally without an override exception. Linux direct
-  package/ZIP evidence passes. Keep signed/GA publication fail-closed until the
-  same replacement passes the fresh GitHub CI native Windows Squirrel and
-  macOS internal maker matrix; preserve their exact artifact evidence.
+  in the Forge-free exact lock described above. The default internal toolchain
+  gate passes, while the strict public gate now deliberately fails closed on
+  the reviewed updater's unresolved redistribution status. Linux direct
+  package/ZIP evidence passes. Keep signed/GA publication fail-closed until a
+  legally reviewable updater passes fresh GitHub CI native Windows Squirrel and
+  macOS internal maker matrices; preserve their exact artifact evidence.
 - **macOS signed artifact:** nested Tokscale Mach-O re-sign/hash binding,
   hardened runtime/Team ID, notarization ticket, mounted-DMG verification, and
   native smoke are not complete. Internal unsigned packaging evidence is not a
   substitute for this gate.
 - **Integrator publication:** the recovered hardening through `ded282e` is
-  pushed on `agent/permanent-sidecar-companion`, PR 1 remains draft, and its
-  latest pre-replacement CI is green. The direct packaging replacement is not
-  yet committed or pushed. Review and push it only with the new lock, tests,
-  docs, and native matrix plan as one coherent change.
+  pushed on `agent/permanent-sidecar-companion`, PR 1 remains draft, and the
+  direct packaging replacement plus reviewed updater integration is committed
+  through `bfc8d0a`. Manual run `29775692315` passed every job except the
+  diagnosed Windows maker post-overlay check described above; rerun after its
+  narrow log-residue fix before claiming native Windows evidence.
   Configure the protected signing/npm/CDN release environments and the four
   exact public download bindings only after the immutable Windows bytes exist;
   never call the historical local rc.12 artifacts shipped.

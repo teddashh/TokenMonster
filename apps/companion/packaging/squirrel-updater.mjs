@@ -1,7 +1,7 @@
 // @ts-check
 
 import { createHash } from "node:crypto";
-import { copyFile, cp, lstat, open, readdir } from "node:fs/promises";
+import { copyFile, cp, lstat, open, readdir, unlink } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +36,8 @@ const EXPECTED_VENDOR_FILE_COUNT = 33;
 const MAX_VENDOR_FILE_BYTES = 16 * 1024 * 1024;
 const MAX_VENDOR_TOTAL_BYTES = 64 * 1024 * 1024;
 const MAX_POLICY_FILE_BYTES = 32 * 1024;
+const MAX_SQUIRREL_RELEASIFY_LOG_BYTES = 4 * 1024 * 1024;
+const SQUIRREL_RELEASIFY_LOG = "Squirrel-Releasify.log";
 const EXPECTED_VENDOR_INVENTORY_SHA256 =
   "a7cacc76777553878f6f873c8471fe5e3b9242cb4e557f83cf7227eccbaf3919";
 
@@ -470,6 +472,49 @@ export async function verifyReviewedSquirrelVendorOverlay(directory) {
     directory: resolve(directory),
     updaterSha256: REVIEWED_SQUIRREL_UPDATER.sha256,
   });
+}
+
+/**
+ * Squirrel writes this fixed-name diagnostic beside its executable during
+ * `--releasify`. It can contain host paths, so never read, retain, or upload
+ * it. Accept only this one bounded physical residue, unlink it, then require
+ * both the disposable overlay and the original package vendor to remain exact.
+ *
+ * @param {string} directory
+ */
+export async function finalizeReviewedSquirrelVendorOverlay(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const residue = entries.find(
+    (entry) => entry.name === SQUIRREL_RELEASIFY_LOG,
+  );
+  if (residue !== undefined) {
+    if (
+      entries.length !== EXPECTED_VENDOR_FILE_COUNT + 1 ||
+      !residue.isFile() ||
+      residue.isSymbolicLink()
+    ) {
+      throw new Error(
+        "Reviewed Squirrel vendor overlay has unexpected maker residue.",
+      );
+    }
+    const residuePath = join(directory, SQUIRREL_RELEASIFY_LOG);
+    const metadata = await lstat(residuePath, { bigint: true });
+    if (
+      !metadata.isFile() ||
+      metadata.isSymbolicLink() ||
+      metadata.size > BigInt(MAX_SQUIRREL_RELEASIFY_LOG_BYTES)
+    ) {
+      throw new Error(
+        "Squirrel releasify log is not a bounded physical file.",
+      );
+    }
+    await unlink(residuePath);
+  }
+  const [overlay] = await Promise.all([
+    verifyReviewedSquirrelVendorOverlay(directory),
+    verifyElectronWinstallerVendor(),
+  ]);
+  return overlay;
 }
 
 /**
