@@ -14,6 +14,13 @@ jobs:
     timeout-minutes: 25
 
     steps:
+      - name: Check out exact TokenMonster patch policy
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: tokenmonster-policy
+          persist-credentials: false
+
       - name: Check out exact upstream source A
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -46,6 +53,7 @@ jobs:
       - name: Verify exact upstream identities and reviewed build-tool source
         shell: pwsh
         env:
+          TOKENMONSTER_POLICY_SHA: ${{ github.workflow_sha }}
           SOURCE_TAG_OBJECT: 274f7a9a5dc211552f27d1da7dc7899546a52be3
           SOURCE_BASE_COMMIT: eef37460aef77b2f9de8cd2237c1e55b344a6554
           SOURCE_BASE_DETECTOR_BLOB: 0fdefda329abf979a2c739f02761e3d4ec8e30de
@@ -54,6 +62,18 @@ jobs:
           FIX_DETECTOR_BLOB: e8e442e0d95c5b7f5cc31a2eb84cf9407f5be2ab
           UPSTREAM_MERGE_COMMIT: 45834cbfeae84d20ef2bed24ac863f02d0abec66
           NUGET_SUBMODULE_COMMIT: 50f8d9e438fe948d7109501bd10f6024d0585b70
+          RETRY_PATCH_SHA256: 81a6bb631b7459773fbad1b4fbe7a878c698ab9e6016899a3f422b3fa32e2b1a
+          RETRY_PATCH_BYTES: 4545
+          XDT_OUTER_PATCH_SHA256: a781b27842680ae01b70b7308ea5a5154e3897e94c7c645a9cd172385fcc0137
+          XDT_OUTER_PATCH_BYTES: 640
+          XDT_INNER_PATCH_SHA256: 31a098f17a1409f03ff270bc819b7cebf8bcf94ca872f1484aa2699d6e5a4dce
+          XDT_INNER_PATCH_BYTES: 665
+          PATCHED_SQUIRREL_PROJECT_BLOB: fcc79959834f1d0cb4d33f7a834e0a6926ccfd0f
+          PATCHED_UTILITY_BLOB: 432a76a6c55c6a01c88eee2641abb3ad051d3fc8
+          PATCHED_DETECTOR_TEST_BLOB: b9757252508228f50abb4aec0739905c52570bc2
+          PATCHED_UTILITY_TEST_BLOB: fb4c75a7910515bb4e98f38d09d1603a329b1e0e
+          PATCHED_NUGET_CORE_PROJECT_BLOB: a00ea88e7de4b53cf02ef5611de6e05ded2d7554
+          PATCHED_NUGET_CORE_PACKAGES_BLOB: 7b537c87913ae0f241c71e7d34889df098181d9d
           ILREPACK_SOURCE_COMMIT: 5b55fa2f4d7c7b18ffb104e2fade2f794f4ccedf
           ILREPACK_SOURCE_TREE: 4c7e73b48c55a535790f9d3f56687258efc525d0
           ILREPACK_RELEASE_TAG_COMMIT: 92843eace06c4eff3d6296a6fc4470ba725c57aa
@@ -62,6 +82,48 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
+
+          $policy = Join-Path $env:GITHUB_WORKSPACE "tokenmonster-policy"
+          $policyHead = (git -C $policy rev-parse HEAD).Trim()
+          $policyDirty = @(git -C $policy status --porcelain)
+          $policyCredentials = @(
+            git -C $policy config --local --get-regexp "^http\..*\.extraheader$" 2>$null
+          )
+          $policyCredentialQueryExit = $LASTEXITCODE
+          if ($policyCredentialQueryExit -notin @(0, 1)) {
+            throw "The patch-policy credential-state query failed."
+          }
+          $global:LASTEXITCODE = 0
+          if (
+            $policyHead -cne $env:TOKENMONSTER_POLICY_SHA -or
+            $policyDirty.Count -ne 0 -or
+            $policyCredentials.Count -ne 0
+          ) {
+            throw "The patch policy is not the exact clean workflow commit."
+          }
+
+          $patchDirectory = Join-Path $policy ".github/patches/squirrel-updater"
+          $retryPatch = Join-Path $patchDirectory "retry-delete-tree.patch"
+          $xdtOuterPatch = Join-Path $patchDirectory "xdt-3.1.0-squirrel.patch"
+          $xdtInnerPatch = Join-Path $patchDirectory "xdt-3.1.0-nuget-core.patch"
+          foreach ($patchContract in @(
+            @($retryPatch, $env:RETRY_PATCH_SHA256, [int64]$env:RETRY_PATCH_BYTES),
+            @($xdtOuterPatch, $env:XDT_OUTER_PATCH_SHA256, [int64]$env:XDT_OUTER_PATCH_BYTES),
+            @($xdtInnerPatch, $env:XDT_INNER_PATCH_SHA256, [int64]$env:XDT_INNER_PATCH_BYTES)
+          )) {
+            $patchFile = Get-Item -LiteralPath $patchContract[0] -Force
+            $patchSha256 = (
+              Get-FileHash -LiteralPath $patchFile.FullName -Algorithm SHA256
+            ).Hash.ToLowerInvariant()
+            if (
+              -not $patchFile.PSIsContainer -and
+              $patchFile.Length -eq $patchContract[2] -and
+              $patchSha256 -ceq $patchContract[1]
+            ) {
+              continue
+            }
+            throw "A reviewed Squirrel source patch does not match its exact contract."
+          }
 
           foreach ($sourceName in @("squirrel-a", "squirrel-b")) {
             $source = Join-Path $env:GITHUB_WORKSPACE $sourceName
@@ -143,6 +205,107 @@ jobs:
             $boundDirty = @(git -C $source status --porcelain --untracked-files=no)
             if ($boundHead -cne $env:FIX_COMMIT -or $boundDirty.Count -ne 0) {
               throw "The source tree was not cleanly bound to the exact fix commit."
+            }
+
+            git -C $source apply --check --index $retryPatch
+            if ($LASTEXITCODE -ne 0) {
+              throw "The bounded-delete source patch does not apply exactly."
+            }
+            git -C $source apply --index $retryPatch
+            if ($LASTEXITCODE -ne 0) {
+              throw "The bounded-delete source patch could not be applied."
+            }
+            git -C $source apply --check --index $xdtOuterPatch
+            if ($LASTEXITCODE -ne 0) {
+              throw "The outer XDT source patch does not apply exactly."
+            }
+            git -C $source apply --index $xdtOuterPatch
+            if ($LASTEXITCODE -ne 0) {
+              throw "The outer XDT source patch could not be applied."
+            }
+
+            $nugetSource = Join-Path $source "vendor/nuget"
+            git -C $nugetSource apply --check --index $xdtInnerPatch
+            if ($LASTEXITCODE -ne 0) {
+              throw "The NuGet Core XDT source patch does not apply exactly."
+            }
+            git -C $nugetSource apply --index $xdtInnerPatch
+            if ($LASTEXITCODE -ne 0) {
+              throw "The NuGet Core XDT source patch could not be applied."
+            }
+
+            $patchedOuterFiles = @(
+              git -C $source diff --cached --name-only
+            )
+            $expectedOuterFiles = @(
+              "src/Squirrel/Squirrel.csproj"
+              "src/Squirrel/Utility.cs"
+              "test/SquirrelAwareExecutableDetectorTests.cs"
+              "test/UtilityTests.cs"
+            )
+            $patchedInnerFiles = @(
+              git -C $nugetSource diff --cached --name-only
+            )
+            $expectedInnerFiles = @(
+              "src/Core/Core.csproj"
+              "src/Core/packages.config"
+            )
+            $outerUnstagedFiles = @(git -C $source diff --name-only)
+            $innerUnstagedFiles = @(git -C $nugetSource diff --name-only)
+            $outerUntrackedFiles = @(
+              git -C $source ls-files --others --exclude-standard
+            )
+            $innerUntrackedFiles = @(
+              git -C $nugetSource ls-files --others --exclude-standard
+            )
+            $patchedSquirrelProjectBlob = (
+              git -C $source rev-parse ":src/Squirrel/Squirrel.csproj"
+            ).Trim()
+            $patchedUtilityBlob = (
+              git -C $source rev-parse ":src/Squirrel/Utility.cs"
+            ).Trim()
+            $patchedDetectorTestBlob = (
+              git -C $source rev-parse ":test/SquirrelAwareExecutableDetectorTests.cs"
+            ).Trim()
+            $patchedUtilityTestBlob = (
+              git -C $source rev-parse ":test/UtilityTests.cs"
+            ).Trim()
+            $patchedNugetProjectBlob = (
+              git -C $nugetSource rev-parse ":src/Core/Core.csproj"
+            ).Trim()
+            $patchedNugetPackagesBlob = (
+              git -C $nugetSource rev-parse ":src/Core/packages.config"
+            ).Trim()
+            $outerFileDifferences = @(
+              Compare-Object $expectedOuterFiles $patchedOuterFiles -CaseSensitive
+            )
+            $innerFileDifferences = @(
+              Compare-Object $expectedInnerFiles $patchedInnerFiles -CaseSensitive
+            )
+            if (
+              $outerFileDifferences.Count -ne 0 -or
+              $innerFileDifferences.Count -ne 0 -or
+              $outerUnstagedFiles.Count -ne 1 -or
+              $outerUnstagedFiles[0] -cne "vendor/nuget" -or
+              $innerUnstagedFiles.Count -ne 0 -or
+              $outerUntrackedFiles.Count -ne 0 -or
+              $innerUntrackedFiles.Count -ne 0 -or
+              $patchedSquirrelProjectBlob -cne $env:PATCHED_SQUIRREL_PROJECT_BLOB -or
+              $patchedUtilityBlob -cne $env:PATCHED_UTILITY_BLOB -or
+              $patchedDetectorTestBlob -cne $env:PATCHED_DETECTOR_TEST_BLOB -or
+              $patchedUtilityTestBlob -cne $env:PATCHED_UTILITY_TEST_BLOB -or
+              $patchedNugetProjectBlob -cne $env:PATCHED_NUGET_CORE_PROJECT_BLOB -or
+              $patchedNugetPackagesBlob -cne $env:PATCHED_NUGET_CORE_PACKAGES_BLOB
+            ) {
+              throw "The patched Squirrel source trees do not match the reviewed changed-file and blob contracts."
+            }
+            git -C $source diff --cached --check
+            if ($LASTEXITCODE -ne 0) {
+              throw "The patched outer Squirrel source has whitespace errors."
+            }
+            git -C $nugetSource -c core.whitespace=cr-at-eol diff --cached --check
+            if ($LASTEXITCODE -ne 0) {
+              throw "The patched NuGet Core source has whitespace errors."
             }
           }
 
