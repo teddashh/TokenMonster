@@ -451,6 +451,7 @@ jobs:
           XDT_PUBLIC_KEY_TOKEN: 31bf3856ad364e35
           XDT_MVID: bf07c227-95c3-42a1-8e96-956ba121bfd3
           REVIEWED_DEPENDENCY_INVENTORY_SHA256: 9ab90cdb2131c34d8c871c2eba37edc7cbc12d63e2abdfcea4306e4cea367b23
+          REVIEWED_TEST_DEPENDENCY_INVENTORY_SHA256: derive-pending
           REVIEWED_MERGE_INPUT_INVENTORY_SHA256: abddfa18198a408cd1b1d3983ce6afdd4eab4a1f4dcec5cbd4b2a0437104c419
           REVIEWED_UPDATER_SHA256: 1673161fd4e64d1123fb828a5e5f1580cbe3c3f6b3f0893f50bb920dada473fd
           REVIEWED_UPDATER_BYTES: 1840640
@@ -965,6 +966,21 @@ jobs:
             "Mono.Cecil.dll`tsha256:7744c9c84c28033bc3606f4dfce2adcd6f632e2be7827893c3e2257100f1cf9e`tbytes:345088"
           )
 
+          function Get-GlobalDependencyInventory {
+            param(
+              [Parameter(Mandatory)] [string] $GlobalPackages
+            )
+
+            return @(
+              Get-ChildItem -LiteralPath $GlobalPackages -Recurse -File -Filter "*.nupkg.sha512" |
+                ForEach-Object {
+                  $relative = [IO.Path]::GetRelativePath($GlobalPackages, $_.FullName).Replace("\", "/").ToLowerInvariant()
+                  "global/$relative`t$((Get-Content -LiteralPath $_.FullName -Raw).Trim())"
+                } |
+                Sort-Object -CaseSensitive
+            )
+          }
+
           function Get-DependencyInventory {
             param(
               [Parameter(Mandatory)] [string] $GlobalPackages,
@@ -972,12 +988,7 @@ jobs:
             )
 
             $globalInventory = @(
-              Get-ChildItem -LiteralPath $GlobalPackages -Recurse -File -Filter "*.nupkg.sha512" |
-                ForEach-Object {
-                  $relative = [IO.Path]::GetRelativePath($GlobalPackages, $_.FullName).Replace("\", "/").ToLowerInvariant()
-                  "$relative`t$((Get-Content -LiteralPath $_.FullName -Raw).Trim())"
-                } |
-                Sort-Object -CaseSensitive
+              Get-GlobalDependencyInventory -GlobalPackages $GlobalPackages
             )
             $legacyInventory = @(
               Get-ChildItem -LiteralPath $LegacyPackages -Recurse -File -Filter "*.nupkg" |
@@ -989,14 +1000,16 @@ jobs:
                 Sort-Object -CaseSensitive
             )
             return @(
-              $globalInventory | ForEach-Object { "global/$_" }
+              $globalInventory
               $legacyInventory
             )
           }
 
           $outputs = @()
           $dependencyInventories = @()
+          $testDependencyInventories = @()
           $mergeInputInventories = @()
+          $sourceTestPassCount = 0
           foreach ($sourceName in @("squirrel-a", "squirrel-b")) {
             $source = Join-Path $env:GITHUB_WORKSPACE $sourceName
             $dependencyCache = Join-Path $env:RUNNER_TEMP "$sourceName-nuget-packages"
@@ -1188,11 +1201,109 @@ jobs:
             ) {
               throw "The merged updater did not internalize the exact reviewed Microsoft.Web.Xdt types."
             }
+
+            $testDependencyCache = Join-Path $env:RUNNER_TEMP "$sourceName-test-nuget-packages"
+            $testHttpCache = Join-Path $env:RUNNER_TEMP "$sourceName-test-nuget-http-cache"
+            $testScratch = Join-Path $env:RUNNER_TEMP "$sourceName-test-nuget-scratch"
+            $testResults = Join-Path $env:RUNNER_TEMP "$sourceName-source-test-results"
+            if (
+              (Test-Path -LiteralPath $testDependencyCache) -or
+              (Test-Path -LiteralPath $testHttpCache) -or
+              (Test-Path -LiteralPath $testScratch) -or
+              (Test-Path -LiteralPath $testResults)
+            ) {
+              throw "The isolated source-test dependency state must start absent."
+            }
+            New-Item -ItemType Directory -Path $testDependencyCache | Out-Null
+            New-Item -ItemType Directory -Path $testHttpCache | Out-Null
+            New-Item -ItemType Directory -Path $testScratch | Out-Null
+            New-Item -ItemType Directory -Path $testResults | Out-Null
+            $testNugetPackageRoot = $testDependencyCache + [IO.Path]::DirectorySeparatorChar
+            $env:NUGET_PACKAGES = $testNugetPackageRoot
+            $env:NUGET_HTTP_CACHE_PATH = $testHttpCache
+            $env:NUGET_SCRATCH = $testScratch
+            $env:TEMP = $testScratch
+            $env:TMP = $testScratch
+
+            $testProject = Join-Path $source "test/Squirrel.Tests.csproj"
+            & $nuget restore $testProject -PackagesDirectory $testNugetPackageRoot -NonInteractive -NoCache -DirectDownload -ConfigFile $nugetConfig -Source $env:NUGET_SOURCE -MSBuildPath (Split-Path -Parent $msbuild)
+            if ($LASTEXITCODE -ne 0) {
+              throw "The exact upstream source-test dependency restore failed."
+            }
+            $testAssetsPath = Join-Path $source "build/obj/Squirrel.Tests/project.assets.json"
+            Assert-IsolatedProjectAssets -AssetsPath $testAssetsPath -PackageRoot $testNugetPackageRoot -ConfigPath $nugetConfig
+            $testInventory = @(
+              Get-GlobalDependencyInventory -GlobalPackages $testDependencyCache
+            )
+            if ($testInventory.Count -lt 1) {
+              throw "The isolated source-test dependency inventory is empty."
+            }
+            $testDependencyInventories += ,$testInventory
+
+            $testBuildArguments = @(
+              $buildArguments |
+                Where-Object {
+                  $_ -notmatch "^/p:(?:NuGetPackageRoot|PathMap|DebugSymbols|DebugType)="
+                }
+            )
+            $testBuildArguments += "/p:NuGetPackageRoot=$testNugetPackageRoot"
+            $testBuildArguments += "/p:BuildProjectReferences=false"
+            # This upstream test helper locates fixtures from StackFrame source
+            # paths, so the unshipped test assembly intentionally keeps a full
+            # PDB and does not use the release artifact PathMap.
+            $testBuildArguments += "/p:PathMap="
+            $testBuildArguments += "/p:DebugSymbols=true"
+            $testBuildArguments += "/p:DebugType=full"
+            $sourceTestFilter = @(
+              "FullyQualifiedName=Squirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpRetriesTransientFileLocks"
+              "FullyQualifiedName=Squirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpReturnsAfterBoundedRetriesForPermanentFileLocks"
+              "FullyQualifiedName=Squirrel.Tests.SquirrelAwareExecutableDetectorTests.NotSquirrelAware"
+            ) -join "|"
+            & dotnet test $testProject --no-restore --filter $sourceTestFilter --logger "trx;LogFileName=reviewed-source-tests.trx" --results-directory $testResults @testBuildArguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "The reviewed bounded-delete and PE-reopen source tests failed."
+            }
+            $trxPath = Join-Path $testResults "reviewed-source-tests.trx"
+            [xml]$trx = Get-Content -LiteralPath $trxPath -Raw
+            $trxNamespaces = [Xml.XmlNamespaceManager]::new($trx.NameTable)
+            $trxNamespaces.AddNamespace(
+              "t",
+              "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"
+            )
+            $trxCounters = $trx.SelectSingleNode(
+              "/t:TestRun/t:ResultSummary/t:Counters",
+              $trxNamespaces
+            )
+            $trxResults = @(
+              $trx.SelectNodes("//t:UnitTestResult", $trxNamespaces)
+            )
+            $failedTrxResults = @(
+              $trxResults |
+                Where-Object { $_.GetAttribute("outcome") -cne "Passed" }
+            )
+            if (
+              $null -eq $trxCounters -or
+              [int]$trxCounters.GetAttribute("total") -ne 3 -or
+              [int]$trxCounters.GetAttribute("executed") -ne 3 -or
+              [int]$trxCounters.GetAttribute("passed") -ne 3 -or
+              [int]$trxCounters.GetAttribute("failed") -ne 0 -or
+              $trxResults.Count -ne 3 -or
+              $failedTrxResults.Count -ne 0
+            ) {
+              throw "The reviewed source-test result set was incomplete."
+            }
+            $sourceTestPassCount += $trxResults.Count
             $outputs += $output
           }
 
           if (Compare-Object $dependencyInventories[0] $dependencyInventories[1] -CaseSensitive) {
             throw "The two isolated restores resolved different dependency content hashes."
+          }
+          if (
+            $sourceTestPassCount -ne 6 -or
+            (Compare-Object $testDependencyInventories[0] $testDependencyInventories[1] -CaseSensitive)
+          ) {
+            throw "The two isolated source-test runs were not identical successful validations."
           }
           $mergeInputDifferences = @(
             Compare-Object $mergeInputInventories[0] $mergeInputInventories[1] -CaseSensitive
@@ -1279,11 +1390,18 @@ jobs:
           $dependencyInventoryPath = Join-Path $artifactDirectory "nuget-content-hashes.txt"
           [IO.File]::WriteAllLines($dependencyInventoryPath, $dependencyInventories[0], [Text.UTF8Encoding]::new($false))
           $dependencyInventorySha256 = (Get-FileHash -LiteralPath $dependencyInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $testDependencyInventoryPath = Join-Path $artifactDirectory "source-test-nuget-content-hashes.txt"
+          [IO.File]::WriteAllLines($testDependencyInventoryPath, $testDependencyInventories[0], [Text.UTF8Encoding]::new($false))
+          $testDependencyInventorySha256 = (Get-FileHash -LiteralPath $testDependencyInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
           $mergeInputInventoryPath = Join-Path $artifactDirectory "merge-input-hashes.txt"
           [IO.File]::WriteAllLines($mergeInputInventoryPath, $mergeInputInventories[0], [Text.UTF8Encoding]::new($false))
           $mergeInputInventorySha256 = (Get-FileHash -LiteralPath $mergeInputInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
           if (
             $dependencyInventorySha256 -cne $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256 -or
+            (
+              -not $deriveCandidate -and
+              $testDependencyInventorySha256 -cne $env:REVIEWED_TEST_DEPENDENCY_INVENTORY_SHA256
+            ) -or
             (
               -not $deriveCandidate -and
               $mergeInputInventorySha256 -cne $env:REVIEWED_MERGE_INPUT_INVENTORY_SHA256
@@ -1300,6 +1418,11 @@ jobs:
             $null
           } else {
             $env:REVIEWED_MERGE_INPUT_INVENTORY_SHA256
+          }
+          $lockedTestDependencyInventorySha256 = if ($deriveCandidate) {
+            $null
+          } else {
+            $env:REVIEWED_TEST_DEPENDENCY_INVENTORY_SHA256
           }
           $lockedBinaryBytes = if ($deriveCandidate) {
             $null
@@ -1389,6 +1512,14 @@ jobs:
             upstreamDeclaredMergeTool = "ILRepack 1.26.0 restored but not executed; PostBuildEvent is disabled"
             dependencyInventorySha256 = $dependencyInventorySha256
             reviewedDependencyInventorySha256 = $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256
+            sourceTestDependencyInventorySha256 = $testDependencyInventorySha256
+            reviewedSourceTestDependencyInventorySha256 = $lockedTestDependencyInventorySha256
+            sourceTests = @(
+              "Squirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpRetriesTransientFileLocks"
+              "Squirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpReturnsAfterBoundedRetriesForPermanentFileLocks"
+              "Squirrel.Tests.SquirrelAwareExecutableDetectorTests.NotSquirrelAware"
+            )
+            sourceTestExecutionsPassed = $sourceTestPassCount
             mergeInputInventorySha256 = $mergeInputInventorySha256
             reviewedMergeInputInventorySha256 = $lockedMergeInputInventorySha256
             compilerDeterministic = $true
