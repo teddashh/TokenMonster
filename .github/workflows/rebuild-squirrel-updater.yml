@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   rebuild-reviewed-updater:
-    name: Rebuild reviewed Squirrel updater twice
+    name: ${{ inputs.derive_candidate && 'Derive quarantined Squirrel updater receipts' || 'Rebuild reviewed Squirrel updater twice' }}
     runs-on: windows-2022
     timeout-minutes: 25
 
@@ -1135,10 +1135,15 @@ jobs:
             $dependencyDifferences = @(
               Compare-Object $reviewedDependencyInventory $inventory -CaseSensitive
             )
-            if ($inventory.Count -lt 1 -or $dependencyDifferences.Count -ne 0) {
-              Write-Output "Resolved dependency inventory for rejected $sourceName restore:"
+            if ($inventory.Count -lt 1) {
+              throw "The upstream restore did not produce a dependency inventory."
+            }
+            if ($dependencyDifferences.Count -ne 0) {
+              Write-Output "Resolved dependency inventory for $sourceName restore:"
               $inventory | ForEach-Object { Write-Output $_ }
-              throw "The upstream restore does not match the committed reviewed dependency inventory."
+              if (-not $deriveCandidate) {
+                throw "The upstream restore does not match the committed reviewed dependency inventory."
+              }
             }
             $dependencyInventories += ,$inventory
 
@@ -1305,10 +1310,15 @@ jobs:
             $testInventoryDifferences = @(
               Compare-Object $reviewedTestDependencyInventory $testInventory -CaseSensitive
             )
-            if ($testInventory.Count -lt 1 -or $testInventoryDifferences.Count -ne 0) {
-              Write-Output "Resolved dependency inventory for rejected $sourceName source-test restore:"
+            if ($testInventory.Count -lt 1) {
+              throw "The source-test restore did not produce a dependency inventory."
+            }
+            if ($testInventoryDifferences.Count -ne 0) {
+              Write-Output "Resolved dependency inventory for $sourceName source-test restore:"
               $testInventory | ForEach-Object { Write-Output $_ }
-              throw "The source-test restore does not match the committed reviewed dependency inventory."
+              if (-not $deriveCandidate) {
+                throw "The source-test restore does not match the committed reviewed dependency inventory."
+              }
             }
             $testDependencyInventories += ,$testInventory
 
@@ -1501,7 +1511,10 @@ jobs:
           [IO.File]::WriteAllLines($mergeInputInventoryPath, $mergeInputInventories[0], [Text.UTF8Encoding]::new($false))
           $mergeInputInventorySha256 = (Get-FileHash -LiteralPath $mergeInputInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
           if (
-            $dependencyInventorySha256 -cne $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256 -or
+            (
+              -not $deriveCandidate -and
+              $dependencyInventorySha256 -cne $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256
+            ) -or
             (
               -not $deriveCandidate -and
               $testDependencyInventorySha256 -cne $env:REVIEWED_TEST_DEPENDENCY_INVENTORY_SHA256
@@ -1518,6 +1531,11 @@ jobs:
           $dotnetInfoSha256 = (Get-FileHash -LiteralPath $dotnetInfoPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
           $versionInfo = (Get-Item -LiteralPath $outputs[0]).VersionInfo
+          $lockedDependencyInventorySha256 = if ($deriveCandidate) {
+            $null
+          } else {
+            $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256
+          }
           $lockedMergeInputInventorySha256 = if ($deriveCandidate) {
             $null
           } else {
@@ -1615,7 +1633,7 @@ jobs:
             )
             upstreamDeclaredMergeTool = "ILRepack 1.26.0 restored but not executed; PostBuildEvent is disabled"
             dependencyInventorySha256 = $dependencyInventorySha256
-            reviewedDependencyInventorySha256 = $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256
+            reviewedDependencyInventorySha256 = $lockedDependencyInventorySha256
             sourceTestDependencyInventorySha256 = $testDependencyInventorySha256
             reviewedSourceTestDependencyInventorySha256 = $lockedTestDependencyInventorySha256
             sourceTestRunnerSha256 = $env:SOURCE_TEST_RUNNER_SHA256
@@ -1647,15 +1665,25 @@ jobs:
             (($provenance | ConvertTo-Json -Depth 4) + "`n"),
             [Text.UTF8Encoding]::new($false)
           )
+          $artifactName = if ($deriveCandidate) {
+            "squirrel-updater-quarantine-$receiptMode-$($hashes[0])"
+          } else {
+            "squirrel-updater-$receiptMode-$($hashes[0])"
+          }
           "receipt-mode=$receiptMode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact-name=$artifactName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "binary-sha256=$($hashes[0])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "binary-bytes=$($sizes[0])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Output "Rebuilt identical $receiptMode Squirrel updater candidate bytes twice: SHA-256 $($hashes[0]), $($sizes[0]) bytes."
+          if ($deriveCandidate) {
+            Write-Output "Derived quarantined Squirrel updater evidence twice: SHA-256 $($hashes[0]), $($sizes[0]) bytes."
+          } else {
+            Write-Output "Rebuilt identical locked Squirrel updater candidate bytes twice: SHA-256 $($hashes[0]), $($sizes[0]) bytes."
+          }
 
-      - name: Upload updater candidate and provenance
+      - name: Upload updater evidence artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: squirrel-updater-${{ steps.build.outputs.receipt-mode }}-${{ steps.build.outputs.binary-sha256 }}
+          name: ${{ steps.build.outputs.artifact-name }}
           path: ${{ runner.temp }}/squirrel-updater-candidate/
           if-no-files-found: error
           retention-days: 7
