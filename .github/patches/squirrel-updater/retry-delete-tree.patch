@@ -1,0 +1,117 @@
+diff --git a/src/Squirrel/Utility.cs b/src/Squirrel/Utility.cs
+index e843f5f..432a76a 100644
+--- a/src/Squirrel/Utility.cs
++++ b/src/Squirrel/Utility.cs
+@@ -514,10 +514,23 @@ public static void DeleteFileHarder(string path, bool ignoreIfFails = false)
+ 
+         public static async Task DeleteDirectoryOrJustGiveUp(string dir)
+         {
+-            try {
+-                await Utility.DeleteDirectory(dir);
+-            } catch {
+-                var message = String.Format("Uninstall failed to delete dir '{0}'", dir);
++            const int attempts = 32;
++            const int delayMilliseconds = 250;
++
++            for (var attempt = 0; attempt < attempts; attempt++) {
++                try {
++                    await Utility.DeleteDirectory(dir);
++                } catch {
++                    // Preserve this helper's existing best-effort behavior.
++                }
++
++                // DeleteDirectory logs and swallows Directory.Delete failures, so
++                // existence is the only reliable signal that a retry is needed.
++                if (!Directory.Exists(dir)) return;
++
++                if (attempt + 1 < attempts) {
++                    await Task.Delay(delayMilliseconds);
++                }
+             }
+         }
+ 
+diff --git a/test/SquirrelAwareExecutableDetectorTests.cs b/test/SquirrelAwareExecutableDetectorTests.cs
+index e29713b..b975725 100644
+--- a/test/SquirrelAwareExecutableDetectorTests.cs
++++ b/test/SquirrelAwareExecutableDetectorTests.cs
+@@ -60,6 +60,9 @@ public void NotSquirrelAware()
+ 
+             var ret = SquirrelAwareExecutableDetector.GetPESquirrelAwareVersion(target);
+             Assert.Null(ret);
++
++            using (File.Open(target, FileMode.Open, FileAccess.Read, FileShare.None)) {
++            }
+         }
+ 
+         [Fact]
+diff --git a/test/UtilityTests.cs b/test/UtilityTests.cs
+index 4e164e3..fb4c75a 100644
+--- a/test/UtilityTests.cs
++++ b/test/UtilityTests.cs
+@@ -4,6 +4,7 @@
+ using System.Linq;
+ using System.Security.Cryptography;
+ using System.Text;
++using System.Threading.Tasks;
+ using Squirrel.SimpleSplat;
+ using Squirrel;
+ using Squirrel.Tests.TestHelpers;
+@@ -121,6 +122,58 @@ public void CanDeleteDeepRecursiveDirectoryStructure()
+             }
+         }
+ 
++        [Fact]
++        public async Task DeleteDirectoryOrJustGiveUpRetriesTransientFileLocks()
++        {
++            if (Environment.OSVersion.Platform != PlatformID.Win32NT) return;
++
++            string tempDir;
++            using (Utility.WithTempDirectory(out tempDir)) {
++                var target = Path.Combine(tempDir, "transient-lock");
++                var lockedPath = Path.Combine(target, "locked.txt");
++                Directory.CreateDirectory(target);
++                File.WriteAllText(lockedPath, "locked");
++
++                using (var lockedFile = new FileStream(lockedPath, FileMode.Open, FileAccess.Read, FileShare.Read)) {
++                    var releaseLock = Task.Run(async () => {
++                        await Task.Delay(5000);
++                        lockedFile.Dispose();
++                    });
++
++                    await Utility.DeleteDirectoryOrJustGiveUp(target);
++                    await releaseLock;
++                }
++
++                Assert.False(Directory.Exists(target));
++            }
++        }
++
++        [Fact]
++        public async Task DeleteDirectoryOrJustGiveUpReturnsAfterBoundedRetriesForPermanentFileLocks()
++        {
++            if (Environment.OSVersion.Platform != PlatformID.Win32NT) return;
++
++            string tempDir;
++            using (Utility.WithTempDirectory(out tempDir)) {
++                var target = Path.Combine(tempDir, "permanent-lock");
++                var lockedPath = Path.Combine(target, "locked.txt");
++                Directory.CreateDirectory(target);
++                File.WriteAllText(lockedPath, "locked");
++
++                using (var lockedFile = new FileStream(lockedPath, FileMode.Open, FileAccess.Read, FileShare.Read)) {
++                    var deletion = Utility.DeleteDirectoryOrJustGiveUp(target);
++                    var completed = await Task.WhenAny(deletion, Task.Delay(15000));
++
++                    Assert.Same(deletion, completed);
++                    await deletion;
++                    Assert.True(Directory.Exists(target));
++                }
++
++                await Utility.DeleteDirectory(target);
++                Assert.False(Directory.Exists(target));
++            }
++        }
++
+         [Fact]
+         public void CreateFakePackageSmokeTest()
+         {

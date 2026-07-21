@@ -65,12 +65,28 @@ diagnostic-only follow-up keeps the zero-residue failure unchanged and reports
 only fixed booleans and counts: immediate and settled TokenMonster/process-tree
 presence, the exact installed application process, residual file/directory
 totals, exclusive-open availability, and lifecycle-hook start count. It never
-emits or persists a path, filename, PID, or raw Squirrel log. Run this narrowed
-native Windows matrix once before changing updater behavior. If the immediate
-lock clears by the settled snapshot, review a bounded upstream deletion retry;
-if it remains locked, identify the owning role without exposing its path and
-fix that lifecycle owner. Only after zero-residue passes should the legal owner
-choose approval of exact XDT 2.1.1 terms or a separately reviewed 3.1.0 rebuild.
+emits or persists a path, filename, PID, or raw Squirrel log.
+
+Commit `8d25cc6` and run `29779253263` produced the decisive classification.
+Immediately after uninstall, no TokenMonster or install-tree process remained,
+but the application directory contained four files: three allowed exclusive
+open and the installed application executable reported the sole Win32
+sharing/lock violation. The packaged Squirrel executable was already absent.
+The lock cleared at the fifth one-second poll; all four remaining files were
+exclusively openable at the settled snapshot, but Squirrel never retried and
+the directory remained. The diagnostic itself reported zero errors, and no
+Windows artifact was uploaded. This proves a transient post-hook lock plus
+Squirrel's one-shot best-effort deletion, rather than a live process or
+persistent ACL failure.
+
+The next source candidate should therefore retry the complete deletion tree 32
+times at 250 ms intervals, a maximum nominal 7.75-second window with margin
+over the observed five-second release. It must add a five-second transient-lock
+test, a permanently locked bounded-return test, and the exact c982 Cecil reopen
+regression, then pass a new reproducible A/B build and the same native matrix.
+Combine that rebuild with the separately reviewed XDT 3.1.0 source upgrade so
+the candidate is not rebuilt twice. Only after zero-residue passes should the
+legal owner approve the resulting dependency terms and complete notices.
 Do not tag, sign, publish npm/CDN assets, or make the GitHub Release public from
 the current internal candidate.
 
@@ -961,11 +977,11 @@ source-merged hourly data.
 - **Integrator publication:** the recovered hardening through `ded282e` is
   pushed on `agent/permanent-sidecar-companion`, PR 1 remains draft, and the
   direct packaging replacement plus reviewed updater integration is committed
-  through `fdc9b72`. Manual run `29775692315` diagnosed and closed the Windows
-  maker log-residue check. Run `29776784521` then passed that check and every
-  other requested job except the fail-closed Windows zero-residue uninstall
-  assertion described above; run the fixed-field diagnostic follow-up before
-  claiming native Windows evidence.
+  through `09af13c`. Manual run `29775692315` diagnosed and closed the Windows
+  maker log-residue check. Run `29776784521` isolated the fail-closed Windows
+  zero-residue assertion, and diagnostic run `29779253263` proved the transient
+  five-second application-executable lock described above. Build and review the
+  bounded-delete/XDT 3.1.0 candidate before claiming native Windows evidence.
   Configure the protected signing/npm/CDN release environments and the four
   exact public download bindings only after the immutable Windows bytes exist;
   never call the historical local rc.12 artifacts shipped.
