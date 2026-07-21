@@ -441,6 +441,15 @@ jobs:
           XDT_SOURCE_TREE: e7f17c790d0ede422e683f8617173df0ac63f1f1
           XDT_LICENSE_BLOB: f49a4e16e68b128803cc2dcea614603632b04eac
           XDT_LICENSE_SHA256: 43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1
+          XDT_ATTRIBUTION_SHA256: 5942a1e712f375fbc36e2ce62bd12b930d6d70c9d9ec74caea35d7ec48fbe1a2
+          XDT_ATTRIBUTION_BYTES: 484
+          XDT_PACKAGE_SHA256: 38ece8d6523710f474391b03c824b66f5192c2a667940dbaa3f895b464c37e72
+          XDT_PACKAGE_BYTES: 129010
+          XDT_DLL_SHA256: 207124b715bd7ef950df87142d9fd0cf86f1acf86409e6d1d8eb9ddf41c0fc56
+          XDT_DLL_BYTES: 81272
+          XDT_ASSEMBLY_VERSION: 3.1.0.0
+          XDT_PUBLIC_KEY_TOKEN: 31bf3856ad364e35
+          XDT_MVID: bf07c227-95c3-42a1-8e96-956ba121bfd3
           REVIEWED_DEPENDENCY_INVENTORY_SHA256: 9ab90cdb2131c34d8c871c2eba37edc7cbc12d63e2abdfcea4306e4cea367b23
           REVIEWED_MERGE_INPUT_INVENTORY_SHA256: abddfa18198a408cd1b1d3983ce6afdd4eab4a1f4dcec5cbd4b2a0437104c419
           REVIEWED_UPDATER_SHA256: 1673161fd4e64d1123fb828a5e5f1580cbe3c3f6b3f0893f50bb920dada473fd
@@ -640,6 +649,117 @@ jobs:
             }
           }
 
+          function Assert-XdtProjectAssets {
+            param(
+              [Parameter(Mandatory)] [string] $AssetsPath
+            )
+
+            $assets = Get-Content -LiteralPath $AssetsPath -Raw | ConvertFrom-Json
+            $expectedLibrary = "Microsoft.Web.Xdt/3.1.0"
+            $xdtLibraries = @(
+              $assets.libraries.PSObject.Properties |
+                Where-Object { $_.Name -imatch "^Microsoft\.Web\.Xdt/" }
+            )
+            $xdtTargets = @()
+            foreach ($target in $assets.targets.PSObject.Properties) {
+              $xdtTarget = $target.Value.PSObject.Properties[$expectedLibrary]
+              if ($null -ne $xdtTarget) {
+                $xdtTargets += ,$xdtTarget
+              }
+            }
+            if ($xdtLibraries.Count -ne 1 -or $xdtLibraries[0].Name -cne $expectedLibrary -or $xdtTargets.Count -ne 1) {
+              throw "The Squirrel restore did not resolve exactly Microsoft.Web.Xdt 3.1.0."
+            }
+            $compile = $xdtTargets[0].Value.PSObject.Properties["compile"]
+            $runtime = $xdtTargets[0].Value.PSObject.Properties["runtime"]
+            $compilePaths = if ($null -eq $compile) {
+              @()
+            } else {
+              @($compile.Value.PSObject.Properties.Name)
+            }
+            $runtimePaths = if ($null -eq $runtime) {
+              @()
+            } else {
+              @($runtime.Value.PSObject.Properties.Name)
+            }
+            if (
+              $compilePaths.Count -ne 1 -or
+              $compilePaths[0] -cne "lib/net40/Microsoft.Web.XmlTransform.dll" -or
+              $runtimePaths.Count -ne 1 -or
+              $runtimePaths[0] -cne "lib/net40/Microsoft.Web.XmlTransform.dll"
+            ) {
+              throw "The Squirrel restore selected an unreviewed Microsoft.Web.Xdt asset."
+            }
+          }
+
+          function Assert-XdtAssembly {
+            param(
+              [Parameter(Mandatory)] [string] $Path
+            )
+
+            $file = Get-Item -LiteralPath $Path -Force
+            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $assemblyName = [Reflection.AssemblyName]::GetAssemblyName($file.FullName)
+            $publicKeyToken = -join @(
+              $assemblyName.GetPublicKeyToken() |
+                ForEach-Object { $_.ToString("x2") }
+            )
+            $stream = [IO.File]::Open(
+              $file.FullName,
+              [IO.FileMode]::Open,
+              [IO.FileAccess]::Read,
+              [IO.FileShare]::Read
+            )
+            try {
+              $peReader = [Reflection.PortableExecutable.PEReader]::new($stream)
+              try {
+                if (-not $peReader.HasMetadata) {
+                  throw "The Microsoft.Web.Xdt DLL has no managed metadata."
+                }
+                $metadata = [Reflection.Metadata.PEReaderExtensions]::GetMetadataReader($peReader)
+                $module = $metadata.GetModuleDefinition()
+                $mvid = $metadata.GetGuid($module.Mvid).ToString("D")
+              } finally {
+                $peReader.Dispose()
+              }
+            } finally {
+              $stream.Dispose()
+            }
+            if (
+              $file.PSIsContainer -or
+              ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+              $file.Length -ne [int64]$env:XDT_DLL_BYTES -or
+              $hash -cne $env:XDT_DLL_SHA256 -or
+              $assemblyName.Name -cne "Microsoft.Web.XmlTransform" -or
+              $assemblyName.Version.ToString() -cne $env:XDT_ASSEMBLY_VERSION -or
+              $publicKeyToken -cne $env:XDT_PUBLIC_KEY_TOKEN -or
+              $mvid -cne $env:XDT_MVID
+            ) {
+              throw "A restored Microsoft.Web.Xdt assembly does not match its exact reviewed identity."
+            }
+          }
+
+          function Assert-XdtPackage {
+            param(
+              [Parameter(Mandatory)] [string] $Path
+            )
+
+            $file = Get-Item -LiteralPath $Path -Force
+            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if (
+              $file.PSIsContainer -or
+              ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+              $file.Length -ne [int64]$env:XDT_PACKAGE_BYTES -or
+              $hash -cne $env:XDT_PACKAGE_SHA256
+            ) {
+              throw "A restored Microsoft.Web.Xdt package does not match its exact reviewed bytes."
+            }
+            & $nuget verify -Signatures $file.FullName
+            if ($LASTEXITCODE -ne 0) {
+              throw "A restored Microsoft.Web.Xdt package signature is invalid."
+            }
+          }
+
           # NuGet 4.9 treats the literal value "clear" as a relative fallback
           # path here. Use an empty global property plus both implicit-folder
           # disable switches, then verify the generated assets fail-closed.
@@ -754,7 +874,17 @@ jobs:
             if ($LASTEXITCODE -ne 0) {
               throw "The exact upstream Squirrel library dependency restore failed."
             }
-            Assert-IsolatedProjectAssets -AssetsPath (Join-Path $source "build/obj/Squirrel/project.assets.json") -PackageRoot $nugetPackageRoot -ConfigPath $nugetConfig
+            $squirrelAssetsPath = Join-Path $source "build/obj/Squirrel/project.assets.json"
+            Assert-IsolatedProjectAssets -AssetsPath $squirrelAssetsPath -PackageRoot $nugetPackageRoot -ConfigPath $nugetConfig
+            Assert-XdtProjectAssets -AssetsPath $squirrelAssetsPath
+
+            $globalXdtRoot = Join-Path $dependencyCache "microsoft.web.xdt/3.1.0"
+            $legacyXdtRoot = Join-Path $legacyPackages "Microsoft.Web.Xdt.3.1.0"
+            Assert-XdtPackage -Path (Join-Path $globalXdtRoot "microsoft.web.xdt.3.1.0.nupkg")
+            Assert-XdtPackage -Path (Join-Path $legacyXdtRoot "Microsoft.Web.Xdt.3.1.0.nupkg")
+            Assert-XdtAssembly -Path (Join-Path $globalXdtRoot "lib/net40/Microsoft.Web.XmlTransform.dll")
+            Assert-XdtAssembly -Path (Join-Path $legacyXdtRoot "lib/net40/Microsoft.Web.XmlTransform.dll")
+
             & $nuget restore (Join-Path $source "src/Update/Update.csproj") -PackagesDirectory $nugetPackageRoot -NonInteractive -NoCache -DirectDownload -ConfigFile $nugetConfig -Source $env:NUGET_SOURCE -MSBuildPath (Split-Path -Parent $msbuild)
             if ($LASTEXITCODE -ne 0) {
               throw "The exact upstream updater dependency restore failed."
@@ -807,6 +937,7 @@ jobs:
             }
 
             $outputDirectory = Join-Path $source "build/Release/net45"
+            Assert-XdtAssembly -Path (Join-Path $outputDirectory "Microsoft.Web.XmlTransform.dll")
             $mergeInputNames = @(
               "Update.exe"
               "WpfAnimatedGif.dll"
@@ -915,6 +1046,35 @@ jobs:
           Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "squirrel-a/vendor/nuget/COPYRIGHT.txt") -Destination (Join-Path $artifactDirectory "NUGET-SUBMODULE-COPYRIGHT.txt")
           Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "squirrel-a/vendor/nuget/CREDITS.txt") -Destination (Join-Path $artifactDirectory "NUGET-SUBMODULE-CREDITS.txt")
           Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "ilrepack-source/LICENSE") -Destination (Join-Path $artifactDirectory "ILREPACK-LICENSE.txt")
+          $xdtLicensePath = Join-Path $artifactDirectory "MICROSOFT-WEB-XDT-LICENSE.txt"
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "xdt-source/LICENSE.txt") -Destination $xdtLicensePath
+          $xdtAttributionPath = Join-Path $artifactDirectory "MICROSOFT-WEB-XDT-ATTRIBUTION.txt"
+          $xdtAttribution = @(
+            "Microsoft.Web.Xdt 3.1.0"
+            ""
+            "Copyright © Microsoft Corporation. All rights reserved."
+            "Licensed under Apache-2.0. See MICROSOFT-WEB-XDT-LICENSE.txt."
+            ""
+            "Package: https://www.nuget.org/packages/Microsoft.Web.Xdt/3.1.0"
+            "Source: https://github.com/dotnet/xdt"
+            "Source commit: 5b67dee04d86740575f0f5022b79833213cc024a"
+            ""
+            "The exact source tree contains LICENSE.txt and no NOTICE file. This attribution"
+            "file is generated by TokenMonster for its redistribution bundle; it is not an"
+            "upstream NOTICE file."
+          ) -join "`n"
+          [IO.File]::WriteAllText(
+            $xdtAttributionPath,
+            ($xdtAttribution + "`n"),
+            [Text.UTF8Encoding]::new($false)
+          )
+          if (
+            (Get-FileHash -LiteralPath $xdtLicensePath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $env:XDT_LICENSE_SHA256 -or
+            (Get-FileHash -LiteralPath $xdtAttributionPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $env:XDT_ATTRIBUTION_SHA256 -or
+            (Get-Item -LiteralPath $xdtAttributionPath).Length -ne [int64]$env:XDT_ATTRIBUTION_BYTES
+          ) {
+            throw "The staged Microsoft.Web.Xdt license bundle does not match its reviewed contract."
+          }
           $dependencyInventoryPath = Join-Path $artifactDirectory "nuget-content-hashes.txt"
           [IO.File]::WriteAllLines($dependencyInventoryPath, $dependencyInventories[0], [Text.UTF8Encoding]::new($false))
           $dependencyInventorySha256 = (Get-FileHash -LiteralPath $dependencyInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -976,6 +1136,16 @@ jobs:
             xdtSourceTree = $env:XDT_SOURCE_TREE
             xdtLicenseBlob = $env:XDT_LICENSE_BLOB
             xdtLicenseSha256 = $env:XDT_LICENSE_SHA256
+            xdtAttributionSha256 = $env:XDT_ATTRIBUTION_SHA256
+            xdtPackageSha256 = $env:XDT_PACKAGE_SHA256
+            xdtPackageBytes = [int64]$env:XDT_PACKAGE_BYTES
+            xdtAssemblySha256 = $env:XDT_DLL_SHA256
+            xdtAssemblyBytes = [int64]$env:XDT_DLL_BYTES
+            xdtAssemblyVersion = $env:XDT_ASSEMBLY_VERSION
+            xdtAssemblyPublicKeyToken = $env:XDT_PUBLIC_KEY_TOKEN
+            xdtAssemblyMvid = $env:XDT_MVID
+            xdtSelectedAsset = "lib/net40/Microsoft.Web.XmlTransform.dll"
+            xdtRestorePathsVerified = @("global", "legacy")
             xdtUpstreamNoticePresent = $false
             runnerImage = $env:ImageOS
             runnerImageVersion = $env:ImageVersion
