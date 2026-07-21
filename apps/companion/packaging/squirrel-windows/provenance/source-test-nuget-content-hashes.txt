@@ -1,0 +1,12 @@
+global/deltacompressiondotnet/1.1.0/deltacompressiondotnet.1.1.0.nupkg.sha512	2lAyh3f9BvodfRmw8kKFxrWIKD6FcLdKv4dSHOfEgbkmNhOARFJ8TItyr76XsumEPJ53ORPLS3twRDIWnO4XnA==
+global/microsoft.codecoverage/15.8.0/microsoft.codecoverage.15.8.0.nupkg.sha512	cgcX2c/K35GrIjXkUwWop2GyG/YsLVo2wnL/2ESzOqr4V21FrrCVYuhpClv/bD80+rwXyIpyulqSX1NBNeAtMA==
+global/microsoft.net.test.sdk/15.8.0/microsoft.net.test.sdk.15.8.0.nupkg.sha512	yRnkhvz0RXRGmoLZqcL917aA8GoEgJRyxhmlf1CoFxU/6msYeIPxVJbBFnMpiSOm8rrY2jJedWnJUODQRbalaw==
+global/microsoft.web.xdt/3.1.0/microsoft.web.xdt.3.1.0.nupkg.sha512	3VApgkdgOglJWtrXSgYzz6o8Cp6IpvmFQMeICyQvvbKoy+OjNwco5ovzBBL1HHj7kEgLfe2ruXW/ZQ1k+2YxYw==
+global/mono.cecil/0.11.2/mono.cecil.0.11.2.nupkg.sha512	BTpKT6mzbvLgXKWSilfGOn0we1JeJb7VWu2f1lJ3ABJqCqoZlNCdi90BMiTJl+9DdJ5MqH3pokN873IjM3vi/Q==
+global/sharpcompress/0.17.1/sharpcompress.0.17.1.nupkg.sha512	wLRtmFrUhhF6ljyYCWWcwfGRZ9pX1gNZDSF6+Rj5uxS85Rq497HvhP7CYLNXCyIP1s065D3ebHcRA6uK1NFtcQ==
+global/xunit.abstractions/2.0.0/xunit.abstractions.2.0.0.nupkg.sha512	WLGy0Y9QeTZZ3/ILGDJAEjwjzsqhV0HPmmVS17CaN0Nzzkdgvl+Ly0tHGD6mmPnaoj0KfE2xpOSoTb3HBhKR3A==
+global/xunit.assert/2.0.0/xunit.assert.2.0.0.nupkg.sha512	cR3mlIu3ouLrzXzxFmu5NCH8gv9MHqW9lUVsIMWwjSnSWV9ktWEDhlc8XDV2h1xPJsAokCqYiUe+JyAnQm0NCg==
+global/xunit.core/2.0.0/xunit.core.2.0.0.nupkg.sha512	m0mwQe7dnxUEf+yEFvMoxJtUut5jL0fgCg9I0+6ZqtnLd6JVe3bJC+c2GHbgo380QRvBrgNuR8c5T2NRwAT6yg==
+global/xunit.extensibility.core/2.0.0/xunit.extensibility.core.2.0.0.nupkg.sha512	2Gp7qJhdgEV6PKBObjG8JK4ZPi7ZrdE2h6UFunFgitC0XJy9JgIwFnkTW8+q5GzgIO4CFStRZ7xHE1RTCSYPfg==
+global/xunit.runner.visualstudio/2.0.0/xunit.runner.visualstudio.2.0.0.nupkg.sha512	Bf9ks/79tZFUAr+masUl6PxB5lpwQYPFzPnS5f4hxmsog8Ax4UtOi3ypvLuBXAP/Agm0SqV07NelKFqQ+Nn7tg==
+global/xunit/2.0.0/xunit.2.0.0.nupkg.sha512	Ji2qbDQTUdzs4p6vcXqq3+Fgql8clNWymv4Q02OYa/6vqpbdBaWvXj/ur5p6GDYUh2qgSCylQmDjwP0PJy6TxQ==

@@ -3,7 +3,7 @@ global/ilrepack/1.26.0/ilrepack.1.26.0.nupkg.sha512	3Taj5hDZkDK8SlOVmoOkI0R6JpQA
 global/microsoft.build.tasks.git/1.0.0-beta2-18618-05/microsoft.build.tasks.git.1.0.0-beta2-18618-05.nupkg.sha512	kcnqXhm6lxU8UFtpVO8enW7L8Gisw05bI46B3cWlW7K1dgGPb4hAyfiGyGczYOU6n4RtHO9CCfh0Lk74qkbF6w==
 global/microsoft.sourcelink.common/1.0.0-beta2-18618-05/microsoft.sourcelink.common.1.0.0-beta2-18618-05.nupkg.sha512	eJP4JUDOiiWPBvwN+/0v1otoT8VPFOm6upABUAS6TwFbLfjRiLI2Ko44gyxF0nW+uMQHx186tnTDt+fg7je97Q==
 global/microsoft.sourcelink.github/1.0.0-beta2-18618-05/microsoft.sourcelink.github.1.0.0-beta2-18618-05.nupkg.sha512	7cQMyVdud/ritrYqgc99LecTC0g9rA2QhO1QFi6OBubsA++gMXRiXx/ct1rmycxM9EvHJSNZ9DHbZHu42RLMLQ==
-global/microsoft.web.xdt/2.1.1/microsoft.web.xdt.2.1.1.nupkg.sha512	8aCgaay6cgnrSwSeIDCU0qG6gi5VdR/LZuHSyyNH/dmtOMq89nSYKEXiscvQNPTNm2CL7s9JRVU0Wl24f6p4kg==
+global/microsoft.web.xdt/3.1.0/microsoft.web.xdt.3.1.0.nupkg.sha512	3VApgkdgOglJWtrXSgYzz6o8Cp6IpvmFQMeICyQvvbKoy+OjNwco5ovzBBL1HHj7kEgLfe2ruXW/ZQ1k+2YxYw==
 global/mono.cecil/0.11.2/mono.cecil.0.11.2.nupkg.sha512	BTpKT6mzbvLgXKWSilfGOn0we1JeJb7VWu2f1lJ3ABJqCqoZlNCdi90BMiTJl+9DdJ5MqH3pokN873IjM3vi/Q==
 global/nerdbank.gitversioning/3.0.50/nerdbank.gitversioning.3.0.50.nupkg.sha512	NiT6vLHcTP8VM244+rfmoVHuWh7bPsG9XnKMm4rAEc2QmPFGQfruUBaqxgbsqz4z7yuEZlhjP1UURdhfz04wXg==
 global/sharpcompress/0.17.1/sharpcompress.0.17.1.nupkg.sha512	wLRtmFrUhhF6ljyYCWWcwfGRZ9pX1gNZDSF6+Rj5uxS85Rq497HvhP7CYLNXCyIP1s065D3ebHcRA6uK1NFtcQ==
@@ -12,4 +12,5 @@ legacy/ilrepack.1.26.0/ilrepack.1.26.0.nupkg	sha256:fe49fd5aa140c1f4e99b24fbe343
 legacy/microsoft.data.edm.5.6.1/microsoft.data.edm.5.6.1.nupkg	sha256:2372dda0dbbc7c01a09883fbeb4ba245ac0913bce346795fd66f11db96945510
 legacy/microsoft.data.odata.5.6.1/microsoft.data.odata.5.6.1.nupkg	sha256:82454bc4c599f79682130e30cd44cb6588dcd75661c3cbd637c9ae321ba84a8c
 legacy/microsoft.data.services.client.5.6.1/microsoft.data.services.client.5.6.1.nupkg	sha256:a6405fb929a99739c3079024a4d1003dc1a4629ff6f40b95c454498d8e545ed8
+legacy/microsoft.web.xdt.3.1.0/microsoft.web.xdt.3.1.0.nupkg	sha256:38ece8d6523710f474391b03c824b66f5192c2a667940dbaa3f895b464c37e72
 legacy/system.spatial.5.6.1/system.spatial.5.6.1.nupkg	sha256:0d6efec3c6097edaa50d02cc713a0bc80d3a1441992081d21104831a7e4f4d06
