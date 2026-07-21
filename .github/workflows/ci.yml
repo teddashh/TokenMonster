@@ -18,9 +18,16 @@ on:
           - skip-macos
           - linux-only
       rebuild_squirrel_updater:
-        description: "Rebuild the reviewed one-commit Squirrel updater fix"
+        description: "Rebuild or derive reviewed Squirrel updater receipts"
         type: boolean
         default: false
+      squirrel_updater_receipt_mode:
+        description: "Receipt mode for manual Squirrel updater rebuilds"
+        type: choice
+        default: locked
+        options:
+          - locked
+          - derive
 
 permissions:
   contents: read
@@ -37,7 +44,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.rebuild_squirrel_updater
     uses: ./.github/workflows/rebuild-squirrel-updater.yml
     with:
-      derive_candidate: false
+      derive_candidate: ${{ inputs.squirrel_updater_receipt_mode == 'derive' }}
     permissions:
       contents: read
 
