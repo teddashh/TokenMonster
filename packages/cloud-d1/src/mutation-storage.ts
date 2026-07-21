@@ -16,6 +16,10 @@ import type {
   IngestStoragePort,
   IngestTransactionPort,
   InstallationRecord,
+  LifecycleStoragePort,
+  LifecycleTransactionPort,
+  RecoverableEnrollmentRecord,
+  RecoverableEnrollmentStoragePort,
   StoredCredential
 } from "@tokenmonster/api-domain";
 
@@ -62,7 +66,9 @@ export interface D1MutationStorage
     DeletionStoragePort,
     DeletionStatusStoragePort,
     DeletionMaintenanceStoragePort,
-    CredentialLookupPort {}
+    CredentialLookupPort,
+    LifecycleStoragePort,
+    RecoverableEnrollmentStoragePort {}
 
 export type D1MutationAdapterErrorCode =
   | "INPUT_INVALID"
@@ -172,6 +178,56 @@ const STATUS_CREDENTIAL_SELECT = `SELECT
 FROM deletion_jobs
 WHERE status_token_id = ?1 AND expires_at > ?2
 LIMIT 2`;
+
+const RECOVERY_CREDENTIAL_SELECT = `SELECT
+  installation_id AS installationId,
+  recovery_token_id AS publicTokenId,
+  recovery_token_hmac AS hmacDigest,
+  recovery_hmac_key_id AS hmacKeyId
+FROM recoverable_enrollments
+WHERE recovery_token_id = ?1
+LIMIT 2`;
+
+const RECOVERABLE_ENROLLMENT_SELECT = `SELECT
+  i.installation_id AS installationId,
+  i.status AS status,
+  i.consent_document_revision AS consentDocumentRevision,
+  i.upload_token_id AS uploadTokenId,
+  i.upload_token_hmac AS uploadTokenHmac,
+  i.upload_hmac_key_id AS uploadHmacKeyId,
+  i.deletion_token_id AS deletionTokenId,
+  i.deletion_token_hmac AS deletionTokenHmac,
+  i.deletion_hmac_key_id AS deletionHmacKeyId,
+  i.created_at AS createdAt,
+  i.paused_at AS pausedAt,
+  i.deleting_at AS deletingAt,
+  i.deleted_at AS deletedAt,
+  c.event_id AS eventId,
+  c.document_revision AS documentRevision,
+  c.occurred_at AS acknowledgedAt,
+  c.recorded_at AS recordedAt,
+  r.recovery_token_id AS recoveryTokenId,
+  r.recovery_token_hmac AS recoveryTokenHmac,
+  r.recovery_hmac_key_id AS recoveryHmacKeyId
+FROM recoverable_enrollments r
+JOIN installations i ON i.installation_id = r.installation_id
+JOIN consent_receipts c ON c.event_id = r.consent_event_id
+WHERE r.recovery_token_id = ?1
+LIMIT 2`;
+
+const LATEST_GRANTED_CONSENT_SELECT = `SELECT
+  event_id AS eventId,
+  installation_id AS installationId,
+  document_revision AS documentRevision,
+  occurred_at AS acknowledgedAt,
+  recorded_at AS recordedAt
+FROM consent_receipts
+WHERE installation_id = ?1
+  AND purpose = 'contribution'
+  AND document_revision = ?2
+  AND granted = 1
+ORDER BY recorded_at DESC, event_id DESC
+LIMIT 1`;
 
 const BATCH_SELECT = `SELECT
   installation_id AS installationId,
@@ -292,6 +348,13 @@ const GUARD_INSERT = `INSERT INTO mutation_guards (
 
 const GUARD_DELETE = `DELETE FROM mutation_guards WHERE request_id = ?1`;
 
+// The original schema's closed operation enum already classifies `ingest` as
+// the upload-authority mutation guard. Pause/resume uses that same guard class
+// so existing databases can adopt the additive lifecycle migration without a
+// risky rebuild of the foreign-key-connected guard tables. This value is
+// diagnostic only; lifecycle still has its own domain and rate-limit route.
+const LIFECYCLE_GUARD_OPERATION = "ingest";
+
 const INSTALLATION_GUARD_INSERT = `INSERT INTO mutation_guard_installations (
   request_id,
   installation_id,
@@ -387,6 +450,26 @@ const CONSENT_INSERT = `INSERT INTO consent_receipts (
   recorded_at,
   expires_at
 ) VALUES (?1, ?2, 'contribution', ?3, 1, ?4, ?5, ?6)`;
+
+const RECOVERABLE_ENROLLMENT_INSERT = `INSERT INTO recoverable_enrollments (
+  recovery_token_id,
+  recovery_token_hmac,
+  recovery_hmac_key_id,
+  installation_id,
+  consent_event_id,
+  created_at
+) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`;
+
+const PAUSE_INSTALLATION_UPDATE = `UPDATE installations SET
+  status = 'paused',
+  paused_at = ?2
+WHERE installation_id = ?1`;
+
+const RESUME_INSTALLATION_UPDATE = `UPDATE installations SET
+  status = 'active',
+  consent_document_revision = ?2,
+  paused_at = NULL
+WHERE installation_id = ?1`;
 
 const AUTHORITY_INSERT = `INSERT INTO collector_window_bindings (
   installation_id,
@@ -512,6 +595,26 @@ const DELETE_SHARES =
   "DELETE FROM share_cards WHERE installation_id = ?1";
 const DELETE_CONSENT =
   "DELETE FROM consent_receipts WHERE installation_id = ?1";
+const DELETE_RESTORED_DELETION_JOBS =
+  "DELETE FROM deletion_jobs WHERE installation_id = ?1";
+const DELETE_RESTORED_MUTATION_GUARDS = `DELETE FROM mutation_guards
+WHERE request_id <> ?2
+  AND request_id IN (
+    SELECT request_id FROM mutation_guard_installations
+      WHERE installation_id = ?1
+    UNION
+    SELECT request_id FROM mutation_guard_batches
+      WHERE installation_id = ?1
+    UNION
+    SELECT request_id FROM mutation_guard_authorities
+      WHERE installation_id = ?1
+    UNION
+    SELECT request_id FROM mutation_guard_usage
+      WHERE installation_id = ?1
+    UNION
+    SELECT request_id FROM mutation_guard_deletions
+      WHERE installation_id = ?1
+  )`;
 
 const COMPLETE_INSTALLATION_UPDATE = `UPDATE installations SET
   upload_token_id = NULL,
@@ -706,6 +809,18 @@ function canonicalNow(now: () => Date): string {
   return value.toISOString();
 }
 
+function assertCanonicalInstant(value: string): void {
+  const milliseconds = Date.parse(value);
+  if (
+    !Number.isFinite(milliseconds) ||
+    milliseconds < Date.parse("2020-01-01T00:00:00.000Z") ||
+    milliseconds >= Date.parse("2100-01-01T00:00:00.000Z") ||
+    new Date(milliseconds).toISOString() !== value
+  ) {
+    fail("INPUT_INVALID");
+  }
+}
+
 function createDefaultRequestId(): string {
   try {
     return `guard_${globalThis.crypto.randomUUID()}`;
@@ -737,13 +852,16 @@ function parseInstallation(row: UnknownRow): StoredInstallation {
   const deletionKeyId = asNullableString(row["deletionHmacKeyId"]);
   const uploadDigest = uploadHmac === null ? null : asBlob(uploadHmac);
   const deletionDigest = deletionHmac === null ? null : asBlob(deletionHmac);
+  const pausedAt = asNullableString(row["pausedAt"]);
   if (
     (uploadTokenId === null) !== (uploadDigest === null) ||
     (uploadTokenId === null) !== (uploadKeyId === null) ||
     (deletionTokenId === null) !== (deletionDigest === null) ||
     (deletionTokenId === null) !== (deletionKeyId === null) ||
     (uploadDigest !== null && uploadDigest.byteLength !== 32) ||
-    (deletionDigest !== null && deletionDigest.byteLength !== 32)
+    (deletionDigest !== null && deletionDigest.byteLength !== 32) ||
+    (status === "paused" && pausedAt === null) ||
+    (status === "active" && pausedAt !== null)
   ) {
     fail("SERVICE_UNAVAILABLE");
   }
@@ -772,11 +890,23 @@ function parseInstallation(row: UnknownRow): StoredInstallation {
             hmacKeyId: deletionKeyId
           }),
     createdAt: asString(row["createdAt"]),
-    pausedAt: asNullableString(row["pausedAt"]),
+    pausedAt,
     deletingAt: asNullableString(row["deletingAt"]),
     deletedAt: asNullableString(row["deletedAt"])
   });
   return Object.freeze({ record, uploadDigest, deletionDigest });
+}
+
+function parseConsentReceipt(row: UnknownRow): ConsentReceiptRecord {
+  return Object.freeze({
+    eventId: asString(row["eventId"]),
+    installationId: asString(row["installationId"]),
+    purpose: "contribution" as const,
+    documentRevision: asString(row["documentRevision"]),
+    granted: true as const,
+    acknowledgedAt: asString(row["acknowledgedAt"]),
+    recordedAt: asString(row["recordedAt"])
+  });
 }
 
 async function readInstallation(
@@ -813,12 +943,40 @@ async function readCredentialCandidate(
       ? UPLOAD_CREDENTIAL_SELECT
       : scope === "deletion"
         ? DELETION_CREDENTIAL_SELECT
-        : STATUS_CREDENTIAL_SELECT;
-  const values = scope === "upload" ? [publicTokenId] : [publicTokenId, at];
+        : scope === "deletion-status"
+          ? STATUS_CREDENTIAL_SELECT
+          : RECOVERY_CREDENTIAL_SELECT;
+  const values =
+    scope === "deletion" || scope === "deletion-status"
+      ? [publicTokenId, at]
+      : [publicTokenId];
   const rows = await allRows(port, query, values);
   if (rows.length > 1) fail("SERVICE_UNAVAILABLE");
   const row = rows[0];
   return row === undefined ? null : parseCredentialRow(row, scope);
+}
+
+function parseRecoverableEnrollment(row: UnknownRow): RecoverableEnrollmentRecord {
+  const installation = parseInstallation(row).record;
+  const consentReceipt = parseConsentReceipt(row);
+  const recoveryDigest = asBlob(row["recoveryTokenHmac"]);
+  if (
+    recoveryDigest.byteLength !== 32 ||
+    consentReceipt.installationId !== installation.installationId ||
+    consentReceipt.documentRevision !== installation.consentDocumentRevision
+  ) {
+    fail("SERVICE_UNAVAILABLE");
+  }
+  return Object.freeze({
+    installation,
+    consentReceipt,
+    recoveryCredential: Object.freeze({
+      scope: "enrollment-recovery" as const,
+      publicTokenId: asString(row["recoveryTokenId"]),
+      hmacDigest: encodeBase64Url(recoveryDigest),
+      hmacKeyId: asString(row["recoveryHmacKeyId"])
+    })
+  });
 }
 
 function parseBatch(row: UnknownRow): StoredBatch {
@@ -843,7 +1001,11 @@ function parseBatch(row: UnknownRow): StoredBatch {
 
 function parseAuthority(row: UnknownRow): AuthorityBindingRecord {
   const collectorKind = asString(row["collectorKind"]);
-  if (collectorKind !== "tokscale" && collectorKind !== "tokentracker-bridge") {
+  if (
+    collectorKind !== "tokscale" &&
+    collectorKind !== "tokentracker-bridge" &&
+    collectorKind !== "tokentracker-sidecar"
+  ) {
     fail("SERVICE_UNAVAILABLE");
   }
   return Object.freeze({
@@ -873,7 +1035,11 @@ function parseUsage(row: UnknownRow): StoredUsage {
     fail("SERVICE_UNAVAILABLE");
   }
   const collectorKind = asString(row["collectorKind"]);
-  if (collectorKind !== "tokscale" && collectorKind !== "tokentracker-bridge") {
+  if (
+    collectorKind !== "tokscale" &&
+    collectorKind !== "tokentracker-bridge" &&
+    collectorKind !== "tokentracker-sidecar"
+  ) {
     fail("SERVICE_UNAVAILABLE");
   }
   const rowDigest = asBlob(row["rowHash"]);
@@ -1159,6 +1325,176 @@ async function commitBatch(
     }
     if (text.includes("TM_GUARD_")) fail("STALE_PREFLIGHT");
     fail("SERVICE_UNAVAILABLE");
+  }
+}
+
+class LifecycleRecorder implements LifecycleTransactionPort {
+  readonly #consentReceipts = new Map<string, ConsentReceiptRecord | null>();
+  #installationLoaded = false;
+  #installation: StoredInstallation | null = null;
+  #credentialRead = false;
+  #credentialCandidate: CredentialCandidate | null = null;
+  #pauseAt: string | null = null;
+  #resumeInput: Readonly<{
+    consentReceipt: ConsentReceiptRecord;
+    at: string;
+  }> | null = null;
+
+  constructor(
+    private readonly db: D1MutationDatabaseLike,
+    private readonly session: D1MutationSessionLike,
+    private readonly installationId: string,
+    private readonly at: string,
+    private readonly requestId: string,
+    private readonly guardExpiresAt: string
+  ) {}
+
+  async findCredentialCandidate(
+    scope: "upload",
+    publicTokenId: string
+  ): Promise<CredentialCandidate | null> {
+    if (scope !== "upload" || this.#credentialRead) fail("INPUT_INVALID");
+    this.#credentialCandidate = await readCredentialCandidate(
+      this.session,
+      "upload",
+      publicTokenId,
+      this.at
+    );
+    this.#credentialRead = true;
+    return this.#credentialCandidate;
+  }
+
+  async getInstallation(): Promise<InstallationRecord | null> {
+    if (!this.#installationLoaded) {
+      this.#installation = await readInstallation(
+        this.session,
+        this.installationId
+      );
+      this.#installationLoaded = true;
+    }
+    return this.#installation?.record ?? null;
+  }
+
+  async getLatestGrantedConsentReceipt(
+    documentRevision: string
+  ): Promise<ConsentReceiptRecord | null> {
+    if (!this.#consentReceipts.has(documentRevision)) {
+      const row = await firstRow(this.session, LATEST_GRANTED_CONSENT_SELECT, [
+        this.installationId,
+        documentRevision
+      ]);
+      this.#consentReceipts.set(
+        documentRevision,
+        row === null ? null : parseConsentReceipt(row)
+      );
+    }
+    return this.#consentReceipts.get(documentRevision) ?? null;
+  }
+
+  async pause(at: string): Promise<void> {
+    assertCanonicalInstant(at);
+    if (
+      this.#pauseAt !== null ||
+      this.#resumeInput !== null
+    ) {
+      fail("INPUT_INVALID");
+    }
+    this.#pauseAt = at;
+  }
+
+  async resume(input: {
+    readonly consentReceipt: ConsentReceiptRecord;
+    readonly at: string;
+  }): Promise<void> {
+    const receipt = input.consentReceipt;
+    assertCanonicalInstant(input.at);
+    if (
+      this.#resumeInput !== null ||
+      this.#pauseAt !== null ||
+      receipt.installationId !== this.installationId ||
+      receipt.purpose !== "contribution" ||
+      receipt.granted !== true ||
+      receipt.recordedAt !== input.at
+    ) {
+      fail("INPUT_INVALID");
+    }
+    this.#resumeInput = Object.freeze({
+      consentReceipt: Object.freeze({ ...receipt }),
+      at: input.at
+    });
+  }
+
+  async commit(): Promise<void> {
+    if (!this.#installationLoaded) {
+      this.#installation = await readInstallation(
+        this.session,
+        this.installationId
+      );
+      this.#installationLoaded = true;
+    }
+    const candidate = this.#credentialCandidate;
+    if (
+      !this.#credentialRead ||
+      candidate === null ||
+      candidate.installationId !== this.installationId ||
+      !credentialsEqual(
+        candidate.credential,
+        this.#installation?.record.uploadCredential ?? null
+      )
+    ) {
+      fail("STALE_PREFLIGHT");
+    }
+
+    const statements: D1MutationPreparedStatementLike[] = [
+      guardHeader(
+        this.db,
+        this.requestId,
+        LIFECYCLE_GUARD_OPERATION,
+        this.guardExpiresAt
+      ),
+      installationGuard(
+        this.db,
+        this.requestId,
+        this.installationId,
+        this.#installation
+      )
+    ];
+    if (this.#pauseAt !== null) {
+      if (this.#installation?.record.status !== "active") {
+        fail("STALE_PREFLIGHT");
+      }
+      statements.push(
+        this.db
+          .prepare(PAUSE_INSTALLATION_UPDATE)
+          .bind(this.installationId, this.#pauseAt)
+      );
+    }
+    if (this.#resumeInput !== null) {
+      if (
+        this.#installation === null ||
+        (this.#installation.record.status !== "active" &&
+          this.#installation.record.status !== "paused")
+      ) {
+        fail("STALE_PREFLIGHT");
+      }
+      const receipt = this.#resumeInput.consentReceipt;
+      statements.push(
+        this.db.prepare(RESUME_INSTALLATION_UPDATE).bind(
+          this.installationId,
+          receipt.documentRevision
+        ),
+        this.db.prepare(CONSENT_INSERT).bind(
+          receipt.eventId,
+          receipt.installationId,
+          receipt.documentRevision,
+          receipt.acknowledgedAt,
+          receipt.recordedAt,
+          ACTIVE_CONSENT_EXPIRES_AT
+        )
+      );
+    }
+    statements.push(guardCleanup(this.db, this.requestId));
+    await commitBatch(this.db, statements);
   }
 }
 
@@ -1676,6 +2012,83 @@ class CloudD1MutationStorage implements D1MutationStorage {
     ]);
   }
 
+  async findRecoverableEnrollment(
+    recoveryPublicTokenId: string
+  ): Promise<RecoverableEnrollmentRecord | null> {
+    if (!/^[A-Za-z0-9_-]{24}$/u.test(recoveryPublicTokenId)) return null;
+    const rows = await allRows(
+      this.#primarySession(),
+      RECOVERABLE_ENROLLMENT_SELECT,
+      [recoveryPublicTokenId]
+    );
+    if (rows.length > 1) fail("SERVICE_UNAVAILABLE");
+    const row = rows[0];
+    return row === undefined ? null : parseRecoverableEnrollment(row);
+  }
+
+  async createRecoverableEnrollmentAtomically(input: {
+    readonly installation: InstallationRecord;
+    readonly consentReceipt: ConsentReceiptRecord;
+    readonly recoveryCredential: StoredCredential;
+  }): Promise<void> {
+    const installation = input.installation;
+    const receipt = input.consentReceipt;
+    const recovery = input.recoveryCredential;
+    if (
+      installation.status !== "active" ||
+      installation.uploadCredential === null ||
+      installation.deletionCredential === null ||
+      receipt.installationId !== installation.installationId ||
+      receipt.documentRevision !== installation.consentDocumentRevision ||
+      recovery.scope !== "enrollment-recovery" ||
+      !/^[A-Za-z0-9_-]{24}$/u.test(recovery.publicTokenId)
+    ) {
+      fail("INPUT_INVALID");
+    }
+    const requestId = this.#nextRequestId();
+    await commitBatch(this.db, [
+      guardHeader(this.db, requestId, "enrollment", this.#guardExpiry()),
+      installationGuard(
+        this.db,
+        requestId,
+        installation.installationId,
+        null
+      ),
+      this.db.prepare(ENROLLMENT_INSTALL).bind(
+        installation.installationId,
+        installation.uploadCredential.publicTokenId,
+        decodeCredentialDigest(installation.uploadCredential.hmacDigest),
+        installation.uploadCredential.hmacKeyId,
+        installation.deletionCredential.publicTokenId,
+        decodeCredentialDigest(installation.deletionCredential.hmacDigest),
+        installation.deletionCredential.hmacKeyId,
+        installation.status,
+        installation.consentDocumentRevision,
+        installation.createdAt,
+        installation.pausedAt,
+        installation.deletingAt,
+        installation.deletedAt
+      ),
+      this.db.prepare(CONSENT_INSERT).bind(
+        receipt.eventId,
+        receipt.installationId,
+        receipt.documentRevision,
+        receipt.acknowledgedAt,
+        receipt.recordedAt,
+        ACTIVE_CONSENT_EXPIRES_AT
+      ),
+      this.db.prepare(RECOVERABLE_ENROLLMENT_INSERT).bind(
+        recovery.publicTokenId,
+        decodeCredentialDigest(recovery.hmacDigest),
+        recovery.hmacKeyId,
+        installation.installationId,
+        receipt.eventId,
+        installation.createdAt
+      ),
+      guardCleanup(this.db, requestId)
+    ]);
+  }
+
   async findCredentialCandidate(
     scope: CredentialScope,
     publicTokenId: string
@@ -1741,6 +2154,25 @@ class CloudD1MutationStorage implements D1MutationStorage {
       installationId,
       at,
       this.#retentionDays,
+      this.#nextRequestId(),
+      this.#guardExpiry()
+    );
+    const result = await operation(recorder);
+    await recorder.commit();
+    return result;
+  }
+
+  async withLifecycleTransaction<T>(
+    installationId: string,
+    operation: (transaction: LifecycleTransactionPort) => Promise<T>
+  ): Promise<T> {
+    const at = canonicalNow(this.#now);
+    const session = this.#primarySession();
+    const recorder = new LifecycleRecorder(
+      this.db,
+      session,
+      installationId,
+      at,
       this.#nextRequestId(),
       this.#guardExpiry()
     );
@@ -1880,6 +2312,16 @@ class CloudD1MutationStorage implements D1MutationStorage {
         installationId,
         installation
       ),
+      // A backup must not revive an abandoned optimistic-guard snapshot.
+      // Those rows can retain token HMACs, deletion-job verifiers, and other
+      // installation-attributable metadata. Exclude this batch's live guard.
+      this.db
+        .prepare(DELETE_RESTORED_MUTATION_GUARDS)
+        .bind(installationId, requestId),
+      // A restored pre-completion job contains live status/replay verifiers.
+      // It is not a deletion receipt in this isolated recovery path and must
+      // disappear atomically with all other attributable restored state.
+      this.db.prepare(DELETE_RESTORED_DELETION_JOBS).bind(installationId),
       ...this.#purgeStatements(
         installationId,
         at,

@@ -28,6 +28,20 @@ describe("canonical server serialization", () => {
     expect(second).toBe(first);
   });
 
+  it("canonically hashes the V2 sidecar envelope and binds rows to version 2", async () => {
+    const snapshot = testSnapshot({ kind: "tokentracker-sidecar" });
+    const parsed = parseStrictIngestSnapshot(snapshot);
+    const canonicalRow = canonicalSerializeServerRow(
+      auth(),
+      parsed.collector,
+      parsed.buckets[0]
+    );
+
+    expect(await hashIngestBatch(snapshot)).toMatch(/^[0-9a-f]{64}$/);
+    expect(canonicalRow).toContain('"schemaVersion":"2"');
+    expect(canonicalRow).toContain('"kind":"tokentracker-sidecar"');
+  });
+
   it("supports an injected canonical hasher without exposing client identity", async () => {
     const seen: string[] = [];
     const hash = await hashIngestBatch(testSnapshot(), (canonical) => {

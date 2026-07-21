@@ -1,0 +1,175 @@
+import { readFile } from "node:fs/promises";
+
+import { describe, expect, it } from "vitest";
+
+import {
+  computeAssetReleaseManifestV2Sha256,
+  getApprovedAssetManifest,
+  getApprovedAssetPackConfiguration,
+} from "../src/index.js";
+import {
+  resolveApprovedAssetAuthority,
+  resolveApprovedAssetPackAuthority,
+} from "../src/approved-authority.js";
+
+function approvedAvatarRelease(): unknown {
+  const hash = "a".repeat(64);
+  return {
+    schemaVersion: "2",
+    releaseId: "approved-authority-test",
+    approvedAt: "2026-07-18T12:00:00.000Z",
+    provenance: {
+      integrityManifestSha256: "b".repeat(64),
+      buildProvenanceSha256: "c".repeat(64),
+      pipeline: {
+        repositoryId: "tokenmonster",
+        revision: "d".repeat(40),
+        scriptPath: "scripts/asset-pipeline/build-manifest.mjs",
+      },
+    },
+    assets: [
+      {
+        assetId: "asset:chatgpt:avatar",
+        association: { kind: "avatar", characterId: "chatgpt" },
+        source: {
+          inventoryId: "approved-authority-test",
+          inventoryRevision: "e".repeat(64),
+          path: "fixtures/avatar.png",
+          sha256: "f".repeat(64),
+        },
+        output: {
+          path: `objects/${hash}.png`,
+          bytes: 12,
+          sha256: hash,
+          media: { mediaType: "image/png", width: 32, height: 32 },
+        },
+        generationHistory: {
+          tool: { name: "fixture-renderer", version: "1.0.0" },
+          sourceMediaType: "image/png",
+          resize: { width: 32, height: 32, algorithm: "nearest" },
+          encoding: { mediaType: "image/png", quality: null },
+          metadataStripped: true,
+        },
+        rights: {
+          licenseStatus: "approved",
+          grantReferenceId: "grant-approved-authority-test",
+          scopes: {
+            publicUse: true,
+            commercialUse: true,
+            modify: true,
+            redistribute: true,
+          },
+        },
+        review: {
+          brandStatus: "approved",
+          brandReviewReferenceId: "brand-approved-authority-test",
+          contentStatus: "approved",
+          contentReviewReferenceId: "content-approved-authority-test",
+          contentRating: "general",
+          disclosureId: "tokenmonster-unaffiliated-v1",
+        },
+        presentation: {
+          altText: {
+            "zh-TW": "測試角色頭像",
+            en: "Test character avatar",
+          },
+          allowedTransforms: ["scale-down"],
+        },
+        releaseStatus: "approved",
+      },
+    ],
+  };
+}
+
+describe("approved asset manifest", () => {
+  it("fails closed to letter-only until a schema-v2 rights release exists", () => {
+    expect(getApprovedAssetManifest()).toBeNull();
+    expect(getApprovedAssetPackConfiguration()).toBeNull();
+  });
+
+  it("emits the one null v2 authority slot beside the compiled getter", async () => {
+    await expect(
+      readFile(
+        new URL("../dist/approved-release-v2.json", import.meta.url),
+        "utf8",
+      ).then((contents) => JSON.parse(contents) as unknown),
+    ).resolves.toBeNull();
+  });
+
+  it("rejects null, legacy v1, and malformed v2 authority input", () => {
+    expect(resolveApprovedAssetAuthority(null)).toBeNull();
+    expect(
+      resolveApprovedAssetAuthority({
+        schemaVersion: "1",
+        generatedAt: "2026-07-18T12:00:00.000Z",
+        characters: [],
+        voice: [],
+      }),
+    ).toBeNull();
+    expect(
+      resolveApprovedAssetAuthority({ schemaVersion: "2", assets: [] }),
+    ).toBeNull();
+  });
+
+  it("projects a strictly approved v2 authority into runtime cache metadata", () => {
+    expect(resolveApprovedAssetAuthority(approvedAvatarRelease())).toEqual({
+      schemaVersion: "1",
+      generatedAt: "2026-07-18T12:00:00.000Z",
+      characters: [
+        {
+          characterId: "chatgpt",
+          avatar: {
+            path: `objects/${"a".repeat(64)}.png`,
+            bytes: 12,
+            sha256: "a".repeat(64),
+            width: 32,
+            height: 32,
+          },
+          themes: [],
+        },
+      ],
+      voice: [],
+    });
+  });
+
+  it("requires descriptor, exact HTTPS allowlist, and manifest hash binding together", () => {
+    const release = approvedAvatarRelease();
+    const releaseId = "approved-authority-test";
+    const packHash = "9".repeat(64);
+    const path = `/tokenmonster/characters/v1/packs/${releaseId}/${packHash}.zip`;
+    const descriptor = {
+      schemaVersion: "1",
+      releaseId,
+      releaseManifestSha256: computeAssetReleaseManifestV2Sha256(release),
+      pack: {
+        path,
+        mediaType: "application/zip",
+        bytes: 100,
+        sha256: packHash,
+        entryCount: 1,
+        extractedBytes: 12,
+      },
+    };
+    const allowlist = {
+      schemaVersion: "1",
+      origin: "https://assets.example.test",
+      path,
+    };
+
+    expect(
+      resolveApprovedAssetPackAuthority(release, descriptor, allowlist),
+    ).toMatchObject({ descriptor, allowlist });
+    expect(
+      resolveApprovedAssetPackAuthority(release, {
+        ...descriptor,
+        releaseManifestSha256: "0".repeat(64),
+      }, allowlist),
+    ).toBeNull();
+    expect(
+      resolveApprovedAssetPackAuthority(release, descriptor, {
+        ...allowlist,
+        path: `${path}?character=glm`,
+      }),
+    ).toBeNull();
+  });
+});

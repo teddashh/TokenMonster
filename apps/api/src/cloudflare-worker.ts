@@ -10,13 +10,21 @@ import {
 } from "@tokenmonster/api-cloudflare";
 import {
   enrollContributor,
+  enrollContributorRecoverably,
+  getContributorDeletionStatus,
   ingestSnapshot,
+  pauseContribution,
   requestContributorDeletion,
+  resumeContribution,
   type DeleteCommand,
+  type DeletionStatusCommand,
   type EnrollmentCommand,
   type IngestCommand,
+  type PauseCommand,
   type RateLimitPort,
   type RateLimitRoute,
+  type RecoverableEnrollmentCommand,
+  type ResumeCommand,
   type SuppressionLedgerPort
 } from "@tokenmonster/api-domain";
 import {
@@ -25,6 +33,7 @@ import {
   type D1DatabaseLike,
   type D1MutationDatabaseLike
 } from "@tokenmonster/cloud-d1";
+import { PERMANENT_SIDECAR_COLLECTOR_IDENTITY_V2 } from "@tokenmonster/contracts";
 
 import {
   createTokenMonsterApi,
@@ -253,9 +262,9 @@ function createRateKeyBoundary(
       return deriver.deriveEnrollmentEdgeKey(edgeInput);
     }
     const bearer = bearerFromRequest(request);
-    return scope === "ingest"
-      ? deriver.deriveIngestTokenKey(bearer)
-      : deriver.deriveDeletionTokenKey(bearer);
+    return scope === "delete"
+      ? deriver.deriveDeletionTokenKey(bearer)
+      : deriver.deriveIngestTokenKey(bearer);
   };
 }
 
@@ -267,8 +276,12 @@ async function mutationDependencies(
   TokenMonsterApiDependencies,
   | "deriveRateLimitKey"
   | "enrollContributor"
+  | "enrollContributorRecoverably"
+  | "getContributorDeletionStatus"
   | "ingestSnapshot"
+  | "pauseContribution"
   | "requestContributorDeletion"
+  | "resumeContribution"
 > | null> {
   if (parsed.mutationConfig === null || !validRuntimePorts(runtimePorts)) {
     return null;
@@ -290,7 +303,8 @@ async function mutationDependencies(
           kind: "tokscale",
           adapterVersion: "0.1.0",
           sourceVersion: "4.5.2"
-        }
+        },
+        PERMANENT_SIDECAR_COLLECTOR_IDENTITY_V2
       ]
     });
     const clock = Object.freeze(new CloudflareClock());
@@ -308,12 +322,43 @@ async function mutationDependencies(
           rateLimit: runtimePorts.rateLimit,
           storage
         }),
+      enrollContributorRecoverably: (command: RecoverableEnrollmentCommand) =>
+        enrollContributorRecoverably(command, {
+          clock,
+          ids,
+          credentials,
+          policy,
+          rateLimit: runtimePorts.rateLimit,
+          storage
+        }),
       ingestSnapshot: (command: IngestCommand) =>
         ingestSnapshot(command, {
           clock,
           credentials,
           policy,
           rateLimit: runtimePorts.rateLimit,
+          storage
+        }),
+      pauseContribution: (command: PauseCommand) =>
+        pauseContribution(command, {
+          clock,
+          credentials,
+          rateLimit: runtimePorts.rateLimit,
+          storage
+        }),
+      resumeContribution: (command: ResumeCommand) =>
+        resumeContribution(command, {
+          clock,
+          ids,
+          credentials,
+          policy,
+          rateLimit: runtimePorts.rateLimit,
+          storage
+        }),
+      getContributorDeletionStatus: (command: DeletionStatusCommand) =>
+        getContributorDeletionStatus(command, {
+          clock,
+          credentials,
           storage
         }),
       requestContributorDeletion: (command: DeleteCommand) =>

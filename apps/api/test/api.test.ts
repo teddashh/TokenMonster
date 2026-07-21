@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { IngestSnapshotV1Schema } from "@tokenmonster/contracts";
+import {
+  IngestSnapshotV1Schema,
+  IngestSnapshotV2Schema,
+  PERMANENT_SIDECAR_COLLECTOR_IDENTITY_V2
+} from "@tokenmonster/contracts";
 
 import {
   createTokenMonsterApi,
@@ -51,6 +55,10 @@ describe("public API envelope", () => {
     const text = await response.text();
 
     expect(response.status).toBe(200);
+    expect(text).toContain('"acceptedSnapshotSchemaVersions":["1","2"]');
+    expect(text).toContain('"kind":"tokentracker-sidecar"');
+    expect(text).toContain('"adapterVersion":"0.1.0"');
+    expect(text).toContain('"sourceVersion":"0.80.0"');
     expect(text).toContain('"sourceVersion":"4.5.2"');
     expect(text).toContain('"kind":"tokentracker-bridge"');
     expect(text).not.toContain('"kind":"tokentracker-cli"');
@@ -97,8 +105,11 @@ describe("consent document", () => {
     expect(body.retention.disclosure).toContain("20");
     expect(body.retention.disclosure).toContain("無法再個別抽出或刪除");
     expect(body.controls.defaultEnabled).toBe(false);
+    expect(IngestSnapshotV2Schema.parse(body.schemaExample).collector).toEqual(
+      PERMANENT_SIDECAR_COLLECTOR_IDENTITY_V2
+    );
     expect(IngestSnapshotV1Schema.safeParse(body.schemaExample).success).toBe(
-      true
+      false
     );
   });
 

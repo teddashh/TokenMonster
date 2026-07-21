@@ -7,7 +7,7 @@ import {
   DailyContentBlindFootprintV1Schema,
   DailyDimensionAggregateV1Schema,
   LocalHourlyRhythmV1Schema,
-  MonsterTokenCountsV1Schema
+  MonsterTokenCountsV1Schema,
 } from "../src/index.js";
 import { aggregate, counts, makeFootprint } from "./fixtures.js";
 
@@ -16,8 +16,8 @@ describe("content-blind footprint contract", () => {
     const fixtures = JSON.parse(
       readFileSync(
         new URL("fixtures/collector-dimensions-v1.json", import.meta.url),
-        "utf8"
-      )
+        "utf8",
+      ),
     ) as unknown[];
 
     for (const fixture of fixtures) {
@@ -25,8 +25,8 @@ describe("content-blind footprint contract", () => {
         DailyDimensionAggregateV1Schema.safeParse({
           ...(fixture as Record<string, unknown>),
           valueQuality: "exact",
-          cacheReadAvailability: "observed"
-        }).success
+          cacheReadAvailability: "observed",
+        }).success,
       ).toBe(true);
     }
   });
@@ -51,7 +51,7 @@ describe("content-blind footprint contract", () => {
       ["xai", "grok", "grok-build"],
       ["xai", "xai-other", "grok-build"],
       ["openrouter", "openrouter-other", "other"],
-      ["other", "other", "other"]
+      ["other", "other", "other"],
     ] as const;
 
     for (const [provider, modelFamily, tool] of collectorDimensions) {
@@ -60,9 +60,9 @@ describe("content-blind footprint contract", () => {
           ...aggregate(),
           provider,
           modelFamily,
-          tool
+          tool,
         }).success,
-        `${provider}/${modelFamily}/${tool}`
+        `${provider}/${modelFamily}/${tool}`,
       ).toBe(true);
     }
   });
@@ -71,15 +71,15 @@ describe("content-blind footprint contract", () => {
     expect(
       DailyDimensionAggregateV1Schema.safeParse({
         ...aggregate(),
-        modelFamily: "gpt-5.9-private-preview-2026-07-15"
-      }).success
+        modelFamily: "gpt-5.9-private-preview-2026-07-15",
+      }).success,
     ).toBe(false);
     expect(
       DailyDimensionAggregateV1Schema.safeParse({
         ...aggregate(),
         provider: "anthropic",
-        modelFamily: "openai-codex"
-      }).success
+        modelFamily: "openai-codex",
+      }).success,
     ).toBe(false);
   });
 
@@ -116,21 +116,21 @@ describe("content-blind footprint contract", () => {
       expect(
         MonsterTokenCountsV1Schema.safeParse({
           ...counts(0),
-          input: value
-        }).success
+          input: value,
+        }).success,
       ).toBe(false);
-    }
+    },
   );
 
   it("rejects an inconsistent total and reasoning greater than output", () => {
     expect(
       MonsterTokenCountsV1Schema.safeParse({
         ...counts(10, 5),
-        total: "16"
-      }).success
+        total: "16",
+      }).success,
     ).toBe(false);
     expect(
-      MonsterTokenCountsV1Schema.safeParse(counts(10, 5, 0, 0, 6)).success
+      MonsterTokenCountsV1Schema.safeParse(counts(10, 5, 0, 0, 6)).success,
     ).toBe(false);
   });
 
@@ -139,39 +139,65 @@ describe("content-blind footprint contract", () => {
       DailyDimensionAggregateV1Schema.safeParse({
         ...aggregate(),
         cacheReadAvailability: "unavailable",
-        tokens: counts(10, 0, 1)
-      }).success
+        tokens: counts(10, 0, 1),
+      }).success,
     ).toBe(false);
     expect(
       DailyDimensionAggregateV1Schema.safeParse({
         ...aggregate(),
         cacheReadAvailability: "observed",
-        tokens: counts(10, 0, 1)
-      }).success
+        tokens: counts(10, 0, 1),
+      }).success,
     ).toBe(true);
   });
 
   it("keeps local hourly rhythm out of the strict daily-only type", () => {
     const local = makeFootprint({
       hourlyObservedDays: 7,
-      hourlyTokens: (hour) => (hour === 23 ? 100 : 0)
+      hourlyTokens: (hour) => (hour === 23 ? 100 : 0),
     });
     expect(ContentBlindFootprintV1Schema.safeParse(local).success).toBe(true);
     expect(DailyContentBlindFootprintV1Schema.safeParse(local).success).toBe(
-      false
+      false,
     );
 
-    const { localHourlyRhythm: _localOnly, ...dailyOnly } = local;
-    expect(DailyContentBlindFootprintV1Schema.safeParse(dailyOnly).success).toBe(
-      true
+    const {
+      localHourlyRhythm: _localOnly,
+      latestDayCompleteness: _completionAuthority,
+      ...dailyOnly
+    } = local;
+    expect(
+      DailyContentBlindFootprintV1Schema.safeParse(dailyOnly).success,
+    ).toBe(true);
+  });
+
+  it("requires an engine-only day-completeness authority", () => {
+    const footprint = makeFootprint();
+    const { latestDayCompleteness: _missing, ...withoutAuthority } = footprint;
+    expect(
+      ContentBlindFootprintV1Schema.safeParse(withoutAuthority).success,
+    ).toBe(false);
+    expect(
+      ContentBlindFootprintV1Schema.safeParse({
+        ...footprint,
+        latestDayCompleteness: "guessed",
+      }).success,
+    ).toBe(false);
+
+    const { latestDayCompleteness: _engineOnly, ...daily } = footprint;
+    expect(DailyContentBlindFootprintV1Schema.safeParse(daily).success).toBe(
+      true,
     );
+    expect(
+      DailyContentBlindFootprintV1Schema.safeParse(footprint).success,
+    ).toBe(false);
   });
 
   it("requires explicit wall-clock and DST quality on hourly rhythm", () => {
     const rhythm = makeFootprint({ hourlyObservedDays: 7 }).localHourlyRhythm!;
     const { timeQuality: _timeQuality, ...missingQuality } = rhythm;
     expect(LocalHourlyRhythmV1Schema.safeParse(missingQuality).success).toBe(
-      false
+      false,
     );
   });
 
@@ -181,29 +207,31 @@ describe("content-blind footprint contract", () => {
       footprint.window.timezone = timezone;
       expect(
         ContentBlindFootprintV1Schema.safeParse(footprint).success,
-        timezone
+        timezone,
       ).toBe(true);
     }
 
     const invented = makeFootprint({
       hourlyObservedDays: 7,
-      hourlyTokens: (hour) => (hour >= 22 || hour < 6 ? 100 : 0)
+      hourlyTokens: (hour) => (hour >= 22 || hour < 6 ? 100 : 0),
     });
     invented.window.timezone = "Mars/Olympus";
     expect(ContentBlindFootprintV1Schema.safeParse(invented).success).toBe(
-      false
+      false,
     );
   });
 
   it("requires exactly 28 canonical contiguous days", () => {
     const missing = makeFootprint();
     missing.days.pop();
-    expect(ContentBlindFootprintV1Schema.safeParse(missing).success).toBe(false);
+    expect(ContentBlindFootprintV1Schema.safeParse(missing).success).toBe(
+      false,
+    );
 
     const unordered = makeFootprint();
     unordered.days[1]!.localDate = unordered.days[0]!.localDate;
     expect(ContentBlindFootprintV1Schema.safeParse(unordered).success).toBe(
-      false
+      false,
     );
   });
 
@@ -212,8 +240,8 @@ describe("content-blind footprint contract", () => {
     expect(
       ContentBlindFootprintV1Schema.safeParse({
         ...footprint,
-        characterId: "placeholder"
-      }).success
+        characterId: "placeholder",
+      }).success,
     ).toBe(false);
   });
 });

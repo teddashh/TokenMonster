@@ -1,3 +1,7 @@
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -13,6 +17,20 @@ import {
 
 const NOW = "2026-07-15T18:30:00.000Z";
 let store: LocalStore | null = null;
+
+function deferred<T>(): Readonly<{
+  promise: Promise<T>;
+  resolve(value: T): void;
+  reject(reason: unknown): void;
+}> {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return Object.freeze({ promise, resolve, reject });
+}
 
 afterEach(() => {
   store?.close();
@@ -230,6 +248,81 @@ describe("companion collector IPC service", () => {
     ).resolves.toMatchObject({ kind: "error", errorCode: "invalid-output" });
   });
 
+  it("quiesces an accepted scan without running late success callbacks", async () => {
+    const execution = deferred<LocalDailyScanResult>();
+    const dispose = vi.fn();
+    const recordCompleteScan = vi.fn();
+    const onApplied = vi.fn();
+    const onFailure = vi.fn();
+    const scanDaily = vi.fn(() => execution.promise);
+    const service = createCompanionCollectorService({
+      execution: { scanDaily },
+      clock: () => new Date(NOW),
+      recordCompleteScan,
+      onApplied,
+      onFailure,
+      dispose,
+    });
+
+    const scan = service.scan({ client: "codex", day: "today" });
+    expect(scanDaily).toHaveBeenCalledOnce();
+    let quiesced = false;
+    const quiescence = service.quiesce().then(() => {
+      quiesced = true;
+    });
+    await Promise.resolve();
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(quiesced).toBe(false);
+    await expect(
+      service.scan({ client: "claude", day: "today" }),
+    ).resolves.toMatchObject({
+      kind: "error",
+      errorCode: "local-service-error",
+    });
+    expect(scanDaily).toHaveBeenCalledOnce();
+
+    execution.resolve(appliedResult("codex", "2026-07-15"));
+    await expect(scan).resolves.toMatchObject({
+      kind: "error",
+      errorCode: "local-service-error",
+    });
+    await quiescence;
+    expect(quiesced).toBe(true);
+    expect(recordCompleteScan).not.toHaveBeenCalled();
+    expect(onApplied).not.toHaveBeenCalled();
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("quiesces a rejected scan without rewriting stopped authority", async () => {
+    const execution = deferred<LocalDailyScanResult>();
+    const dispose = vi.fn();
+    const onFailure = vi.fn();
+    const service = createCompanionCollectorService({
+      execution: { scanDaily: () => execution.promise },
+      clock: () => new Date(NOW),
+      onApplied: () => undefined,
+      onFailure,
+      dispose,
+    });
+
+    const scan = service.scan({ client: "codex", day: "today" });
+    let quiesced = false;
+    const quiescence = service.quiesce().then(() => {
+      quiesced = true;
+    });
+    await Promise.resolve();
+    expect(quiesced).toBe(false);
+
+    execution.reject(new CollectorCoreError("COLLECTOR_FAILED"));
+    await expect(scan).resolves.toMatchObject({
+      kind: "error",
+      errorCode: "local-service-error",
+    });
+    await quiescence;
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
   it("sets one exact tokscale authority and stops it on disposal", async () => {
     store = await openLocalStore({ path: ":memory:" });
     const service = createTokscaleCollectorService({
@@ -246,6 +339,30 @@ describe("companion collector IPC service", () => {
       state: "running",
     });
     service.dispose();
+    expect(store.getCollectorAuthority()).toMatchObject({ state: "stopped" });
+  });
+
+  it("does not let a late directory failure rewrite stopped authority", async () => {
+    store = await openLocalStore({ path: ":memory:" });
+    const service = createTokscaleCollectorService({
+      store,
+      configDir: join(
+        tmpdir(),
+        `tokenmonster-guaranteed-missing-${randomUUID()}`,
+        "config",
+      ),
+      clock: () => new Date(NOW),
+      onApplied: () => undefined,
+    });
+
+    const scan = service.scan({ client: "codex", day: "today" });
+    service.dispose();
+    expect(store.getCollectorAuthority()).toMatchObject({ state: "stopped" });
+    await expect(scan).resolves.toMatchObject({
+      kind: "error",
+      errorCode: "local-service-error",
+    });
+    await service.quiesce();
     expect(store.getCollectorAuthority()).toMatchObject({ state: "stopped" });
   });
 

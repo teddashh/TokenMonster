@@ -7,15 +7,16 @@ import {
 } from "node:sqlite";
 
 import {
-  CollectorIdentityV1Schema,
   DailyAggregateBucketV1Schema,
-  IngestSnapshotV1Schema,
-  type CollectorIdentityV1,
-  type IngestSnapshotV1,
+  SupportedCollectorIdentitySchema,
+  SupportedIngestSnapshotSchema,
+  type SupportedCollectorIdentity,
+  type SupportedIngestSnapshot,
   type ProviderKindV1,
   type TokenCountsV1,
 } from "@tokenmonster/contracts";
 import {
+  MONSTER_ENGINE_VERSION_V1,
   MonsterCharacterIdV1Schema,
   MonsterStateV1Schema,
 } from "@tokenmonster/monster-engine";
@@ -89,6 +90,16 @@ type SqlRow = Record<string, unknown>;
 
 const DAY_MS = 86_400_000;
 const COMPLETE_SCAN_RETENTION_DAYS = 35;
+const REPLACEABLE_MONSTER_ENGINE_VERSION_LIST = [
+  "0.1.0",
+  "0.1.1",
+  "0.1.2",
+  "0.1.3",
+  "0.1.4",
+] as const;
+const REPLACEABLE_MONSTER_ENGINE_VERSIONS = new Set<string>(
+  REPLACEABLE_MONSTER_ENGINE_VERSION_LIST,
+);
 const LOCAL_USAGE_INSIGHT_PROVIDERS = [
   "anthropic",
   "google",
@@ -465,7 +476,7 @@ function rowToCloudMirror(row: SqlRow): StoredCloudMirrorRow {
         total: tokenString(row, "total_tokens"),
       },
     });
-    const collector = CollectorIdentityV1Schema.parse({
+    const collector = SupportedCollectorIdentitySchema.parse({
       kind: requiredString(row, "collector_kind"),
       adapterVersion: requiredString(row, "adapter_version"),
       sourceVersion: requiredString(row, "source_version"),
@@ -498,7 +509,7 @@ function rowToCloudMirror(row: SqlRow): StoredCloudMirrorRow {
 function sameCloudMirrorValue(
   existing: StoredCloudMirrorRow,
   bucket: StoredCloudMirrorRow["bucket"],
-  collector: CollectorIdentityV1,
+  collector: SupportedCollectorIdentity,
 ): boolean {
   return (
     existing.bucket.valueQuality === bucket.valueQuality &&
@@ -509,7 +520,7 @@ function sameCloudMirrorValue(
 
 function cloudMirrorBindings(
   bucket: StoredCloudMirrorRow["bucket"],
-  collector: CollectorIdentityV1,
+  collector: SupportedCollectorIdentity,
   receipt: StoredCloudMirrorRow["receipt"],
   updatedAt: string,
 ): readonly (string | bigint)[] {
@@ -537,8 +548,8 @@ function cloudMirrorBindings(
 }
 
 function sameCollector(
-  left: CollectorIdentityV1,
-  right: CollectorIdentityV1,
+  left: SupportedCollectorIdentity,
+  right: SupportedCollectorIdentity,
 ): boolean {
   return (
     left.kind === right.kind &&
@@ -712,6 +723,17 @@ function verifyDatabaseIntegrity(database: DatabaseSync): void {
       "Local SQLite failed its integrity check.",
     );
   }
+}
+
+function removeReplaceableMonsterSnapshots(database: DatabaseSync): void {
+  const placeholders = REPLACEABLE_MONSTER_ENGINE_VERSION_LIST.map(
+    () => "?",
+  ).join(", ");
+  database
+    .prepare(
+      `DELETE FROM monster_state WHERE engine_version IN (${placeholders})`,
+    )
+    .run(...REPLACEABLE_MONSTER_ENGINE_VERSION_LIST);
 }
 
 export class LocalStore {
@@ -1428,12 +1450,22 @@ export class LocalStore {
     }
     const row = this.#database
       .prepare(
-        `SELECT state_json, as_of_revision, updated_at
+        `SELECT engine_version, state_json, as_of_revision, updated_at
          FROM monster_state WHERE character_id = ?`,
       )
       .get(character.data) as SqlRow | undefined;
     if (row === undefined) return null;
     try {
+      const engineVersion = requiredString(row, "engine_version");
+      if (REPLACEABLE_MONSTER_ENGINE_VERSIONS.has(engineVersion)) {
+        return null;
+      }
+      if (engineVersion !== MONSTER_ENGINE_VERSION_V1) {
+        return contentFreeFailure(
+          "CORRUPT_STORAGE",
+          "Monster state has an unsupported engine version.",
+        );
+      }
       const state = MonsterStateV1Schema.parse(
         parseJson(requiredString(row, "state_json")),
       );
@@ -1514,7 +1546,7 @@ export class LocalStore {
     return Object.freeze(
       rows.map((row) => {
         try {
-          const snapshot = IngestSnapshotV1Schema.parse(
+          const snapshot = SupportedIngestSnapshotSchema.parse(
             parseJson(requiredString(row, "payload_json")),
           );
           const lastError = row["last_error_code"];
@@ -1595,9 +1627,9 @@ export class LocalStore {
       .prepare("SELECT payload_json FROM cloud_outbox WHERE batch_id = ?")
       .get(batchId) as SqlRow | undefined;
     if (queued === undefined) return false;
-    let snapshot: IngestSnapshotV1;
+    let snapshot: SupportedIngestSnapshot;
     try {
-      snapshot = IngestSnapshotV1Schema.parse(
+      snapshot = SupportedIngestSnapshotSchema.parse(
         parseJson(requiredString(queued, "payload_json")),
       );
     } catch {
@@ -1836,6 +1868,7 @@ export async function openLocalStore(
     }
     assertExpectedTables(database, LOCAL_STORE_SCHEMA_VERSION);
     verifyDatabaseIntegrity(database);
+    removeReplaceableMonsterSnapshots(database);
     return new LocalStore(
       database,
       storage,

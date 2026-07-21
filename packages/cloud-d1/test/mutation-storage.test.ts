@@ -16,9 +16,12 @@ import {
   ApiDomainError,
   completeContributorDeletion,
   enrollContributor,
+  enrollContributorRecoverably,
   getContributorDeletionStatus,
   ingestSnapshot,
-  requestContributorDeletion
+  pauseContribution,
+  requestContributorDeletion,
+  resumeContribution
 } from "@tokenmonster/api-domain";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -31,6 +34,7 @@ import {
 import { SqliteD1Database } from "./sqlite-d1.js";
 
 const NOW = "2026-07-15T18:30:00.000Z";
+const RESTORED_GUARD_EXPIRES_AT = "2026-08-14T18:30:00.000Z";
 const RATE_KEY = "rate_key_AAAAAAAA";
 const DELETE_KEY = "delete_request_AAAAAAAA";
 
@@ -72,6 +76,32 @@ class DeterministicCredentials implements CredentialService {
     return this.#make(scope, `publictoken${String(this.#index).padStart(6, "0")}`, this.#index);
   }
 
+  async acceptPresentedV2(
+    scope: "upload" | "deletion" | "enrollment-recovery",
+    bearerToken: string
+  ): Promise<StoredCredential> {
+    const letter = scope === "upload" ? "u" : scope === "deletion" ? "d" : "r";
+    const match = new RegExp(
+      `^tm_${letter}2_([A-Za-z0-9_-]{24})\\.([A-Za-z0-9_-]{42}[AEIMQUYcgkosw048])$`,
+      "u"
+    ).exec(bearerToken);
+    if (match?.[1] === undefined || match[2] === undefined) {
+      throw new Error("invalid V2 credential");
+    }
+    const seed = [...`${scope}:${match[2]}`].reduce(
+      (total, character) => (total + character.charCodeAt(0)) % 251,
+      1
+    );
+    const stored: StoredCredential = Object.freeze({
+      scope,
+      publicTokenId: match[1],
+      hmacDigest: base64Url(seed),
+      hmacKeyId: "pepper-v2"
+    });
+    this.#byBearer.set(bearerToken, stored);
+    return stored;
+  }
+
   async issueDeletionStatus(jobId: string): Promise<IssuedCredential> {
     const existing = this.#statusByJob.get(jobId);
     if (existing !== undefined) return existing;
@@ -85,7 +115,9 @@ class DeterministicCredentials implements CredentialService {
   }
 
   async inspect(bearerToken: string): Promise<PresentedCredential | null> {
-    const match = /^tm_[uds]1_([A-Za-z0-9_-]{16,32})\./u.exec(bearerToken);
+    const match = /^tm_(?:[uds]1|[udr]2)_([A-Za-z0-9_-]{16,32})\./u.exec(
+      bearerToken
+    );
     return match?.[1] === undefined
       ? null
       : Object.freeze({ publicTokenId: match[1] });
@@ -132,14 +164,18 @@ class TestPolicy implements ContributionPolicy {
   readonly currentConsentDocumentRevision = "contribution-2026-07-15";
 
   isCollectorSupported(collector: {
-    readonly kind: "tokscale" | "tokentracker-bridge";
+    readonly kind:
+      | "tokscale"
+      | "tokentracker-bridge"
+      | "tokentracker-sidecar";
     readonly adapterVersion: string;
     readonly sourceVersion: string;
   }): boolean {
     return (
-      collector.kind === "tokscale" &&
       collector.adapterVersion === "0.1.0" &&
-      collector.sourceVersion === "4.5.2"
+      ((collector.kind === "tokscale" && collector.sourceVersion === "4.5.2") ||
+        (collector.kind === "tokentracker-sidecar" &&
+          collector.sourceVersion === "0.80.0"))
     );
   }
 }
@@ -174,6 +210,25 @@ function enrollmentBody(): unknown {
   };
 }
 
+const RECOVERABLE_CREDENTIALS = Object.freeze({
+  uploadToken: `tm_u2_${"u".repeat(24)}.${"U".repeat(43)}`,
+  deletionToken: `tm_d2_${"d".repeat(24)}.${"D".repeat(42)}E`,
+  recoveryToken: `tm_r2_${"r".repeat(24)}.${"R".repeat(42)}I`
+});
+
+function recoverableEnrollmentBody(): unknown {
+  return {
+    contractVersion: 2,
+    credentials: RECOVERABLE_CREDENTIALS,
+    consent: {
+      purpose: "contribution",
+      documentRevision: "contribution-2026-07-15",
+      granted: true,
+      acknowledgedAt: NOW
+    }
+  };
+}
+
 function bucketStart(daysAgo: number): string {
   const start = Date.parse("2026-07-15T00:00:00.000Z");
   return new Date(start - daysAgo * 86_400_000).toISOString();
@@ -184,6 +239,7 @@ function snapshot(input: {
   readonly revision?: number;
   readonly total?: string;
   readonly bucketCount?: number;
+  readonly sidecar?: boolean;
 } = {}): unknown {
   const total = input.total ?? "2500";
   const buckets = Array.from({ length: input.bucketCount ?? 1 }, (_, index) => ({
@@ -204,13 +260,13 @@ function snapshot(input: {
     }
   }));
   return {
-    schemaVersion: "1",
+    schemaVersion: input.sidecar === true ? "2" : "1",
     batchId: input.batchId ?? "6b0b8cb1-cd48-47ef-b676-c5a71d02a74b",
     generatedAt: "2026-07-15T18:22:04.000Z",
     collector: {
-      kind: "tokscale",
+      kind: input.sidecar === true ? "tokentracker-sidecar" : "tokscale",
       adapterVersion: "0.1.0",
-      sourceVersion: "4.5.2"
+      sourceVersion: input.sidecar === true ? "0.80.0" : "4.5.2"
     },
     buckets
   };
@@ -231,12 +287,14 @@ type Setup = Readonly<{
 
 const openDatabases: SqliteD1Database[] = [];
 
-async function setup(): Promise<Setup> {
+async function setup(
+  options: Readonly<{ storageNow?: () => Date }> = {}
+): Promise<Setup> {
   const db = new SqliteD1Database();
   openDatabases.push(db);
   let guardIndex = 0;
   const storage = createD1MutationStorage(db, {
-    now: () => new Date(NOW),
+    now: options.storageNow ?? (() => new Date(NOW)),
     createRequestId: () => {
       guardIndex += 1;
       return `guard_request_${String(guardIndex).padStart(8, "0")}`;
@@ -274,6 +332,60 @@ function ingestDependencies(context: Setup) {
     rateLimit: context.rateLimit,
     storage: context.storage
   };
+}
+
+function lifecycleDependencies(context: Setup) {
+  return {
+    clock: context.clock,
+    ids: context.ids,
+    credentials: context.credentials,
+    policy: context.policy,
+    rateLimit: context.rateLimit,
+    storage: context.storage
+  };
+}
+
+function resumeBody(): unknown {
+  return {
+    contractVersion: 1,
+    consent: {
+      purpose: "contribution",
+      documentRevision: "contribution-2026-07-15",
+      granted: true,
+      acknowledgedAt: "2026-07-15T18:25:00.000Z"
+    }
+  };
+}
+
+function seedRestoredDeletionGuard(
+  context: Setup,
+  installationId: string
+): void {
+  const requestId = "restored-delete-guard-0001";
+  context.db.database
+    .prepare(
+      `INSERT INTO mutation_guards (request_id, operation, expires_at)
+       VALUES (?, 'complete-delete', ?)`
+    )
+    .run(requestId, RESTORED_GUARD_EXPIRES_AT);
+  context.db.database
+    .prepare(
+      `INSERT INTO mutation_guard_deletions (
+        request_id, installation_id, idempotency_key, expected_exists,
+        expected_job_id, expected_state, expected_status_token_id,
+        expected_status_token_hmac, expected_status_hmac_key_id,
+        expected_replay_token_id, expected_replay_token_hmac,
+        expected_replay_hmac_key_id,
+        expected_anonymous_historical_totals_retained,
+        expected_requested_at, expected_finished_at, expected_expires_at
+      ) SELECT ?, installation_id, idempotency_key, 1, job_id, state,
+        status_token_id, status_token_hmac, status_hmac_key_id,
+        replay_token_id, replay_token_hmac, replay_hmac_key_id,
+        anonymous_historical_totals_retained, requested_at, finished_at,
+        expires_at
+      FROM deletion_jobs WHERE installation_id = ?`
+    )
+    .run(requestId, installationId);
 }
 
 function ingestCommand(token: string, body: unknown) {
@@ -339,6 +451,123 @@ describe("production-shaped D1 mutation storage", () => {
     expect(context.db.primarySessionCount).toBeGreaterThan(0);
   });
 
+  it("atomically creates and exactly replays a verifier-only recoverable enrollment", async () => {
+    const context = await setup();
+    const command = {
+      body: recoverableEnrollmentBody(),
+      rateLimitKey: RATE_KEY
+    };
+    const dependencies = {
+      clock: context.clock,
+      ids: context.ids,
+      credentials: context.credentials,
+      policy: context.policy,
+      rateLimit: context.rateLimit,
+      storage: context.storage
+    };
+    const first = await enrollContributorRecoverably(command, dependencies);
+    const replay = await enrollContributorRecoverably(command, dependencies);
+
+    expect(replay).toEqual(first);
+    expect(
+      context.db.database.prepare(
+        "SELECT COUNT(*) AS count FROM recoverable_enrollments"
+      ).get()
+    ).toEqual({ count: 1 });
+    const recovered = await context.storage.findRecoverableEnrollment(
+      "r".repeat(24)
+    );
+    expect(recovered).toMatchObject({
+      installation: { status: "active" },
+      recoveryCredential: {
+        scope: "enrollment-recovery",
+        publicTokenId: "r".repeat(24)
+      }
+    });
+    const persisted = JSON.stringify(
+      context.db.database.prepare(
+        `SELECT recovery_token_id, hex(recovery_token_hmac) AS recovery_hmac,
+          recovery_hmac_key_id, installation_id, consent_event_id
+         FROM recoverable_enrollments`
+      ).all()
+    );
+    for (const bearer of Object.values(RECOVERABLE_CREDENTIALS)) {
+      expect(persisted).not.toContain(bearer);
+      expect(persisted).not.toContain(bearer.split(".")[1]);
+    }
+    const boundStrings = context.db.boundValues
+      .flat()
+      .filter((value): value is string => typeof value === "string");
+    expect(JSON.stringify(boundStrings)).not.toContain("tm_u2_");
+    expect(JSON.stringify(boundStrings)).not.toContain("tm_d2_");
+    expect(JSON.stringify(boundStrings)).not.toContain("tm_r2_");
+  });
+
+  it("makes concurrent exact recoverable enrollment requests converge", async () => {
+    const context = await setup();
+    const command = {
+      body: recoverableEnrollmentBody(),
+      rateLimitKey: RATE_KEY
+    };
+    const dependencies = {
+      clock: context.clock,
+      ids: context.ids,
+      credentials: context.credentials,
+      policy: context.policy,
+      rateLimit: context.rateLimit,
+      storage: context.storage
+    };
+    const [first, second] = await Promise.all([
+      enrollContributorRecoverably(command, dependencies),
+      enrollContributorRecoverably(command, dependencies)
+    ]);
+    expect(second).toEqual(first);
+    expect(
+      context.db.database.prepare(
+        "SELECT COUNT(*) AS count FROM recoverable_enrollments"
+      ).get()
+    ).toEqual({ count: 1 });
+  });
+
+  it("cascades the enrollment-recovery verifier during contributor deletion", async () => {
+    const context = await setup();
+    await enrollContributorRecoverably(
+      { body: recoverableEnrollmentBody(), rateLimitKey: RATE_KEY },
+      {
+        clock: context.clock,
+        ids: context.ids,
+        credentials: context.credentials,
+        policy: context.policy,
+        rateLimit: context.rateLimit,
+        storage: context.storage
+      }
+    );
+    const accepted = await requestContributorDeletion(
+      {
+        bearerToken: RECOVERABLE_CREDENTIALS.deletionToken,
+        idempotencyKey: "recoverable_delete_0001",
+        rateLimitKey: RATE_KEY
+      },
+      {
+        clock: context.clock,
+        ids: context.ids,
+        credentials: context.credentials,
+        rateLimit: context.rateLimit,
+        storage: context.storage,
+        suppressionLedger: context.suppressionLedger
+      }
+    );
+    await completeContributorDeletion(
+      { jobId: accepted.jobId },
+      { clock: context.clock, storage: context.storage }
+    );
+    expect(
+      context.db.database.prepare(
+        "SELECT COUNT(*) AS count FROM recoverable_enrollments"
+      ).get()
+    ).toEqual({ count: 0 });
+  });
+
   it("rolls enrollment back when a later consent insert collides", async () => {
     const context = await setup();
     const upload = await context.credentials.issue("upload");
@@ -380,6 +609,148 @@ describe("production-shaped D1 mutation storage", () => {
     ).toEqual({ count: 0 });
   });
 
+  it("atomically pauses, blocks ingest, resumes with consent, and replays both controls", async () => {
+    const context = await setup();
+    const dependencies = lifecycleDependencies(context);
+    const pauseCommand = {
+      bearerToken: context.uploadToken,
+      rateLimitKey: RATE_KEY
+    };
+    const firstPause = await pauseContribution(pauseCommand, dependencies);
+    const replayedPause = await pauseContribution(pauseCommand, dependencies);
+    expect(replayedPause).toEqual(firstPause);
+    expect(
+      context.db.database.prepare(
+        "SELECT status, paused_at AS pausedAt FROM installations"
+      ).get()
+    ).toEqual({ status: "paused", pausedAt: NOW });
+    await expectDomainCode(
+      ingestSnapshot(
+        ingestCommand(context.uploadToken, snapshot()),
+        ingestDependencies(context)
+      ),
+      "INSTALLATION_PAUSED"
+    );
+
+    const resumeCommand = {
+      bearerToken: context.uploadToken,
+      body: resumeBody(),
+      rateLimitKey: RATE_KEY
+    };
+    const firstResume = await resumeContribution(resumeCommand, dependencies);
+    const replayedResume = await resumeContribution(resumeCommand, dependencies);
+    expect(replayedResume).toEqual(firstResume);
+    expect(
+      context.db.database.prepare(
+        "SELECT status, paused_at AS pausedAt FROM installations"
+      ).get()
+    ).toEqual({ status: "active", pausedAt: null });
+    expect(
+      context.db.database.prepare(
+        "SELECT COUNT(*) AS count FROM consent_receipts"
+      ).get()
+    ).toEqual({ count: 2 });
+    expect(
+      context.db.database.prepare(
+        "SELECT COUNT(*) AS count FROM mutation_guards"
+      ).get()
+    ).toEqual({ count: 0 });
+  });
+
+  it("accepts domain lifecycle timestamps independent of the storage guard clock", async () => {
+    const context = await setup({
+      storageNow: () => new Date("2026-07-15T18:30:00.137Z")
+    });
+    const dependencies = lifecycleDependencies(context);
+
+    const paused = await pauseContribution(
+      { bearerToken: context.uploadToken, rateLimitKey: RATE_KEY },
+      dependencies
+    );
+    expect(paused.pausedAt).toBe(NOW);
+
+    const resumed = await resumeContribution(
+      {
+        bearerToken: context.uploadToken,
+        body: resumeBody(),
+        rateLimitKey: RATE_KEY
+      },
+      dependencies
+    );
+    expect(resumed.resumedAt).toBe(NOW);
+    expect(
+      context.db.database.prepare(
+        "SELECT status, paused_at AS pausedAt FROM installations"
+      ).get()
+    ).toEqual({ status: "active", pausedAt: null });
+    expect(
+      context.db.database.prepare(
+        `SELECT recorded_at AS recordedAt
+         FROM consent_receipts
+         ORDER BY recorded_at DESC, event_id DESC
+         LIMIT 1`
+      ).get()
+    ).toEqual({ recordedAt: NOW });
+  });
+
+  it("rolls back resume status when the immutable consent insert fails", async () => {
+    const context = await setup();
+    const dependencies = lifecycleDependencies(context);
+    await pauseContribution(
+      { bearerToken: context.uploadToken, rateLimitKey: RATE_KEY },
+      dependencies
+    );
+    context.db.database.prepare(`INSERT INTO consent_receipts (
+      event_id, installation_id, purpose, document_revision, granted,
+      occurred_at, recorded_at, expires_at
+    ) SELECT ?, installation_id, 'contribution', ?, 1, ?, ?, ?
+      FROM installations`).run(
+      `cr_${String(3).padStart(22, "A")}`,
+      "contribution-2026-07-15",
+      "2026-07-15T18:24:00.000Z",
+      NOW,
+      "2099-12-31T23:59:59.999Z"
+    );
+
+    await expectDomainCode(
+      resumeContribution(
+        {
+          bearerToken: context.uploadToken,
+          body: resumeBody(),
+          rateLimitKey: RATE_KEY
+        },
+        dependencies
+      ),
+      "SERVICE_UNAVAILABLE"
+    );
+    expect(
+      context.db.database.prepare(
+        "SELECT status, paused_at AS pausedAt FROM installations"
+      ).get()
+    ).toEqual({ status: "paused", pausedAt: NOW });
+  });
+
+  it("lets one concurrent pause win and rejects the stale lifecycle preflight", async () => {
+    const context = await setup();
+    const dependencies = lifecycleDependencies(context);
+    const command = {
+      bearerToken: context.uploadToken,
+      rateLimitKey: RATE_KEY
+    };
+    context.db.beforeNextBatch = async () => {
+      await pauseContribution(command, dependencies);
+    };
+    await expectDomainCode(
+      pauseContribution(command, dependencies),
+      "SERVICE_UNAVAILABLE"
+    );
+    expect(
+      context.db.database.prepare(
+        "SELECT status, paused_at AS pausedAt FROM installations"
+      ).get()
+    ).toEqual({ status: "paused", pausedAt: NOW });
+  });
+
   it("accepts 30 rows in one atomic batch and leaves no guard residue", async () => {
     const context = await setup();
     const body = snapshot({ bucketCount: 30 });
@@ -393,6 +764,44 @@ describe("production-shaped D1 mutation storage", () => {
     ).toEqual({ count: 30 });
     expect(
       context.db.database.prepare("SELECT COUNT(*) AS count FROM mutation_guards").get()
+    ).toEqual({ count: 0 });
+  });
+
+  it("durably applies and reads the V2 permanent-sidecar authority", async () => {
+    const context = await setup();
+    const body = snapshot({ sidecar: true });
+    const first = await ingestSnapshot(
+      ingestCommand(context.uploadToken, body),
+      ingestDependencies(context)
+    );
+    const replay = await ingestSnapshot(
+      ingestCommand(context.uploadToken, body),
+      ingestDependencies(context)
+    );
+
+    expect(first.summary.appliedBuckets).toBe(1);
+    expect(replay).toEqual({ ...first, replayed: true });
+    expect(
+      context.db.database.prepare(
+        `SELECT collector_kind AS kind, adapter_version AS adapterVersion,
+          source_version AS sourceVersion
+         FROM collector_window_bindings`
+      ).get()
+    ).toEqual({
+      kind: "tokentracker-sidecar",
+      adapterVersion: "0.1.0",
+      sourceVersion: "0.80.0"
+    });
+    expect(
+      context.db.database.prepare(
+        `SELECT collector_kind AS kind, total_tokens AS total
+         FROM usage_daily_current`
+      ).get()
+    ).toEqual({ kind: "tokentracker-sidecar", total: 2500 });
+    expect(
+      context.db.database.prepare(
+        "SELECT COUNT(*) AS count FROM mutation_guards"
+      ).get()
     ).toEqual({ count: 0 });
   });
 
@@ -751,6 +1160,117 @@ describe("production-shaped D1 mutation storage", () => {
     await expect(context.storage.listQueuedDeletionJobIds(100)).resolves.toEqual(
       []
     );
+  });
+
+  it.each(["queued", "running"] as const)(
+    "removes a restored unexpired %s deletion job in the guarded purge batch",
+    async (state) => {
+      const context = await setup();
+      const accepted = await requestContributorDeletion(
+        {
+          bearerToken: context.deletionToken,
+          idempotencyKey: DELETE_KEY,
+          rateLimitKey: RATE_KEY
+        },
+        {
+          clock: context.clock,
+          ids: context.ids,
+          credentials: context.credentials,
+          rateLimit: context.rateLimit,
+          storage: context.storage,
+          suppressionLedger: context.suppressionLedger
+        }
+      );
+      if (state === "running") {
+        context.db.database
+          .prepare(
+            "UPDATE deletion_jobs SET state = 'running', started_at = ? WHERE job_id = ?"
+          )
+          .run(NOW, accepted.jobId);
+      }
+      const installationId = (
+        context.db.database
+          .prepare(
+            "SELECT installation_id AS installationId FROM installations"
+          )
+          .get() as { installationId: string }
+      ).installationId;
+      seedRestoredDeletionGuard(context, installationId);
+
+      await expect(
+        context.storage.purgeRestoredInstallation(installationId, NOW)
+      ).resolves.toBe(true);
+      expect(
+        context.db.database.prepare("SELECT count(*) AS count FROM deletion_jobs").get()
+      ).toEqual({ count: 0 });
+      expect(
+        context.db.database.prepare("SELECT count(*) AS count FROM mutation_guards").get()
+      ).toEqual({ count: 0 });
+      expect(
+        context.db.database
+          .prepare("SELECT count(*) AS count FROM mutation_guard_deletions")
+          .get()
+      ).toEqual({ count: 0 });
+      expect(
+        context.db.database.prepare(
+          `SELECT status, upload_token_id AS uploadId,
+            deletion_token_id AS deletionId FROM installations`
+        ).get()
+      ).toEqual({ status: "deleted", uploadId: null, deletionId: null });
+    }
+  );
+
+  it("rolls the restored purge back if deletion-job credential removal fails", async () => {
+    const context = await setup();
+    await requestContributorDeletion(
+      {
+        bearerToken: context.deletionToken,
+        idempotencyKey: DELETE_KEY,
+        rateLimitKey: RATE_KEY
+      },
+      {
+        clock: context.clock,
+        ids: context.ids,
+        credentials: context.credentials,
+        rateLimit: context.rateLimit,
+        storage: context.storage,
+        suppressionLedger: context.suppressionLedger
+      }
+    );
+    const installationId = (
+      context.db.database
+        .prepare("SELECT installation_id AS installationId FROM installations")
+        .get() as { installationId: string }
+    ).installationId;
+    seedRestoredDeletionGuard(context, installationId);
+    context.db.database.exec(`CREATE TRIGGER fail_restored_job_removal
+      BEFORE DELETE ON deletion_jobs
+      BEGIN
+        SELECT RAISE(ABORT, 'forced restored job removal failure');
+      END`);
+
+    await expect(
+      context.storage.purgeRestoredInstallation(installationId, NOW)
+    ).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+    expect(
+      context.db.database.prepare("SELECT status FROM installations").get()
+    ).toEqual({ status: "deleting" });
+    expect(
+      context.db.database.prepare(
+        "SELECT state, count(*) AS count FROM deletion_jobs"
+      ).get()
+    ).toEqual({ state: "queued", count: 1 });
+    expect(
+      context.db.database.prepare("SELECT count(*) AS count FROM consent_receipts").get()
+    ).toEqual({ count: 1 });
+    expect(
+      context.db.database.prepare("SELECT count(*) AS count FROM mutation_guards").get()
+    ).toEqual({ count: 1 });
+    expect(
+      context.db.database
+        .prepare("SELECT count(*) AS count FROM mutation_guard_deletions")
+        .get()
+    ).toEqual({ count: 1 });
   });
 
   it("enforces the queued deletion page bound before querying D1", async () => {

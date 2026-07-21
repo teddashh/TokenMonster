@@ -36,6 +36,7 @@ interface DailyScanExecutionPort {
 export interface CompanionCollectorService {
   scan(input: unknown): Promise<CollectorScanResponse>;
   dispose(): void;
+  quiesce(): Promise<void>;
 }
 
 interface CompanionCollectorServiceDependencies {
@@ -196,114 +197,137 @@ export function createCompanionCollectorService(
   dependencies: CompanionCollectorServiceDependencies,
 ): CompanionCollectorService {
   let disposed = false;
+  const activeScans = new Set<Promise<CollectorScanResponse>>();
+  let quiescence: Promise<void> | null = null;
+
+  const stoppedResponse = (
+    request: CollectorScanRequest,
+  ): CollectorScanResponse =>
+    Object.freeze({
+      kind: "error",
+      client: request.client,
+      day: request.day,
+      errorCode: "local-service-error",
+    });
+
+  const runScan = async (
+    request: CollectorScanRequest,
+  ): Promise<CollectorScanResponse> => {
+    if (dependencies.unavailableErrorCode !== undefined) {
+      return Object.freeze({
+        kind: "error",
+        client: request.client,
+        day: request.day,
+        errorCode: dependencies.unavailableErrorCode,
+      });
+    }
+    let at: Date;
+    try {
+      const candidate = dependencies.clock();
+      if (
+        !(candidate instanceof Date) ||
+        !Number.isFinite(candidate.getTime())
+      ) {
+        throw new Error("CLOCK_INVALID");
+      }
+      at = new Date(candidate.getTime());
+    } catch {
+      return stoppedResponse(request);
+    }
+    const utcDate = scanUtcDate(request.day, at);
+    try {
+      const rawResult = await dependencies.execution.scanDaily(
+        { client: request.client, utcDate },
+        at,
+      );
+      if (disposed) return stoppedResponse(request);
+      const result = sanitizeResult(rawResult, request, utcDate);
+      if (result === null) {
+        try {
+          dependencies.onFailure?.("invalid-output");
+        } catch {
+          // Health degradation must not reflect a local storage exception.
+        }
+        return Object.freeze({
+          kind: "error",
+          client: request.client,
+          day: request.day,
+          errorCode: "invalid-output",
+        });
+      }
+      try {
+        dependencies.recordCompleteScan?.({
+          utcDate,
+          client: request.client,
+        });
+      } catch {
+        try {
+          dependencies.onFailure?.("storage-error");
+        } catch {
+          // The fixed storage error remains authoritative.
+        }
+        return Object.freeze({
+          kind: "error",
+          client: request.client,
+          day: request.day,
+          errorCode: "storage-error",
+        });
+      }
+      try {
+        dependencies.onApplied(at.toISOString());
+      } catch {
+        // The local aggregate is already committed; a RAM-only UI timestamp
+        // must not turn a successful absolute scan into a false failure.
+      }
+      return result;
+    } catch (error: unknown) {
+      if (disposed) return stoppedResponse(request);
+      const errorCode = mappedErrorCode(error);
+      try {
+        dependencies.onFailure?.(errorCode);
+      } catch {
+        // The fixed scan error remains authoritative.
+      }
+      return Object.freeze({
+        kind: "error",
+        client: request.client,
+        day: request.day,
+        errorCode,
+      });
+    }
+  };
+
+  const dispose = (): void => {
+    if (disposed) return;
+    disposed = true;
+    try {
+      dependencies.dispose?.();
+    } catch {
+      // Shutdown deliberately exposes no local paths or runtime exception.
+    }
+  };
+
   return Object.freeze({
     async scan(input: unknown): Promise<CollectorScanResponse> {
       const request = strictScanRequest(input);
-      if (disposed) {
-        return Object.freeze({
-          kind: "error",
-          client: request.client,
-          day: request.day,
-          errorCode: "local-service-error",
-        });
-      }
-      if (dependencies.unavailableErrorCode !== undefined) {
-        return Object.freeze({
-          kind: "error",
-          client: request.client,
-          day: request.day,
-          errorCode: dependencies.unavailableErrorCode,
-        });
-      }
-      let at: Date;
+      if (disposed) return stoppedResponse(request);
+      const operation = runScan(request);
+      activeScans.add(operation);
       try {
-        const candidate = dependencies.clock();
-        if (
-          !(candidate instanceof Date) ||
-          !Number.isFinite(candidate.getTime())
-        ) {
-          throw new Error("CLOCK_INVALID");
-        }
-        at = new Date(candidate.getTime());
-      } catch {
-        return Object.freeze({
-          kind: "error",
-          client: request.client,
-          day: request.day,
-          errorCode: "local-service-error",
-        });
-      }
-      const utcDate = scanUtcDate(request.day, at);
-      try {
-        const result = sanitizeResult(
-          await dependencies.execution.scanDaily(
-            { client: request.client, utcDate },
-            at,
-          ),
-          request,
-          utcDate,
-        );
-        if (result === null) {
-          try {
-            dependencies.onFailure?.("invalid-output");
-          } catch {
-            // Health degradation must not reflect a local storage exception.
-          }
-          return Object.freeze({
-            kind: "error",
-            client: request.client,
-            day: request.day,
-            errorCode: "invalid-output",
-          });
-        }
-        try {
-          dependencies.recordCompleteScan?.({
-            utcDate,
-            client: request.client,
-          });
-        } catch {
-          try {
-            dependencies.onFailure?.("storage-error");
-          } catch {
-            // The fixed storage error remains authoritative.
-          }
-          return Object.freeze({
-            kind: "error",
-            client: request.client,
-            day: request.day,
-            errorCode: "storage-error",
-          });
-        }
-        try {
-          dependencies.onApplied(at.toISOString());
-        } catch {
-          // The local aggregate is already committed; a RAM-only UI timestamp
-          // must not turn a successful absolute scan into a false failure.
-        }
-        return result;
-      } catch (error: unknown) {
-        const errorCode = mappedErrorCode(error);
-        try {
-          dependencies.onFailure?.(errorCode);
-        } catch {
-          // The fixed scan error remains authoritative.
-        }
-        return Object.freeze({
-          kind: "error",
-          client: request.client,
-          day: request.day,
-          errorCode,
-        });
+        return await operation;
+      } finally {
+        activeScans.delete(operation);
       }
     },
-    dispose(): void {
-      if (disposed) return;
-      disposed = true;
-      try {
-        dependencies.dispose?.();
-      } catch {
-        // Shutdown deliberately exposes no local paths or runtime exception.
-      }
+    dispose,
+    quiesce(): Promise<void> {
+      dispose();
+      quiescence ??= (async () => {
+        while (activeScans.size > 0) {
+          await Promise.allSettled([...activeScans]);
+        }
+      })();
+      return quiescence;
     },
   });
 }
@@ -365,7 +389,13 @@ function stopTokscaleAuthority(store: LocalStore): void {
 function degradeTokscaleAuthority(store: LocalStore): void {
   try {
     const current = store.getCollectorAuthority();
-    if (!sameTokscaleAuthority(current)) return;
+    if (
+      current === null ||
+      !sameTokscaleAuthority(current) ||
+      current.state !== "running"
+    ) {
+      return;
+    }
     store.setCollectorAuthority({
       ...TOKSCALE_COLLECTOR_IDENTITY,
       state: "degraded",

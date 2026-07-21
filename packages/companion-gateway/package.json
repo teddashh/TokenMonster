@@ -1,0 +1,29 @@
+{
+  "name": "@tokenmonster/companion-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tokenmonster/byok-openai": "0.1.0",
+    "@tokenmonster/characters": "0.1.0",
+    "@tokenmonster/contribution-runtime": "0.1.0",
+    "@tokenmonster/contracts": "0.1.0",
+    "@tokenmonster/monster-engine": "0.1.0",
+    "@tokenmonster/secret-vault": "0.1.0",
+    "@tokenmonster/token-tracker-adapter": "0.1.0"
+  }
+}

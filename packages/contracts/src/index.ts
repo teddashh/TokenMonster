@@ -34,6 +34,40 @@ export type {
 } from "./ingest-v1.js";
 
 export {
+  COLLECTOR_KINDS_V2,
+  INGEST_SNAPSHOT_V2_SCHEMA_VERSION,
+  MAX_INGEST_BUCKETS_V2,
+  PERMANENT_SIDECAR_COLLECTOR_IDENTITY_V2,
+  CollectorIdentityV2Schema,
+  CollectorKindV2Schema,
+  IngestSnapshotV2Schema,
+  deserializeIngestSnapshotV2,
+  parseIngestSnapshotV2,
+  safeParseIngestSnapshotV2,
+  serializeIngestSnapshotV2
+} from "./ingest-v2.js";
+
+export type {
+  CollectorIdentityV2,
+  CollectorKindV2,
+  IngestSnapshotV2
+} from "./ingest-v2.js";
+
+export {
+  ACCEPTED_INGEST_SNAPSHOT_SCHEMA_VERSIONS,
+  SupportedCollectorIdentitySchema,
+  SupportedIngestSnapshotSchema,
+  parseSupportedIngestSnapshot,
+  safeParseSupportedIngestSnapshot
+} from "./ingest.js";
+
+export type {
+  SupportedCollectorIdentity,
+  SupportedCollectorKind,
+  SupportedIngestSnapshot
+} from "./ingest.js";
+
+export {
   CONTRIBUTION_API_CONTRACT_VERSION,
   CONTRIBUTION_CONSENT_PURPOSE,
   DELETION_STATES_V1,
@@ -77,3 +111,18 @@ export type {
   ResumeRequestV1,
   ResumeResponseV1
 } from "./contribution-api-v1.js";
+
+export {
+  CONTRIBUTION_ENROLLMENT_CONTRACT_VERSION_V2,
+  EnrollmentRequestV2Schema,
+  EnrollmentResponseV2Schema,
+  RecoverableEnrollmentCredentialsV2Schema,
+  parseEnrollmentRequestV2,
+  serializeContributionEnrollmentV2
+} from "./contribution-enrollment-v2.js";
+
+export type {
+  EnrollmentRequestV2,
+  EnrollmentResponseV2,
+  RecoverableEnrollmentCredentialsV2
+} from "./contribution-enrollment-v2.js";

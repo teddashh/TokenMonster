@@ -1,10 +1,15 @@
 # TokenMonster 技術規格
 
+> Architecture update (2026-07-15): collector, local store, IPC, and packaging
+> sections that assume Tokscale/Electron are legacy migration notes. The
+> permanent runtime boundary is specified by
+> [ADR 0005](adr/0005-permanent-tokentracker-sidecar-adapter.md).
+
 | 欄位 | 內容 |
 | --- | --- |
 | 文件狀態 | Target architecture + tested source-slice baseline；不是 production evidence |
 | 文件版本 | 0.1.0 |
-| 更新日期 | 2026-07-15 |
+| 更新日期 | 2026-07-16 |
 | 對應產品規格 | `docs/PRODUCT_SPEC.md` |
 | 對應架構決策 | `docs/adr/0001-repository-boundaries.md` |
 | 首要目標 | 以 local-first、content-blind、可刪除、可回復的方式把 TokenMonster 安全上線 |
@@ -13,27 +18,28 @@
 
 本文使用「必須」、「不得」、「應該」、「可以」表示 RFC 2119 等級的要求。除非另有 ADR 取代，本文是 MVP 實作與上線驗收的技術基線。
 
-截至 2026-07-15，local Companion、Tokscale、BYOK/固定互動、monster、Web/API、
+截至 2026-07-17，local Companion、exact-pinned TokenTracker sidecar、11 位角色／進度、
+asset integrity cache／letter fallback、BYOK/固定互動、monster、Web/API、
 匿名 contribution preview/enrollment/background-sync/delete source slice、D1 mutation/
 deletion、`day-all-v1` k=20 compaction、preserving retention、projection與Durable
 Object source slice已有本機測試。Scheduled Worker 已按
 `deletion → compactor → preserving retention → projection` 執行，compactor每次最多
 處理一個完整結束且已到期的UTC日。Cloudflare account／remote D1／domain／secrets、
 remote rehearsal／staging E2E、Companion background packet capture／wake soak、
-signed installer、native smoke、backup/restore與suppression replay、license／法律決策、raster rights及
+signed installer、native smoke、backup/restore與suppression replay、license／法律決策及
 production operations仍未形成上線證據。本文未標成「pending」的 target requirement
 也不代表已部署；current truth以README、Implementation Plan快照與Release Checklist為準。
 
 已裁決的核心決策如下：
 
 1. TokenMonster 是獨立 monorepo；不 wholesale fork TokenTracker、token-monitor、ai-avatar-bot 或 AI-Sister。
-2. collector 預設且唯一的直接來源是精確鎖版 `tokscale@4.5.2`。
-3. `tokentracker-cli@0.79.8` 只作為既有 TokenTracker 使用者的可選 bridge；它與 tokscale 互斥，任何時間只能有一個 authoritative collector。
+2. collector 預設且唯一的直接來源是精確鎖版 `tokentracker-cli@0.80.0` child。
+3. TokenMonster 只透過 fixed loopback aggregate routes 與 strict adapter 取用 TokenTracker；Tokscale／Electron 是 migration-only legacy slice，不得成為第二使用量 authority。
 4. 本地只保存投影後的 daily/hourly aggregates；雲端只接收 UTC daily absolute snapshots，不接收原始事件、session/event count 或內容。
 5. 匿名貢獻預設關閉。沒有同意時，核心 dashboard、角色引擎與固定台詞仍完整在本機運作。
 6. 新建 hosting 的預設是單一 Cloudflare Worker：同一 deploy unit 提供 React/Vite static assets 與 Hono API，D1 作為雲端資料庫。`apps/web` 與 `apps/api` 仍保留邏輯邊界，也可日後分拆。
-7. desktop companion 採 Electron shell，macOS first；React renderer、main-process collector 與 SQLite 分層。
-8. AI-Sister 現有 raster 設計可作為候選角色資產，但目前 rich/full-body 素材與 voice references 不得被描述為已取得正式商用授權。任何公開 bundle 都必須先通過 manifest rights gate。
+7. 支援的 companion 是 CLI 組合的 loopback gateway 與輕量靜態 UI；Electron 是 migration-only legacy slice。
+8. Release 內嵌 10 位角色的 strict schema-v1 integrity manifest，GLM 使用 letter mode。圖像與預錄語音不進入 npm package；正式入口目前只用已驗證 cache。公開下載必須同時通過 schema-v2 rights gate、明確使用者同意與 usage-independent fixed-pack privacy gate；v1 manifest 的歷史名稱不代表 public approval。
 
 ## 2. 上線目標、非目標與硬性守門
 
@@ -60,7 +66,7 @@ production operations仍未形成上線證據。本文未標成「pending」的 
 
 - collector 互斥鎖、absolute report 重掃、retry、out-of-order 與 downward correction 測試全數通過。
 - recursive privacy test 證明 cloud payload、log、diagnostic report 不含禁止欄位。
-- TokenTracker bridge 的 telemetry 與 cloud sync fail-closed；tokscale 子程序只允許經審核的 local report 路徑。
+- Exact-pinned TokenTracker managed child、adapter schema與loopback gateway的compatibility/privacy/lifecycle tests通過；legacy tokscale contribution slice保持停用且不得與sidecar totals相加。
 - pause、hot-data delete 與 backup restore 後 deletion replay 完成實測。
 - Electron 完成 code signing/notarization、CSP、IPC、navigation 與 secure storage review。
 - 所有公開角色 asset 的 `releaseStatus=approved`；否則只能使用另行創作且權利清楚的 TokenMonster 原創 placeholder。
@@ -95,10 +101,13 @@ apps/
   companion/           Electron main/preload/renderer、internal package；signed installer/updater pending
 packages/
   contracts/           wire/local schemas、error codes、forbidden-field guard
-  collector-core/      authority、scheduler、projection、normalization、spool
-  collector-tokscale/  exact tokscale adapter 與 golden fixtures
-  collector-tokentracker-bridge/（target，尚未建立runtime package）
-                       exact TokenTracker bridge、telemetry/cloud-sync guard
+  token-tracker-runtime/ exact pin resolution、managed child lifecycle、local refresh
+  token-tracker-adapter/ strict fixed-route schema validation與content-blind DTO projection
+  companion-gateway/  loopback session、fixed browser API/static routes
+  companion-ui/       strict DTO-only static local UI
+  cli/                唯一支援的one-command runtime composition
+  contribution-runtime/ opt-in preview/outbox/lifecycle與strict sidecar daily projection
+  collector-core/與collector-tokscale/（migration-only contribution slice）
   monster-engine/      pure deterministic rules、explanations、versioning
   characters/          rights-gated manifests、2D layers、fixed-line schemas
   usage-domain/        idempotent absolute-snapshot、authority、retention/compaction rules
@@ -114,11 +123,11 @@ packages/
 
 ### 3.3 Repository 與 fork 策略
 
-- `tokscale@4.5.2` 由 TokenMonster bundle，使用本專案 lockfile，不透過 runtime `npx` 下載。
-- `tokentracker-cli@0.79.8` bridge 只連到使用者明確啟用的 exact-compatible 本機安裝。
-- 若 adapter 無法安全修補 tokscale parser/total semantics，才建立獨立公開 fork `teddashh/tokenmonster-collector`，只帶最小 patch、上游 commit、測試與 notice；不得把 fork 變成 TokenMonster app monorepo。
+- Production exact-pins `tokentracker-cli@0.80.0` as an npm dependency and resolves that installed public bin; runtime never floats to `latest` or downloads an unreviewed version.
+- TokenTracker is the sole collection engine. TokenMonster does not attach to an arbitrary existing server, discover/kill by PID or port, or add a second scanner.
+- TokenMonster never forks, vendors, submodules, deep-imports, or copies TokenTracker parser/hook code and never reads its queue files or provider databases. Legacy tokscale workspaces are migration-only and receive no new product features.
 - `token-monitor` 與 `ai-avatar-bot` 僅供架構參考，不搬入 runtime source。
-- AI-Sister 只 vendoring 經核准的輸出 asset 與必要 persona facts，且每一檔都有 manifest provenance；不 submodule 整個 app。
+- AI-Sister source 與 raw parts 不 vendoring 或 submodule 進 TokenMonster。TokenMonster release 只內嵌通過 schema-v2 gate 的 immutable output manifest 與必要 persona facts；pre-rendered assets 的未來 fixed pack 可由 AI-Sister 管理的 R2／CDN 提供，但目前正式入口不發出 asset GET。
 
 ## 4. Trust boundaries 與資料流
 
@@ -161,7 +170,14 @@ contract guard 必須遞迴拒絕、logger 必須 allowlist，而不是只 redac
 
 ## 5. Collector 架構
 
-### 5.1 Single authoritative collector
+Sections 5.1–5.4 preserve the already-implemented legacy contribution contract
+because `IngestSnapshotV1` still enumerates its historical authority IDs. They
+are migration-only, are not the supported companion collector, and must not
+receive new product features. The permanent runtime is section 5.5 and ADR
+0005. A sidecar-to-contribution mapper requires a new reviewed contract/cutover;
+the legacy enum must never be used to mislabel sidecar data.
+
+### 5.1 Legacy contribution authority (migration-only)
 
 本機 `collector_authority` 只有一筆 active row，且另以 OS-level single-instance lock 防止兩個 companion 同時收集。狀態機如下：
 
@@ -173,12 +189,12 @@ STOPPED -> SWITCH_PREVIEW -> RUNNING
 
 不變量：
 
-- `RUNNING` authority 必須恰好一個，kind 只能是 `tokscale` 或 `tokentracker-bridge`。
+- 在此legacy slice內，`RUNNING` authority 必須恰好一個，kind只能是`tokscale`或`tokentracker-bridge`；兩者都不是目前支援的companion runtime。
 - 任何 dashboard/cloud bucket 只來自 active authority；不得相加兩個 collector 的結果，也不得以「去掉看起來重複的部分」來猜。
 - V1 的 authority 是本機選擇與每個 snapshot 的 `collector.kind`，不是 wire generation。每個 daily key 各有自己的單調 `revision`；server ordering 不使用 wall clock。
 - 本機切換必須先 stop 舊 collector、取得 lock、清除由舊 authority 產生的 local aggregates、掃描新來源並顯示差異 preview。V1 若 contribution 已啟用，不支援保留歷史的 in-place cloud switch；UI 必須先 pause 並走「stop and delete／重新 enrollment」，或維持原 authority。跨 authority server-side full-set replacement 列為 V2 候選。
 
-### 5.2 預設 `tokscale@4.5.2` adapter
+### 5.2 Legacy `tokscale@4.5.2` adapter (migration-only)
 
 必須 bundle 精確版本並在啟動時驗證 package version/integrity。spawn 規則：
 
@@ -193,7 +209,7 @@ STOPPED -> SWITCH_PREVIEW -> RUNNING
 
 已知 v4.5.2 的 Codex normalization 風險必須由 TokenMonster adapter 防守：cached input 已從 non-cache input 拆出，但上游 `TokenBreakdown.total()` 仍可能再次加上已包含於 output 的 reasoning。TokenMonster 不採信該 total；必須按第 6 節公式自行計算，並以 Codex golden fixture 鎖住行為。這是若需建立 dedicated fork 時的第一個 upstream-patch 候選。
 
-### 5.3 可選 `tokentracker-cli@0.79.8` bridge
+### 5.3 Legacy `tokentracker-cli@0.79.8` bridge target (never shipped)
 
 bridge 只供使用者明確選擇，且必須：
 
@@ -208,7 +224,7 @@ bridge 只供使用者明確選擇，且必須：
 
 bridge 的輸出經同一 canonical normalizer，cloud protocol 看不到 upstream 差異。
 
-### 5.4 Fixed aggregate 掃描與本地修正
+### 5.4 Legacy fixed-report correction model
 
 MVP 不要求 tokscale 提供 stable event fingerprint、session watermark 或 raw-event dedupe。安全 adapter 每次重新執行 bounded fixed aggregate report，以完整 absolute row 覆蓋相同 key：
 
@@ -218,6 +234,31 @@ MVP 不要求 tokscale 提供 stable event fingerprint、session watermark 或 r
 - v4.5.2 hourly label 是 local-time `YYYY-MM-DD HH:00`，沒有足夠資訊區分 DST fall-back 的兩個同名小時。adapter 必須記錄 `localTimeQuality="assigned"`、在 UI/trait explanation 揭露可能合併，並以固定 timezone rule 做 deterministic assignment；不得宣稱精確 UTC hour。
 - 若 hourly adapter 尚未完成上述 fixture、DST 與 forbidden-field tests，產品把 hourly rhythm 標為 planned，MVP 仍可用 daily aggregates；不得假裝 daily report 已提供 event/hourly truth。
 - 任何 report 的 raw stdout/stderr 都只在 process memory 完成 parse/projection後立即丟棄，不落盤、不進 IPC/log/diagnostic。
+
+### 5.5 Permanent exact-pinned TokenTracker sidecar
+
+- `packages/cli` is the supported `tokenmonster`/`npx tokenmonster` entry point. It composes and shuts down the exact-pinned runtime, strict adapter, loopback gateway, static UI, and optional browser launch.
+- `packages/token-tracker-runtime` resolves only the tested `tokentracker-cli@0.80.0` public bin, owns child-object lifecycle, and terminates only children it created. No PID/port discovery or arbitrary executable/argv is allowed.
+- `packages/token-tracker-adapter` calls only exact-tested loopback routes, validates strict responses, and projects content-blind TokenMonster DTOs. Raw upstream JSON, model/source extras, paths, credentials, and error text do not cross the boundary.
+- TokenTracker remains the sole local usage authority. TokenMonster does not read its databases/queues, deep-import its implementation, or run a second parser/scanner.
+- Current trustworthy time-series input is UTC daily aggregate data. The 0.80.0 hourly route combines sources, omits provider/source identity, and rounds to whole hours; it cannot support exact 2 h/5 h provider rolling windows and stays unused for that feature until an upstream exact-source sub-hour contract exists.
+- Companion copy uses one typed `zh-TW`/`en` catalog. The selected locale is
+  passed to fixed character interaction and drives all number/date formatting,
+  static text, dynamic state/error copy, ARIA labels, and locally rendered
+  share cards. Server-provided zh-TW tagline/explanation/theme labels are never
+  rendered as English; the UI derives English copy from structured IDs.
+- The fixed loopback `/api/preferences/locale` GET/POST stores only canonical
+  `{schemaVersion, revision, locale}` bytes beside `progressionStorePath`.
+  Session, Host, exact-Origin mutation, method, body/key, and query guards apply.
+  Mutation is serialized under the one user-scoped runtime lease and uses
+  goal-idempotent CAS plus a private atomic rename. POSIX opens use no-follow;
+  all platforms compare lstat and opened-handle identity before reading and
+  after rename. Corrupt or non-private state is preserved and returns a generic
+  unavailable response; no path crosses the browser boundary and no preference
+  reaches TokenMonster cloud. If persistence is unavailable, the exact
+  session-gated `/session/locale/zh-TW` and `/session/locale/en` document routes
+  carry only the tab's content-free override and force every localized/Intl
+  projection to render again. Only the exact optional `?view=pet` query survives.
 
 ## 6. Canonical usage schema 與 normalization
 
@@ -311,7 +352,7 @@ interface IngestSnapshotV1 {
   collector: {
     kind: "tokscale" | "tokentracker-bridge";
     adapterVersion: string; // exact SemVer
-    sourceVersion: string; // exact SemVer: 4.5.2 or 0.79.8 in current release
+    sourceVersion: string; // exact SemVer for the legacy migration contract
   };
   buckets: DailyAggregateBucketV1[]; // 1..30
 }
@@ -410,7 +451,7 @@ Local DB 由 Electron main process 單一 repository owner 開啟。必須啟用
 | `cloud_mirror` | bucket_start + provider + model_family + tool PK、last accepted V1 row/revision/receipt | 產生 absolute correction 與 higher-revision zero row；遺失完整性即停止 contribution |
 | `upload_spool` | batch_id PK、generated_at、payload_json、attempts、next_attempt、state、expires_at | 僅保存 parse-valid V1 body，最多 30 天，停用時依明確選項清除 |
 | `consent_state` | purpose PK、document_revision、granted、changed_at | contribution、product analytics、BYOK/TTS 分開 consent |
-| `cloud_enrollment` | status、upload/delete secret refs、last_receipt_at | 不存/傳 stable enrollment ID；Bearer/deletion secret 在 OS-secret-store adapter，不在 SQLite |
+| `cloud_enrollment` | status、upload/delete secret refs、last_receipt_at | 不存/傳 stable enrollment ID；active 與 complete pending bundle 都只在 OS-secret-store adapter，不在 SQLite |
 | `monster_state` | character_id PK、engine_version、traits_json、mood_json、as_of_revision | 可從 usage 重算 |
 | `monster_events` | event_id PK、rule_version、reason_code、window、before/after/input_summary、expires_at | 可解釋變化；本地 mood history 預設 30 天 |
 | `fixed_line_ledger` | line_id + character_id PK、last_shown、show_count | cooldown 與避免重複 |
@@ -430,6 +471,7 @@ Cloud schema 只存 pseudonymous contribution domain：
 | --- | --- | --- |
 | `installations` | `installation_id PK`、`upload_token_id UNIQUE` | HMAC token verifier、status、consent revision、created/rotated/paused timestamps；無 email/account；刪除後 receipt window 最多 30 天 |
 | `consent_receipts` | `event_id PK` | installation、purpose、immutable document revision、grant/revoke time；identifiable period後刪除/匿名化 |
+| `recoverable_enrollments` | `recovery_token_id PK`、`installation_id UNIQUE` | r2 HMAC verifier/key ID 與 consent FK；沒有 raw u2/d2/r2 secret；installation delete cascade |
 | `collector_window_bindings` | `(installation_id, bucket_start) PK` | collector kind/source version、expires_at；防同一日混用兩個 authority，最多保留 bucket day + 30 天 |
 | `ingest_batches` | `(installation_id, batch_id) UNIQUE` | server payload_hash、status、receipt summary、created_at；7 天後清理 |
 | `usage_daily_current` | `(installation_id, bucket_start, provider, model_family, tool) PK` | disjoint INTEGER ledger、`value_quality`、per-key revision、collector versions、server row_hash、quarantine status；bucket day + 30 天硬上限 |
@@ -476,17 +518,17 @@ quarantine、標記projection dirty。`0002_compaction_audit.sql` triggers封閉
 
 ### 8.4 Credentials
 
-Contributor upload/deletion token 各為獨立 256-bit random secret，格式可為 `<public token id>.<secret>`。D1 只存 public token id 與 `HMAC-SHA-256(serverPepper, secret)`；因 secret 高 entropy，不需在 Worker 執行昂貴 password hash。pepper 只放 Wrangler secret，rotation 要支援雙 key window。
+Contributor upload/deletion token 各為獨立 256-bit random secret，格式可為 `<public token id>.<secret>`。Recoverable enrollment V2 另有只限 exact enrollment replay 的獨立 recovery token；它不是 deletion-status 或帳號復原 authority。D1 只存 public token id 與 scope/version-separated `HMAC-SHA-256(serverPepper, secret)`；因 secret 高 entropy，不需在 Worker 執行昂貴 password hash。pepper 只放 Wrangler secret，rotation 要支援雙 key window。
 
 Upload token 只能 ingest/consent/pause/share；deletion token 只能 rotate/delete/status。token 不得放 URL/query、log、analytics、renderer、crash report 或 cloud backup 明文。
 
-Companion 透過 OS-secret-store adapter 持久化 contribution/deletion secret 與 BYOK key；Electron `safeStorage` ciphertext 存在獨立 app-private secret file，排除 SQLite migration backup、diagnostic 與 export。Linux 若 selected backend 是 `basic_text`，**BYOK 與 contribution/deletion secret 都不得持久化**；沒有可用 Secret Service/KWallet 時只提供 local-only 核心功能，不提供需要背景 credential 的 persistent cloud opt-in。
+Companion 透過 OS-secret-store adapter 持久化 contribution/deletion secret、完整 pending-enrollment bundle 與 BYOK key；Electron `safeStorage` ciphertext 存在獨立 app-private secret file，排除 SQLite migration backup、diagnostic 與 export。Linux 若 selected backend 是 `basic_text`，**BYOK 與全部 contribution secret 都不得持久化**；沒有可用 Secret Service/KWallet 時只提供 local-only 核心功能，不提供需要背景 credential 的 persistent cloud opt-in。
 
 ## 9. HTTP API contracts
 
 ### 9.1 共通規則
 
-- Base URL：`https://api-or-app-domain.example/v1`；production 固定 HTTPS/HSTS。
+- Base origin：`https://api-or-app-domain.example`；version 是固定 route path；production 固定 HTTPS/HSTS。
 - Mutation 使用 `Authorization: Bearer <contribution-or-deletion-token>`；不得用 cookie implicit auth。
 - JSON response 帶 `X-Request-Id`、`X-Contract-Version: 1`；public GET 支援 ETag。
 - Error 使用 RFC 9457 Problem Details 的固定 extension：`code`、`requestId`、可選 `retryAfterSeconds`。不得回顯 credential、payload 或 SQL。
@@ -516,6 +558,16 @@ Request：
 ```
 
 Server 不接受 `granted=false` enrollment。成功 `201` 只顯示一次 upload token、deletion token、consent receipt 與 API compatibility；不回 stable installation/enrollment ID，server 以 credential 內的 random public token id 查找。companion 只有在 OS-backed safeStorage 可用時才能保存。Linux `basic_text` 必須在呼叫 enrollment 前阻擋 persistent opt-in。重建/遺失 deletion token 不提供 email recovery，UI 在 opt-in 前必須說明。Companion/API version compatibility 用 contract/header 處理，不順便收集 platform/app analytics。
+
+V1 route 與 response byte shape 必須原樣保留。新的 trusted native host 使用
+`POST /v2/enrollments`：client 先在一個 OS-backed encrypted slot 原子保存
+u2/d2/r2、deletion idempotency key 與 exact consent，再送出 strict request。
+第一次 create 必須是 current consent、不得超過 10 分鐘 old，且保留 5 分鐘
+future-skew bound；成功 response 不回顯任何 credential 或 installation ID。若 response
+遺失，byte-identical replay 以 r2 找 record，再驗證 u2/d2/r2 三個 verifier 與 exact
+accepted consent；只略過 current-policy 與 freshness，不能略過 credential/consent
+validation。definitive expired/no-record 會清掉 pending bundle，要求新的 preview，不能
+自動產生替代 consent。ambiguous timeout/5xx/429/network failure 保留原 bundle 重試。
 
 #### `PUT /v1/me/consent`
 
@@ -586,7 +638,7 @@ Worker 只把 `generatedAt` 在 server clock 前 10 分鐘內（並容許最多 
 
 #### `POST /v1/me/shares`
 
-只接受 allowlisted descriptor：approved `characterAssetId`、2–3 個 trait IDs、reason codes、使用者選取的 coarse time window、可選 token band/total、locale、theme。不得接受任意 HTML、任意文字、raw model、path、account 或對話內容。預設 expiry 30 天，最多 90 天。
+只接受 allowlisted descriptor：approved `characterAssetId`、最多 3 個有證據的 trait IDs、reason codes、使用者選取的 coarse time window、可選 token band/total、locale、theme。不得接受任意 HTML、任意文字、raw model、path、account 或對話內容。預設 expiry 30 天，最多 90 天。
 
 成功回 128-bit random `shareId`、public URL、expiresAt。分享頁固定顯示 contributor wording、獨立/非官方 disclosure 與 asset attribution。
 
@@ -619,14 +671,14 @@ deriveMonsterState(
 | 尺度 | Window | 用途 | 更新規則 |
 | --- | --- | --- | --- |
 | Pulse | 最近 5 分鐘、只在 RAM | blink/glow/typing idle | 不寫 identity，不上雲 |
-| Mood short | rolling 6 小時 | 活躍、安靜、探索中的短期表情 | 最快 15 分鐘更新，有 hysteresis |
-| Mood day | rolling 24 小時 | 與個人基準比較的節律 | 不以絕對 burn 評價 |
+| Mood short | attested hourly 上游完成後：rolling 6 小時 | 活躍、安靜、探索中的短期表情 | 目前停用；不可拿無來源日桶偽造 |
+| Mood day | 目前：最近完整 UTC 日；未來：rolling 24 小時 | 與個人基準比較的節律 | 今日 partial 桶不參與比較；不以絕對 burn 評價 |
 | Daily | 使用者 IANA local day | 每日 recap、fixed lines、提醒 | DST 用 timezone library，不假設 24 小時 |
-| Identity | trailing 28 天，至少 7 active days | 2–3 個主 traits | 每日最多變更一個主 trait；顯示 provisional |
+| Identity | trailing 28 天，至少 7 active days | 1–3 個有充分證據的主 traits | 每日最多變更一個主 trait；provider 證據不完整時省略該類 trait；顯示 provisional |
 | Development | 7/28 天 rolling | 配件、色彩與姿態偏好 | 水平差異、可回復 |
 | Lifetime | all local history，log/saturating | 背景光暈/里程碑 | 不形成 strength/rank |
 
-Cloud UTC day 只為 aggregate protocol；角色引擎使用本地 IANA timezone。變更 timezone 時保存 transition event，舊 event 不重標 wall-clock day，避免 DST/旅行重複。
+Cloud UTC day 主要服務 aggregate protocol。現行 exact-pin 0.80.0 的 sidecar profile 也只能使用可證明完整的 UTC 日：window 到今天，但 mood 明確以 D-1 對更早可用日比較，缺日不當零；今日 partial 桶只參與 identity aggregate。等 attested hourly/local-time contract 完成後，角色節奏才改用本地 IANA timezone。變更 timezone 時保存 transition event，舊 event 不重標 wall-clock day，避免 DST/旅行重複。
 
 ### 10.3 Trait families
 
@@ -666,13 +718,23 @@ interface MonsterExplanationV1 {
 
 通知預設關閉，只在本地 scheduler 產生。必須支援 quiet hours、OS permission、單日 cap 與一鍵停用。提醒依相對個人 baseline 或使用者自設 budget，不把 estimated token 說成帳單，也不使用羞辱、醫療或成癮診斷文案。
 
+### 10.6 本機 starter-character decision
+
+已實作的 starter policy 是純本機、deterministic 的 presentation decision，不是 monster identity 或 progression rule：
+
+1. Adapter 只對固定 `GET /functions/tokentracker-usage-model-breakdown` 讀取最近 28 個 UTC 日，strict-validate pinned TokenTracker response，並只做 exact source mapping：`codex → openai`、`claude → anthropic`、`gemini → google`、`grok → xai`。其他合法 source 可存在但被忽略；絕不從 model ID 推論 provider，model IDs 與 cost 驗證後丟棄。
+2. `packages/characters` 在沒有 manual choice 時，只選擇四個 provider totals 中唯一、正數且嚴格最高者所對應的預設姊妹。最高值平手、全為零或沒有資料都回明確的 `user-choice-required` outcome；manual choice 永遠勝出。
+3. Provider endpoint timeout、network error 或 incompatible response 在 starter 流程中降級為手動選擇，不得阻擋本機圖表或 placeholder 角色。
+4. Gateway 對 browser 只輸出 allowlisted decision fields（selected／user-choice-required、reason、character ID、selection source，以及需要時的 tied provider family IDs），不輸出 provider totals、upstream source rows、model IDs 或 cost。
+5. 被選中的 sister 可作為本機起始角色解鎖，後續使用者覆寫是 authoritative local choice。進度不得形成 XP、power、rank、rarity 或可購買的優勢。
+
 ## 11. Characters、2D MVP 與互動
 
 ### 11.1 Asset manifest 與 rights gate
 
-`packages/characters/asset-manifest.json` 是唯一 ship allowlist，CI 依 `asset-manifest.schema.json` 驗證。每個 asset 至少需要：source repository + pinned commit/path、SHA-256、bytes/dimensions/media type、generation/edit history、content rating、license status、written grant reference、commercial/public/modify/redistribute scope、brand review、required disclosure、release status、alt text 與允許的 transforms。現有 v1 schema 尚未容納全部 rights 欄位；公開 asset approval 前必須升 manifest schema v2 並完成 migration，不能只在 PR 留口頭說明。
+`packages/characters/src/approved-release-v2.json` 是唯一可內嵌的 public runtime authority slot，目前值為 `null`；`getApprovedAssetManifest()` 對任何非空值先做完整 schema-v2 驗證，再投影成既有 cache-serving runtime shape。`packages/characters/src/approved-manifest.json` 與 `packages/characters/asset-manifest.json` 都只是歷史 schema-v1 integrity／candidate input，並不 ship。每個 public asset 至少需要：source repository + pinned revision/path（不得含本機路徑）、SHA-256、bytes/dimensions/media type、generation/edit history、content rating、license status、written grant reference、commercial/public/modify/redistribute scope、brand review、required disclosure、release status、alt text 與允許的 transforms。Voice 另需 locale、voice/source type、speaker/owner consent 或 synthetic provenance、spoken-content review與 trigger association。Schema-v1 只有 integrity/association 欄位，不可進入 authority slot，也不能只在 PR 留口頭說明或把 v1 rows grandfather。
 
-CI 只複製同時滿足下列條件的檔案到 web/companion bundle：
+AI-Sister publisher 只可把同時滿足下列條件的 pre-rendered 檔案加入 CDN release set，TokenMonster build 只內嵌該 approved manifest，不把 raw parts 複製進 web/companion bundle：
 
 - `licenseStatus=approved` 且存在可稽核的 owner grant；
 - `brandReview` 通過 provider-inspired design/logo review；
@@ -680,7 +742,7 @@ CI 只複製同時滿足下列條件的檔案到 web/companion bundle：
 - checksum 與 source pinned commit 相符；
 - 產品頁顯示 unaffiliated/fan-character disclosure（若 review 要求）。
 
-截至本文件日期，四個候選 WebP portrait 的 manifest 仍為 `pending-owner-grant` / `blocked`。其他 full-body workspace 資產 provenance 不完整；real-speaker reference 或 generated/cloned voices 也未核准。**不得在網站、README、商店頁或 release notes 宣稱這些 rich assets 或 voices 已有正式商用授權。** 若 launch 前未取得書面權利，build 必須 fail 或改用不衍生自該素材、權利完整的 TokenMonster 原創角色；不得把 blocked asset 當「暫時可用」。
+歷史 schema-v1 integrity input 列出 10 位角色、各 20 種衣櫥與 pose art（810 image refs），以及每人五條、共 50 條 prerecorded WAV refs；它不再是 release authority。這 860 筆 v1 associations 缺少上述 normative rights fields，不能進入 `approved-release-v2.json`。在真正 rights-approved v2 authority 產生前，GLM 與其餘角色都使用 code-native letter mode。Real-speaker reference 與 generated/cloned voices 不得未經獨立 consent／rights／content gate 進入 public release；新舊圖像與語音都必須完成 schema-v2 migration。
 
 ### 11.2 2D MVP renderer
 
@@ -692,6 +754,16 @@ CI 只複製同時滿足下列條件的檔案到 web/companion bundle：
 - `prefers-reduced-motion` 時停用位移與閃爍，只換靜態 state；
 - 圖像切換不得拉伸、切掉重要內容或移除 attribution；
 - 不使用 ai-avatar-bot 的 Live2D sample、Haru model、runtime 或 voice sample。
+
+### 11.2.1 AI-Sister asset delivery
+
+- Approved pre-rendered assets 的未來來源是 AI-Sister 管理的 Cloudflare R2／CDN，固定 versioned prefix 為 `tokenmonster/characters/v1`；同一 key 不原地換內容，變更必須產生新的 asset ID／hash／manifest revision。
+- TokenMonster release 內嵌經 rights gate 核准的 strict manifest，至少固定 asset ID、相對 pack entry、media type、bytes、dimensions、SHA-256、release status 與 code-native fallback。Runtime 不接受任意 origin、path 或 server 回傳的臨時 asset URL。
+- 目前 gateway 設定只接受 `cdnBaseUrl: null`，不暴露 fetch hook 或逐物件 downloader；CLI 與 legacy Electron 也固定使用此設定，只讀取 `~/.tokenmonster/asset-cache`。Cache hit 仍重新驗證 hash，miss 回退到內建 letter renderer／靜音，且不影響本機 usage 功能。`--no-character-downloads` 為向後相容參數。
+- 不得依 unlock、starter、theme、pose、today tokens 或 voice trigger 逐物件發出 GET。Hash key 可由 public manifest 映回這些 association，因此沒有 query string 仍會洩漏本機用量衍生狀態。
+- `@tokenmonster/characters/asset-pack` 已提供獨立、未接線的 fixed-pack 驗證/cache primitive：完整 pack hash 先驗、strict classic ZIP profile、固定 entry set/order、redirect/timeout/transfer/extraction caps、逐 entry bytes/media type/SHA-256 與 atomic mode-0600 cache。它不在 package main export，且目前沒有正式 schema-v2 manifest、pack descriptor/origin 或 consent UI，因此 CLI/gateway/Electron 仍不得 import/call；這段程式存在不等於 public runtime transport 已獲准。
+- 未來 downloader 只能在使用者充分揭露後明確啟動上述 primitive，取得完整、固定、versioned pack；網路物件集合與次序不得依任何本機用量、角色或解鎖狀態改變。所有 pose／voice 選擇只可在完整 pack 已於本機驗證後發生。
+- 可編輯 source、layered/raw parts、生成素材與 publisher credentials 全留在 AI-Sister 邊界；TokenMonster 只消費 approved pre-rendered outputs。
 
 ### 11.3 Fixed lines
 
@@ -717,9 +789,9 @@ MVP 的 OpenAI 路徑必須符合：
 - [OpenAI conversation state](https://developers.openai.com/api/docs/guides/conversation-state)
 - [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data)
 
-### 11.5 TTS 與 voice 的後續路徑
+### 11.5 預錄 voice 與 TTS 的後續路徑
 
-MVP 先以文字 fixed lines/BYOK text 為準。後續 TTS 必須新增獨立 consent、provider adapter、keychain credential 與 data-retention disclosure；請求仍由 companion 直接送 provider，中央不 proxy。文字/音訊只在 RAM 或明確的使用者匯出路徑，預設不持久化。
+Companion 已有 default-off 的本機預錄 voice playback；它只對 unlocked character 暴露 strict manifest lines，且正式入口只播放逐次驗證的 cache 命中，不會依 trigger 連網。Runtime 能播放不等於 public rights 或 fixed-pack privacy gate 已完成。後續 online TTS 必須新增獨立 consent、provider adapter、keychain credential 與 data-retention disclosure；請求仍由 companion 直接送 provider，中央不 proxy。文字/音訊只在 RAM 或明確的使用者匯出路徑，預設不持久化。
 
 OS built-in TTS 若啟用，必須先核對平台散布/錄製條款，預設關閉。不得使用未核准的真人 reference、voice clone、非官方 scraping TTS 或把 AI-Sister 既有 voice 描述成已獲授權。每個 voice pack 需要與 image asset 分開的 manifest rights gate。
 
@@ -884,8 +956,9 @@ CI 必須有 in-memory/reference adapter contract tests。日後可換 Node/Hono
 | --- | --- | --- |
 | Contracts | `schemaVersion="1"`、safe decimal、MAX_SAFE 邊界、per-key numeric revision、total formula、reasoning subset、duplicate key、64 KiB/1–30 buckets、strict unknown reject | property/fuzz tests 無 invariant escape，type mirror 與 `ingest-v1.ts` 一致 |
 | Privacy | recursive forbidden keys、nested `mcpServers`、prompt/path/key/eventCount、logger/diagnostic allowlist | 任一 leak 使 CI fail |
-| tokscale adapter | v4.5.2 exact version、Codex cached input、reasoning double-count golden、fixed daily/hourly argv、`graph` command denied、offline/pricing cache env | golden output byte-stable；測試期間無非預期 egress |
-| TokenTracker bridge | 0.79.8 exact、telemetry disabled、cloud sync false、unknown pref/port/host/oversize response | 任一不確定狀態 fail closed |
+| Permanent TokenTracker sidecar | 0.80.0 exact pin/bin resolution、strict route schemas、sanitized child、readiness/data probe、bounded shutdown、no PID/port discovery、daily/model/source privacy projection | compatibility/privacy/lifecycle與one-command smoke全通過 |
+| Legacy tokscale adapter (migration-only) | v4.5.2 exact version、Codex cached input、reasoning double-count golden、fixed daily/hourly argv、`graph` denied、offline/pricing cache env | 不得成為支援runtime或接收新feature；移除前fixtures保持綠 |
+| Legacy TokenTracker bridge target | 0.79.8 telemetry/cloud-sync guard與unknown pref/host failure fixtures | 從未成為支援runtime；不得用它標記permanent sidecar資料 |
 | Authority | concurrent start、crash/restart、第二個 collector 啟動、active-cloud switch attempt | 永遠只有一個 authority；V1 switch 正確阻擋/要求 stop-delete |
 | Local DB | fixed report rescan absolute replace、WAL crash、downward/zero correction、hourly DST ambiguity、migration rollback | totals 與 golden fixture 一致；無 raw event/count/cost |
 | Ingest protocol | identical retry、batchId different payload、per-key out-of-order、equal revision conflict、downward correction、higher-revision zero、authority-window conflict | exact receipt/error；public current truth 無 drift |
@@ -930,7 +1003,7 @@ Server 至少支援目前 companion minor 與前兩個 minor，或自下一版 G
 | Phase | 範圍 | Exit criteria |
 | --- | --- | --- |
 | 0 — Legal/security | local fixtures、original placeholder、無 cloud traffic | asset/OSS review、threat model、privacy tests |
-| 1 — Internal alpha | tokscale only、local dashboard/monster/fixed lines | 14 天無 double count/data leak；crash recovery |
+| 1 — Internal alpha | exact-pinned TokenTracker sidecar、local dashboard/monster/fixed lines | 14 天無 double count/data leak；managed-child crash recovery |
 | 2 — Closed beta | 少量 opt-in contributor、public total 僅 staging/private | correction/zero/compaction/delete/restore/load 全通過 |
 | 3 — Public beta | signed macOS companion、public counter/share、OpenAI BYOK | SLO 30 天、support/runbook、rights gate |
 | 4 — GA | 經驗證平台擴大、adapter roster 擴大 | error budget、capacity、customer support 成熟 |
@@ -949,13 +1022,13 @@ Companion rollout 5% → 25% → 100%，每階段至少觀察一個 collector cy
 ### 18.1 建議實作順序
 
 1. `contracts`：canonical ledger、forbidden-field guard、IngestSnapshotV1、Problem Details。
-2. `collector-core` + tokscale exact adapter：local fixtures、SQLite、authority、hour/day rollup。
+2. Permanent TokenTracker runtime + strict adapter + gateway + CLI：exact pin、fixed routes、managed lifecycle與one-command smoke。Legacy collector-core/tokscale只維持migration tests直到移除。
 3. monster engine + fixed lines + rights-gated 2D placeholder。
 4. Electron secure shell、dashboard、payload preview、pause UX。
 5. Hono/D1 enrollment、V1 ingest、30-day compaction、aggregate、delete。
 6. Worker Static Assets public site、honest counter、downloads/privacy/support matrix。
 7. share、OpenAI local BYOK、signed installer/updater。
-8. optional TokenTracker bridge；在 tokscale path 穩定前不阻擋 core beta。
+8. Sidecar contribution cutover：另立versioned contract與migration；不得重用legacy bridge enum或同時保留第二authority。
 9. security/load/restore drills、canary、public beta。
 
 ### 18.2 Feature DoD

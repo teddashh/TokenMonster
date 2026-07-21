@@ -3,6 +3,7 @@ export type ApiDomainErrorCode =
   | "CONSENT_NOT_GRANTED"
   | "CONSENT_REQUIRED"
   | "ACKNOWLEDGEMENT_IN_FUTURE"
+  | "ACKNOWLEDGEMENT_EXPIRED"
   | "TOKEN_INVALID"
   | "INSTALLATION_PAUSED"
   | "INSTALLATION_DELETING"
@@ -43,6 +44,11 @@ const ERROR_DEFINITIONS: Readonly<
     httpStatus: 400,
     title: "Invalid acknowledgement time",
     message: "The consent acknowledgement time is outside the allowed clock skew."
+  },
+  ACKNOWLEDGEMENT_EXPIRED: {
+    httpStatus: 400,
+    title: "Consent acknowledgement expired",
+    message: "A fresh contribution preview and acknowledgement are required."
   },
   TOKEN_INVALID: {
     httpStatus: 401,

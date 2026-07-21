@@ -65,11 +65,11 @@ const TRAIT_COPY: Readonly<
 const MOOD_LABELS: Readonly<Record<MonsterStateV1["mood"]["id"], string>> =
   Object.freeze({
     learning: "正在認識你的節奏",
-    unknown: "今天的足跡尚未完整",
-    resting: "今天在休息",
-    quiet: "今天比較安靜",
-    steady: "今天節奏穩定",
-    lively: "今天很有精神",
+    unknown: "最近完整日的足跡尚未確認",
+    resting: "最近完整日有好好休息",
+    quiet: "最近完整日比較安靜",
+    steady: "最近完整日節奏穩定",
+    lively: "最近完整日很有精神",
   });
 
 function utcDate(at: number): string {
@@ -143,6 +143,7 @@ function buildFootprint(store: LocalStore, now: Date): ContentBlindFootprintV1 {
     schemaVersion: "1",
     characterId: ANALYTICAL_STATE_CHARACTER_ID,
     window,
+    latestDayCompleteness: "partial",
     days: Array.from({ length: WINDOW_DAYS }, (_, index) => {
       const localDate = utcDate(start + index * DAY_MS);
       const rows = rowsByDate.get(localDate) ?? [];

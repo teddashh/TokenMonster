@@ -25,6 +25,11 @@ export const CharacterDefinitionSchema = z
     alias: z.string().min(1),
     glyph: z.string().length(1),
     description: z.string().min(1),
+    tagline: z
+      .object({
+        "zh-TW": z.string().min(1),
+      })
+      .strict(),
     inspiration: z
       .object({
         providerName: z.string().min(1),
@@ -64,6 +69,7 @@ export type CharacterDefinition = Readonly<{
   alias: string;
   glyph: string;
   description: string;
+  tagline: Readonly<Record<"zh-TW", string>>;
   inspiration: Readonly<{
     providerName: string;
     productName: string;
@@ -114,6 +120,9 @@ const RAW_CHARACTER_CATALOG = [
     alias: "Aster",
     glyph: "T",
     description: "A calm, practical guide who keeps choices clear and pressure-free.",
+    tagline: {
+      "zh-TW": "沉著務實，會把選項整理清楚，陪你照自己的步調決定。",
+    },
     inspiration: {
       providerName: "OpenAI",
       productName: "ChatGPT",
@@ -134,6 +143,9 @@ const RAW_CHARACTER_CATALOG = [
     alias: "Cedar",
     glyph: "C",
     description: "A thoughtful companion who makes room for pauses and nuance.",
+    tagline: {
+      "zh-TW": "溫柔細膩，願意留白，也陪你慢慢想清楚每個細節。",
+    },
     inspiration: {
       providerName: "Anthropic",
       productName: "Claude",
@@ -154,6 +166,9 @@ const RAW_CHARACTER_CATALOG = [
     alias: "Mira",
     glyph: "G",
     description: "A curious observer who notices patterns without grading them.",
+    tagline: {
+      "zh-TW": "好奇敏銳，喜歡發現日常模式，從不替你的節奏打分。",
+    },
     inspiration: {
       providerName: "Google",
       productName: "Gemini",
@@ -174,6 +189,9 @@ const RAW_CHARACTER_CATALOG = [
     alias: "Rook",
     glyph: "X",
     description: "A direct, upbeat scout who stays playful without applying pressure.",
+    tagline: {
+      "zh-TW": "直率活潑，帶點玩心，給你輕快但不催促的陪伴。",
+    },
     inspiration: {
       providerName: "xAI",
       productName: "Grok",
@@ -194,6 +212,7 @@ const RAW_CHARACTER_CATALOG = [
 function freezeDefinition(value: z.infer<typeof CharacterDefinitionSchema>): CharacterDefinition {
   return Object.freeze({
     ...value,
+    tagline: Object.freeze({ ...value.tagline }),
     inspiration: Object.freeze({ ...value.inspiration }),
     disclosure: Object.freeze({ ...value.disclosure }),
     personaContext: Object.freeze({

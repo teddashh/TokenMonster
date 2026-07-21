@@ -82,6 +82,7 @@ describe("companion local state", () => {
       enabled: false,
       canEnable: false,
       canDelete: true,
+      canRecover: false,
       outboxPending: 0,
       consentDocumentRevision: null,
       deletion: null

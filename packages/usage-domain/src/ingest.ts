@@ -1,7 +1,7 @@
 import type {
-  CollectorIdentityV1,
   DailyAggregateBucketV1,
-  IngestSnapshotV1
+  SupportedCollectorIdentity,
+  SupportedIngestSnapshot
 } from "@tokenmonster/contracts";
 
 import type { CanonicalHasher } from "./canonical-json.js";
@@ -38,7 +38,7 @@ export interface IngestExecutionOptions {
 }
 
 function assertInsideRetention(
-  snapshot: IngestSnapshotV1,
+  snapshot: SupportedIngestSnapshot,
   receivedAt: string
 ): void {
   const receivedAtMs = Date.parse(receivedAt);
@@ -60,7 +60,7 @@ function assertInsideRetention(
 
 function freezeRow(
   enrollment: AuthenticatedEnrollment,
-  collector: CollectorIdentityV1,
+  collector: SupportedCollectorIdentity,
   bucket: DailyAggregateBucketV1,
   rowHash: string
 ): CanonicalUsageRow {
@@ -89,7 +89,7 @@ function freezeRow(
 
 async function buildRows(
   enrollment: AuthenticatedEnrollment,
-  snapshot: IngestSnapshotV1,
+  snapshot: SupportedIngestSnapshot,
   hasher: CanonicalHasher | undefined
 ): Promise<CanonicalUsageRow[]> {
   const rows: CanonicalUsageRow[] = [];
@@ -119,7 +119,7 @@ function buildSummary(decisions: readonly BucketDecision[]): IngestDecisionSumma
 
 function preflightAuthorities(
   enrollment: AuthenticatedEnrollment,
-  snapshot: IngestSnapshotV1,
+  snapshot: SupportedIngestSnapshot,
   state: UsageDomainState
 ): AuthorityBinding[] {
   const inserts = new Map<string, AuthorityBinding>();

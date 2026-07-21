@@ -15,9 +15,21 @@
       "types": "./dist/ingest-v1.d.ts",
       "import": "./dist/ingest-v1.js"
     },
+    "./ingest-v2": {
+      "types": "./dist/ingest-v2.d.ts",
+      "import": "./dist/ingest-v2.js"
+    },
+    "./ingest": {
+      "types": "./dist/ingest.d.ts",
+      "import": "./dist/ingest.js"
+    },
     "./contribution-api-v1": {
       "types": "./dist/contribution-api-v1.d.ts",
       "import": "./dist/contribution-api-v1.js"
+    },
+    "./contribution-enrollment-v2": {
+      "types": "./dist/contribution-enrollment-v2.d.ts",
+      "import": "./dist/contribution-enrollment-v2.js"
     }
   },
   "scripts": {

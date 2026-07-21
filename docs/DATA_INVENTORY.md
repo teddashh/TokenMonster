@@ -1,8 +1,14 @@
 # TokenMonster data inventory
 
+> Architecture update (2026-07-15): collector/storage entries that assume
+> Tokscale/Electron describe the legacy migration slice. TokenTracker is the
+> sole upstream authority under
+> [ADR 0005](adr/0005-permanent-tokentracker-sidecar-adapter.md); TokenMonster
+> retains only minimized aggregates and product-owned state.
+
 > Status: Phase 0 privacy baseline
 >
-> Updated: 2026-07-15
+> Updated: 2026-07-16
 >
 > Owner: product/privacy owner (to assign before Private Alpha)
 
@@ -19,10 +25,10 @@ without a reviewed contract and inventory change.
   consent choices.
 - The default collector persists only projected aggregates. Raw upstream JSON
   is parsed in memory and then discarded.
-- Prompt, response, source content, filename, path, repository, provider
-  account, API key, cookie, and authorization material are forbidden in the
-  contribution body, cloud database, application log, analytics, share, and
-  diagnostic bundle.
+- Prompt, response, source content, filename, path, repository, raw upstream
+  store content, raw model ID, provider account, API key, cookie, and
+  authorization material are forbidden in the contribution body, cloud
+  database, application log, analytics, share, and diagnostic bundle.
 - Local hourly buckets support charts and character rhythm. Cloud contribution
   contains UTC daily buckets only.
 - Public copy says “tokens shared by TokenMonster contributors”; it never
@@ -32,10 +38,14 @@ without a reviewed contract and inventory change.
 
 | Location | Intended contents | Backup policy | User control |
 | --- | --- | --- | --- |
-| Collector process memory | Raw tokscale JSON long enough to validate and project | Never backed up | Ends with scan/process |
+| Managed TokenTracker or legacy collector process memory | Raw upstream JSON long enough to validate and project | Never backed up | Ends with request/process |
+| TokenTracker adapter/gateway request memory | Strict projected metrics and, for starter selection, four 28-day provider totals until they are reduced to a decision | Never backed up or persisted | Ends with request |
 | Companion SQLite | Safe local aggregates, revisions, character state, settings, bounded contribution queue | Local-only; excluded from crash bundles | Export/delete in companion |
 | OS secret store | OpenAI BYOK key plus separate contribution-upload and deletion bearer secrets | Never copied into app backup | Rotate/delete in companion |
-| Companion renderer memory | Current BYOK prompt/response and rendered state | Never backed up | Cleared when conversation/window closes |
+| Companion renderer memory | Current BYOK prompt/response and rendered state | Never backed up | Conversation clears when conversation/window closes |
+| `~/.tokenmonster/progression-v1.json` and character preferences | Local aggregate progression ledger, monotonic unlock timestamps, selected character, and active wardrobe choices | Local-only; mode `0600` in a mode `0700` directory | Rebuilt/fails closed to letter mode if invalid; never uploaded |
+| `~/.tokenmonster/character-profile-v1.json` | Strict derived identity/mood/evolution state, banded explanations, UTC window, and computation instant; mood uses the latest complete UTC day, while today's partial bucket is excluded from mood; never the footprint or token components | Local-only; mode `0600` in a mode `0700` directory | Replaced after a fresh derivation; only a current/previous-date snapshot at most 48 hours old may serve as stale; never uploaded |
+| `~/.tokenmonster/asset-cache` | Integrity-verified raster/voice objects named by SHA-256; schema-v1 presence is not public rights approval | Disposable, local-only cache; each read revalidates its digest | Current CLI/Electron are unconditionally cache-only and network-disabled; missing content falls back to letter mode or silence |
 | Cloudflare Worker memory | Validated request and transaction state | Never intentionally persisted | Request-scoped |
 | D1 current tables | Hashed enrollment auth, consent, recent canonical buckets, optional shares | Time Travel plus independent logical export | Revoke/delete within stated window |
 | D1 anonymous rollups | Irreversibly compacted historical coarse totals | Daily logical export; rebuild tested | Not attributable after compaction |
@@ -89,13 +99,34 @@ path, client data directory, message count, cost, performance, warning,
 diagnostic, raw provider/model strings outside the allowlist, prompt, response,
 and source content. Raw stdout/stderr must not be copied to application logs.
 
+### Starter-character provider projection (implemented)
+
+The adapter reads TokenTracker's local model-breakdown response for the latest
+28 UTC days and immediately reduces it to exactly four numeric provider totals:
+`openai`, `anthropic`, `google`, and `xai`. Those four values exist only in
+request memory. They are not stored in TokenMonster's database, diagnostic
+state, analytics, contribution queue, or cloud payload.
+
+The four totals stop at the starter selector. The gateway response includes
+only the resulting starter decision from this branch: selected character and
+coarse provider-family reason, or a manual-choice-required reason and any tied
+provider-family enums. It does not include numeric provider totals, upstream
+model identifiers, or raw source metadata. The gateway's separate aggregate
+metrics and daily series remain part of their existing content-blind DTO.
+
+If the model-breakdown request, validation, or provider projection fails, the
+gateway treats the four totals as unavailable and returns a manual-selection
+decision. That optional failure does not fail or suppress the independently
+loaded aggregate metrics.
+
 ## 4. Local character, settings, and diagnostics
 
 | Record | Allowed fields | Retention | Notes |
 | --- | --- | --- | --- |
-| Character profile | Character manifest ID, deterministic traits, explanation keys, 28-day normalized inputs | Until local reset | No prompt/content inference |
+| Character profile | Fixed analytical character ID, deterministic allowlisted traits, banded explanation keys, freshness/coverage, and 28-day UTC window metadata | Until local reset or replacement | Positive days are estimated; missing/empty dates stay unavailable; provider traits are suppressed; no prompt/content inference or persisted footprint |
 | Mood history | Coarse mood, explanation key, day/hour aggregate references | Default 30 days | User may clear independently |
 | Preferences | Locale, theme, reduced motion, reminder/quiet hours, source choice | Until reset | Cloud toggle defaults off |
+| Manual character choice | One allowlisted roster ID plus selection timestamp | Until locally changed/reset | Stored in local progression/preferences JSON; never sent to cloud |
 | Reminder ledger | Rule ID, scheduled/fired time, dedupe state | 30 days | Notification text contains no project/content |
 | Diagnostic state | Adapter versions, last success/error code, coarse OS/runtime version | Rolling 30 days | Detailed export requires preview |
 | Share-card draft | Derived traits, selected visibility fields, local image | Until user deletes/export completes | No upload unless separately confirmed |
@@ -103,6 +134,30 @@ and source content. Raw stdout/stderr must not be copied to application logs.
 Diagnostic exports must use an allowlist and a canary test. They may not copy
 the local database wholesale or include environment variables, home paths,
 process command lines, raw collector output, credentials, prompt, or response.
+
+### Character-asset delivery (cache-only implemented; network blocked)
+
+The release embeds a strict schema-v1 integrity manifest. The gateway accepts
+only `cdnBaseUrl: null`, rejects transport hooks, and contains no per-object
+downloader; CLI and legacy Electron also ignore the former override. Cache hits
+must match the filename's SHA-256; a miss or invalid entry falls back to the
+code-native letter renderer or silence without affecting local usage features.
+`--no-character-downloads` is retained only as a compatibility safety alias.
+
+Per-object network delivery is prohibited because the public manifest maps
+each hash to a character/theme/pose or voice trigger. Even without query
+parameters or numeric totals, a request selected by starter, unlock, today
+usage, or refresh state would disclose usage-derived information to the CDN.
+Future delivery requires a separate explicit user action and one fixed,
+versioned pack whose network object set and order do not depend on any local
+usage, selection, progression, pose, or trigger. Pack entries still require
+bounded extraction and per-entry bytes/media/SHA-256 checks before atomic cache
+writes.
+
+The schema-v1 runtime integrity manifest contains 50 prerecorded voice refs
+for the ten art-backed characters and none for GLM; voice defaults off and can
+currently play only verified cache hits. These rows lack schema-v2 public
+rights/content evidence and must not be treated as approval.
 
 ## 5. BYOK interaction data
 
@@ -227,4 +282,13 @@ at the most recently confirmed value.
 - Retention/compaction and deletion are tested with an attributable current
   bucket plus an already-anonymous historical rollup.
 - A clean diagnostic export contains no forbidden key or canary value.
+- Starter-selection tests prove that the 28-day model breakdown becomes four
+  request-scoped provider totals, only the decision crosses the gateway, and a
+  projection failure falls back to manual choice without breaking metrics.
+- Before any public asset network runtime is enabled, packet capture and tests
+  must pin the exact AI-Sister origin, embedded schema-v2 rights-approved
+  manifest, fixed pack/version, explicit consent, SHA-256/size/MIME/extraction
+  checks, immutable cache, and local fallback. They must also prove the request
+  set/order is independent of all local usage and progression. The existing
+  schema-v1 integrity runtime is not equivalent to either approval gate.
 - The production privacy page matches this inventory field-for-field.

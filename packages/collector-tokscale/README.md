@@ -2,6 +2,10 @@
 
 This package is the narrow Tokscale parser-authority adapter for TokenMonster cloud ingestion.
 
+It is migration-only. New collector and companion product work belongs to the
+exact-pinned TokenTracker runtime/adapter/gateway path; this workspace must not
+receive new product features.
+
 ## Audited boundary
 
 - Upstream package: tokscale 4.5.2

@@ -2,7 +2,10 @@ import {
   DeletionAcceptedResponseV1Schema,
   DeletionStatusResponseV1Schema,
   EnrollmentResponseV1Schema,
-  IngestReceiptV1Schema
+  EnrollmentResponseV2Schema,
+  IngestReceiptV1Schema,
+  PauseResponseV1Schema,
+  ResumeResponseV1Schema
 } from "@tokenmonster/contracts";
 import {
   ApiDomainError,
@@ -14,7 +17,13 @@ import {
   type EnrollmentResult,
   type IngestCommand,
   type IngestResult,
-  type RateLimitRoute
+  type PauseCommand,
+  type PauseResult,
+  type RateLimitRoute,
+  type RecoverableEnrollmentCommand,
+  type RecoverableEnrollmentResult,
+  type ResumeCommand,
+  type ResumeResult
 } from "@tokenmonster/api-domain";
 import { describe, expect, it, vi } from "vitest";
 
@@ -31,10 +40,28 @@ const UPLOAD_TOKEN = `tm_u1_publicAAAAAAAAAAAAAAAA.${"U".repeat(43)}`;
 const DELETION_TOKEN = `tm_d1_publicBBBBBBBBBBBBBBBB.${"D".repeat(43)}`;
 const STATUS_TOKEN = `tm_s1_statusCCCCCCCCCCCCCCCC.${"S".repeat(43)}`;
 const DELETION_JOB_ID = `del_${"B".repeat(22)}`;
+const V2_CREDENTIALS = Object.freeze({
+  uploadToken: `tm_u2_${"u".repeat(24)}.${"U".repeat(43)}`,
+  deletionToken: `tm_d2_${"d".repeat(24)}.${"D".repeat(42)}E`,
+  recoveryToken: `tm_r2_${"r".repeat(24)}.${"R".repeat(42)}I`
+});
 
 function enrollmentRequest(): unknown {
   return {
     contractVersion: 1,
+    consent: {
+      purpose: "contribution",
+      documentRevision: "contribution-2026-07-15",
+      granted: true,
+      acknowledgedAt: "2026-07-15T18:20:00.000Z"
+    }
+  };
+}
+
+function recoverableEnrollmentRequest(): unknown {
+  return {
+    contractVersion: 2,
+    credentials: V2_CREDENTIALS,
     consent: {
       purpose: "contribution",
       documentRevision: "contribution-2026-07-15",
@@ -95,6 +122,22 @@ function enrollmentResult(): EnrollmentResult {
   };
 }
 
+function recoverableEnrollmentResult(): RecoverableEnrollmentResult {
+  return {
+    contractVersion: 2,
+    status: "active",
+    consentReceipt: {
+      receiptId: `cr_${"V".repeat(22)}`,
+      purpose: "contribution",
+      documentRevision: "contribution-2026-07-15",
+      granted: true,
+      acknowledgedAt: "2026-07-15T18:20:00.000Z",
+      recordedAt: "2026-07-15T18:30:00.000Z"
+    },
+    acceptedSnapshotSchemaVersions: ["1", "2"]
+  };
+}
+
 function ingestResult(
   status: "accepted" | "quarantined" = "accepted"
 ): IngestResult {
@@ -110,6 +153,33 @@ function ingestResult(
       staleBuckets: 0,
       idempotentBuckets: 0,
       quarantinedBuckets: quarantined
+    }
+  };
+}
+
+function pauseResult(): PauseResult {
+  return {
+    contractVersion: 1,
+    status: "paused",
+    pausedAt: "2026-07-15T18:30:00.000Z",
+    futureUploadsBlocked: true,
+    identifiableCurrentDataRetained: true,
+    anonymousHistoricalTotalsRetained: true
+  };
+}
+
+function resumeResult(): ResumeResult {
+  return {
+    contractVersion: 1,
+    status: "active",
+    resumedAt: "2026-07-15T18:30:00.000Z",
+    consentReceipt: {
+      receiptId: `cr_${"R".repeat(22)}`,
+      purpose: "contribution",
+      documentRevision: "contribution-2026-07-15",
+      granted: true,
+      acknowledgedAt: "2026-07-15T18:20:00.000Z",
+      recordedAt: "2026-07-15T18:30:00.000Z"
     }
   };
 }
@@ -144,7 +214,10 @@ function deletionStatusResult(
 interface MutationHarness {
   readonly app: ReturnType<typeof createTokenMonsterApi>;
   readonly enrollmentCommands: EnrollmentCommand[];
+  readonly recoverableEnrollmentCommands: RecoverableEnrollmentCommand[];
   readonly ingestCommands: IngestCommand[];
+  readonly pauseCommands: PauseCommand[];
+  readonly resumeCommands: ResumeCommand[];
   readonly deleteCommands: DeleteCommand[];
   readonly deletionStatusCommands: DeletionStatusCommand[];
   readonly rateScopes: RateLimitRoute[];
@@ -154,7 +227,10 @@ function createMutationHarness(
   overrides: Partial<TokenMonsterApiDependencies> = {}
 ): MutationHarness {
   const enrollmentCommands: EnrollmentCommand[] = [];
+  const recoverableEnrollmentCommands: RecoverableEnrollmentCommand[] = [];
   const ingestCommands: IngestCommand[] = [];
+  const pauseCommands: PauseCommand[] = [];
+  const resumeCommands: ResumeCommand[] = [];
   const deleteCommands: DeleteCommand[] = [];
   const deletionStatusCommands: DeletionStatusCommand[] = [];
   const rateScopes: RateLimitRoute[] = [];
@@ -171,9 +247,21 @@ function createMutationHarness(
       enrollmentCommands.push(command);
       return enrollmentResult();
     },
+    enrollContributorRecoverably: async (command) => {
+      recoverableEnrollmentCommands.push(command);
+      return recoverableEnrollmentResult();
+    },
     ingestSnapshot: async (command) => {
       ingestCommands.push(command);
       return ingestResult();
+    },
+    pauseContribution: async (command) => {
+      pauseCommands.push(command);
+      return pauseResult();
+    },
+    resumeContribution: async (command) => {
+      resumeCommands.push(command);
+      return resumeResult();
     },
     requestContributorDeletion: async (command) => {
       deleteCommands.push(command);
@@ -188,7 +276,10 @@ function createMutationHarness(
   return {
     app,
     enrollmentCommands,
+    recoverableEnrollmentCommands,
     ingestCommands,
+    pauseCommands,
+    resumeCommands,
     deleteCommands,
     deletionStatusCommands,
     rateScopes
@@ -232,6 +323,50 @@ describe("mutation success contracts", () => {
     expect(response.headers.get("x-contract-version")).toBe("1");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("returns the strict recoverable V2 receipt without reflecting credentials", async () => {
+    const context = createMutationHarness();
+    const requestBody = recoverableEnrollmentRequest();
+    const response = await context.app.request(
+      "https://api.tokenmonster.example/v2/enrollments",
+      {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify(requestBody)
+      }
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(201);
+    expect(EnrollmentResponseV2Schema.parse(JSON.parse(text))).toEqual(
+      recoverableEnrollmentResult()
+    );
+    expect(context.recoverableEnrollmentCommands).toEqual([
+      { body: requestBody, rateLimitKey: RATE_KEY }
+    ]);
+    expect(context.rateScopes).toEqual(["enrollment"]);
+    expect(responseSurface(response, text)).not.toMatch(/tm_[udr]2_/u);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("rejects insecure, query-bearing, and non-canonical V2 enrollment requests before execution", async () => {
+    const context = createMutationHarness();
+    const candidates = [
+      "http://api.tokenmonster.example/v2/enrollments",
+      "https://api.tokenmonster.example/v2/enrollments?debug=1"
+    ];
+    for (const url of candidates) {
+      const response = await context.app.request(url, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify(recoverableEnrollmentRequest())
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ code: "SCHEMA_INVALID" });
+    }
+    expect(context.recoverableEnrollmentCommands).toHaveLength(0);
+    expect(context.rateScopes).toHaveLength(0);
   });
 
   it("passes only exact auth/idempotency/rate inputs to ingest and returns 200", async () => {
@@ -287,6 +422,55 @@ describe("mutation success contracts", () => {
     expect(IngestReceiptV1Schema.safeParse(await response.json()).success).toBe(
       true
     );
+  });
+
+  it("pauses with an empty upload-authenticated request and exact ordered disclosure", async () => {
+    const context = createMutationHarness();
+    const response = await context.app.request("/v1/me/pause", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${UPLOAD_TOKEN}`,
+        Origin: ALLOWED_ORIGIN
+      }
+    });
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(PauseResponseV1Schema.parse(JSON.parse(text))).toEqual(pauseResult());
+    expect(text).toBe(JSON.stringify(pauseResult()));
+    expect(context.pauseCommands).toEqual([
+      { bearerToken: UPLOAD_TOKEN, rateLimitKey: RATE_KEY }
+    ]);
+    expect(context.rateScopes).toEqual(["lifecycle"]);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    expect(responseSurface(response, text)).not.toContain(UPLOAD_TOKEN);
+  });
+
+  it("resumes with only the strict consent body and exact ordered receipt", async () => {
+    const context = createMutationHarness();
+    const requestBody = enrollmentRequest();
+    const response = await context.app.request("/v1/me/resume", {
+      method: "POST",
+      headers: jsonHeaders({ Authorization: `Bearer ${UPLOAD_TOKEN}` }),
+      body: JSON.stringify(requestBody)
+    });
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(ResumeResponseV1Schema.parse(JSON.parse(text))).toEqual(
+      resumeResult()
+    );
+    expect(text).toBe(JSON.stringify(resumeResult()));
+    expect(context.resumeCommands).toEqual([
+      {
+        bearerToken: UPLOAD_TOKEN,
+        body: requestBody,
+        rateLimitKey: RATE_KEY
+      }
+    ]);
+    expect(context.rateScopes).toEqual(["lifecycle"]);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    expect(responseSurface(response, text)).not.toContain(UPLOAD_TOKEN);
   });
 
   it("accepts deletion with a deletion-scoped command and a strict 202 contract", async () => {
@@ -448,6 +632,73 @@ describe("bounded strict request parsing", () => {
     expect(context.deleteCommands).toEqual([]);
   });
 
+  it("rejects lifecycle query strings, pause bodies, and non-strict resume JSON", async () => {
+    const context = createMutationHarness();
+    const requests = [
+      context.app.request("/v1/me/pause?reason=private", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${UPLOAD_TOKEN}` }
+      }),
+      context.app.request("/v1/me/pause?", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${UPLOAD_TOKEN}` }
+      }),
+      context.app.request("/v1/me/pause", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${UPLOAD_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        body: "{}"
+      }),
+      context.app.request("/v1/me/resume?source=history", {
+        method: "POST",
+        headers: jsonHeaders({ Authorization: `Bearer ${UPLOAD_TOKEN}` }),
+        body: JSON.stringify(enrollmentRequest())
+      })
+    ];
+    for (const pending of requests) {
+      const response = await pending;
+      const text = await response.text();
+      expect(response.status).toBe(400);
+      expect(JSON.parse(text)).toMatchObject({ code: "SCHEMA_INVALID" });
+    }
+    expect(context.pauseCommands).toEqual([]);
+    expect(context.resumeCommands).toEqual([]);
+  });
+
+  it("rejects query strings on every fixed mutation target", async () => {
+    const context = createMutationHarness();
+    const cases = [
+      context.app.request("/v1/enrollments?debug=1", {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify(enrollmentRequest())
+      }),
+      context.app.request("/v1/me/ingest-snapshots?debug=1", {
+        method: "POST",
+        headers: jsonHeaders({
+          Authorization: `Bearer ${UPLOAD_TOKEN}`,
+          "Idempotency-Key": BATCH_ID
+        }),
+        body: JSON.stringify(snapshot())
+      }),
+      context.app.request("/v1/me/data?debug=1", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${DELETION_TOKEN}`,
+          "Idempotency-Key": "delete_AAAAAAAAAAAAAAAAAAAAAA"
+        }
+      })
+    ];
+    for (const pending of cases) {
+      const response = await pending;
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ code: "SCHEMA_INVALID" });
+    }
+    expect(context.rateScopes).toEqual([]);
+  });
+
   it("requires a canonical status path with no query or declared body", async () => {
     const context = createMutationHarness();
     const request = (path: string, headers: Record<string, string> = {}) =>
@@ -460,6 +711,7 @@ describe("bounded strict request parsing", () => {
 
     for (const response of [
       await request("/v1/deletions/not-a-job"),
+      await request(`/v1/deletions/${DELETION_JOB_ID}?`),
       await request(`/v1/deletions/${DELETION_JOB_ID}?detail=true`),
       await request(`/v1/deletions/${DELETION_JOB_ID}`, {
         "Content-Length": "1"
@@ -505,7 +757,7 @@ describe("authentication, idempotency and sanitized failures", () => {
     expect(context.ingestCommands).toEqual([]);
   });
 
-  it("maps a domain scope rejection without reflecting the presented token", async () => {
+  it("maps a domain credential rejection without reflecting the presented token", async () => {
     const execute = vi.fn(async (_command: IngestCommand) => {
       throw new ApiDomainError("TOKEN_INVALID");
     });
@@ -515,7 +767,7 @@ describe("authentication, idempotency and sanitized failures", () => {
       {
         method: "POST",
         headers: jsonHeaders({
-          Authorization: `Bearer ${DELETION_TOKEN}`,
+          Authorization: `Bearer ${UPLOAD_TOKEN}`,
           "Idempotency-Key": BATCH_ID
         }),
         body: JSON.stringify(snapshot())
@@ -526,7 +778,53 @@ describe("authentication, idempotency and sanitized failures", () => {
     expect(execute).toHaveBeenCalledOnce();
     expect(response.status).toBe(401);
     expect(JSON.parse(text)).toMatchObject({ code: "TOKEN_INVALID" });
-    expect(responseSurface(response, text)).not.toContain(DELETION_TOKEN);
+    expect(responseSurface(response, text)).not.toContain(UPLOAD_TOKEN);
+  });
+
+  it("rejects credential role substitution before rate derivation or domain execution", async () => {
+    const context = createMutationHarness();
+    const responses = [
+      await context.app.request("/v1/me/ingest-snapshots", {
+        method: "POST",
+        headers: jsonHeaders({
+          Authorization: `Bearer ${DELETION_TOKEN}`,
+          "Idempotency-Key": BATCH_ID
+        }),
+        body: JSON.stringify(snapshot())
+      }),
+      await context.app.request("/v1/me/pause", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${DELETION_TOKEN}` }
+      }),
+      await context.app.request("/v1/me/resume", {
+        method: "POST",
+        headers: jsonHeaders({ Authorization: `Bearer ${DELETION_TOKEN}` }),
+        body: JSON.stringify(enrollmentRequest())
+      }),
+      await context.app.request("/v1/me/data", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${UPLOAD_TOKEN}`,
+          "Idempotency-Key": "delete_AAAAAAAAAAAAAAAAAAAAAA"
+        }
+      }),
+      await context.app.request(`/v1/deletions/${DELETION_JOB_ID}`, {
+        headers: { Authorization: `Bearer ${UPLOAD_TOKEN}` }
+      })
+    ];
+    for (const response of responses) {
+      const text = await response.text();
+      expect(response.status).toBe(401);
+      expect(JSON.parse(text)).toMatchObject({ code: "TOKEN_INVALID" });
+      expect(responseSurface(response, text)).not.toContain(UPLOAD_TOKEN);
+      expect(responseSurface(response, text)).not.toContain(DELETION_TOKEN);
+    }
+    expect(context.rateScopes).toEqual([]);
+    expect(context.ingestCommands).toEqual([]);
+    expect(context.pauseCommands).toEqual([]);
+    expect(context.resumeCommands).toEqual([]);
+    expect(context.deleteCommands).toEqual([]);
+    expect(context.deletionStatusCommands).toEqual([]);
   });
 
   it("requires exact status bearer syntax and sanitizes status output", async () => {
@@ -742,6 +1040,56 @@ describe("authentication, idempotency and sanitized failures", () => {
     expect(response.status).toBe(503);
     expect(JSON.parse(text)).toMatchObject({ code: "SERVICE_UNAVAILABLE" });
     expect(responseSurface(response, text)).not.toContain(canary);
+  });
+
+  it("never serializes extra lifecycle output fields or bearer credentials", async () => {
+    const canary = `prompt=OUTPUT:${UPLOAD_TOKEN}`;
+    const invalidPause = {
+      ...pauseResult(),
+      prompt: canary
+    } as unknown as PauseResult;
+    const invalidResume = {
+      ...resumeResult(),
+      account: canary
+    } as unknown as ResumeResult;
+    const pauseApp = createMutationHarness({
+      pauseContribution: async () => invalidPause
+    }).app;
+    const resumeApp = createMutationHarness({
+      resumeContribution: async () => invalidResume
+    }).app;
+    const revokedResumeApp = createMutationHarness({
+      resumeContribution: async () => ({
+        ...resumeResult(),
+        consentReceipt: {
+          ...resumeResult().consentReceipt,
+          granted: false
+        }
+      } as unknown as ResumeResult)
+    }).app;
+    const responses = [
+      await pauseApp.request("/v1/me/pause", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${UPLOAD_TOKEN}` }
+      }),
+      await resumeApp.request("/v1/me/resume", {
+        method: "POST",
+        headers: jsonHeaders({ Authorization: `Bearer ${UPLOAD_TOKEN}` }),
+        body: JSON.stringify(enrollmentRequest())
+      }),
+      await revokedResumeApp.request("/v1/me/resume", {
+        method: "POST",
+        headers: jsonHeaders({ Authorization: `Bearer ${UPLOAD_TOKEN}` }),
+        body: JSON.stringify(enrollmentRequest())
+      })
+    ];
+    for (const response of responses) {
+      const text = await response.text();
+      expect(response.status).toBe(503);
+      expect(JSON.parse(text)).toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+      expect(responseSurface(response, text)).not.toContain(canary);
+      expect(responseSurface(response, text)).not.toContain(UPLOAD_TOKEN);
+    }
   });
 
   it("never grants CORS to mutation preflights", async () => {

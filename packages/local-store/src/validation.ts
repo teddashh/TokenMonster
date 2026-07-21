@@ -1,10 +1,10 @@
 import {
-  CollectorIdentityV1Schema,
   DailyAggregateBucketV1Schema,
   IngestReceiptV1Schema,
-  IngestSnapshotV1Schema,
+  SupportedCollectorIdentitySchema,
+  SupportedIngestSnapshotSchema,
   type IngestReceiptV1,
-  type IngestSnapshotV1,
+  type SupportedIngestSnapshot,
 } from "@tokenmonster/contracts";
 import {
   MonsterCharacterIdV1Schema,
@@ -228,7 +228,9 @@ export function parseProjectedDailyAggregate(
       revision: 1,
       tokens: record["tokens"],
     });
-    const collector = CollectorIdentityV1Schema.parse(record["collector"]);
+    const collector = SupportedCollectorIdentitySchema.parse(
+      record["collector"],
+    );
     const localCoverage = record["localCoverage"];
     if (
       localCoverage !== "complete" &&
@@ -363,7 +365,7 @@ export function parseCollectorAuthority(
     "Collector authority did not match the allowlisted schema.",
   );
   try {
-    const collector = CollectorIdentityV1Schema.parse({
+    const collector = SupportedCollectorIdentitySchema.parse({
       kind: record["kind"],
       adapterVersion: record["adapterVersion"],
       sourceVersion: record["sourceVersion"],
@@ -471,13 +473,13 @@ export function parseMonsterSnapshot(input: unknown): MonsterSnapshotInput {
   }
 }
 
-export function parseCloudSnapshot(input: unknown): IngestSnapshotV1 {
+export function parseCloudSnapshot(input: unknown): SupportedIngestSnapshot {
   try {
-    return IngestSnapshotV1Schema.parse(input);
+    return SupportedIngestSnapshotSchema.parse(input);
   } catch {
     return fail(
       "INVALID_OUTBOX_ENTRY",
-      "Cloud outbox payload did not match IngestSnapshotV1.",
+      "Cloud outbox payload did not match a supported ingest snapshot.",
     );
   }
 }
@@ -485,7 +487,10 @@ export function parseCloudSnapshot(input: unknown): IngestSnapshotV1 {
 export function parseAcceptedCloudSnapshot(
   snapshotInput: unknown,
   receiptInput: unknown,
-): { readonly snapshot: IngestSnapshotV1; readonly receipt: IngestReceiptV1 } {
+): {
+  readonly snapshot: SupportedIngestSnapshot;
+  readonly receipt: IngestReceiptV1;
+} {
   const snapshot = parseCloudSnapshot(snapshotInput);
   let receipt: IngestReceiptV1;
   try {
@@ -654,7 +659,7 @@ export function parseMissingCloudZeroCorrectionQuery(
   const presentKeys = presentKeysInput.map(parseCloudMirrorPresenceKey);
   let collector;
   try {
-    collector = CollectorIdentityV1Schema.parse(record["collector"]);
+    collector = SupportedCollectorIdentitySchema.parse(record["collector"]);
   } catch {
     return fail(
       "INVALID_CLOUD_MIRROR",

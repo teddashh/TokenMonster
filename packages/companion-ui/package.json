@@ -1,0 +1,21 @@
+{
+  "name": "@tokenmonster/companion-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./assets/*": "./dist/public/*"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-static.mjs",
+    "test": "npm run build && vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

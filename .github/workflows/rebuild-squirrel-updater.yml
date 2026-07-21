@@ -1,0 +1,1689 @@
+name: Rebuild reviewed Squirrel updater
+
+on:
+  workflow_call:
+    inputs:
+      derive_candidate:
+        description: Derive quarantined candidate receipts without accepting them
+        type: boolean
+        required: false
+        default: false
+  workflow_dispatch:
+    inputs:
+      derive_candidate:
+        description: Derive quarantined candidate receipts without accepting them
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild-reviewed-updater:
+    name: ${{ inputs.derive_candidate && 'Derive quarantined Squirrel updater receipts' || 'Rebuild reviewed Squirrel updater twice' }}
+    runs-on: windows-2022
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out exact TokenMonster patch policy
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: tokenmonster-policy
+          persist-credentials: false
+
+      - name: Check out exact Microsoft.Web.Xdt source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: dotnet/xdt
+          ref: 5b67dee04d86740575f0f5022b79833213cc024a
+          path: xdt-source
+          persist-credentials: false
+
+      - name: Check out exact upstream source A
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: Squirrel/Squirrel.Windows
+          ref: eef37460aef77b2f9de8cd2237c1e55b344a6554
+          path: squirrel-a
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Check out exact upstream source B
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: Squirrel/Squirrel.Windows
+          ref: eef37460aef77b2f9de8cd2237c1e55b344a6554
+          path: squirrel-b
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Check out exact deterministic ILRepack source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: gluck/il-repack
+          ref: 5b55fa2f4d7c7b18ffb104e2fade2f794f4ccedf
+          path: ilrepack-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact upstream identities and reviewed build-tool source
+        shell: pwsh
+        env:
+          TOKENMONSTER_POLICY_SHA: ${{ github.workflow_sha }}
+          SOURCE_TAG_OBJECT: 274f7a9a5dc211552f27d1da7dc7899546a52be3
+          SOURCE_BASE_COMMIT: eef37460aef77b2f9de8cd2237c1e55b344a6554
+          SOURCE_BASE_DETECTOR_BLOB: 0fdefda329abf979a2c739f02761e3d4ec8e30de
+          FIX_COMMIT: c98244936f6876b080366417301268058028a53c
+          FIX_TREE: 0a1ebfa90cea6f8037907134d53562a26c6bb4c3
+          FIX_DETECTOR_BLOB: e8e442e0d95c5b7f5cc31a2eb84cf9407f5be2ab
+          UPSTREAM_MERGE_COMMIT: 45834cbfeae84d20ef2bed24ac863f02d0abec66
+          NUGET_SUBMODULE_COMMIT: 50f8d9e438fe948d7109501bd10f6024d0585b70
+          RETRY_PATCH_SHA256: 81a6bb631b7459773fbad1b4fbe7a878c698ab9e6016899a3f422b3fa32e2b1a
+          RETRY_PATCH_BYTES: 4545
+          XDT_OUTER_PATCH_SHA256: a781b27842680ae01b70b7308ea5a5154e3897e94c7c645a9cd172385fcc0137
+          XDT_OUTER_PATCH_BYTES: 640
+          XDT_INNER_PATCH_SHA256: 31a098f17a1409f03ff270bc819b7cebf8bcf94ca872f1484aa2699d6e5a4dce
+          XDT_INNER_PATCH_BYTES: 665
+          SOURCE_TEST_RUNNER_SHA256: e427140dfe867dd1739f6b493864887c53b864218aac172a4af54a11841c3a54
+          SOURCE_TEST_RUNNER_BYTES: 5519
+          PATCHED_SQUIRREL_PROJECT_BLOB: fcc79959834f1d0cb4d33f7a834e0a6926ccfd0f
+          PATCHED_UTILITY_BLOB: 432a76a6c55c6a01c88eee2641abb3ad051d3fc8
+          PATCHED_DETECTOR_TEST_BLOB: b9757252508228f50abb4aec0739905c52570bc2
+          PATCHED_UTILITY_TEST_BLOB: fb4c75a7910515bb4e98f38d09d1603a329b1e0e
+          PATCHED_NUGET_CORE_PROJECT_BLOB: a00ea88e7de4b53cf02ef5611de6e05ded2d7554
+          PATCHED_NUGET_CORE_PACKAGES_BLOB: 7b537c87913ae0f241c71e7d34889df098181d9d
+          XDT_SOURCE_COMMIT: 5b67dee04d86740575f0f5022b79833213cc024a
+          XDT_SOURCE_TREE: e7f17c790d0ede422e683f8617173df0ac63f1f1
+          XDT_LICENSE_BLOB: f49a4e16e68b128803cc2dcea614603632b04eac
+          XDT_LICENSE_SHA256: 43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1
+          XDT_LICENSE_BYTES: 11356
+          ILREPACK_SOURCE_COMMIT: 5b55fa2f4d7c7b18ffb104e2fade2f794f4ccedf
+          ILREPACK_SOURCE_TREE: 4c7e73b48c55a535790f9d3f56687258efc525d0
+          ILREPACK_RELEASE_TAG_COMMIT: 92843eace06c4eff3d6296a6fc4470ba725c57aa
+          ILREPACK_IMPORTER_BLOB: 07ea3c6054587b2dca44121ca99762b950b103c2
+          ILREPACK_LICENSE_BLOB: d645695673349e3947e8e5ae42332d0ac3164cd7
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+
+          $policy = Join-Path $env:GITHUB_WORKSPACE "tokenmonster-policy"
+          $policyHead = (git -C $policy rev-parse HEAD).Trim()
+          $policyDirty = @(git -C $policy status --porcelain)
+          $policyCredentials = @(
+            git -C $policy config --local --get-regexp "^http\..*\.extraheader$" 2>$null
+          )
+          $policyCredentialQueryExit = $LASTEXITCODE
+          if ($policyCredentialQueryExit -notin @(0, 1)) {
+            throw "The patch-policy credential-state query failed."
+          }
+          $global:LASTEXITCODE = 0
+          if (
+            $policyHead -cne $env:TOKENMONSTER_POLICY_SHA -or
+            $policyDirty.Count -ne 0 -or
+            $policyCredentials.Count -ne 0
+          ) {
+            throw "The patch policy is not the exact clean workflow commit."
+          }
+
+          $patchDirectory = Join-Path $policy ".github/patches/squirrel-updater"
+          $retryPatch = Join-Path $patchDirectory "retry-delete-tree.patch"
+          $xdtOuterPatch = Join-Path $patchDirectory "xdt-3.1.0-squirrel.patch"
+          $xdtInnerPatch = Join-Path $patchDirectory "xdt-3.1.0-nuget-core.patch"
+          foreach ($patchContract in @(
+            @($retryPatch, $env:RETRY_PATCH_SHA256, [int64]$env:RETRY_PATCH_BYTES),
+            @($xdtOuterPatch, $env:XDT_OUTER_PATCH_SHA256, [int64]$env:XDT_OUTER_PATCH_BYTES),
+            @($xdtInnerPatch, $env:XDT_INNER_PATCH_SHA256, [int64]$env:XDT_INNER_PATCH_BYTES)
+          )) {
+            $patchFile = Get-Item -LiteralPath $patchContract[0] -Force
+            $patchSha256 = (
+              Get-FileHash -LiteralPath $patchFile.FullName -Algorithm SHA256
+            ).Hash.ToLowerInvariant()
+            if (
+              -not $patchFile.PSIsContainer -and
+              $patchFile.Length -eq $patchContract[2] -and
+              $patchSha256 -ceq $patchContract[1]
+            ) {
+              continue
+            }
+            throw "A reviewed Squirrel source patch does not match its exact contract."
+          }
+
+          $sourceTestRunner = Join-Path $policy ".github/scripts/run-squirrel-source-tests.ps1"
+          $sourceTestRunnerFile = Get-Item -LiteralPath $sourceTestRunner -Force
+          $sourceTestRunnerSha256 = (
+            Get-FileHash -LiteralPath $sourceTestRunnerFile.FullName -Algorithm SHA256
+          ).Hash.ToLowerInvariant()
+          if (
+            $sourceTestRunnerFile.PSIsContainer -or
+            ($sourceTestRunnerFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+            $sourceTestRunnerFile.Length -ne [int64]$env:SOURCE_TEST_RUNNER_BYTES -or
+            $sourceTestRunnerSha256 -cne $env:SOURCE_TEST_RUNNER_SHA256
+          ) {
+            throw "The reviewed Squirrel source-test runner does not match its exact contract."
+          }
+
+          $xdtSource = Join-Path $env:GITHUB_WORKSPACE "xdt-source"
+          $xdtHead = (git -C $xdtSource rev-parse HEAD).Trim()
+          $xdtTree = (git -C $xdtSource rev-parse "HEAD^{tree}").Trim()
+          $xdtLicenseBlob = (git -C $xdtSource rev-parse "HEAD:LICENSE.txt").Trim()
+          $xdtLicense = Get-Item -LiteralPath (Join-Path $xdtSource "LICENSE.txt") -Force
+          $xdtCanonicalLicenseText = [IO.File]::ReadAllText($xdtLicense.FullName)
+          $xdtCanonicalLicenseText = $xdtCanonicalLicenseText.Replace("`r`n", "`n")
+          $xdtCanonicalLicenseText = $xdtCanonicalLicenseText.Replace("`r", "`n")
+          $xdtCanonicalLicenseBytes = [Text.UTF8Encoding]::new($false).GetBytes(
+            $xdtCanonicalLicenseText
+          )
+          $xdtLicenseHasher = [Security.Cryptography.SHA256]::Create()
+          try {
+            $xdtLicenseSha256 = -join @(
+              $xdtLicenseHasher.ComputeHash($xdtCanonicalLicenseBytes) |
+                ForEach-Object { $_.ToString("x2") }
+            )
+          } finally {
+            $xdtLicenseHasher.Dispose()
+          }
+          $xdtNoticePaths = @(
+            git -C $xdtSource ls-tree -r --name-only HEAD |
+              Where-Object {
+                [IO.Path]::GetFileName($_) -imatch "^NOTICE(?:\..*)?$"
+              }
+          )
+          $xdtDirty = @(git -C $xdtSource status --porcelain)
+          $xdtCredentials = @(
+            git -C $xdtSource config --local --get-regexp "^http\..*\.extraheader$" 2>$null
+          )
+          $xdtCredentialQueryExit = $LASTEXITCODE
+          if ($xdtCredentialQueryExit -notin @(0, 1)) {
+            throw "The Microsoft.Web.Xdt credential-state query failed."
+          }
+          $global:LASTEXITCODE = 0
+          if (
+            $xdtHead -cne $env:XDT_SOURCE_COMMIT -or
+            $xdtTree -cne $env:XDT_SOURCE_TREE -or
+            $xdtLicenseBlob -cne $env:XDT_LICENSE_BLOB -or
+            $xdtLicense.PSIsContainer -or
+            ($xdtLicense.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+            $xdtCanonicalLicenseBytes.Length -ne [int64]$env:XDT_LICENSE_BYTES -or
+            $xdtLicenseSha256 -cne $env:XDT_LICENSE_SHA256 -or
+            $xdtNoticePaths.Count -ne 0 -or
+            $xdtDirty.Count -ne 0 -or
+            $xdtCredentials.Count -ne 0
+          ) {
+            throw "The Microsoft.Web.Xdt source is not the exact reviewed Apache-2.0 tree."
+          }
+
+          foreach ($sourceName in @("squirrel-a", "squirrel-b")) {
+            $source = Join-Path $env:GITHUB_WORKSPACE $sourceName
+            $head = (git -C $source rev-parse HEAD).Trim()
+            $tagObject = (git -C $source rev-parse "refs/tags/2.0.1").Trim()
+            $tagCommit = (git -C $source rev-parse "refs/tags/2.0.1^{}").Trim()
+            $baseDetectorBlob = (
+              git -C $source rev-parse "$($env:SOURCE_BASE_COMMIT):src/Squirrel/SquirrelAwareExecutableDetector.cs"
+            ).Trim()
+            $nugetLink = (
+              git -C $source rev-parse "$($env:SOURCE_BASE_COMMIT):vendor/nuget"
+            ).Trim()
+            $nugetHead = (git -C (Join-Path $source "vendor/nuget") rev-parse HEAD).Trim()
+            $persistedCredentials = @(
+              git -C $source config --local --get-regexp "^http\..*\.extraheader$" 2>$null
+            )
+            $credentialQueryExit = $LASTEXITCODE
+            if ($credentialQueryExit -notin @(0, 1)) {
+              throw "The upstream credential-state query failed."
+            }
+            $global:LASTEXITCODE = 0
+            $fixParent = (git -C $source rev-parse "$($env:FIX_COMMIT)^").Trim()
+            $fixTree = (git -C $source rev-parse "$($env:FIX_COMMIT)^{tree}").Trim()
+            $fixDetectorBlob = (
+              git -C $source rev-parse "$($env:FIX_COMMIT):src/Squirrel/SquirrelAwareExecutableDetector.cs"
+            ).Trim()
+            $fixChangedFiles = @(
+              git -C $source diff-tree --no-commit-id --name-only -r $env:FIX_COMMIT
+            )
+            $mergeFixParent = (git -C $source rev-parse "$($env:UPSTREAM_MERGE_COMMIT)^2").Trim()
+            $mergeDetectorBlob = (
+              git -C $source rev-parse "$($env:UPSTREAM_MERGE_COMMIT):src/Squirrel/SquirrelAwareExecutableDetector.cs"
+            ).Trim()
+            $dirty = @(git -C $source status --porcelain --untracked-files=no)
+
+            if (
+              $head -cne $env:SOURCE_BASE_COMMIT -or
+              $tagObject -cne $env:SOURCE_TAG_OBJECT -or
+              $tagCommit -cne $env:SOURCE_BASE_COMMIT -or
+              $baseDetectorBlob -cne $env:SOURCE_BASE_DETECTOR_BLOB -or
+              $nugetLink -cne $env:NUGET_SUBMODULE_COMMIT -or
+              $nugetHead -cne $env:NUGET_SUBMODULE_COMMIT -or
+              $persistedCredentials.Count -ne 0 -or
+              $fixParent -cne $env:SOURCE_BASE_COMMIT -or
+              $fixTree -cne $env:FIX_TREE -or
+              $fixDetectorBlob -cne $env:FIX_DETECTOR_BLOB -or
+              $fixChangedFiles.Count -ne 1 -or
+              $fixChangedFiles[0] -cne "src/Squirrel/SquirrelAwareExecutableDetector.cs" -or
+              $mergeFixParent -cne $env:FIX_COMMIT -or
+              $mergeDetectorBlob -cne $env:FIX_DETECTOR_BLOB -or
+              $dirty.Count -ne 0
+            ) {
+              throw "The upstream graph is not the exact 2.0.1 base and merged one-file fix."
+            }
+
+            git -C $source checkout $env:FIX_COMMIT -- "src/Squirrel/SquirrelAwareExecutableDetector.cs"
+            if ($LASTEXITCODE -ne 0) {
+              throw "The reviewed Squirrel fix could not be reconstructed."
+            }
+            $changedFiles = @(git -C $source diff --cached --name-only)
+            $reconstructedBlob = (
+              git -C $source rev-parse ":src/Squirrel/SquirrelAwareExecutableDetector.cs"
+            ).Trim()
+            $reconstructedTree = (git -C $source write-tree).Trim()
+            if (
+              $changedFiles.Count -ne 1 -or
+              $changedFiles[0] -cne "src/Squirrel/SquirrelAwareExecutableDetector.cs" -or
+              $reconstructedBlob -cne $env:FIX_DETECTOR_BLOB -or
+              $reconstructedTree -cne $env:FIX_TREE
+            ) {
+              throw "The reconstructed source is not the upstream-merged one-file fix."
+            }
+
+            git -C $source reset --hard $env:FIX_COMMIT
+            if ($LASTEXITCODE -ne 0) {
+              throw "The reconstructed source could not be bound to the exact fix commit."
+            }
+            $boundHead = (git -C $source rev-parse HEAD).Trim()
+            $boundDirty = @(git -C $source status --porcelain --untracked-files=no)
+            if ($boundHead -cne $env:FIX_COMMIT -or $boundDirty.Count -ne 0) {
+              throw "The source tree was not cleanly bound to the exact fix commit."
+            }
+
+            git -C $source apply --check --index $retryPatch
+            if ($LASTEXITCODE -ne 0) {
+              throw "The bounded-delete source patch does not apply exactly."
+            }
+            git -C $source apply --index $retryPatch
+            if ($LASTEXITCODE -ne 0) {
+              throw "The bounded-delete source patch could not be applied."
+            }
+            git -C $source apply --check --index $xdtOuterPatch
+            if ($LASTEXITCODE -ne 0) {
+              throw "The outer XDT source patch does not apply exactly."
+            }
+            git -C $source apply --index $xdtOuterPatch
+            if ($LASTEXITCODE -ne 0) {
+              throw "The outer XDT source patch could not be applied."
+            }
+
+            $nugetSource = Join-Path $source "vendor/nuget"
+            git -C $nugetSource apply --check --index $xdtInnerPatch
+            if ($LASTEXITCODE -ne 0) {
+              throw "The NuGet Core XDT source patch does not apply exactly."
+            }
+            git -C $nugetSource apply --index $xdtInnerPatch
+            if ($LASTEXITCODE -ne 0) {
+              throw "The NuGet Core XDT source patch could not be applied."
+            }
+
+            $patchedOuterFiles = @(
+              git -C $source diff --cached --name-only
+            )
+            $expectedOuterFiles = @(
+              "src/Squirrel/Squirrel.csproj"
+              "src/Squirrel/Utility.cs"
+              "test/SquirrelAwareExecutableDetectorTests.cs"
+              "test/UtilityTests.cs"
+            )
+            $patchedInnerFiles = @(
+              git -C $nugetSource diff --cached --name-only
+            )
+            $expectedInnerFiles = @(
+              "src/Core/Core.csproj"
+              "src/Core/packages.config"
+            )
+            $outerUnstagedFiles = @(git -C $source diff --name-only)
+            $innerUnstagedFiles = @(git -C $nugetSource diff --name-only)
+            $outerUntrackedFiles = @(
+              git -C $source ls-files --others --exclude-standard
+            )
+            $innerUntrackedFiles = @(
+              git -C $nugetSource ls-files --others --exclude-standard
+            )
+            $patchedSquirrelProjectBlob = (
+              git -C $source rev-parse ":src/Squirrel/Squirrel.csproj"
+            ).Trim()
+            $patchedUtilityBlob = (
+              git -C $source rev-parse ":src/Squirrel/Utility.cs"
+            ).Trim()
+            $patchedDetectorTestBlob = (
+              git -C $source rev-parse ":test/SquirrelAwareExecutableDetectorTests.cs"
+            ).Trim()
+            $patchedUtilityTestBlob = (
+              git -C $source rev-parse ":test/UtilityTests.cs"
+            ).Trim()
+            $patchedNugetProjectBlob = (
+              git -C $nugetSource rev-parse ":src/Core/Core.csproj"
+            ).Trim()
+            $patchedNugetPackagesBlob = (
+              git -C $nugetSource rev-parse ":src/Core/packages.config"
+            ).Trim()
+            $outerFileDifferences = @(
+              Compare-Object $expectedOuterFiles $patchedOuterFiles -CaseSensitive
+            )
+            $innerFileDifferences = @(
+              Compare-Object $expectedInnerFiles $patchedInnerFiles -CaseSensitive
+            )
+            if (
+              $outerFileDifferences.Count -ne 0 -or
+              $innerFileDifferences.Count -ne 0 -or
+              $outerUnstagedFiles.Count -ne 1 -or
+              $outerUnstagedFiles[0] -cne "vendor/nuget" -or
+              $innerUnstagedFiles.Count -ne 0 -or
+              $outerUntrackedFiles.Count -ne 0 -or
+              $innerUntrackedFiles.Count -ne 0 -or
+              $patchedSquirrelProjectBlob -cne $env:PATCHED_SQUIRREL_PROJECT_BLOB -or
+              $patchedUtilityBlob -cne $env:PATCHED_UTILITY_BLOB -or
+              $patchedDetectorTestBlob -cne $env:PATCHED_DETECTOR_TEST_BLOB -or
+              $patchedUtilityTestBlob -cne $env:PATCHED_UTILITY_TEST_BLOB -or
+              $patchedNugetProjectBlob -cne $env:PATCHED_NUGET_CORE_PROJECT_BLOB -or
+              $patchedNugetPackagesBlob -cne $env:PATCHED_NUGET_CORE_PACKAGES_BLOB
+            ) {
+              throw "The patched Squirrel source trees do not match the reviewed changed-file and blob contracts."
+            }
+            git -C $source diff --cached --check
+            if ($LASTEXITCODE -ne 0) {
+              throw "The patched outer Squirrel source has whitespace errors."
+            }
+            git -C $nugetSource -c core.whitespace=cr-at-eol diff --cached --check
+            if ($LASTEXITCODE -ne 0) {
+              throw "The patched NuGet Core source has whitespace errors."
+            }
+          }
+
+          $ilrepackSource = Join-Path $env:GITHUB_WORKSPACE "ilrepack-source"
+          $ilrepackHead = (git -C $ilrepackSource rev-parse HEAD).Trim()
+          $ilrepackTag = (git -C $ilrepackSource rev-parse "refs/tags/2.0.24^{}").Trim()
+          $ilrepackTree = (git -C $ilrepackSource rev-parse "HEAD^{tree}").Trim()
+          $ilrepackImporterBlob = (
+            git -C $ilrepackSource rev-parse "HEAD:ILRepack/RepackImporter.cs"
+          ).Trim()
+          $ilrepackLicenseBlob = (git -C $ilrepackSource rev-parse "HEAD:LICENSE").Trim()
+          git -C $ilrepackSource merge-base --is-ancestor $env:ILREPACK_SOURCE_COMMIT $env:ILREPACK_RELEASE_TAG_COMMIT
+          $ilrepackSourcePredatesTag = $LASTEXITCODE -eq 0
+          $ilrepackDirty = @(git -C $ilrepackSource status --porcelain --untracked-files=no)
+          $ilrepackPersistedCredentials = @(
+            git -C $ilrepackSource config --local --get-regexp "^http\..*\.extraheader$" 2>$null
+          )
+          $ilrepackCredentialQueryExit = $LASTEXITCODE
+          if ($ilrepackCredentialQueryExit -notin @(0, 1)) {
+            throw "The ILRepack credential-state query failed."
+          }
+          $global:LASTEXITCODE = 0
+          if (
+            $ilrepackHead -cne $env:ILREPACK_SOURCE_COMMIT -or
+            $ilrepackTag -cne $env:ILREPACK_RELEASE_TAG_COMMIT -or
+            $ilrepackTree -cne $env:ILREPACK_SOURCE_TREE -or
+            -not $ilrepackSourcePredatesTag -or
+            $ilrepackImporterBlob -cne $env:ILREPACK_IMPORTER_BLOB -or
+            $ilrepackLicenseBlob -cne $env:ILREPACK_LICENSE_BLOB -or
+            $ilrepackDirty.Count -ne 0 -or
+            $ilrepackPersistedCredentials.Count -ne 0
+          ) {
+            throw "The deterministic ILRepack source is not the exact reviewed 2.0.24 tree."
+          }
+
+      - name: Build twice with isolated dependency caches
+        id: build
+        shell: pwsh
+        env:
+          RECEIPT_MODE: ${{ inputs.derive_candidate && 'derive' || 'locked' }}
+          TOKENMONSTER_POLICY_SHA: ${{ github.workflow_sha }}
+          BROKEN_UPDATER_SHA256: 76359cd4b0349a83337b941332ad042c90351c2bb0a4628307740324c97984cc
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+          DOTNET_NOLOGO: 1
+          DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+          NUGET_URL: https://dist.nuget.org/win-x86-commandline/v4.9.4/nuget.exe
+          NUGET_SHA256: cb139d855d06d07e7da892e8558fe16dcaa65cb381175c506f5ed0a759eaf8f6
+          NUGET_SOURCE: https://api.nuget.org/v3/index.json
+          REFERENCE_ASSEMBLIES_URL: https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net45/1.0.3/microsoft.netframework.referenceassemblies.net45.1.0.3.nupkg
+          REFERENCE_ASSEMBLIES_SHA256: 23a9f94ea3e2cb88cd8341af75b811c6fb5cb82516fc696e95ed4620279128e3
+          ILREPACK_URL: https://api.nuget.org/v3-flatcontainer/ilrepack/2.0.24/ilrepack.2.0.24.nupkg
+          ILREPACK_PACKAGE_SHA256: 4354440d0b1ad531ef2dfd9f112fde80018b9d1534c25d10afe728146a6f67be
+          ILREPACK_TOOL_SHA256: adc25f9933da1e9d660ba41d2f6ae8181b7383bc2c08b869a03b10aac2dd9ab5
+          ILREPACK_RUNTIMECONFIG_SHA256: f528ed48a5ea5a5dafc7460a4db46c0a95823a806c523ec914250aa1e5798782
+          ILREPACK_RUNTIME_VERSION: 6.0.43
+          ILREPACK_SOURCE_COMMIT: 5b55fa2f4d7c7b18ffb104e2fade2f794f4ccedf
+          ILREPACK_SOURCE_TREE: 4c7e73b48c55a535790f9d3f56687258efc525d0
+          ILREPACK_RELEASE_TAG_COMMIT: 92843eace06c4eff3d6296a6fc4470ba725c57aa
+          SOURCE_BASE_COMMIT: eef37460aef77b2f9de8cd2237c1e55b344a6554
+          FIX_COMMIT: c98244936f6876b080366417301268058028a53c
+          FIX_TREE: 0a1ebfa90cea6f8037907134d53562a26c6bb4c3
+          UPSTREAM_MERGE_COMMIT: 45834cbfeae84d20ef2bed24ac863f02d0abec66
+          NUGET_SUBMODULE_COMMIT: 50f8d9e438fe948d7109501bd10f6024d0585b70
+          RETRY_PATCH_SHA256: 81a6bb631b7459773fbad1b4fbe7a878c698ab9e6016899a3f422b3fa32e2b1a
+          RETRY_PATCH_BYTES: 4545
+          XDT_OUTER_PATCH_SHA256: a781b27842680ae01b70b7308ea5a5154e3897e94c7c645a9cd172385fcc0137
+          XDT_OUTER_PATCH_BYTES: 640
+          XDT_INNER_PATCH_SHA256: 31a098f17a1409f03ff270bc819b7cebf8bcf94ca872f1484aa2699d6e5a4dce
+          XDT_INNER_PATCH_BYTES: 665
+          SOURCE_TEST_RUNNER_SHA256: e427140dfe867dd1739f6b493864887c53b864218aac172a4af54a11841c3a54
+          SOURCE_TEST_RUNNER_BYTES: 5519
+          XDT_SOURCE_COMMIT: 5b67dee04d86740575f0f5022b79833213cc024a
+          XDT_SOURCE_TREE: e7f17c790d0ede422e683f8617173df0ac63f1f1
+          XDT_LICENSE_BLOB: f49a4e16e68b128803cc2dcea614603632b04eac
+          XDT_LICENSE_SHA256: 43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1
+          XDT_ATTRIBUTION_SHA256: 5942a1e712f375fbc36e2ce62bd12b930d6d70c9d9ec74caea35d7ec48fbe1a2
+          XDT_ATTRIBUTION_BYTES: 484
+          XDT_PACKAGE_SHA256: 38ece8d6523710f474391b03c824b66f5192c2a667940dbaa3f895b464c37e72
+          XDT_PACKAGE_BYTES: 129010
+          XDT_DLL_SHA256: 207124b715bd7ef950df87142d9fd0cf86f1acf86409e6d1d8eb9ddf41c0fc56
+          XDT_DLL_BYTES: 81272
+          XDT_ASSEMBLY_VERSION: 3.1.0.0
+          XDT_PUBLIC_KEY_TOKEN: 31bf3856ad364e35
+          XDT_MVID: bf07c227-95c3-42a1-8e96-956ba121bfd3
+          REVIEWED_DEPENDENCY_INVENTORY_SHA256: 9ab90cdb2131c34d8c871c2eba37edc7cbc12d63e2abdfcea4306e4cea367b23
+          REVIEWED_TEST_DEPENDENCY_INVENTORY_SHA256: f7fe9ed4bb26e0e812d86a8a04971ac6f71824e3dea483fab0ec21462267e4a6
+          REVIEWED_MERGE_INPUT_INVENTORY_SHA256: 9086ab285b0959e8bbbd2e797b53865d80793468bff6d3aa8f76a9b4e88d03d2
+          REVIEWED_UPDATER_SHA256: 83b754a9b24742675678c5d8fa024a8140c2d18eb640116a87a364f0a897388a
+          REVIEWED_UPDATER_BYTES: 1841664
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+
+          $deriveCandidate = switch -CaseSensitive ($env:RECEIPT_MODE) {
+            "derive" { $true; break }
+            "locked" { $false; break }
+            default { throw "The updater receipt mode is invalid." }
+          }
+          $receiptMode = $env:RECEIPT_MODE
+
+          $sourceTestRunner = Join-Path $env:GITHUB_WORKSPACE "tokenmonster-policy/.github/scripts/run-squirrel-source-tests.ps1"
+          $sourceTestRunnerFile = Get-Item -LiteralPath $sourceTestRunner -Force
+          $sourceTestRunnerSha256 = (
+            Get-FileHash -LiteralPath $sourceTestRunnerFile.FullName -Algorithm SHA256
+          ).Hash.ToLowerInvariant()
+          if (
+            $sourceTestRunnerFile.PSIsContainer -or
+            ($sourceTestRunnerFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+            $sourceTestRunnerFile.Length -ne [int64]$env:SOURCE_TEST_RUNNER_BYTES -or
+            $sourceTestRunnerSha256 -cne $env:SOURCE_TEST_RUNNER_SHA256
+          ) {
+            throw "The reviewed Squirrel source-test runner changed after policy verification."
+          }
+          $windowsPowerShell = Join-Path $env:SystemRoot "System32/WindowsPowerShell/v1.0/powershell.exe"
+          $windowsPowerShellFile = Get-Item -LiteralPath $windowsPowerShell -Force
+          if (
+            $windowsPowerShellFile.PSIsContainer -or
+            ($windowsPowerShellFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
+          ) {
+            throw "The reviewed Windows runner lacks a physical Windows PowerShell executable."
+          }
+
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
+          if (-not (Test-Path -LiteralPath $vswhere -PathType Leaf)) {
+            throw "The reviewed Windows runner lacks vswhere.exe."
+          }
+          $msbuildCandidates = @(
+            & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe"
+          )
+          if ($msbuildCandidates.Count -ne 1) {
+            throw "The reviewed Windows runner did not resolve exactly one MSBuild executable."
+          }
+          $msbuild = $msbuildCandidates[0]
+          $msbuildVersion = (& $msbuild -version -nologo | Select-Object -Last 1).Trim()
+          if ($LASTEXITCODE -ne 0 -or [String]::IsNullOrWhiteSpace($msbuildVersion)) {
+            throw "MSBuild did not report a version."
+          }
+          $dotnetInfo = @(& dotnet --info)
+          if ($LASTEXITCODE -ne 0 -or $dotnetInfo.Count -lt 1) {
+            throw "The reviewed Windows runner did not report its .NET SDK inventory."
+          }
+          $dotnetRuntimes = @(& dotnet --list-runtimes)
+          if (
+            $LASTEXITCODE -ne 0 -or
+            @($dotnetRuntimes | Where-Object { $_ -match "^Microsoft\.NETCore\.App $([regex]::Escape($env:ILREPACK_RUNTIME_VERSION)) \[" }).Count -ne 1
+          ) {
+            throw "The reviewed Windows runner lacks the exact ILRepack runtime."
+          }
+
+          foreach ($credentialVariable in @(
+            "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+            "ACTIONS_RUNTIME_TOKEN",
+            "GH_TOKEN",
+            "GITHUB_TOKEN",
+            "NODE_AUTH_TOKEN",
+            "NUGET_AUTH_TOKEN",
+            "SYSTEM_ACCESSTOKEN"
+          )) {
+            Remove-Item "Env:$credentialVariable" -ErrorAction SilentlyContinue
+          }
+          # Nerdbank.GitVersioning 3.0.50 predates GitHub's environment-file
+          # protocol. Keep its normal MSBuild versioning while preventing it
+          # from emitting the retired workflow-command form of set-env.
+          Remove-Item Env:GITHUB_ACTIONS -ErrorAction SilentlyContinue
+
+          $nuget = Join-Path $env:RUNNER_TEMP "nuget-4.9.4.exe"
+          if (Test-Path -LiteralPath $nuget) {
+            throw "The exact NuGet bootstrap path must start absent."
+          }
+          Invoke-WebRequest -Uri $env:NUGET_URL -OutFile $nuget -MaximumRedirection 0
+          $nugetFile = Get-Item -LiteralPath $nuget
+          $nugetSha256 = (Get-FileHash -LiteralPath $nuget -Algorithm SHA256).Hash.ToLowerInvariant()
+          $nugetSignature = Get-AuthenticodeSignature -LiteralPath $nuget
+          if (
+            $nugetFile.Length -ne 5690456 -or
+            $nugetSha256 -cne $env:NUGET_SHA256 -or
+            $nugetFile.VersionInfo.FileVersion -cne "4.9.4.5839" -or
+            $nugetFile.VersionInfo.ProductVersion -cne "4.9.4+ed6e2dca9391d13b431f4eff58c5194f0ebcee13" -or
+            $nugetSignature.Status -cne "Valid" -or
+            $nugetSignature.SignerCertificate.Thumbprint -cne "9DC17888B5CFAD98B3CB35C1994E96227F061675" -or
+            $nugetSignature.SignerCertificate.Subject -notmatch "(?:^|, )O=Microsoft Corporation(?:,|$)"
+          ) {
+            throw "The downloaded NuGet 4.9.4 bootstrap is not the reviewed Microsoft binary."
+          }
+          $nugetVersion = $nugetFile.VersionInfo.FileVersion
+
+          $referencePackage = Join-Path $env:RUNNER_TEMP "microsoft.netframework.referenceassemblies.net45.1.0.3.nupkg"
+          $referenceRoot = Join-Path $env:RUNNER_TEMP "net45-reference-assemblies"
+          if (
+            (Test-Path -LiteralPath $referencePackage) -or
+            (Test-Path -LiteralPath $referenceRoot)
+          ) {
+            throw "The exact .NET Framework reference-assembly paths must start absent."
+          }
+          Invoke-WebRequest -Uri $env:REFERENCE_ASSEMBLIES_URL -OutFile $referencePackage -MaximumRedirection 0
+          $referencePackageFile = Get-Item -LiteralPath $referencePackage
+          $referencePackageSha256 = (Get-FileHash -LiteralPath $referencePackage -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (
+            $referencePackageFile.Length -ne 19820444 -or
+            $referencePackageSha256 -cne $env:REFERENCE_ASSEMBLIES_SHA256
+          ) {
+            throw "The .NET Framework 4.5 reference-assembly package is not the reviewed NuGet binary."
+          }
+          & $nuget verify -Signatures $referencePackage
+          if ($LASTEXITCODE -ne 0) {
+            throw "The exact .NET Framework reference-assembly NuGet signature is invalid."
+          }
+          New-Item -ItemType Directory -Path $referenceRoot | Out-Null
+          [IO.Compression.ZipFile]::ExtractToDirectory($referencePackage, $referenceRoot)
+          $referenceBuildRoot = Join-Path $referenceRoot "build"
+          $referenceMscorlib = Join-Path $referenceBuildRoot ".NETFramework/v4.5/mscorlib.dll"
+          $referenceTargets = Join-Path $referenceBuildRoot "Microsoft.NETFramework.ReferenceAssemblies.net45.targets"
+          if (
+            -not (Test-Path -LiteralPath $referenceMscorlib -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $referenceTargets -PathType Leaf)
+          ) {
+            throw "The reviewed reference-assembly package lacks its exact net45 build inputs."
+          }
+
+          $ilrepackPackage = Join-Path $env:RUNNER_TEMP "ilrepack.2.0.24.nupkg"
+          $ilrepackPackageRoot = Join-Path $env:RUNNER_TEMP "ilrepack.2.0.24"
+          if (
+            (Test-Path -LiteralPath $ilrepackPackage) -or
+            (Test-Path -LiteralPath $ilrepackPackageRoot)
+          ) {
+            throw "The reviewed deterministic ILRepack paths must start absent."
+          }
+          Invoke-WebRequest -Uri $env:ILREPACK_URL -OutFile $ilrepackPackage -MaximumRedirection 0
+          $ilrepackPackageFile = Get-Item -LiteralPath $ilrepackPackage
+          $ilrepackPackageSha256 = (
+            Get-FileHash -LiteralPath $ilrepackPackage -Algorithm SHA256
+          ).Hash.ToLowerInvariant()
+          if (
+            $ilrepackPackageFile.Length -ne 726144 -or
+            $ilrepackPackageSha256 -cne $env:ILREPACK_PACKAGE_SHA256
+          ) {
+            throw "The deterministic ILRepack package is not the reviewed NuGet binary."
+          }
+          & $nuget verify -Signatures $ilrepackPackage
+          if ($LASTEXITCODE -ne 0) {
+            throw "The exact deterministic ILRepack NuGet signature is invalid."
+          }
+          New-Item -ItemType Directory -Path $ilrepackPackageRoot | Out-Null
+          [IO.Compression.ZipFile]::ExtractToDirectory($ilrepackPackage, $ilrepackPackageRoot)
+          $ilrepackTool = Join-Path $ilrepackPackageRoot "tools/ILRepack.exe"
+          $ilrepackRuntimeConfig = Join-Path $ilrepackPackageRoot "tools/ILRepack.runtimeconfig.json"
+          $ilrepackVersionInfo = (Get-Item -LiteralPath $ilrepackTool).VersionInfo
+          if (
+            -not (Test-Path -LiteralPath $ilrepackTool -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $ilrepackRuntimeConfig -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $ilrepackTool -Algorithm SHA256).Hash.ToLowerInvariant() -cne $env:ILREPACK_TOOL_SHA256 -or
+            (Get-FileHash -LiteralPath $ilrepackRuntimeConfig -Algorithm SHA256).Hash.ToLowerInvariant() -cne $env:ILREPACK_RUNTIMECONFIG_SHA256 -or
+            $ilrepackVersionInfo.FileVersion -cne "2.0.24.0" -or
+            $ilrepackVersionInfo.ProductVersion -cne "2.0.24+5b55fa2f4d7c7b18ffb104e2fade2f794f4ccedf"
+          ) {
+            throw "The reviewed ILRepack package lacks its exact deterministic tools."
+          }
+
+          $nugetConfig = Join-Path $env:RUNNER_TEMP "tokenmonster-squirrel-nuget.config"
+          [IO.File]::WriteAllText(
+            $nugetConfig,
+            "<?xml version=`"1.0`" encoding=`"utf-8`"?>`n<configuration>`n  <packageSources>`n    <clear />`n    <add key=`"nuget.org`" value=`"$($env:NUGET_SOURCE)`" protocolVersion=`"3`" />`n  </packageSources>`n  <fallbackPackageFolders>`n    <clear />`n  </fallbackPackageFolders>`n</configuration>`n",
+            [Text.UTF8Encoding]::new($false)
+          )
+
+          function Assert-IsolatedProjectAssets {
+            param(
+              [Parameter(Mandatory)] [string] $AssetsPath,
+              [Parameter(Mandatory)] [string] $PackageRoot,
+              [Parameter(Mandatory)] [string] $ConfigPath
+            )
+
+            if (-not (Test-Path -LiteralPath $AssetsPath -PathType Leaf)) {
+              throw "The exact PackageReference restore did not produce $AssetsPath."
+            }
+            $assets = Get-Content -LiteralPath $AssetsPath -Raw | ConvertFrom-Json
+            $packageFolders = @($assets.packageFolders.PSObject.Properties.Name)
+            $sources = @($assets.project.restore.sources.PSObject.Properties.Name)
+            $configFiles = @($assets.project.restore.configFilePaths)
+            $expectedPackageRoot = [IO.Path]::TrimEndingDirectorySeparator(
+              [IO.Path]::GetFullPath($PackageRoot)
+            )
+            $actualPackageRoot = if ($packageFolders.Count -eq 1) {
+              [IO.Path]::TrimEndingDirectorySeparator(
+                [IO.Path]::GetFullPath($packageFolders[0])
+              )
+            } else {
+              ""
+            }
+            $unexpectedReferencePackages = @(
+              $assets.libraries.PSObject.Properties.Name |
+                Where-Object { $_ -match "^Microsoft\.NETFramework\.ReferenceAssemblies" }
+            )
+            if (
+              $packageFolders.Count -ne 1 -or
+              $actualPackageRoot -ine $expectedPackageRoot -or
+              $sources.Count -ne 1 -or
+              $sources[0] -cne $env:NUGET_SOURCE -or
+              $configFiles.Count -ne 1 -or
+              [IO.Path]::GetFullPath($configFiles[0]) -ine [IO.Path]::GetFullPath($ConfigPath) -or
+              $unexpectedReferencePackages.Count -ne 0
+            ) {
+              throw "The PackageReference restore escaped its reviewed source, config, package root, or reference inputs."
+            }
+          }
+
+          function Assert-XdtProjectAssets {
+            param(
+              [Parameter(Mandatory)] [string] $AssetsPath
+            )
+
+            $assets = Get-Content -LiteralPath $AssetsPath -Raw | ConvertFrom-Json
+            $expectedLibrary = "Microsoft.Web.Xdt/3.1.0"
+            $xdtLibraries = @(
+              $assets.libraries.PSObject.Properties |
+                Where-Object { $_.Name -imatch "^Microsoft\.Web\.Xdt/" }
+            )
+            $xdtTargets = @()
+            foreach ($target in $assets.targets.PSObject.Properties) {
+              $xdtTarget = $target.Value.PSObject.Properties[$expectedLibrary]
+              if ($null -ne $xdtTarget) {
+                $xdtTargets += ,$xdtTarget
+              }
+            }
+            if ($xdtLibraries.Count -ne 1 -or $xdtLibraries[0].Name -cne $expectedLibrary -or $xdtTargets.Count -ne 1) {
+              throw "The Squirrel restore did not resolve exactly Microsoft.Web.Xdt 3.1.0."
+            }
+            $compile = $xdtTargets[0].Value.PSObject.Properties["compile"]
+            $runtime = $xdtTargets[0].Value.PSObject.Properties["runtime"]
+            $compilePaths = @(
+              if ($null -ne $compile) {
+                $compile.Value.PSObject.Properties.Name
+              }
+            )
+            $runtimePaths = @(
+              if ($null -ne $runtime) {
+                $runtime.Value.PSObject.Properties.Name
+              }
+            )
+            if (
+              $compilePaths.Count -ne 1 -or
+              $compilePaths[0] -cne "lib/net40/Microsoft.Web.XmlTransform.dll" -or
+              $runtimePaths.Count -ne 1 -or
+              $runtimePaths[0] -cne "lib/net40/Microsoft.Web.XmlTransform.dll"
+            ) {
+              throw "The Squirrel restore selected an unreviewed Microsoft.Web.Xdt asset."
+            }
+          }
+
+          function Assert-XdtAssembly {
+            param(
+              [Parameter(Mandatory)] [string] $Path
+            )
+
+            $file = Get-Item -LiteralPath $Path -Force
+            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $assemblyName = [Reflection.AssemblyName]::GetAssemblyName($file.FullName)
+            $publicKeyToken = -join @(
+              $assemblyName.GetPublicKeyToken() |
+                ForEach-Object { $_.ToString("x2") }
+            )
+            $stream = [IO.File]::Open(
+              $file.FullName,
+              [IO.FileMode]::Open,
+              [IO.FileAccess]::Read,
+              [IO.FileShare]::Read
+            )
+            try {
+              $peReader = [Reflection.PortableExecutable.PEReader]::new($stream)
+              try {
+                if (-not $peReader.HasMetadata) {
+                  throw "The Microsoft.Web.Xdt DLL has no managed metadata."
+                }
+                $metadata = [Reflection.Metadata.PEReaderExtensions]::GetMetadataReader($peReader)
+                $module = $metadata.GetModuleDefinition()
+                $mvid = $metadata.GetGuid($module.Mvid).ToString("D")
+              } finally {
+                $peReader.Dispose()
+              }
+            } finally {
+              $stream.Dispose()
+            }
+            if (
+              $file.PSIsContainer -or
+              ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+              $file.Length -ne [int64]$env:XDT_DLL_BYTES -or
+              $hash -cne $env:XDT_DLL_SHA256 -or
+              $assemblyName.Name -cne "Microsoft.Web.XmlTransform" -or
+              $assemblyName.Version.ToString() -cne $env:XDT_ASSEMBLY_VERSION -or
+              $publicKeyToken -cne $env:XDT_PUBLIC_KEY_TOKEN -or
+              $mvid -cne $env:XDT_MVID
+            ) {
+              throw "A restored Microsoft.Web.Xdt assembly does not match its exact reviewed identity."
+            }
+          }
+
+          function Get-ManagedMetadataReceipt {
+            param(
+              [Parameter(Mandatory)] [string] $Path
+            )
+
+            $stream = [IO.File]::Open(
+              $Path,
+              [IO.FileMode]::Open,
+              [IO.FileAccess]::Read,
+              [IO.FileShare]::Read
+            )
+            try {
+              $peReader = [Reflection.PortableExecutable.PEReader]::new($stream)
+              try {
+                if (-not $peReader.HasMetadata) {
+                  throw "A reviewed merge input has no managed metadata."
+                }
+                $metadata = [Reflection.Metadata.PEReaderExtensions]::GetMetadataReader($peReader)
+                $references = @(
+                  foreach ($handle in $metadata.AssemblyReferences) {
+                    $reference = $metadata.GetAssemblyReference($handle)
+                    $token = -join @(
+                      $metadata.GetBlobBytes($reference.PublicKeyOrToken) |
+                        ForEach-Object { $_.ToString("x2") }
+                    )
+                    [pscustomobject]@{
+                      Name = $metadata.GetString($reference.Name)
+                      Version = $reference.Version.ToString()
+                      PublicKeyToken = $token
+                    }
+                  }
+                )
+                $types = @(
+                  foreach ($handle in $metadata.TypeDefinitions) {
+                    $definition = $metadata.GetTypeDefinition($handle)
+                    $namespace = $metadata.GetString($definition.Namespace)
+                    $name = $metadata.GetString($definition.Name)
+                    if ([String]::IsNullOrEmpty($namespace)) {
+                      $name
+                    } else {
+                      "$namespace.$name"
+                    }
+                  }
+                )
+              } finally {
+                $peReader.Dispose()
+              }
+            } finally {
+              $stream.Dispose()
+            }
+            return [pscustomobject]@{
+              AssemblyReferences = $references
+              TypeDefinitions = $types
+            }
+          }
+
+          function Assert-MergedXdtBehavior {
+            param(
+              [Parameter(Mandatory)] [string] $Path
+            )
+
+            $assembly = [Reflection.Assembly]::LoadFrom($Path)
+            $documentType = $assembly.GetType(
+              "Microsoft.Web.XmlTransform.XmlTransformableDocument",
+              $true,
+              $false
+            )
+            $transformationType = $assembly.GetType(
+              "Microsoft.Web.XmlTransform.XmlTransformation",
+              $true,
+              $false
+            )
+            $instanceFlags = (
+              [Reflection.BindingFlags]::Instance -bor
+              [Reflection.BindingFlags]::Public -bor
+              [Reflection.BindingFlags]::NonPublic
+            )
+            $constructors = @(
+              $transformationType.GetConstructors($instanceFlags) |
+                Where-Object {
+                  $parameters = @($_.GetParameters())
+                  $parameters.Count -eq 3 -and
+                  $parameters[0].ParameterType -eq [string] -and
+                  $parameters[1].ParameterType -eq [bool] -and
+                  $parameters[2].ParameterType.FullName -ceq "Microsoft.Web.XmlTransform.IXmlTransformationLogger"
+                }
+            )
+            $applyMethods = @(
+              $transformationType.GetMethods($instanceFlags) |
+                Where-Object {
+                  $parameters = @($_.GetParameters())
+                  $_.Name -ceq "Apply" -and
+                  $parameters.Count -eq 1 -and
+                  $parameters[0].ParameterType -eq [Xml.XmlDocument]
+                }
+            )
+            if ($constructors.Count -ne 1 -or $applyMethods.Count -ne 1) {
+              throw "The internalized Microsoft.Web.Xdt reflection surface is unexpected."
+            }
+
+            $sourceXml = "<configuration><appSettings><add key=`"replace`" value=`"old`" /><add key=`"remove`" value=`"drop`" /></appSettings></configuration>"
+            $transformXml = "<configuration xmlns:xdt=`"http://schemas.microsoft.com/XML-Document-Transform`"><appSettings><add key=`"replace`" value=`"new`" xdt:Transform=`"Replace`" xdt:Locator=`"Match(key)`" /><add key=`"insert`" value=`"created`" xdt:Transform=`"InsertIfMissing`" xdt:Locator=`"Match(key)`" /><add key=`"remove`" xdt:Transform=`"Remove`" xdt:Locator=`"Match(key)`" /></appSettings></configuration>"
+            $document = [Activator]::CreateInstance($documentType, $true)
+            $document.PreserveWhitespace = $true
+            $document.LoadXml($sourceXml)
+            $transformation = $constructors[0].Invoke(
+              [object[]]@($transformXml, $false, $null)
+            )
+            try {
+              $applied = $applyMethods[0].Invoke(
+                $transformation,
+                [object[]]@($document)
+              )
+            } finally {
+              if ($transformation -is [IDisposable]) {
+                $transformation.Dispose()
+              }
+            }
+            $replace = $document.SelectSingleNode(
+              "/configuration/appSettings/add[@key='replace']"
+            )
+            $insert = $document.SelectSingleNode(
+              "/configuration/appSettings/add[@key='insert']"
+            )
+            $remove = $document.SelectSingleNode(
+              "/configuration/appSettings/add[@key='remove']"
+            )
+            $allSettings = $document.SelectNodes("/configuration/appSettings/add")
+            if (
+              $applied -ne $true -or
+              $null -eq $replace -or
+              $replace.GetAttribute("value") -cne "new" -or
+              $null -eq $insert -or
+              $insert.GetAttribute("value") -cne "created" -or
+              $null -ne $remove -or
+              $allSettings.Count -ne 2
+            ) {
+              throw "The internalized Microsoft.Web.Xdt behavior smoke failed."
+            }
+
+            $malformedRejected = $false
+            $malformedTransformation = $null
+            try {
+              $malformedTransformation = $constructors[0].Invoke(
+                [object[]]@("<configuration>", $false, $null)
+              )
+            } catch {
+              $malformedRejected = $true
+            } finally {
+              if ($malformedTransformation -is [IDisposable]) {
+                $malformedTransformation.Dispose()
+              }
+            }
+            if (-not $malformedRejected) {
+              throw "The internalized Microsoft.Web.Xdt accepted malformed transform XML."
+            }
+          }
+
+          function Assert-XdtPackage {
+            param(
+              [Parameter(Mandatory)] [string] $Path
+            )
+
+            $file = Get-Item -LiteralPath $Path -Force
+            $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            if (
+              $file.PSIsContainer -or
+              ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+              $file.Length -ne [int64]$env:XDT_PACKAGE_BYTES -or
+              $hash -cne $env:XDT_PACKAGE_SHA256
+            ) {
+              throw "A restored Microsoft.Web.Xdt package does not match its exact reviewed bytes."
+            }
+            & $nuget verify -Signatures $file.FullName
+            if ($LASTEXITCODE -ne 0) {
+              throw "A restored Microsoft.Web.Xdt package signature is invalid."
+            }
+          }
+
+          # NuGet 4.9 treats the literal value "clear" as a relative fallback
+          # path here. Use an empty global property plus both implicit-folder
+          # disable switches, then verify the generated assets fail-closed.
+          $env:NUGET_RESTORE_MSBUILD_ARGS = @(
+            "/p:DisableImplicitLibraryPacksFolder=true"
+            "/p:DisableImplicitNuGetFallbackFolder=true"
+            "/p:RestoreFallbackFolders="
+            "/p:RestoreAdditionalProjectSources="
+            "/p:RestoreAdditionalProjectFallbackFolders="
+            "/p:AutomaticallyUseReferenceAssemblyPackages=false"
+            "/p:TargetFrameworkRootPath=$referenceBuildRoot"
+            "/p:DirectoryBuildTargetsPath=$referenceTargets"
+          ) -join " "
+
+          # These are the human-reviewed inventories from quarantined,
+          # byte-identical builds. Each isolated restore must match before any
+          # package-provided targets are allowed into its compile.
+          $reviewedDependencyInventory = @(
+            "global/deltacompressiondotnet/1.1.0/deltacompressiondotnet.1.1.0.nupkg.sha512`t2lAyh3f9BvodfRmw8kKFxrWIKD6FcLdKv4dSHOfEgbkmNhOARFJ8TItyr76XsumEPJ53ORPLS3twRDIWnO4XnA=="
+            "global/ilrepack/1.26.0/ilrepack.1.26.0.nupkg.sha512`t3Taj5hDZkDK8SlOVmoOkI0R6JpQAbCLEP3Rs1nbS3RhqjuKdsH1PvbNFTAtLMhsBNVnGahY3mJD8BmfZjnIj3Q=="
+            "global/microsoft.build.tasks.git/1.0.0-beta2-18618-05/microsoft.build.tasks.git.1.0.0-beta2-18618-05.nupkg.sha512`tkcnqXhm6lxU8UFtpVO8enW7L8Gisw05bI46B3cWlW7K1dgGPb4hAyfiGyGczYOU6n4RtHO9CCfh0Lk74qkbF6w=="
+            "global/microsoft.sourcelink.common/1.0.0-beta2-18618-05/microsoft.sourcelink.common.1.0.0-beta2-18618-05.nupkg.sha512`teJP4JUDOiiWPBvwN+/0v1otoT8VPFOm6upABUAS6TwFbLfjRiLI2Ko44gyxF0nW+uMQHx186tnTDt+fg7je97Q=="
+            "global/microsoft.sourcelink.github/1.0.0-beta2-18618-05/microsoft.sourcelink.github.1.0.0-beta2-18618-05.nupkg.sha512`t7cQMyVdud/ritrYqgc99LecTC0g9rA2QhO1QFi6OBubsA++gMXRiXx/ct1rmycxM9EvHJSNZ9DHbZHu42RLMLQ=="
+            "global/microsoft.web.xdt/3.1.0/microsoft.web.xdt.3.1.0.nupkg.sha512`t3VApgkdgOglJWtrXSgYzz6o8Cp6IpvmFQMeICyQvvbKoy+OjNwco5ovzBBL1HHj7kEgLfe2ruXW/ZQ1k+2YxYw=="
+            "global/mono.cecil/0.11.2/mono.cecil.0.11.2.nupkg.sha512`tBTpKT6mzbvLgXKWSilfGOn0we1JeJb7VWu2f1lJ3ABJqCqoZlNCdi90BMiTJl+9DdJ5MqH3pokN873IjM3vi/Q=="
+            "global/nerdbank.gitversioning/3.0.50/nerdbank.gitversioning.3.0.50.nupkg.sha512`tNiT6vLHcTP8VM244+rfmoVHuWh7bPsG9XnKMm4rAEc2QmPFGQfruUBaqxgbsqz4z7yuEZlhjP1UURdhfz04wXg=="
+            "global/sharpcompress/0.17.1/sharpcompress.0.17.1.nupkg.sha512`twLRtmFrUhhF6ljyYCWWcwfGRZ9pX1gNZDSF6+Rj5uxS85Rq497HvhP7CYLNXCyIP1s065D3ebHcRA6uK1NFtcQ=="
+            "global/wpfanimatedgif/1.4.15/wpfanimatedgif.1.4.15.nupkg.sha512`tzuh1qY8DkJOXM/SIMGDtfNMrIUiPsOzr9ZLWoxFqo2GQBoU7QuZpdQE/yQDxrZS3AuNx8gdX753BxT42xfJLbA=="
+            "legacy/ilrepack.1.26.0/ilrepack.1.26.0.nupkg`tsha256:fe49fd5aa140c1f4e99b24fbe34311289a4ee97ab0989df2b9f4f5288fa95471"
+            "legacy/microsoft.data.edm.5.6.1/microsoft.data.edm.5.6.1.nupkg`tsha256:2372dda0dbbc7c01a09883fbeb4ba245ac0913bce346795fd66f11db96945510"
+            "legacy/microsoft.data.odata.5.6.1/microsoft.data.odata.5.6.1.nupkg`tsha256:82454bc4c599f79682130e30cd44cb6588dcd75661c3cbd637c9ae321ba84a8c"
+            "legacy/microsoft.data.services.client.5.6.1/microsoft.data.services.client.5.6.1.nupkg`tsha256:a6405fb929a99739c3079024a4d1003dc1a4629ff6f40b95c454498d8e545ed8"
+            "legacy/microsoft.web.xdt.3.1.0/microsoft.web.xdt.3.1.0.nupkg`tsha256:38ece8d6523710f474391b03c824b66f5192c2a667940dbaa3f895b464c37e72"
+            "legacy/system.spatial.5.6.1/system.spatial.5.6.1.nupkg`tsha256:0d6efec3c6097edaa50d02cc713a0bc80d3a1441992081d21104831a7e4f4d06"
+          )
+          $reviewedMergeInputInventory = @(
+            "Update.exe`tsha256:c7cd37af0958928bb362d33824847966ec2f1efa3a9fe43c39b0aa071ed77d12`tbytes:86528"
+            "WpfAnimatedGif.dll`tsha256:ce8ef825fc10e5a3265bd3a4c418e7012ade1f61bbeb7ed9459c1311e4e6b917`tbytes:39936"
+            "SharpCompress.dll`tsha256:21d9b05a5c703f6754b8fbd6e3d0d58fc6dd31215d1118af64d4305f7d92d585`tbytes:454144"
+            "Microsoft.Web.XmlTransform.dll`tsha256:207124b715bd7ef950df87142d9fd0cf86f1acf86409e6d1d8eb9ddf41c0fc56`tbytes:81272"
+            "DeltaCompressionDotNet.dll`tsha256:13950b911243e13269ef2487a00147c824e2223a7fb9103eb21f765c795be45e`tbytes:4608"
+            "DeltaCompressionDotNet.MsDelta.dll`tsha256:1ce872ed466a8a3466c808a7babf3b597ec12e1cb84870e7a0cf00b2f5ef6df4`tbytes:5632"
+            "Squirrel.dll`tsha256:89fc1b22134ed7363ceac1298c10a619b9bce22d309c902382d2a1e385374b8e`tbytes:267264"
+            "NuGet.Squirrel.dll`tsha256:49f7f7051a3f62c4806384d6d43ea8ed27ccc73ff15ee6993b89a4dc5aa88dfa`tbytes:513536"
+            "Mono.Cecil.dll`tsha256:7744c9c84c28033bc3606f4dfce2adcd6f632e2be7827893c3e2257100f1cf9e`tbytes:345088"
+          )
+          $reviewedTestDependencyInventory = @(
+            "global/deltacompressiondotnet/1.1.0/deltacompressiondotnet.1.1.0.nupkg.sha512`t2lAyh3f9BvodfRmw8kKFxrWIKD6FcLdKv4dSHOfEgbkmNhOARFJ8TItyr76XsumEPJ53ORPLS3twRDIWnO4XnA=="
+            "global/microsoft.codecoverage/15.8.0/microsoft.codecoverage.15.8.0.nupkg.sha512`tcgcX2c/K35GrIjXkUwWop2GyG/YsLVo2wnL/2ESzOqr4V21FrrCVYuhpClv/bD80+rwXyIpyulqSX1NBNeAtMA=="
+            "global/microsoft.net.test.sdk/15.8.0/microsoft.net.test.sdk.15.8.0.nupkg.sha512`tyRnkhvz0RXRGmoLZqcL917aA8GoEgJRyxhmlf1CoFxU/6msYeIPxVJbBFnMpiSOm8rrY2jJedWnJUODQRbalaw=="
+            "global/microsoft.web.xdt/3.1.0/microsoft.web.xdt.3.1.0.nupkg.sha512`t3VApgkdgOglJWtrXSgYzz6o8Cp6IpvmFQMeICyQvvbKoy+OjNwco5ovzBBL1HHj7kEgLfe2ruXW/ZQ1k+2YxYw=="
+            "global/mono.cecil/0.11.2/mono.cecil.0.11.2.nupkg.sha512`tBTpKT6mzbvLgXKWSilfGOn0we1JeJb7VWu2f1lJ3ABJqCqoZlNCdi90BMiTJl+9DdJ5MqH3pokN873IjM3vi/Q=="
+            "global/sharpcompress/0.17.1/sharpcompress.0.17.1.nupkg.sha512`twLRtmFrUhhF6ljyYCWWcwfGRZ9pX1gNZDSF6+Rj5uxS85Rq497HvhP7CYLNXCyIP1s065D3ebHcRA6uK1NFtcQ=="
+            "global/xunit.abstractions/2.0.0/xunit.abstractions.2.0.0.nupkg.sha512`tWLGy0Y9QeTZZ3/ILGDJAEjwjzsqhV0HPmmVS17CaN0Nzzkdgvl+Ly0tHGD6mmPnaoj0KfE2xpOSoTb3HBhKR3A=="
+            "global/xunit.assert/2.0.0/xunit.assert.2.0.0.nupkg.sha512`tcR3mlIu3ouLrzXzxFmu5NCH8gv9MHqW9lUVsIMWwjSnSWV9ktWEDhlc8XDV2h1xPJsAokCqYiUe+JyAnQm0NCg=="
+            "global/xunit.core/2.0.0/xunit.core.2.0.0.nupkg.sha512`tm0mwQe7dnxUEf+yEFvMoxJtUut5jL0fgCg9I0+6ZqtnLd6JVe3bJC+c2GHbgo380QRvBrgNuR8c5T2NRwAT6yg=="
+            "global/xunit.extensibility.core/2.0.0/xunit.extensibility.core.2.0.0.nupkg.sha512`t2Gp7qJhdgEV6PKBObjG8JK4ZPi7ZrdE2h6UFunFgitC0XJy9JgIwFnkTW8+q5GzgIO4CFStRZ7xHE1RTCSYPfg=="
+            "global/xunit.runner.visualstudio/2.0.0/xunit.runner.visualstudio.2.0.0.nupkg.sha512`tBf9ks/79tZFUAr+masUl6PxB5lpwQYPFzPnS5f4hxmsog8Ax4UtOi3ypvLuBXAP/Agm0SqV07NelKFqQ+Nn7tg=="
+            "global/xunit/2.0.0/xunit.2.0.0.nupkg.sha512`tJi2qbDQTUdzs4p6vcXqq3+Fgql8clNWymv4Q02OYa/6vqpbdBaWvXj/ur5p6GDYUh2qgSCylQmDjwP0PJy6TxQ=="
+          )
+
+          function Get-GlobalDependencyInventory {
+            param(
+              [Parameter(Mandatory)] [string] $GlobalPackages
+            )
+
+            return @(
+              Get-ChildItem -LiteralPath $GlobalPackages -Recurse -File -Filter "*.nupkg.sha512" |
+                ForEach-Object {
+                  $relative = [IO.Path]::GetRelativePath($GlobalPackages, $_.FullName).Replace("\", "/").ToLowerInvariant()
+                  "global/$relative`t$((Get-Content -LiteralPath $_.FullName -Raw).Trim())"
+                } |
+                Sort-Object -CaseSensitive
+            )
+          }
+
+          function Get-DependencyInventory {
+            param(
+              [Parameter(Mandatory)] [string] $GlobalPackages,
+              [Parameter(Mandatory)] [string] $LegacyPackages
+            )
+
+            $globalInventory = @(
+              Get-GlobalDependencyInventory -GlobalPackages $GlobalPackages
+            )
+            $legacyInventory = @(
+              Get-ChildItem -LiteralPath $LegacyPackages -Recurse -File -Filter "*.nupkg" |
+                ForEach-Object {
+                  $relative = [IO.Path]::GetRelativePath($LegacyPackages, $_.FullName).Replace("\", "/").ToLowerInvariant()
+                  $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                  "legacy/$relative`tsha256:$hash"
+                } |
+                Sort-Object -CaseSensitive
+            )
+            return @(
+              $globalInventory
+              $legacyInventory
+            )
+          }
+
+          $outputs = @()
+          $dependencyInventories = @()
+          $testDependencyInventories = @()
+          $mergeInputInventories = @()
+          $sourceTestPassCount = 0
+          foreach ($sourceName in @("squirrel-a", "squirrel-b")) {
+            $source = Join-Path $env:GITHUB_WORKSPACE $sourceName
+            $dependencyCache = Join-Path $env:RUNNER_TEMP "$sourceName-nuget-packages"
+            $httpCache = Join-Path $env:RUNNER_TEMP "$sourceName-nuget-http-cache"
+            $scratch = Join-Path $env:RUNNER_TEMP "$sourceName-nuget-scratch"
+            if (
+              (Test-Path -LiteralPath $dependencyCache) -or
+              (Test-Path -LiteralPath $httpCache) -or
+              (Test-Path -LiteralPath $scratch)
+            ) {
+              throw "The isolated NuGet dependency state must start absent."
+            }
+            New-Item -ItemType Directory -Path $dependencyCache | Out-Null
+            New-Item -ItemType Directory -Path $httpCache | Out-Null
+            New-Item -ItemType Directory -Path $scratch | Out-Null
+            # Keep the global-package root canonical for both NuGet 4.9 and
+            # PackageReference-generated MSBuild inputs.
+            $nugetPackageRoot = $dependencyCache + [IO.Path]::DirectorySeparatorChar
+            $env:NUGET_PACKAGES = $nugetPackageRoot
+            $env:NUGET_HTTP_CACHE_PATH = $httpCache
+            $env:NUGET_SCRATCH = $scratch
+            $env:TEMP = $scratch
+            $env:TMP = $scratch
+            $env:NUGET_CREDENTIALPROVIDERS_PATH = ""
+            $env:NUGET_PLUGIN_PATHS = ""
+
+            $legacyPackages = Join-Path $source "packages"
+            & $nuget restore (Join-Path $source "vendor/nuget/src/Core/packages.config") -PackagesDirectory $legacyPackages -NonInteractive -NoCache -DirectDownload -ConfigFile $nugetConfig -Source $env:NUGET_SOURCE
+            if ($LASTEXITCODE -ne 0) {
+              throw "The exact upstream legacy Core dependency restore failed."
+            }
+            & $nuget restore (Join-Path $source "src/Squirrel/Squirrel.csproj") -PackagesDirectory $nugetPackageRoot -NonInteractive -NoCache -DirectDownload -ConfigFile $nugetConfig -Source $env:NUGET_SOURCE -MSBuildPath (Split-Path -Parent $msbuild)
+            if ($LASTEXITCODE -ne 0) {
+              throw "The exact upstream Squirrel library dependency restore failed."
+            }
+            $squirrelAssetsPath = Join-Path $source "build/obj/Squirrel/project.assets.json"
+            Assert-IsolatedProjectAssets -AssetsPath $squirrelAssetsPath -PackageRoot $nugetPackageRoot -ConfigPath $nugetConfig
+            Assert-XdtProjectAssets -AssetsPath $squirrelAssetsPath
+
+            $globalXdtRoot = Join-Path $dependencyCache "microsoft.web.xdt/3.1.0"
+            $legacyXdtRoot = Join-Path $legacyPackages "Microsoft.Web.Xdt.3.1.0"
+            Assert-XdtPackage -Path (Join-Path $globalXdtRoot "microsoft.web.xdt.3.1.0.nupkg")
+            Assert-XdtPackage -Path (Join-Path $legacyXdtRoot "Microsoft.Web.Xdt.3.1.0.nupkg")
+            Assert-XdtAssembly -Path (Join-Path $globalXdtRoot "lib/net40/Microsoft.Web.XmlTransform.dll")
+            Assert-XdtAssembly -Path (Join-Path $legacyXdtRoot "lib/net40/Microsoft.Web.XmlTransform.dll")
+
+            & $nuget restore (Join-Path $source "src/Update/Update.csproj") -PackagesDirectory $nugetPackageRoot -NonInteractive -NoCache -DirectDownload -ConfigFile $nugetConfig -Source $env:NUGET_SOURCE -MSBuildPath (Split-Path -Parent $msbuild)
+            if ($LASTEXITCODE -ne 0) {
+              throw "The exact upstream updater dependency restore failed."
+            }
+            Assert-IsolatedProjectAssets -AssetsPath (Join-Path $source "build/obj/Update/project.assets.json") -PackageRoot $nugetPackageRoot -ConfigPath $nugetConfig
+
+            $inventory = @(
+              Get-DependencyInventory -GlobalPackages $dependencyCache -LegacyPackages $legacyPackages
+            )
+            $dependencyDifferences = @(
+              Compare-Object $reviewedDependencyInventory $inventory -CaseSensitive
+            )
+            if ($inventory.Count -lt 1) {
+              throw "The upstream restore did not produce a dependency inventory."
+            }
+            if ($dependencyDifferences.Count -ne 0) {
+              Write-Output "Resolved dependency inventory for $sourceName restore:"
+              $inventory | ForEach-Object { Write-Output $_ }
+              if (-not $deriveCandidate) {
+                throw "The upstream restore does not match the committed reviewed dependency inventory."
+              }
+            }
+            $dependencyInventories += ,$inventory
+
+            # Core.csproj predates SourceRoot items. Disable MSBuild's inferred
+            # source mapping and supply the same explicit compiler PathMap for
+            # both otherwise independent source trees. Symbols are neither
+            # merged nor shipped, so do not embed a path-sensitive PDB identity.
+            $buildArguments = @(
+              "/p:Configuration=Release"
+              "/p:Platform=Any CPU"
+              "/p:TargetFrameworkRootPath=$referenceBuildRoot"
+              "/p:DirectoryBuildTargetsPath=$referenceTargets"
+              "/p:NuGetPackageRoot=$nugetPackageRoot"
+              "/p:DisableImplicitLibraryPacksFolder=true"
+              "/p:DisableImplicitNuGetFallbackFolder=true"
+              "/p:RestoreFallbackFolders="
+              "/p:RestoreAdditionalProjectSources="
+              "/p:RestoreAdditionalProjectFallbackFolders="
+              "/p:AutomaticallyUseReferenceAssemblyPackages=false"
+              "/p:Deterministic=true"
+              "/p:ContinuousIntegrationBuild=true"
+              "/p:DeterministicSourcePaths=false"
+              "/p:PathMap=$source=/_/squirrel"
+              "/p:DebugSymbols=false"
+              "/p:DebugType=None"
+              "/p:PostBuildEvent="
+              "/m:1"
+              "/nr:false"
+              "/v:minimal"
+            )
+            & $msbuild (Join-Path $source "src/Update/Update.csproj") @buildArguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "The exact upstream updater build failed."
+            }
+
+            $outputDirectory = Join-Path $source "build/Release/net45"
+            Assert-XdtAssembly -Path (Join-Path $outputDirectory "Microsoft.Web.XmlTransform.dll")
+            $mergeInputNames = @(
+              "Update.exe"
+              "WpfAnimatedGif.dll"
+              "SharpCompress.dll"
+              "Microsoft.Web.XmlTransform.dll"
+              "DeltaCompressionDotNet.dll"
+              "DeltaCompressionDotNet.MsDelta.dll"
+              "Squirrel.dll"
+              "NuGet.Squirrel.dll"
+              "Mono.Cecil.dll"
+            )
+            $mergeInputInventory = @(
+              $mergeInputNames | ForEach-Object {
+                $inputPath = Join-Path $outputDirectory $_
+                if (-not (Test-Path -LiteralPath $inputPath -PathType Leaf)) {
+                  throw "The exact upstream build did not produce merge input $_."
+                }
+                $inputHash = (
+                  Get-FileHash -LiteralPath $inputPath -Algorithm SHA256
+                ).Hash.ToLowerInvariant()
+                "$_`tsha256:$inputHash`tbytes:$((Get-Item -LiteralPath $inputPath).Length)"
+              }
+            )
+            foreach ($mergeInputName in $mergeInputNames) {
+              $metadataReceipt = Get-ManagedMetadataReceipt -Path (Join-Path $outputDirectory $mergeInputName)
+              $xdtReferences = @(
+                $metadataReceipt.AssemblyReferences |
+                  Where-Object { $_.Name -ieq "Microsoft.Web.XmlTransform" }
+              )
+              if ($mergeInputName -ceq "NuGet.Squirrel.dll") {
+                if (
+                  $xdtReferences.Count -ne 1 -or
+                  $xdtReferences[0].Name -cne "Microsoft.Web.XmlTransform" -or
+                  $xdtReferences[0].Version -cne $env:XDT_ASSEMBLY_VERSION -or
+                  $xdtReferences[0].PublicKeyToken -cne $env:XDT_PUBLIC_KEY_TOKEN
+                ) {
+                  throw "NuGet.Squirrel.dll does not contain the exact reviewed Microsoft.Web.Xdt reference."
+                }
+              } elseif ($xdtReferences.Count -ne 0) {
+                throw "An unexpected merge input contains a Microsoft.Web.Xdt reference."
+              }
+            }
+            Write-Output "Reviewed pre-merge input inventory for $sourceName (fixed public filenames only):"
+            $mergeInputInventory | ForEach-Object { Write-Output $_ }
+            $mergeInputReceiptDifferences = @(
+              Compare-Object $reviewedMergeInputInventory $mergeInputInventory -CaseSensitive
+            )
+            if (-not $deriveCandidate -and $mergeInputReceiptDifferences.Count -ne 0) {
+              throw "The compiler outputs do not match the committed reviewed merge-input inventory."
+            }
+            $mergeInputInventories += ,$mergeInputInventory
+
+            $mergedTemporaryOutput = Join-Path $outputDirectory "Update.exe.tmp"
+            if (Test-Path -LiteralPath $mergedTemporaryOutput) {
+              throw "The deterministic merge output path must start absent."
+            }
+            $mergeExitCode = $null
+            Push-Location $outputDirectory
+            try {
+              & dotnet exec --fx-version $env:ILREPACK_RUNTIME_VERSION --roll-forward Disable $ilrepackTool "/ndebug" "/internalize" "/out:Update.exe.tmp" @mergeInputNames
+              $mergeExitCode = $LASTEXITCODE
+            } finally {
+              Pop-Location
+            }
+            if ($mergeExitCode -ne 0 -or -not (Test-Path -LiteralPath $mergedTemporaryOutput -PathType Leaf)) {
+              throw "The reviewed deterministic ILRepack merge failed."
+            }
+            $output = Join-Path $outputDirectory "Update.exe"
+            Move-Item -LiteralPath $mergedTemporaryOutput -Destination $output -Force
+            $mergedMetadataReceipt = Get-ManagedMetadataReceipt -Path $output
+            $mergedXdtReferences = @(
+              $mergedMetadataReceipt.AssemblyReferences |
+                Where-Object { $_.Name -ieq "Microsoft.Web.XmlTransform" }
+            )
+            $expectedMergedXdtTypes = @(
+              "Microsoft.Web.XmlTransform.XmlTransformation"
+              "Microsoft.Web.XmlTransform.XmlTransformableDocument"
+            )
+            $mergedXdtTypes = @(
+              $mergedMetadataReceipt.TypeDefinitions |
+                Where-Object { $expectedMergedXdtTypes -ccontains $_ }
+            )
+            $mergedTypeDifferences = @(
+              Compare-Object $expectedMergedXdtTypes $mergedXdtTypes -CaseSensitive
+            )
+            if (
+              $mergedXdtReferences.Count -ne 0 -or
+              $mergedXdtTypes.Count -ne 2 -or
+              $mergedTypeDifferences.Count -ne 0
+            ) {
+              throw "The merged updater did not internalize the exact reviewed Microsoft.Web.Xdt types."
+            }
+
+            $testDependencyCache = Join-Path $env:RUNNER_TEMP "$sourceName-test-nuget-packages"
+            $testHttpCache = Join-Path $env:RUNNER_TEMP "$sourceName-test-nuget-http-cache"
+            $testScratch = Join-Path $env:RUNNER_TEMP "$sourceName-test-nuget-scratch"
+            $testResults = Join-Path $env:RUNNER_TEMP "$sourceName-source-test-results"
+            if (
+              (Test-Path -LiteralPath $testDependencyCache) -or
+              (Test-Path -LiteralPath $testHttpCache) -or
+              (Test-Path -LiteralPath $testScratch) -or
+              (Test-Path -LiteralPath $testResults)
+            ) {
+              throw "The isolated source-test dependency state must start absent."
+            }
+            New-Item -ItemType Directory -Path $testDependencyCache | Out-Null
+            New-Item -ItemType Directory -Path $testHttpCache | Out-Null
+            New-Item -ItemType Directory -Path $testScratch | Out-Null
+            New-Item -ItemType Directory -Path $testResults | Out-Null
+            $testNugetPackageRoot = $testDependencyCache + [IO.Path]::DirectorySeparatorChar
+            $env:NUGET_PACKAGES = $testNugetPackageRoot
+            $env:NUGET_HTTP_CACHE_PATH = $testHttpCache
+            $env:NUGET_SCRATCH = $testScratch
+            $env:TEMP = $testScratch
+            $env:TMP = $testScratch
+
+            $testProject = Join-Path $source "test/Squirrel.Tests.csproj"
+            & $nuget restore $testProject -PackagesDirectory $testNugetPackageRoot -NonInteractive -NoCache -DirectDownload -ConfigFile $nugetConfig -Source $env:NUGET_SOURCE -MSBuildPath (Split-Path -Parent $msbuild)
+            if ($LASTEXITCODE -ne 0) {
+              throw "The exact upstream source-test dependency restore failed."
+            }
+            $testAssetsPath = Join-Path $source "test/obj/project.assets.json"
+            Assert-IsolatedProjectAssets -AssetsPath $testAssetsPath -PackageRoot $testNugetPackageRoot -ConfigPath $nugetConfig
+            $testInventory = @(
+              Get-GlobalDependencyInventory -GlobalPackages $testDependencyCache
+            )
+            $testInventoryDifferences = @(
+              Compare-Object $reviewedTestDependencyInventory $testInventory -CaseSensitive
+            )
+            if ($testInventory.Count -lt 1) {
+              throw "The source-test restore did not produce a dependency inventory."
+            }
+            if ($testInventoryDifferences.Count -ne 0) {
+              Write-Output "Resolved dependency inventory for $sourceName source-test restore:"
+              $testInventory | ForEach-Object { Write-Output $_ }
+              if (-not $deriveCandidate) {
+                throw "The source-test restore does not match the committed reviewed dependency inventory."
+              }
+            }
+            $testDependencyInventories += ,$testInventory
+
+            $testBuildArguments = @(
+              $buildArguments |
+                Where-Object {
+                  $_ -notmatch "^/p:(?:NuGetPackageRoot|PathMap|DebugSymbols|DebugType)="
+                }
+            )
+            $testBuildArguments += "/p:NuGetPackageRoot=$testNugetPackageRoot"
+            $testBuildArguments += "/p:BuildProjectReferences=false"
+            # This upstream test helper locates fixtures from StackFrame source
+            # paths, so the unshipped test assembly intentionally keeps a full
+            # PDB and does not use the release artifact PathMap.
+            $testBuildArguments += "/p:PathMap="
+            $testBuildArguments += "/p:DebugSymbols=true"
+            $testBuildArguments += "/p:DebugType=full"
+            & $msbuild $testProject @testBuildArguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "The reviewed source-test assembly build failed."
+            }
+            $testAssembly = Join-Path $source "test/bin/Any CPU/Release/net45/Squirrel.Tests.dll"
+            $testAssemblyFile = Get-Item -LiteralPath $testAssembly -Force
+            $testSymbols = Join-Path $source "test/bin/Any CPU/Release/net45/Squirrel.Tests.pdb"
+            $testSymbolsFile = Get-Item -LiteralPath $testSymbols -Force
+            if (
+              $testAssemblyFile.PSIsContainer -or
+              ($testAssemblyFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+              $testAssemblyFile.Length -lt 1 -or
+              $testSymbolsFile.PSIsContainer -or
+              ($testSymbolsFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+              $testSymbolsFile.Length -lt 1
+            ) {
+              throw "The reviewed source-test build did not produce a physical assembly and full PDB."
+            }
+            $sourceTestReceipt = Join-Path $testResults "reviewed-source-tests.txt"
+            $sourceTestRunnerFile = Get-Item -LiteralPath $sourceTestRunner -Force
+            $sourceTestRunnerSha256 = (
+              Get-FileHash -LiteralPath $sourceTestRunnerFile.FullName -Algorithm SHA256
+            ).Hash.ToLowerInvariant()
+            if (
+              $sourceTestRunnerFile.PSIsContainer -or
+              ($sourceTestRunnerFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+              $sourceTestRunnerFile.Length -ne [int64]$env:SOURCE_TEST_RUNNER_BYTES -or
+              $sourceTestRunnerSha256 -cne $env:SOURCE_TEST_RUNNER_SHA256
+            ) {
+              throw "The reviewed Squirrel source-test runner changed before execution."
+            }
+            & $windowsPowerShell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $sourceTestRunnerFile.FullName -AssemblyPath $testAssemblyFile.FullName -ReceiptPath $sourceTestReceipt
+            if ($LASTEXITCODE -ne 0) {
+              throw "The reviewed bounded-delete and PE-reopen source tests failed."
+            }
+            $sourceTestReceiptFile = Get-Item -LiteralPath $sourceTestReceipt -Force
+            if (
+              $sourceTestReceiptFile.PSIsContainer -or
+              ($sourceTestReceiptFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
+            ) {
+              throw "The reviewed source-test runner did not produce a physical receipt."
+            }
+            $expectedSourceTestReceipt = @(
+              "passed`tSquirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpRetriesTransientFileLocks"
+              "passed`tSquirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpReturnsAfterBoundedRetriesForPermanentFileLocks"
+              "passed`tSquirrel.Tests.SquirrelAwareExecutableDetectorTests.NotSquirrelAware"
+            )
+            $sourceTestReceiptLines = @(
+              Get-Content -LiteralPath $sourceTestReceiptFile.FullName -Encoding UTF8
+            )
+            $sourceTestReceiptMatches = $sourceTestReceiptLines.Count -eq 3
+            for ($sourceTestIndex = 0; $sourceTestIndex -lt 3; $sourceTestIndex++) {
+              if (
+                $sourceTestReceiptLines.Count -le $sourceTestIndex -or
+                $sourceTestReceiptLines[$sourceTestIndex] -cne $expectedSourceTestReceipt[$sourceTestIndex]
+              ) {
+                $sourceTestReceiptMatches = $false
+              }
+            }
+            if (-not $sourceTestReceiptMatches) {
+              throw "The reviewed source-test result set was incomplete."
+            }
+            $sourceTestPassCount += $sourceTestReceiptLines.Count
+            $outputs += $output
+          }
+
+          if (Compare-Object $dependencyInventories[0] $dependencyInventories[1] -CaseSensitive) {
+            throw "The two isolated restores resolved different dependency content hashes."
+          }
+          if (
+            $sourceTestPassCount -ne 6 -or
+            (Compare-Object $testDependencyInventories[0] $testDependencyInventories[1] -CaseSensitive)
+          ) {
+            throw "The two isolated source-test runs were not identical successful validations."
+          }
+          $mergeInputDifferences = @(
+            Compare-Object $mergeInputInventories[0] $mergeInputInventories[1] -CaseSensitive
+          )
+          if ($mergeInputDifferences.Count -ne 0) {
+            throw "The two isolated compilers produced different deterministic merge inputs."
+          }
+          $hashes = @(
+            $outputs | ForEach-Object {
+              (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+          )
+          $sizes = @($outputs | ForEach-Object { (Get-Item -LiteralPath $_).Length })
+          $invalidRepeatedOutput = (
+            $hashes.Count -ne 2 -or
+            $hashes[0] -cne $hashes[1] -or
+            $hashes[0] -ceq $env:BROKEN_UPDATER_SHA256 -or
+            $sizes[0] -ne $sizes[1] -or
+            $sizes[0] -lt 1 -or
+            $sizes[0] -gt 10485760
+          )
+          $invalidLockedOutput = (
+            -not $deriveCandidate -and (
+              $hashes[0] -cne $env:REVIEWED_UPDATER_SHA256 -or
+              $sizes[0] -ne [int64]$env:REVIEWED_UPDATER_BYTES
+            )
+          )
+          if ($invalidRepeatedOutput -or $invalidLockedOutput) {
+            throw "The two isolated updater builds were not identical outputs for the selected receipt mode."
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $outputs[0]
+          if ($signature.Status -cne "NotSigned") {
+            throw "The reviewed source build unexpectedly produced a signed updater."
+          }
+          Assert-MergedXdtBehavior -Path $outputs[0]
+
+          $artifactDirectory = Join-Path $env:RUNNER_TEMP "squirrel-updater-candidate"
+          if (Test-Path -LiteralPath $artifactDirectory) {
+            throw "The updater candidate artifact directory must start absent."
+          }
+          New-Item -ItemType Directory -Path $artifactDirectory | Out-Null
+          $artifactBinary = Join-Path $artifactDirectory "Squirrel.exe"
+          Copy-Item -LiteralPath $outputs[0] -Destination $artifactBinary
+          if (
+            (Get-FileHash -LiteralPath $artifactBinary -Algorithm SHA256).Hash.ToLowerInvariant() -cne $hashes[0] -or
+            (Get-Item -LiteralPath $artifactBinary).Length -ne $sizes[0]
+          ) {
+            throw "The staged updater artifact no longer matches the reviewed output."
+          }
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "squirrel-a/COPYING") -Destination (Join-Path $artifactDirectory "SQUIRREL-WINDOWS-LICENSE.txt")
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "squirrel-a/vendor/nuget/LICENSE.txt") -Destination (Join-Path $artifactDirectory "NUGET-SUBMODULE-LICENSE.txt")
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "squirrel-a/vendor/nuget/COPYRIGHT.txt") -Destination (Join-Path $artifactDirectory "NUGET-SUBMODULE-COPYRIGHT.txt")
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "squirrel-a/vendor/nuget/CREDITS.txt") -Destination (Join-Path $artifactDirectory "NUGET-SUBMODULE-CREDITS.txt")
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "ilrepack-source/LICENSE") -Destination (Join-Path $artifactDirectory "ILREPACK-LICENSE.txt")
+          $xdtLicensePath = Join-Path $artifactDirectory "MICROSOFT-WEB-XDT-LICENSE.txt"
+          $xdtSourceLicensePath = Join-Path $env:GITHUB_WORKSPACE "xdt-source/LICENSE.txt"
+          $xdtLicenseText = [IO.File]::ReadAllText($xdtSourceLicensePath)
+          $xdtLicenseText = $xdtLicenseText.Replace("`r`n", "`n")
+          $xdtLicenseText = $xdtLicenseText.Replace("`r", "`n")
+          [IO.File]::WriteAllText(
+            $xdtLicensePath,
+            $xdtLicenseText,
+            [Text.UTF8Encoding]::new($false)
+          )
+          $xdtAttributionPath = Join-Path $artifactDirectory "MICROSOFT-WEB-XDT-ATTRIBUTION.txt"
+          $xdtAttribution = @(
+            "Microsoft.Web.Xdt 3.1.0"
+            ""
+            "Copyright © Microsoft Corporation. All rights reserved."
+            "Licensed under Apache-2.0. See MICROSOFT-WEB-XDT-LICENSE.txt."
+            ""
+            "Package: https://www.nuget.org/packages/Microsoft.Web.Xdt/3.1.0"
+            "Source: https://github.com/dotnet/xdt"
+            "Source commit: 5b67dee04d86740575f0f5022b79833213cc024a"
+            ""
+            "The exact source tree contains LICENSE.txt and no NOTICE file. This attribution"
+            "file is generated by TokenMonster for its redistribution bundle; it is not an"
+            "upstream NOTICE file."
+          ) -join "`n"
+          [IO.File]::WriteAllText(
+            $xdtAttributionPath,
+            ($xdtAttribution + "`n"),
+            [Text.UTF8Encoding]::new($false)
+          )
+          if (
+            (Get-FileHash -LiteralPath $xdtLicensePath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $env:XDT_LICENSE_SHA256 -or
+            (Get-FileHash -LiteralPath $xdtAttributionPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $env:XDT_ATTRIBUTION_SHA256 -or
+            (Get-Item -LiteralPath $xdtAttributionPath).Length -ne [int64]$env:XDT_ATTRIBUTION_BYTES
+          ) {
+            throw "The staged Microsoft.Web.Xdt license bundle does not match its reviewed contract."
+          }
+          $dependencyInventoryPath = Join-Path $artifactDirectory "nuget-content-hashes.txt"
+          [IO.File]::WriteAllLines($dependencyInventoryPath, $dependencyInventories[0], [Text.UTF8Encoding]::new($false))
+          $dependencyInventorySha256 = (Get-FileHash -LiteralPath $dependencyInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $testDependencyInventoryPath = Join-Path $artifactDirectory "source-test-nuget-content-hashes.txt"
+          [IO.File]::WriteAllLines($testDependencyInventoryPath, $testDependencyInventories[0], [Text.UTF8Encoding]::new($false))
+          $testDependencyInventorySha256 = (Get-FileHash -LiteralPath $testDependencyInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $mergeInputInventoryPath = Join-Path $artifactDirectory "merge-input-hashes.txt"
+          [IO.File]::WriteAllLines($mergeInputInventoryPath, $mergeInputInventories[0], [Text.UTF8Encoding]::new($false))
+          $mergeInputInventorySha256 = (Get-FileHash -LiteralPath $mergeInputInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (
+            (
+              -not $deriveCandidate -and
+              $dependencyInventorySha256 -cne $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256
+            ) -or
+            (
+              -not $deriveCandidate -and
+              $testDependencyInventorySha256 -cne $env:REVIEWED_TEST_DEPENDENCY_INVENTORY_SHA256
+            ) -or
+            (
+              -not $deriveCandidate -and
+              $mergeInputInventorySha256 -cne $env:REVIEWED_MERGE_INPUT_INVENTORY_SHA256
+            )
+          ) {
+            throw "The staged review inventories do not match their committed receipts."
+          }
+          $dotnetInfoPath = Join-Path $artifactDirectory "dotnet-info.txt"
+          [IO.File]::WriteAllLines($dotnetInfoPath, $dotnetInfo, [Text.UTF8Encoding]::new($false))
+          $dotnetInfoSha256 = (Get-FileHash -LiteralPath $dotnetInfoPath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          $versionInfo = (Get-Item -LiteralPath $outputs[0]).VersionInfo
+          $lockedDependencyInventorySha256 = if ($deriveCandidate) {
+            $null
+          } else {
+            $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256
+          }
+          $lockedMergeInputInventorySha256 = if ($deriveCandidate) {
+            $null
+          } else {
+            $env:REVIEWED_MERGE_INPUT_INVENTORY_SHA256
+          }
+          $lockedTestDependencyInventorySha256 = if ($deriveCandidate) {
+            $null
+          } else {
+            $env:REVIEWED_TEST_DEPENDENCY_INVENTORY_SHA256
+          }
+          $lockedBinaryBytes = if ($deriveCandidate) {
+            $null
+          } else {
+            [int64]$env:REVIEWED_UPDATER_BYTES
+          }
+          $lockedBinarySha256 = if ($deriveCandidate) {
+            $null
+          } else {
+            $env:REVIEWED_UPDATER_SHA256
+          }
+          $provenance = [ordered]@{
+            contractVersion = 1
+            candidateOnly = $true
+            receiptMode = $receiptMode
+            workflowRepository = $env:GITHUB_REPOSITORY
+            workflowCommit = $env:TOKENMONSTER_POLICY_SHA
+            triggerCommit = $env:GITHUB_SHA
+            workflowRunId = $env:GITHUB_RUN_ID
+            workflowRunAttempt = $env:GITHUB_RUN_ATTEMPT
+            sourceRepository = "https://github.com/Squirrel/Squirrel.Windows"
+            sourceBaseCommit = $env:SOURCE_BASE_COMMIT
+            fixCommit = $env:FIX_COMMIT
+            fixTree = $env:FIX_TREE
+            upstreamMergeCommit = $env:UPSTREAM_MERGE_COMMIT
+            nugetSubmoduleCommit = $env:NUGET_SUBMODULE_COMMIT
+            boundedDeletePatchSha256 = $env:RETRY_PATCH_SHA256
+            boundedDeletePatchBytes = [int64]$env:RETRY_PATCH_BYTES
+            xdtOuterPatchSha256 = $env:XDT_OUTER_PATCH_SHA256
+            xdtOuterPatchBytes = [int64]$env:XDT_OUTER_PATCH_BYTES
+            xdtInnerPatchSha256 = $env:XDT_INNER_PATCH_SHA256
+            xdtInnerPatchBytes = [int64]$env:XDT_INNER_PATCH_BYTES
+            xdtPackageVersion = "3.1.0"
+            xdtSourceCommit = $env:XDT_SOURCE_COMMIT
+            xdtSourceTree = $env:XDT_SOURCE_TREE
+            xdtLicenseBlob = $env:XDT_LICENSE_BLOB
+            xdtLicenseSha256 = $env:XDT_LICENSE_SHA256
+            xdtAttributionSha256 = $env:XDT_ATTRIBUTION_SHA256
+            xdtPackageSha256 = $env:XDT_PACKAGE_SHA256
+            xdtPackageBytes = [int64]$env:XDT_PACKAGE_BYTES
+            xdtAssemblySha256 = $env:XDT_DLL_SHA256
+            xdtAssemblyBytes = [int64]$env:XDT_DLL_BYTES
+            xdtAssemblyVersion = $env:XDT_ASSEMBLY_VERSION
+            xdtAssemblyPublicKeyToken = $env:XDT_PUBLIC_KEY_TOKEN
+            xdtAssemblyMvid = $env:XDT_MVID
+            xdtSelectedAsset = "lib/net40/Microsoft.Web.XmlTransform.dll"
+            xdtRestorePathsVerified = @("global", "legacy")
+            xdtPreMergeReferenceScan = "exactly NuGet.Squirrel.dll => Microsoft.Web.XmlTransform 3.1.0.0, token 31bf3856ad364e35"
+            xdtMergedExternalReferenceCount = 0
+            xdtMergedTypesVerified = @(
+              "Microsoft.Web.XmlTransform.XmlTransformation"
+              "Microsoft.Web.XmlTransform.XmlTransformableDocument"
+            )
+            xdtBehaviorSmoke = "Replace, InsertIfMissing, Remove, and malformed-transform rejection passed"
+            xdtUpstreamNoticePresent = $false
+            runnerImage = $env:ImageOS
+            runnerImageVersion = $env:ImageVersion
+            msbuildVersion = $msbuildVersion
+            dotnetInfoSha256 = $dotnetInfoSha256
+            nugetVersion = $nugetVersion
+            nugetSha256 = $nugetSha256
+            referenceAssembliesVersion = "1.0.3"
+            referenceAssembliesSha256 = $referencePackageSha256
+            mergeTool = "ILRepack"
+            mergeToolVersion = "2.0.24"
+            mergeToolSourceCommit = $env:ILREPACK_SOURCE_COMMIT
+            mergeToolSourceTree = $env:ILREPACK_SOURCE_TREE
+            mergeToolReleaseTagCommit = $env:ILREPACK_RELEASE_TAG_COMMIT
+            mergeToolPackageSha256 = $ilrepackPackageSha256
+            mergeToolExecutableSha256 = $env:ILREPACK_TOOL_SHA256
+            mergeToolRuntimeConfigSha256 = $env:ILREPACK_RUNTIMECONFIG_SHA256
+            mergeToolRuntime = "Microsoft.NETCore.App $($env:ILREPACK_RUNTIME_VERSION) selected with dotnet exec --fx-version and --roll-forward Disable"
+            mergeArguments = @(
+              "/ndebug"
+              "/internalize"
+              "/out:Update.exe.tmp"
+              "Update.exe"
+              "WpfAnimatedGif.dll"
+              "SharpCompress.dll"
+              "Microsoft.Web.XmlTransform.dll"
+              "DeltaCompressionDotNet.dll"
+              "DeltaCompressionDotNet.MsDelta.dll"
+              "Squirrel.dll"
+              "NuGet.Squirrel.dll"
+              "Mono.Cecil.dll"
+            )
+            upstreamDeclaredMergeTool = "ILRepack 1.26.0 restored but not executed; PostBuildEvent is disabled"
+            dependencyInventorySha256 = $dependencyInventorySha256
+            reviewedDependencyInventorySha256 = $lockedDependencyInventorySha256
+            sourceTestDependencyInventorySha256 = $testDependencyInventorySha256
+            reviewedSourceTestDependencyInventorySha256 = $lockedTestDependencyInventorySha256
+            sourceTestRunnerSha256 = $env:SOURCE_TEST_RUNNER_SHA256
+            sourceTestRunnerBytes = [int64]$env:SOURCE_TEST_RUNNER_BYTES
+            sourceTestExecution = "Windows PowerShell 5.1 reflection runner; exact public instance Fact methods only; async Tasks awaited"
+            sourceTests = @(
+              "Squirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpRetriesTransientFileLocks"
+              "Squirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpReturnsAfterBoundedRetriesForPermanentFileLocks"
+              "Squirrel.Tests.SquirrelAwareExecutableDetectorTests.NotSquirrelAware"
+            )
+            sourceTestExecutionsPassed = $sourceTestPassCount
+            mergeInputInventorySha256 = $mergeInputInventorySha256
+            reviewedMergeInputInventorySha256 = $lockedMergeInputInventorySha256
+            compilerDeterministic = $true
+            compilerPathMap = "source checkout root => /_/squirrel"
+            compilerDebugSymbols = $false
+            compilerDebugType = "None"
+            binaryBytes = $sizes[0]
+            binarySha256 = $hashes[0]
+            reviewedBinaryBytes = $lockedBinaryBytes
+            reviewedBinarySha256 = $lockedBinarySha256
+            productVersion = $versionInfo.ProductVersion
+            fileVersion = $versionInfo.FileVersion
+            repeatability = "same-job byte equality across two path-mapped source trees, isolated NuGet caches, deterministic compiler inputs, and the reviewed deterministic merge tool"
+          }
+          $provenancePath = Join-Path $artifactDirectory "provenance.json"
+          [IO.File]::WriteAllText(
+            $provenancePath,
+            (($provenance | ConvertTo-Json -Depth 4) + "`n"),
+            [Text.UTF8Encoding]::new($false)
+          )
+          $artifactName = if ($deriveCandidate) {
+            "squirrel-updater-quarantine-$receiptMode-$($hashes[0])"
+          } else {
+            "squirrel-updater-$receiptMode-$($hashes[0])"
+          }
+          "receipt-mode=$receiptMode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact-name=$artifactName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "binary-sha256=$($hashes[0])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "binary-bytes=$($sizes[0])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          if ($deriveCandidate) {
+            Write-Output "Derived quarantined Squirrel updater evidence twice: SHA-256 $($hashes[0]), $($sizes[0]) bytes."
+          } else {
+            Write-Output "Rebuilt identical locked Squirrel updater candidate bytes twice: SHA-256 $($hashes[0]), $($sizes[0]) bytes."
+          }
+
+      - name: Upload updater evidence artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.build.outputs.artifact-name }}
+          path: ${{ runner.temp }}/squirrel-updater-candidate/
+          if-no-files-found: error
+          retention-days: 7

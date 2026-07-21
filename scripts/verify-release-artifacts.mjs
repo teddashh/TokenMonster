@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import { extname, join, relative } from "node:path";
 
 import { rootDirectory } from "./repository-files.mjs";
@@ -17,10 +17,20 @@ async function listFiles(directory) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) {
+    const metadata = await lstat(path);
+    if (metadata.isSymbolicLink()) {
+      throw new Error(
+        `Symbolic link is forbidden in artifacts: ${relative(rootDirectory, path)}`,
+      );
+    }
+    if (metadata.isDirectory()) {
       files.push(...(await listFiles(path)));
-    } else if (entry.isFile()) {
+    } else if (metadata.isFile()) {
       files.push(path);
+    } else {
+      throw new Error(
+        `Unsupported artifact entry: ${relative(rootDirectory, path)}`,
+      );
     }
   }
   return files;
@@ -50,6 +60,11 @@ const forbiddenMarkers = [
   ["-----BEGIN ", "PRIVATE KEY-----"].join(""),
   "web/public/avatars/",
   "data:image/",
+  "https://cdn.ted-h.com/tokenmonster/characters/v1",
+  "TOKENMONSTER_CHARACTER_CDN",
+  "CompanionCharacterFetch",
+  "DownloadSemaphore",
+  "asset fetch failed",
 ];
 let fileCount = 0;
 for (const root of artifactRoots) {

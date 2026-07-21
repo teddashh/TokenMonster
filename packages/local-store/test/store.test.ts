@@ -28,6 +28,7 @@ import {
   ingestReceipt,
   ingestSnapshot,
   learningMonsterState,
+  sidecarIngestSnapshot,
   validConfig,
   zeroTokens,
 } from "./helpers.js";
@@ -80,7 +81,7 @@ describe("opening, migrations, and lifecycle", () => {
     store.close();
     const database = new DatabaseSync(path, { readBigInts: true });
     expect(database.prepare("PRAGMA user_version").get()).toEqual({
-      user_version: 4n,
+      user_version: 5n,
     });
     expect(database.prepare("PRAGMA quick_check").get()).toEqual({
       quick_check: "ok",
@@ -121,7 +122,7 @@ describe("opening, migrations, and lifecycle", () => {
     store.close();
 
     const backups = readdirSync(directory).filter((name) =>
-      name.startsWith(".tokenmonster-pre-migration-v1-to-v4-"),
+      name.startsWith(".tokenmonster-pre-migration-v1-to-v5-"),
     );
     expect(backups).toHaveLength(1);
     const backupPath = join(directory, backups[0] ?? "missing");
@@ -156,7 +157,7 @@ describe("opening, migrations, and lifecycle", () => {
     store.close();
     expect(
       readdirSync(directory).some((name) =>
-        name.startsWith(".tokenmonster-pre-migration-v2-to-v4-"),
+        name.startsWith(".tokenmonster-pre-migration-v2-to-v5-"),
       ),
     ).toBe(true);
   });
@@ -201,7 +202,122 @@ describe("opening, migrations, and lifecycle", () => {
     store.close();
     expect(
       readdirSync(directory).some((name) =>
-        name.startsWith(".tokenmonster-pre-migration-v3-to-v4-"),
+        name.startsWith(".tokenmonster-pre-migration-v3-to-v5-"),
+      ),
+    ).toBe(true);
+  });
+
+  it("migrates v4 collector rows losslessly before accepting sidecar rows", async () => {
+    const { directory, path } = temporaryDatabase();
+    const versionFour = new DatabaseSync(path);
+    for (const migration of LOCAL_STORE_MIGRATIONS.slice(0, 4)) {
+      versionFour.exec(migration.sql);
+    }
+    versionFour
+      .prepare(
+        `INSERT INTO usage_daily (
+           bucket_start, provider, model_family, tool, value_quality, revision,
+           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+           reasoning_tokens, other_tokens, total_tokens, local_coverage,
+           collector_kind, adapter_version, source_version, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        "2026-07-14T00:00:00.000Z",
+        "openai",
+        "gpt-5",
+        "codex-cli",
+        "exact",
+        1,
+        1200,
+        500,
+        800,
+        0,
+        120,
+        0,
+        2500,
+        "complete",
+        "tokscale",
+        "0.1.0",
+        "4.5.2",
+        NOW,
+      );
+    versionFour
+      .prepare(
+        `INSERT INTO collector_authority (
+           singleton, kind, state, adapter_version, source_version, updated_at
+         ) VALUES (1, ?, ?, ?, ?, ?)`,
+      )
+      .run("tokscale", "running", "0.1.0", "4.5.2", NOW);
+    versionFour
+      .prepare(
+        `INSERT INTO cloud_mirror (
+           bucket_start, provider, model_family, tool, value_quality, revision,
+           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+           reasoning_tokens, other_tokens, total_tokens, collector_kind,
+           adapter_version, source_version, receipt_batch_id,
+           receipt_received_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        "2026-07-14T00:00:00.000Z",
+        "openai",
+        "gpt-5",
+        "codex-cli",
+        "exact",
+        1,
+        1200,
+        500,
+        800,
+        0,
+        120,
+        0,
+        2500,
+        "tokscale",
+        "0.1.0",
+        "4.5.2",
+        "00000000-0000-4000-8000-000000000004",
+        NOW,
+        NOW,
+      );
+    versionFour.exec(
+      "UPDATE app_meta SET value = '4' WHERE key = 'schema_version'; PRAGMA user_version = 4",
+    );
+    versionFour.close();
+
+    const store = await openLocalStore({ path, clock: fixedClock() });
+    expect(store.listDailyAggregates({ limit: 10 })).toMatchObject([
+      { collector: { kind: "tokscale" }, revision: 1 },
+    ]);
+    expect(store.listCloudMirror({ limit: 10 })).toMatchObject([
+      { collector: { kind: "tokscale" }, bucket: { revision: 1 } },
+    ]);
+    expect(store.getCollectorAuthority()).toMatchObject({
+      kind: "tokscale",
+      state: "running",
+    });
+    expect(
+      store.upsertDailyAggregate(
+        dailyAggregate({
+          bucketStart: "2026-07-15T00:00:00.000Z",
+          provider: "other",
+          modelFamily: "all",
+          tool: "all",
+          collector: {
+            kind: "tokentracker-sidecar",
+            adapterVersion: "0.1.0",
+            sourceVersion: "0.80.0",
+          },
+        }),
+      ),
+    ).toMatchObject({
+      status: "inserted",
+      row: { collector: { kind: "tokentracker-sidecar" } },
+    });
+    store.close();
+    expect(
+      readdirSync(directory).some((name) =>
+        name.startsWith(".tokenmonster-pre-migration-v4-to-v5-"),
       ),
     ).toBe(true);
   });
@@ -605,9 +721,9 @@ describe("bounded local usage insights", () => {
       path: ":memory:",
       clock: fixedClock(),
     });
-    expect(() =>
-      store.getLocalUsageInsights({ windowDays: 14 }),
-    ).toThrowError(expect.objectContaining({ code: "INVALID_QUERY" }));
+    expect(() => store.getLocalUsageInsights({ windowDays: 14 })).toThrowError(
+      expect.objectContaining({ code: "INVALID_QUERY" }),
+    );
     expect(() =>
       store.getLocalUsageInsights({ windowDays: 7, path: "/private" }),
     ).toThrowError(expect.objectContaining({ code: "INVALID_QUERY" }));
@@ -700,7 +816,10 @@ describe("local-only state", () => {
     const snapshot = ingestSnapshot();
     store.upsertDailyAggregate(dailyAggregate());
     store.recordCompleteDailyScan({ utcDate: "2026-07-15", client: "codex" });
-    store.upsertMonsterSnapshot({ state: learningMonsterState(), asOfRevision: 1 });
+    store.upsertMonsterSnapshot({
+      state: learningMonsterState(),
+      asOfRevision: 1,
+    });
     store.enqueueCloudSnapshot(snapshot, {
       nextAttemptAt: NOW,
       expiresAt: "2026-08-14T18:00:00.000Z",
@@ -758,7 +877,13 @@ describe("local-only state", () => {
     ).toMatchObject({
       status: "unchanged",
     });
-    const changed = learningMonsterState({ appearance: { energyBand: "low" } });
+    const changed = learningMonsterState({
+      mood: {
+        id: "quiet",
+        explanationId: "monster-v1:2026-07-15:mood:0",
+      },
+      appearance: { energyBand: "low" },
+    });
     expect(() =>
       store.upsertMonsterSnapshot({ state: changed, asOfRevision: 2 }),
     ).toThrowError(
@@ -772,6 +897,52 @@ describe("local-only state", () => {
     });
     store.close();
   });
+
+  it.each(["0.1.0", "0.1.1", "0.1.2", "0.1.3", "0.1.4"])(
+    "replaces prior engine rule snapshot %s without treating it as corrupt",
+    async (priorVersion) => {
+      const { path } = temporaryDatabase();
+      const initial = await openLocalStore({ path, clock: fixedClock() });
+      const currentState = learningMonsterState();
+      initial.upsertMonsterSnapshot({ state: currentState, asOfRevision: 7 });
+      initial.close();
+
+      const database = new DatabaseSync(path);
+      const priorState = { ...currentState, engineVersion: priorVersion };
+      database
+        .prepare(
+          `UPDATE monster_state
+         SET engine_version = ?, state_json = ?
+         WHERE character_id = ?`,
+        )
+        .run(priorVersion, JSON.stringify(priorState), "chatgpt");
+      database.close();
+
+      const reopened = await openLocalStore({ path, clock: fixedClock() });
+      expect(reopened.getMonsterSnapshot("chatgpt")).toBeNull();
+      expect(
+        reopened.exportContentBlindState({ maxDailyRows: 1 }).monsterSnapshots,
+      ).toEqual([]);
+      expect(reopened.getDiagnosticSummary().counts.monsterSnapshots).toBe(0);
+      expect(
+        reopened.upsertMonsterSnapshot({
+          state: currentState,
+          asOfRevision: 1,
+        }),
+      ).toMatchObject({
+        status: "inserted",
+        snapshot: {
+          asOfRevision: 1,
+          state: { engineVersion: currentState.engineVersion },
+        },
+      });
+      expect(reopened.getMonsterSnapshot("chatgpt")).toMatchObject({
+        asOfRevision: 1,
+        state: { engineVersion: currentState.engineVersion },
+      });
+      reopened.close();
+    },
+  );
 
   it("exports only allowlisted content-blind state with explicit truncation", async () => {
     const store = await openLocalStore({
@@ -1036,7 +1207,7 @@ describe("last-accepted cloud mirror", () => {
 
     const correction = plan.corrections[0]!;
     const zeroSnapshot = ingestSnapshot({
-      collector: correction.collector,
+      collector: accepted.collector,
       buckets: [correction.bucket],
     });
     expect(
@@ -1086,6 +1257,74 @@ describe("last-accepted cloud mirror", () => {
 });
 
 describe("strict cloud outbox", () => {
+  it("persists, replays, mirrors, and delivers an exact V2 sidecar snapshot", async () => {
+    const store = await openLocalStore({
+      path: ":memory:",
+      clock: fixedClock(),
+    });
+    const snapshot = sidecarIngestSnapshot();
+    expect(
+      store.setCollectorAuthority({
+        ...snapshot.collector,
+        state: "running",
+      }),
+    ).toMatchObject({
+      kind: "tokentracker-sidecar",
+      adapterVersion: "0.1.0",
+      sourceVersion: "0.80.0",
+    });
+    expect(
+      store.upsertDailyAggregate(
+        dailyAggregate({
+          bucketStart: snapshot.buckets[0]!.bucketStart,
+          provider: "other",
+          modelFamily: "all",
+          tool: "all",
+          valueQuality: "estimated",
+          collector: snapshot.collector,
+        }),
+      ),
+    ).toMatchObject({
+      status: "inserted",
+      row: { collector: { kind: "tokentracker-sidecar" } },
+    });
+    const options = {
+      nextAttemptAt: NOW,
+      expiresAt: "2026-08-14T18:00:00.000Z",
+    } as const;
+    expect(store.enqueueCloudSnapshot(snapshot, options)).toBe("inserted");
+    expect(store.enqueueCloudSnapshot(snapshot, options)).toBe("idempotent");
+    expect(store.listDueCloudSnapshots({ now: NOW, limit: 1 })).toEqual([
+      {
+        snapshot,
+        attempts: 0,
+        nextAttemptAt: NOW,
+        expiresAt: options.expiresAt,
+        lastErrorCode: null,
+      },
+    ]);
+
+    expect(
+      store.recordAcceptedCloudSnapshot(snapshot, ingestReceipt(snapshot)),
+    ).toMatchObject({ decisions: [{ status: "inserted" }] });
+    expect(
+      store.recordAcceptedCloudSnapshot(
+        snapshot,
+        ingestReceipt(snapshot, { replayed: true }),
+      ),
+    ).toMatchObject({ decisions: [{ status: "idempotent" }] });
+    expect(store.listCloudMirror({ limit: 10 })).toMatchObject([
+      {
+        collector: snapshot.collector,
+        bucket: snapshot.buckets[0],
+        receipt: { batchId: snapshot.batchId },
+      },
+    ]);
+    expect(store.markCloudSnapshotDelivered(snapshot.batchId)).toBe(true);
+    expect(store.listDueCloudSnapshots({ now: NOW, limit: 1 })).toEqual([]);
+    store.close();
+  });
+
   it("enqueues idempotently, rejects batch reuse, and lists due entries with a hard bound", async () => {
     const store = await openLocalStore({
       path: ":memory:",

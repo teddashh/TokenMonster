@@ -1,0 +1,38 @@
+{
+  "name": "tokenmonster",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "tokenmonster": "./dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "THIRD_PARTY_LICENSES"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": "24.15.0",
+    "npm": "11.12.1"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tokenmonster/companion-gateway": "0.1.0",
+    "@tokenmonster/companion-ui": "0.1.0",
+    "@tokenmonster/contribution-runtime": "0.1.0",
+    "@tokenmonster/local-store": "0.1.0",
+    "@tokenmonster/secret-vault": "0.1.0",
+    "@tokenmonster/token-tracker-adapter": "0.1.0",
+    "@tokenmonster/token-tracker-runtime": "0.1.0"
+  }
+}

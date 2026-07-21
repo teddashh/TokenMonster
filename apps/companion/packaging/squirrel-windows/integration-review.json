@@ -1,0 +1,24 @@
+{
+  "contractVersion": 1,
+  "integrationStatus": "reviewed-internal-candidate",
+  "publicReleaseStatus": "blocked-pending-redistribution-and-native-install-review",
+  "binarySha256": "83b754a9b24742675678c5d8fa024a8140c2d18eb640116a87a364f0a897388a",
+  "binaryBytes": 1841664,
+  "sourceBaseCommit": "eef37460aef77b2f9de8cd2237c1e55b344a6554",
+  "sourceFixCommit": "c98244936f6876b080366417301268058028a53c",
+  "sourceFixTree": "0a1ebfa90cea6f8037907134d53562a26c6bb4c3",
+  "dependencyInventorySha256": "9ab90cdb2131c34d8c871c2eba37edc7cbc12d63e2abdfcea4306e4cea367b23",
+  "sourceTestDependencyInventorySha256": "f7fe9ed4bb26e0e812d86a8a04971ac6f71824e3dea483fab0ec21462267e4a6",
+  "mergeInputInventorySha256": "9086ab285b0959e8bbbd2e797b53865d80793468bff6d3aa8f76a9b4e88d03d2",
+  "xdtLicenseSha256": "43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1",
+  "xdtAttributionSha256": "5942a1e712f375fbc36e2ce62bd12b930d6d70c9d9ec74caea35d7ec48fbe1a2",
+  "confirmations": [
+    {
+      "workflowCommit": "548a2c94a77de337a4980fefd8a27b2965db642c",
+      "workflowRunId": "29794447787",
+      "artifactId": "8481535392",
+      "artifactArchiveSha256": "c01b2dcde1c527a1d2010ea5aa6d8d752a381c6c2f40fbe4a450af6f7ba22a31",
+      "artifactProvenanceSha256": "153c1cf52c298f1da410b8cadfc16e309586214b2995f9ecfee22ce29acfeaf2"
+    }
+  ]
+}

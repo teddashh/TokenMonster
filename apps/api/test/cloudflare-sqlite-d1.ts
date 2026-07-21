@@ -11,13 +11,20 @@ import type {
   D1MutationSessionLike
 } from "@tokenmonster/cloud-d1";
 
-const MIGRATION_SQL = readFileSync(
-  new URL(
-    "../../../packages/cloud-d1/migrations/0001_initial.sql",
-    import.meta.url
-  ),
-  "utf8"
-);
+const MIGRATION_SQL = [
+  "0001_initial.sql",
+  "0002_compaction_audit.sql",
+  "0003_lifecycle.sql",
+  "0004_sidecar_contribution.sql",
+  "0005_recoverable_enrollment.sql"
+]
+  .map((name) =>
+    readFileSync(
+      new URL(`../../../packages/cloud-d1/migrations/${name}`, import.meta.url),
+      "utf8"
+    )
+  )
+  .join("\n");
 
 type SqlValue = null | number | string | Uint8Array;
 

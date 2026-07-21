@@ -3,13 +3,18 @@ import { randomUUID } from "node:crypto";
 import type {
   IngestReceiptV1,
   IngestSnapshotV1,
-  TokenCountsV1
+  IngestSnapshotV2,
+  SupportedIngestSnapshot,
+  TokenCountsV1,
 } from "@tokenmonster/contracts";
-import type { MonsterStateV1 } from "@tokenmonster/monster-engine";
+import {
+  MONSTER_ENGINE_VERSION_V1,
+  type MonsterStateV1,
+} from "@tokenmonster/monster-engine";
 
 import type {
   LocalCompanionConfigV1,
-  ProjectedDailyAggregate
+  ProjectedDailyAggregate,
 } from "../src/index.js";
 
 export const NOW = "2026-07-15T18:00:00.000Z";
@@ -25,11 +30,11 @@ export const BASE_TOKENS: TokenCountsV1 = Object.freeze({
   cacheWrite: "0",
   reasoning: "120",
   other: "0",
-  total: "2500"
+  total: "2500",
 });
 
 export function dailyAggregate(
-  overrides: Partial<ProjectedDailyAggregate> = {}
+  overrides: Partial<ProjectedDailyAggregate> = {},
 ): ProjectedDailyAggregate {
   return {
     bucketStart: "2026-07-15T00:00:00.000Z",
@@ -42,9 +47,9 @@ export function dailyAggregate(
     collector: {
       kind: "tokscale",
       adapterVersion: "0.1.0",
-      sourceVersion: "4.5.2"
+      sourceVersion: "4.5.2",
     },
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -56,7 +61,7 @@ export function zeroTokens(): TokenCountsV1 {
     cacheWrite: "0",
     reasoning: "0",
     other: "0",
-    total: "0"
+    total: "0",
   };
 }
 
@@ -68,21 +73,21 @@ export function validConfig(): LocalCompanionConfigV1 {
     selectedCharacterId: "chatgpt",
     collectionIntervalMinutes: 30,
     startAtLogin: false,
-    animationsEnabled: true
+    animationsEnabled: true,
   };
 }
 
 export function learningMonsterState(
-  overrides: Partial<MonsterStateV1> = {}
+  overrides: Partial<MonsterStateV1> = {},
 ): MonsterStateV1 {
   return {
     schemaVersion: "1",
-    engineVersion: "0.1.0",
+    engineVersion: MONSTER_ENGINE_VERSION_V1,
     characterId: "chatgpt",
     window: {
       from: "2026-06-18",
       to: "2026-07-15",
-      timezone: "America/New_York"
+      timezone: "America/New_York",
     },
     identityStatus: "learning",
     coverageBand: "insufficient",
@@ -90,27 +95,28 @@ export function learningMonsterState(
     identityContinuity: {
       schemaVersion: "1",
       lastIdentityReviewDate: "2026-07-15",
-      provisional: true
+      evidenceLossStartedDate: null,
+      provisional: true,
     },
     traits: [],
     mood: {
       id: "learning",
-      explanationId: "monster-v1:2026-07-15:mood:0"
+      explanationId: "monster-v1:2026-07-15:mood:0",
     },
     evolution: {
       cadence: "event",
       event: "awaiting-coverage",
-      explanationId: "monster-v1:2026-07-15:evolution:0"
+      explanationId: "monster-v1:2026-07-15:evolution:0",
     },
     appearance: {
-      energyBand: "dormant"
+      energyBand: "dormant",
     },
-    ...overrides
+    ...overrides,
   };
 }
 
 export function ingestSnapshot(
-  overrides: Partial<IngestSnapshotV1> = {}
+  overrides: Partial<IngestSnapshotV1> = {},
 ): IngestSnapshotV1 {
   return {
     schemaVersion: "1",
@@ -119,7 +125,7 @@ export function ingestSnapshot(
     collector: {
       kind: "tokscale",
       adapterVersion: "0.1.0",
-      sourceVersion: "4.5.2"
+      sourceVersion: "4.5.2",
     },
     buckets: [
       {
@@ -129,16 +135,43 @@ export function ingestSnapshot(
         tool: "codex-cli",
         valueQuality: "exact",
         revision: 1,
-        tokens: BASE_TOKENS
-      }
+        tokens: BASE_TOKENS,
+      },
     ],
-    ...overrides
+    ...overrides,
+  };
+}
+
+export function sidecarIngestSnapshot(
+  overrides: Partial<IngestSnapshotV2> = {},
+): IngestSnapshotV2 {
+  return {
+    schemaVersion: "2",
+    batchId: randomUUID(),
+    generatedAt: NOW,
+    collector: {
+      kind: "tokentracker-sidecar",
+      adapterVersion: "0.1.0",
+      sourceVersion: "0.80.0",
+    },
+    buckets: [
+      {
+        bucketStart: "2026-07-15T00:00:00.000Z",
+        provider: "other",
+        modelFamily: "all",
+        tool: "all",
+        valueQuality: "estimated",
+        revision: 1,
+        tokens: BASE_TOKENS,
+      },
+    ],
+    ...overrides,
   };
 }
 
 export function ingestReceipt(
-  snapshot: IngestSnapshotV1,
-  overrides: Partial<IngestReceiptV1> = {}
+  snapshot: SupportedIngestSnapshot,
+  overrides: Partial<IngestReceiptV1> = {},
 ): IngestReceiptV1 {
   return {
     contractVersion: 1,
@@ -150,8 +183,8 @@ export function ingestReceipt(
       appliedBuckets: snapshot.buckets.length,
       staleBuckets: 0,
       idempotentBuckets: 0,
-      quarantinedBuckets: 0
+      quarantinedBuckets: 0,
     },
-    ...overrides
+    ...overrides,
   };
 }

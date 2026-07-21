@@ -1,5 +1,5 @@
 {
-  "name": "tokenmonster",
+  "name": "tokenmonster-workspace",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,17 +8,12 @@
     "node": "24.15.0",
     "npm": "11.12.1"
   },
-  "overrides": {
-    "@electron-forge/cli@7.11.2": {
-      "@electron/rebuild": "4.2.0",
-      "tmp": "0.2.7"
-    }
-  },
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
+    "audit:zstd-native-prebuild": "node scripts/release/audit-zstd-native-prebuild.mjs --all",
     "build": "node scripts/run-workspaces.mjs build",
     "format:check": "node scripts/verify-format.mjs",
     "lint": "node scripts/verify-repository.mjs",
@@ -26,11 +21,12 @@
     "make:companion:signed": "npm run make:signed --workspace @tokenmonster/companion",
     "package:companion:internal": "npm run package:internal --workspace @tokenmonster/companion",
     "test": "node scripts/run-workspaces.mjs test",
-    "typecheck": "node scripts/run-workspaces.mjs typecheck",
+    "typecheck": "node scripts/run-workspaces.mjs typecheck && tsc -p tsconfig.release-scripts.json",
     "verify:artifacts": "node scripts/verify-release-artifacts.mjs",
     "verify:companion-package": "node scripts/verify-companion-package.mjs --mode internal",
     "verify:packaging-toolchain": "node scripts/verify-packaging-toolchain.mjs",
-    "verify:secrets": "node scripts/scan-secrets.mjs"
+    "verify:secrets": "node scripts/scan-secrets.mjs",
+    "verify:zstd-native-prebuild": "node scripts/release/zstd-native-verifier.mjs --installed-root ."
   },
   "devDependencies": {
     "@types/node": "24.13.3",

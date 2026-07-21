@@ -22,6 +22,8 @@ describe("release artifact privacy and rights boundary", () => {
     expect(packageJson.files).toEqual(["dist", "README.md"]);
     expect(packageJson.files).not.toContain("asset-manifest.json");
     expect(packageJson.files).not.toContain("asset-manifest.schema.json");
+    expect(packageJson.files).not.toContain("ai-sister-source-map.json");
+    expect(packageJson.files).not.toContain("ai-sister-source-map.schema.json");
   });
 
   it("does not compile candidate IDs, paths, hashes, or blocked status values", () => {
@@ -35,9 +37,39 @@ describe("release artifact privacy and rights boundary", () => {
         licenseStatus: string;
       }>;
     };
+    const sourceMap = JSON.parse(
+      readFileSync(join(PACKAGE_ROOT, "ai-sister-source-map.json"), "utf8"),
+    ) as {
+      source: {
+        repository: string;
+        commit: string;
+        externalCandidateLibrary: { logicalRoot: string };
+      };
+      cloudDelivery: {
+        objectPrefix: string;
+        manifestObjectPattern: string;
+        packObjectPattern: string;
+      };
+      wardrobe: {
+        externalCandidateBank: {
+          relativePathTemplates: Record<string, string>;
+        };
+      };
+    };
     const forbidden = new Set([
       ".webp",
       "pending-owner-grant",
+      "ai-sister-source-map.json",
+      "ai-sister-source-map.schema.json",
+      sourceMap.source.repository,
+      sourceMap.source.commit,
+      sourceMap.source.externalCandidateLibrary.logicalRoot,
+      sourceMap.cloudDelivery.objectPrefix,
+      sourceMap.cloudDelivery.manifestObjectPattern,
+      sourceMap.cloudDelivery.packObjectPattern,
+      ...Object.values(
+        sourceMap.wardrobe.externalCandidateBank.relativePathTemplates,
+      ),
       ...manifest.assets.flatMap((asset) => [
         asset.id,
         asset.sourcePath,

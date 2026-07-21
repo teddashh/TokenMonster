@@ -1,8 +1,8 @@
 import {
-  CollectorIdentityV1Schema,
   DailyAggregateBucketV1Schema,
-  type CollectorIdentityV1,
-  type DailyAggregateBucketV1
+  SupportedCollectorIdentitySchema,
+  type DailyAggregateBucketV1,
+  type SupportedCollectorIdentity
 } from "@tokenmonster/contracts";
 
 import {
@@ -20,11 +20,11 @@ function parseCanonicalRowParts(
   bucketInput: unknown
 ): {
   enrollment: AuthenticatedEnrollment;
-  collector: CollectorIdentityV1;
+  collector: SupportedCollectorIdentity;
   bucket: DailyAggregateBucketV1;
 } {
   const enrollment = parseAuthenticatedEnrollment(enrollmentInput);
-  const collector = CollectorIdentityV1Schema.safeParse(collectorInput);
+  const collector = SupportedCollectorIdentitySchema.safeParse(collectorInput);
   const bucket = DailyAggregateBucketV1Schema.safeParse(bucketInput);
   if (!collector.success || !bucket.success) {
     throw new UsageDomainError(
@@ -50,7 +50,8 @@ export function canonicalSerializeServerRow(
     bucketInput
   );
   return canonicalizeJson({
-    schemaVersion: "1",
+    schemaVersion:
+      collector.kind === "tokentracker-sidecar" ? "2" : "1",
     enrollmentId: enrollment.enrollmentId,
     bucketStart: bucket.bucketStart,
     provider: bucket.provider,

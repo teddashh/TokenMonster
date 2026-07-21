@@ -15,6 +15,27 @@ allow only the single coarsest `all/other/all/all` output shape, make completed
 days and anonymous output immutable, and reject late usage or authority input
 after closure. Dropped days retain no token totals.
 
+`migrations/0003_lifecycle.sql` is the additive upgrade for pause/resume. It
+adds the affirmative-consent replay lookup index and pause-state relational
+triggers without rebuilding the foreign-key-connected mutation guard graph.
+The adapter also rejects any inconsistent row that predates the triggers, and
+the fixed pause/resume statements are the only lifecycle writers. Lifecycle
+commits reuse the existing `ingest` upload-authority guard class so the closed
+operation enum in an already-applied `0001` remains compatible.
+
+`migrations/0004_sidecar_contribution.sql` widens the authority, current-usage,
+and authority-guard collector checks to include `tokentracker-sidecar`. Because
+SQLite cannot alter checks in place, it rebuilds only those three tables,
+copies all V1 rows, restores their indexes and mutation/closed-day triggers,
+and preserves the foreign-key graph. Unknown collector kinds remain rejected.
+
+`migrations/0005_recoverable_enrollment.sql` adds the V2 recovery lookup. It
+stores only a 24-character public lookup ID, a 32-byte HMAC verifier, verifier
+key ID, and foreign keys to the atomic installation/consent pair. Raw upload,
+deletion, and recovery bearer secrets have no columns. Deleting the
+installation cascades the recovery verifier so it cannot become a status or
+account-recovery channel.
+
 Credential records contain separate public lookup IDs and 32-byte
 HMAC-SHA-256 verifiers for upload, deletion, and deletion-status credentials.
 The server pepper stays in the Worker secret binding and is never written to
@@ -32,8 +53,10 @@ in the same batch.
 
 ## Mutation storage
 
-`createD1MutationStorage(db)` implements the enrollment, scoped credential
-lookup, ingest, and deletion storage ports from `@tokenmonster/api-domain`.
+`createD1MutationStorage(db)` implements V1 and recoverable V2 enrollment,
+scoped credential
+lookup, ingest, pause/resume lifecycle, and deletion storage ports from
+`@tokenmonster/api-domain`.
 Every domain transaction runs first against a primary-session preflight read
 set and a recording facade. The adapter then submits one D1 batch that
 inserts request-scoped SQL expectations, writes the recorded intent, marks the
@@ -41,6 +64,14 @@ projection dirty where required, and removes the guard. Schema triggers use
 `RAISE(ABORT, ...)` when status, consent, credential verifiers, authority,
 batch receipts, revisions, row hashes, or deletion state changed after
 preflight. A zero-row conditional write is never treated as proof of commit.
+
+Pause changes only `active -> paused`, preserves current and anonymous totals,
+and makes repeated pause calls return the original timestamp. Resume requires a
+current affirmative consent acknowledgement; status/revision update and the new
+immutable consent receipt commit in one guarded batch. Repeating resume while
+already active on the current revision returns the latest stored granted
+receipt without creating another event. Both paths reverify the upload
+credential inside the transaction, and ingest continues to reject `paused`.
 
 Deletion begins by revoking both installation credentials and retains only
 the deletion replay verifier plus the independently scoped status verifier in
@@ -141,6 +172,47 @@ installations with positive accepted usage. Projection replacement and dirty
 marker cleanup share one D1 batch. Counts at or above 80% of signed-int64
 capacity fail closed and leave the dirty marker for operator intervention.
 
+## Suppression-aware isolated restore drill
+
+`createD1SuppressionAwareRestoreDrill` is the no-route orchestration primitive
+for an already-restored, isolated D1 database. It accepts only the isolated D1
+binding, independent active-suppression reader, suppression-marker derivation
+capability, hard bounds, and an approved count/checksum manifest. One invocation
+uses a fixed clock and performs these phases in order:
+
+1. snapshot and validate the active suppression ledger and restored row count;
+2. run bounded `replayDeletionSuppressions` and guarded D1 purges;
+3. recheck the ledger snapshot, installation count, tombstone lifecycle,
+   upload/deletion, restored deletion-job, and abandoned mutation-guard
+   credential revocation; clear every offline guard shadow; then audit
+   attributable rows, quarantine rows, consent, and shares;
+4. rebuild the public projection and compare its count-only checksum.
+
+Success returns only suppression/installation/residue counts, three public
+projection counts, and SHA-256 projection/evidence checksums. Installation IDs,
+suppression markers, credential artifacts, timestamps, and revisions are never
+returned or logged. Any ledger drift, capacity overflow, manifest mismatch,
+purge residue, or projection mismatch rejects with a fixed error and never
+publishes evidence. The IDs needed for exact post-purge checks exist only
+transiently inside the bounded invocation. Because an isolated restore has no
+legitimate in-flight writer, every restored `mutation_guards` snapshot is
+discarded before rebuild; this also prevents an orphan shadow from retaining a
+token HMAC or deletion verifier after its installation row is gone. A failed
+drill database remains isolated and must be discarded, never attached to a
+route.
+
+The executable local verification uses a real SQLite D1-shaped restore fixture:
+
+```sh
+npm run test:restore-drill --workspace @tokenmonster/cloud-d1
+```
+
+This command is local evidence, not a remote Cloudflare restore. A real monthly
+drill still needs an owner-created D1 database with no public route, the
+independent suppression Durable Object reader, the suppression-key derivation
+binding, and an approved count/checksum manifest. No public admin endpoint or
+remote invocation identity is implemented or claimed here.
+
 Apply the migration with the environment-specific Wrangler workflow, for
 example:
 
@@ -169,18 +241,19 @@ adapter.
 ```sh
 npm run typecheck --workspace @tokenmonster/cloud-d1
 npm test --workspace @tokenmonster/cloud-d1
+npm run test:restore-drill --workspace @tokenmonster/cloud-d1
 npm run build --workspace @tokenmonster/cloud-d1
 ```
 
-The migration suite applies both SQL migrations to Node 24 `node:sqlite` in memory,
+The migration suite applies all SQL migrations to Node 24 `node:sqlite` in memory,
 inspects tables/columns/indexes, exercises a transactional valid roundtrip,
 verifies privacy absence, and proves database rejection of ledger, credential,
 cohort, projection, and lifecycle invariant violations. A separate fake-D1
 suite locks the public reader query, bindings, and fail-closed behavior. The
 mutation suite uses the exact migration to cover 30-row atomic ingest, replay,
-stale/equal/higher revisions, forced rollback, status/credential/authority
-races, deletion racing ingest, credential revocation, hot-data purge, and
-absence of raw bearer bindings.
+stale/equal/higher revisions, pause/resume replay and consent rollback,
+status/credential/authority/lifecycle races, deletion racing ingest, credential
+revocation, hot-data purge, and absence of raw bearer bindings.
 
 The anonymous-compaction suite covers closed-day eligibility, k=19/20,
 active/paused/deleting and quarantine boundaries, whole-day capacity drop,

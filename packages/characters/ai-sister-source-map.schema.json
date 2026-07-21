@@ -1,0 +1,697 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokenmonster.app/schemas/ai-sister-source-map-v1.json",
+  "title": "TokenMonster AI-Sister source asset map",
+  "description": "Repository-only audit map for blocked AI-Sister character candidates. This is not a runtime or release manifest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "auditedAt",
+    "source",
+    "cloudDelivery",
+    "rosterAudit",
+    "starterSelection",
+    "characters",
+    "wardrobe",
+    "animation",
+    "releasePolicy"
+  ],
+  "properties": {
+    "$schema": { "const": "./ai-sister-source-map.schema.json" },
+    "schemaVersion": { "const": 1 },
+    "auditedAt": { "type": "string", "format": "date" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit", "externalCandidateLibrary"],
+      "properties": {
+        "repository": { "type": "string", "format": "uri" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "externalCandidateLibrary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["logicalRoot", "kind", "trackedBySourceRepository"],
+          "properties": {
+            "logicalRoot": { "$ref": "#/$defs/relativeReference" },
+            "kind": { "const": "local-only-candidate-bank" },
+            "trackedBySourceRepository": { "const": false }
+          }
+        }
+      }
+    },
+    "cloudDelivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "storage",
+        "publicDelivery",
+        "objectPrefix",
+        "manifestObjectPattern",
+        "packObjectPattern",
+        "manifestTrust",
+        "publisherRunsIn",
+        "tokenMonsterRole",
+        "downloadMode",
+        "requestCardinality",
+        "objectImmutability",
+        "cachePolicy",
+        "integrity",
+        "initialRenderedAssetStates",
+        "rawLayerPartsPublished",
+        "networkFailureFallback",
+        "status"
+      ],
+      "properties": {
+        "owner": { "const": "ai-sister" },
+        "storage": { "const": "cloudflare-r2" },
+        "publicDelivery": { "const": "ai-sister-cdn" },
+        "objectPrefix": { "$ref": "#/$defs/relativeReference" },
+        "manifestObjectPattern": {
+          "const": "tokenmonster/characters/v1/releases/{releaseId}/asset-release-manifest-v2.json"
+        },
+        "packObjectPattern": {
+          "const": "tokenmonster/characters/v1/packs/{releaseId}/{packSha256}.zip"
+        },
+        "manifestTrust": { "const": "release-embedded-approved-copy" },
+        "publisherRunsIn": { "const": "ai-sister" },
+        "tokenMonsterRole": {
+          "const": "manifest-consumer-and-local-cache"
+        },
+        "downloadMode": { "const": "explicit-consent-single-fixed-pack" },
+        "requestCardinality": {
+          "const": "one-get-independent-of-local-state"
+        },
+        "objectImmutability": { "const": "versioned-path-no-overwrite" },
+        "cachePolicy": { "const": "content-addressed-local-cache" },
+        "integrity": { "const": "sha256-per-object" },
+        "initialRenderedAssetStates": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/assetState" }
+        },
+        "rawLayerPartsPublished": { "const": false },
+        "networkFailureFallback": {
+          "const": "tokenmonster-letter-avatar-v1"
+        },
+        "status": { "const": "planned-release-blocked" }
+      }
+    },
+    "rosterAudit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "confirmed", "unresolvedSlots"],
+      "properties": {
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sisters", "friends"],
+          "properties": {
+            "sisters": { "const": 4 },
+            "friends": { "const": 8 }
+          }
+        },
+        "confirmed": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sisters", "friends"],
+          "properties": {
+            "sisters": { "const": 4 },
+            "friends": { "const": 7 }
+          }
+        },
+        "unresolvedSlots": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "count", "reason"],
+            "properties": {
+              "kind": { "const": "friend" },
+              "count": { "const": 1 },
+              "reason": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "starterSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "availableCharacterIds",
+        "providerCharacterMap",
+        "window",
+        "signal",
+        "rule",
+        "tieOutcome",
+        "noDataOutcome",
+        "manualOverride",
+        "persistence",
+        "usedForProgression",
+        "leavesDevice",
+        "adapterReadiness"
+      ],
+      "properties": {
+        "availableCharacterIds": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/runtimeCharacterId" }
+        },
+        "providerCharacterMap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["openai", "anthropic", "google", "xai"],
+          "properties": {
+            "openai": { "const": "chatgpt" },
+            "anthropic": { "const": "claude" },
+            "google": { "const": "gemini" },
+            "xai": { "const": "grok" }
+          }
+        },
+        "window": { "const": "not-applicable" },
+        "signal": { "const": "explicit-player-choice" },
+        "rule": { "const": "choose-one-of-four" },
+        "tieOutcome": { "const": "explicit-user-choice" },
+        "noDataOutcome": { "const": "explicit-user-choice" },
+        "manualOverride": { "const": "always" },
+        "persistence": { "const": "local-preference-only" },
+        "usedForProgression": { "const": true },
+        "leavesDevice": { "const": false },
+        "adapterReadiness": {
+          "const": "not-required-for-choice"
+        }
+      }
+    },
+    "characters": {
+      "type": "array",
+      "minItems": 11,
+      "maxItems": 11,
+      "items": { "$ref": "#/$defs/character" }
+    },
+    "wardrobe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "themes",
+        "styleFacetEffect",
+        "recommendationIsUnlockGate",
+        "unlockPolicy",
+        "externalCandidateBank"
+      ],
+      "properties": {
+        "themes": {
+          "type": "array",
+          "minItems": 20,
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/wardrobeTheme" }
+        },
+        "styleFacetEffect": { "const": "cosmetic-presentation-only" },
+        "recommendationIsUnlockGate": { "const": false },
+        "unlockPolicy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "implementedAllowedSignals",
+            "forbiddenForCloudSignals",
+            "note"
+          ],
+          "properties": {
+            "status": { "const": "implemented-local-milestones" },
+            "implementedAllowedSignals": {
+              "type": "array",
+              "minItems": 5,
+              "maxItems": 5,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "local-provider-cumulative-total",
+                  "local-distinct-active-provider-breadth",
+                  "local-active-day-streak",
+                  "local-lifetime-total",
+                  "local-allowlisted-workflow-trait"
+                ]
+              }
+            },
+            "forbiddenForCloudSignals": {
+              "type": "array",
+              "minItems": 6,
+              "maxItems": 6,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "absolute-token-volume",
+                  "cost",
+                  "spending",
+                  "prompt-content",
+                  "project-path",
+                  "filename"
+                ]
+              }
+            },
+            "note": {
+              "const": "Owner-approved 2026-07-16: usage-milestone progression; all signals local-only and never leave the device."
+            }
+          }
+        },
+        "externalCandidateBank": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "inventoryStatus",
+            "coveredPersonaIds",
+            "candidateAssetStates",
+            "observedCounts",
+            "relativePathTemplates"
+          ],
+          "properties": {
+            "inventoryStatus": {
+              "const": "observed-local-candidates-not-release-evidence"
+            },
+            "coveredPersonaIds": {
+              "type": "array",
+              "minItems": 11,
+              "maxItems": 11,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/sourceId" }
+            },
+            "candidateAssetStates": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/assetState" }
+            },
+            "observedCounts": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "personas",
+                "themesPerPersona",
+                "outfits",
+                "reactionPoses",
+                "layeredPartSets"
+              ],
+              "properties": {
+                "personas": { "const": 11 },
+                "themesPerPersona": { "const": 20 },
+                "outfits": { "const": 220 },
+                "reactionPoses": { "const": 660 },
+                "layeredPartSets": { "const": 220 }
+              }
+            },
+            "relativePathTemplates": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "outfit",
+                "reactionPose",
+                "reactionMetadata",
+                "layerManifest",
+                "layerSource"
+              ],
+              "properties": {
+                "outfit": { "$ref": "#/$defs/relativeReference" },
+                "reactionPose": { "$ref": "#/$defs/relativeReference" },
+                "reactionMetadata": {
+                  "$ref": "#/$defs/relativeReference"
+                },
+                "layerManifest": { "$ref": "#/$defs/relativeReference" },
+                "layerSource": { "$ref": "#/$defs/relativeReference" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "animation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "standardRuntimeFormatsPresent",
+        "runtimeCompatibility",
+        "capabilities",
+        "actionVocabulary",
+        "semanticStates"
+      ],
+      "properties": {
+        "classification": { "const": "custom-layered-2.5d" },
+        "standardRuntimeFormatsPresent": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "runtimeCompatibility": {
+          "const": "requires-tokenmonster-renderer-port"
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "layer-compositing",
+              "idle-sway",
+              "breathing",
+              "blink",
+              "viseme-lip-sync",
+              "static-reaction-pose-swap"
+            ]
+          }
+        },
+        "actionVocabulary": {
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/actionId" }
+        },
+        "semanticStates": {
+          "type": "array",
+          "minItems": 11,
+          "maxItems": 11,
+          "items": { "$ref": "#/$defs/semanticState" }
+        }
+      }
+    },
+    "releasePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtimeUse",
+        "copyCandidateBinariesIntoRepository",
+        "requiredBeforeRuntimeUse",
+        "fallbackRenderer"
+      ],
+      "properties": {
+        "runtimeUse": { "const": "blocked" },
+        "copyCandidateBinariesIntoRepository": { "const": false },
+        "requiredBeforeRuntimeUse": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "explicit-redistribution-and-modification-grant",
+              "per-asset-integrity-manifest",
+              "provider-brand-review",
+              "content-rating-review",
+              "reviewed-browser-renderer",
+              "explicit-consent-fixed-pack-delivery",
+              "ai-sister-r2-publisher-and-cache-smoke"
+            ]
+          }
+        },
+        "fallbackRenderer": { "const": "tokenmonster-letter-avatar-v1" }
+      }
+    }
+  },
+  "$defs": {
+    "sourceId": {
+      "enum": [
+        "chatgpt",
+        "claude",
+        "gemini",
+        "grok",
+        "deepseek",
+        "qwen",
+        "mistral",
+        "venice",
+        "sakana",
+        "perplexity",
+        "glm"
+      ]
+    },
+    "runtimeCharacterId": {
+      "enum": ["chatgpt", "claude", "gemini", "grok"]
+    },
+    "monsterTrait": {
+      "enum": [
+        "cli-focused",
+        "tool-focused",
+        "multi-tool",
+        "provider-focused",
+        "multi-provider",
+        "cache-savvy",
+        "output-heavy",
+        "night-oriented",
+        "balanced"
+      ]
+    },
+    "assetState": {
+      "enum": ["outfit", "supported", "challenged", "victory"]
+    },
+    "actionId": {
+      "enum": [
+        "preen",
+        "check_phone",
+        "tidy_hair",
+        "sip",
+        "stretch",
+        "nod",
+        "shake",
+        "laugh",
+        "smirk",
+        "frown",
+        "pout",
+        "arms_crossed",
+        "lean_in",
+        "eyeroll",
+        "applause",
+        "tilt"
+      ]
+    },
+    "semanticStateId": {
+      "enum": [
+        "idle-static",
+        "idle",
+        "connecting",
+        "learning",
+        "resting",
+        "quiet",
+        "steady",
+        "lively",
+        "notice",
+        "error",
+        "wardrobe-unlocked"
+      ]
+    },
+    "relativeReference": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?![/\\\\])(?!//)(?!www\\.)(?![^/]+\\.[A-Za-z]{2,}(?:/|$))(?!.*\\\\)(?!\\.\\.(?:/|$))(?!.*\\/\\.\\.(?:\\/|$)).+$"
+    },
+    "character": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceId",
+        "displayName",
+        "kind",
+        "tokenMonsterCharacterId",
+        "heroThemeId",
+        "trackedArt",
+        "externalWardrobe"
+      ],
+      "properties": {
+        "sourceId": { "$ref": "#/$defs/sourceId" },
+        "displayName": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["sister", "friend"] },
+        "tokenMonsterCharacterId": {
+          "enum": [
+            "chatgpt",
+            "claude",
+            "gemini",
+            "grok",
+            "deepseek",
+            "qwen",
+            "mistral",
+            "venice",
+            "sakana",
+            "perplexity",
+            "glm"
+          ]
+        },
+        "heroThemeId": {
+          "enum": [
+            "chatgpt",
+            "claude",
+            "gemini",
+            "grok",
+            "spring",
+            "summer",
+            "fall",
+            "winter",
+            "sakana",
+            "perplexity",
+            "glm"
+          ]
+        },
+        "trackedArt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["avatar", "hero", "personaReferences"],
+          "properties": {
+            "avatar": {
+              "type": "string",
+              "pattern": "^web/public/avatars/[A-Za-z0-9.-]+\\.webp$"
+            },
+            "hero": {
+              "type": "string",
+              "pattern": "^web/public/hero/[A-Za-z0-9.-]+\\.webp$"
+            },
+            "personaReferences": {
+              "type": "array",
+              "maxItems": 2,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^server/persona-refs/[A-Za-z0-9._-]+\\.png$"
+              }
+            }
+          }
+        },
+        "externalWardrobe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sourceKey", "coverage"],
+          "properties": {
+            "sourceKey": { "$ref": "#/$defs/sourceId" },
+            "coverage": { "enum": ["complete-candidate-bank", "missing"] }
+          }
+        }
+      }
+    },
+    "wardrobeTheme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["themeId", "styleFacet", "recommendedWhen"],
+      "properties": {
+        "themeId": {
+          "enum": [
+            "tech",
+            "finance",
+            "politics",
+            "education",
+            "health",
+            "environment",
+            "law",
+            "relationship",
+            "family",
+            "workplace",
+            "science",
+            "culture",
+            "sports",
+            "food",
+            "travel",
+            "psychology",
+            "philosophy",
+            "international",
+            "media",
+            "festival"
+          ]
+        },
+        "styleFacet": {
+          "enum": [
+            "builder",
+            "planner",
+            "civic-strategist",
+            "mentor",
+            "caretaker",
+            "steward",
+            "guardian",
+            "listener",
+            "nurturer",
+            "organizer",
+            "researcher",
+            "storyteller",
+            "challenger",
+            "host",
+            "explorer",
+            "reflector",
+            "thinker",
+            "connector",
+            "communicator",
+            "celebrator"
+          ]
+        },
+        "recommendedWhen": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["traitAny"],
+          "properties": {
+            "traitAny": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/monsterTrait" }
+            }
+          }
+        }
+      }
+    },
+    "semanticState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stateId",
+        "sourcePosePreference",
+        "actionPreferences",
+        "fallbackStateId",
+        "reducedMotionFallbackId"
+      ],
+      "properties": {
+        "stateId": { "$ref": "#/$defs/semanticStateId" },
+        "sourcePosePreference": { "$ref": "#/$defs/assetState" },
+        "actionPreferences": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/actionId" }
+        },
+        "fallbackStateId": {
+          "enum": [
+            "idle-static",
+            "idle",
+            "connecting",
+            "learning",
+            "resting",
+            "quiet",
+            "steady",
+            "lively",
+            "notice",
+            "error",
+            "wardrobe-unlocked",
+            null
+          ]
+        },
+        "reducedMotionFallbackId": {
+          "enum": [
+            "idle-static",
+            "idle",
+            "connecting",
+            "learning",
+            "resting",
+            "quiet",
+            "steady",
+            "lively",
+            "notice",
+            "error",
+            "wardrobe-unlocked",
+            null
+          ]
+        }
+      }
+    }
+  }
+}

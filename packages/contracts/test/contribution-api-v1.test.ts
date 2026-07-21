@@ -112,6 +112,29 @@ describe("contribution enrollment wire contracts", () => {
     expect(JSON.stringify(parsed)).not.toMatch(/installation|enrollmentId/i);
   });
 
+  it("preserves the published V1 response shape for old credential parsers", () => {
+    const base = {
+      contractVersion: 1,
+      credentials: {
+        uploadToken: UPLOAD_TOKEN,
+        deletionToken: DELETION_TOKEN
+      },
+      consentReceipt: consentReceipt()
+    };
+    expect(
+      EnrollmentResponseV1Schema.parse({
+        ...base,
+        acceptedSnapshotSchemaVersions: ["1"]
+      }).acceptedSnapshotSchemaVersions
+    ).toEqual(["1"]);
+    expect(
+      EnrollmentResponseV1Schema.safeParse({
+        ...base,
+        acceptedSnapshotSchemaVersions: ["1", "2"]
+      }).success
+    ).toBe(false);
+  });
+
   it("enforces credential role prefixes and 256-bit secret encodings", () => {
     expect(
       ContributionCredentialPairV1Schema.safeParse({

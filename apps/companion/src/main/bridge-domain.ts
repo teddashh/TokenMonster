@@ -47,6 +47,7 @@ const DEFAULT_CONTRIBUTION_STATUS: ContributionRuntimeStatus = Object.freeze({
   enabled: false,
   canEnable: false,
   canDelete: false,
+  canRecover: false,
   outboxPending: 0,
   consentDocumentRevision: null,
   deletion: null

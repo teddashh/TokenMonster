@@ -1,0 +1,168 @@
+export const CHARACTER_ANIMATION_CLASSES = Object.freeze([
+  "character-idle",
+  "character-letter-idle",
+  "character-entering",
+  "character-crossfade-in",
+  "character-crossfade-out"
+] as const);
+
+export type CharacterAnimationClass =
+  (typeof CHARACTER_ANIMATION_CLASSES)[number];
+
+export function enabledCharacterAnimationClasses(
+  reducedMotion: boolean
+): readonly CharacterAnimationClass[] {
+  return reducedMotion ? Object.freeze([]) : CHARACTER_ANIMATION_CLASSES;
+}
+
+export interface PortraitTarget {
+  readonly characterId: string;
+  readonly imagePath: string;
+}
+
+export interface PortraitSwitchHooks<T extends PortraitTarget> {
+  preload(imagePath: string): Promise<void>;
+  onSwitching(target: T, current: T | undefined): void;
+  onCommit(target: T, current: T | undefined): void;
+  onError(target: T, current: T | undefined): void;
+}
+
+export interface PortraitSwitchStateMachine<T extends PortraitTarget> {
+  current(): T | undefined;
+  transition(target: T): Promise<boolean>;
+  cancel(): void;
+}
+
+/** Keeps the committed portrait unchanged until its successor is decoded. */
+export function createPortraitSwitchStateMachine<T extends PortraitTarget>(
+  hooks: PortraitSwitchHooks<T>
+): PortraitSwitchStateMachine<T> {
+  let committed: T | undefined;
+  let sequence = 0;
+  return Object.freeze({
+    current(): T | undefined {
+      return committed;
+    },
+    async transition(target: T): Promise<boolean> {
+      const transitionSequence = ++sequence;
+      hooks.onSwitching(target, committed);
+      try {
+        await hooks.preload(target.imagePath);
+      } catch {
+        if (sequence === transitionSequence) hooks.onError(target, committed);
+        return false;
+      }
+      if (sequence !== transitionSequence) return false;
+      const previous = committed;
+      committed = target;
+      hooks.onCommit(target, previous);
+      return true;
+    },
+    cancel(): void {
+      sequence += 1;
+      committed = undefined;
+    }
+  });
+}
+
+/** Owns the letter-to-doll handoff so the current letter stays visible while decoding. */
+export function createPortraitStageStateMachine<T extends PortraitTarget>(
+  letterLayer: Pick<HTMLElement, "hidden">,
+  hooks: PortraitSwitchHooks<T>
+): PortraitSwitchStateMachine<T> {
+  return createPortraitSwitchStateMachine({
+    ...hooks,
+    onCommit: (target, current) => {
+      hooks.onCommit(target, current);
+      letterLayer.hidden = true;
+    }
+  });
+}
+
+export type CharacterImageFactory = () => HTMLImageElement;
+
+export async function preloadCharacterImage(
+  imagePath: string,
+  createImage: CharacterImageFactory = () => new Image()
+): Promise<void> {
+  const image = createImage();
+  const loaded = new Promise<void>((resolve, reject) => {
+    image.addEventListener("load", () => resolve(), { once: true });
+    image.addEventListener(
+      "error",
+      () => reject(new Error("Character image unavailable")),
+      { once: true }
+    );
+  });
+  image.src = imagePath;
+  await loaded;
+  if (typeof image.decode === "function") await image.decode();
+}
+
+export function userPrefersReducedMotion(
+  matchMedia: Pick<Window, "matchMedia"> = window
+): boolean {
+  return matchMedia.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+export interface CharacterIdleAnimation {
+  isRunning(): boolean;
+  start(): void;
+  stop(): void;
+  destroy(): void;
+}
+
+export interface CharacterIdleVisibilitySource {
+  readonly visibilityState: DocumentVisibilityState;
+  addEventListener(type: "visibilitychange", listener: EventListener): void;
+  removeEventListener(type: "visibilitychange", listener: EventListener): void;
+}
+
+/**
+ * Owns the idle class independently from portrait loading and interactions.
+ * CSS performs the animation; this lifecycle only pauses it for hidden views.
+ */
+export function createCharacterIdleAnimation(
+  target: Pick<Element, "classList">,
+  visibilitySource: CharacterIdleVisibilitySource = document,
+  reducedMotion = false
+): CharacterIdleAnimation {
+  let started = false;
+  let running = false;
+  let destroyed = false;
+
+  const sync = (): void => {
+    running =
+      !destroyed &&
+      started &&
+      !reducedMotion &&
+      visibilitySource.visibilityState === "visible";
+    target.classList.toggle("character-idle", running);
+  };
+  const handleVisibilityChange: EventListener = () => sync();
+  visibilitySource.addEventListener("visibilitychange", handleVisibilityChange);
+
+  return Object.freeze({
+    isRunning(): boolean {
+      return running;
+    },
+    start(): void {
+      if (destroyed) return;
+      started = true;
+      sync();
+    },
+    stop(): void {
+      started = false;
+      sync();
+    },
+    destroy(): void {
+      if (destroyed) return;
+      destroyed = true;
+      sync();
+      visibilitySource.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange
+      );
+    }
+  });
+}

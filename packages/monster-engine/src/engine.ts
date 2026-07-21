@@ -18,7 +18,7 @@ import {
   type MonsterStateV1,
   type MonsterTemplateIdV1,
   type MonsterTraitIdV1,
-  type MonsterValueBandV1
+  type MonsterValueBandV1,
 } from "./schemas.js";
 
 const BASIS_POINTS = 10_000n;
@@ -37,11 +37,11 @@ export const MONSTER_THRESHOLDS_V1 = Object.freeze({
   outputHeavyShareBps: 4_500,
   nightOrientedShareBps: 4_000,
   quietRelativeActivityBps: 5_000,
-  livelyRelativeActivityBps: 15_000
+  livelyRelativeActivityBps: 15_000,
+  evidenceLossGraceDays: 7,
 });
 
 const CLI_TOOLS = new Set<string>(MONSTER_CLI_TOOLS_V1);
-
 interface FootprintMetrics {
   readonly observedDays: number;
   readonly activeDays: number;
@@ -81,7 +81,7 @@ function addToMap(map: Map<string, bigint>, key: string, value: bigint): void {
 function cappedRatioBps(
   numerator: bigint,
   denominator: bigint,
-  cap = 10_000
+  cap = 10_000,
 ): number {
   if (denominator <= 0n || numerator <= 0n) {
     return 0;
@@ -93,7 +93,7 @@ function cappedRatioBps(
 
 function metricCoverageBand(
   observedDays: number,
-  activeDays: number
+  activeDays: number,
 ): MonsterCoverageBandV1 {
   if (
     observedDays < MONSTER_THRESHOLDS_V1.minimumObservedDays ||
@@ -112,7 +112,7 @@ function metricCoverageBand(
 
 function ratioCoverageBand(
   ratioBps: number,
-  minimumBps: number
+  minimumBps: number,
 ): MonsterCoverageBandV1 {
   if (ratioBps < minimumBps) {
     return "insufficient";
@@ -139,7 +139,9 @@ function hourlyCoverageBand(observedDays: number): MonsterCoverageBandV1 {
   return "full";
 }
 
-function aggregateMetrics(footprint: ContentBlindFootprintV1): FootprintMetrics {
+function aggregateMetrics(
+  footprint: ContentBlindFootprintV1,
+): FootprintMetrics {
   const byTool = new Map<string, bigint>();
   const byProvider = new Map<string, bigint>();
   const dailyTotals: Array<bigint | null> = [];
@@ -216,14 +218,14 @@ function aggregateMetrics(footprint: ContentBlindFootprintV1): FootprintMetrics 
     hourlyObservedDays,
     hourlyTimeIsExact,
     hourlyTotal,
-    hourlyNight
+    hourlyNight,
   };
 }
 
 function countMaterialDimensions(
   dimensions: ReadonlyMap<string, bigint>,
   total: bigint,
-  minimumShareBps: number
+  minimumShareBps: number,
 ): number {
   let count = 0;
   for (const value of dimensions.values()) {
@@ -236,7 +238,7 @@ function countMaterialDimensions(
 
 function largestDimensionShareBps(
   dimensions: ReadonlyMap<string, bigint>,
-  total: bigint
+  total: bigint,
 ): number {
   let largest = 0n;
   for (const value of dimensions.values()) {
@@ -250,98 +252,115 @@ function largestDimensionShareBps(
 function explanationInput(
   metric: MonsterExplanationInputV1["metric"],
   valueBand: MonsterValueBandV1,
-  coverage: MonsterCoverageBandV1
+  coverage: MonsterCoverageBandV1,
 ): MonsterExplanationInputV1 {
   return { metric, valueBand, coverage };
 }
 
 function selectTraits(
   metrics: FootprintMetrics,
-  coverage: MonsterCoverageBandV1
+  coverage: MonsterCoverageBandV1,
 ): readonly TraitSelection[] {
   const traits: TraitSelection[] = [];
   const cliShareBps = cappedRatioBps(metrics.cli, metrics.total);
   const toolCount = countMaterialDimensions(
     metrics.byTool,
     metrics.total,
-    MONSTER_THRESHOLDS_V1.materialToolShareBps
+    MONSTER_THRESHOLDS_V1.materialToolShareBps,
   );
+  const materialCliToolCount = Array.from(metrics.byTool.entries()).filter(
+    ([tool, value]) =>
+      CLI_TOOLS.has(tool) &&
+      cappedRatioBps(value, metrics.total) >=
+        MONSTER_THRESHOLDS_V1.materialToolShareBps,
+  ).length;
   const topToolShareBps = largestDimensionShareBps(
     metrics.byTool,
-    metrics.total
+    metrics.total,
   );
 
-  if (cliShareBps >= MONSTER_THRESHOLDS_V1.cliFocusedShareBps) {
-    traits.push({
-      id: "cli-focused",
-      reasonCode: "TRAIT_CLI_FOCUS_28D",
-      templateId: "monster.trait.cliFocused.v1",
-      inputs: [explanationInput("cli-share", "high", coverage)]
-    });
-  } else if (toolCount >= 2) {
-    traits.push({
-      id: "multi-tool",
-      reasonCode: "TRAIT_MULTI_TOOL_28D",
-      templateId: "monster.trait.multiTool.v1",
-      inputs: [explanationInput("tool-diversity", "diverse", coverage)]
-    });
-  } else {
-    traits.push({
-      id: "tool-focused",
-      reasonCode: "TRAIT_TOOL_FOCUS_28D",
-      templateId: "monster.trait.toolFocused.v1",
-      inputs: [
-        explanationInput(
-          "top-tool-share",
-          topToolShareBps >= 8_500 ? "high" : "concentrated",
-          coverage
-        )
-      ]
-    });
+  if (toolCoverageIsComplete(metrics)) {
+    if (toolCount >= 2 && materialCliToolCount >= 2) {
+      traits.push({
+        id: "multi-tool",
+        reasonCode: "TRAIT_MULTI_TOOL_28D",
+        templateId: "monster.trait.multiTool.v1",
+        inputs: [explanationInput("tool-diversity", "diverse", coverage)],
+      });
+    } else if (cliShareBps >= MONSTER_THRESHOLDS_V1.cliFocusedShareBps) {
+      traits.push({
+        id: "cli-focused",
+        reasonCode: "TRAIT_CLI_FOCUS_28D",
+        templateId: "monster.trait.cliFocused.v1",
+        inputs: [explanationInput("cli-share", "high", coverage)],
+      });
+    } else if (toolCount >= 2) {
+      traits.push({
+        id: "multi-tool",
+        reasonCode: "TRAIT_MULTI_TOOL_28D",
+        templateId: "monster.trait.multiTool.v1",
+        inputs: [explanationInput("tool-diversity", "diverse", coverage)],
+      });
+    } else {
+      traits.push({
+        id: "tool-focused",
+        reasonCode: "TRAIT_TOOL_FOCUS_28D",
+        templateId: "monster.trait.toolFocused.v1",
+        inputs: [
+          explanationInput(
+            "top-tool-share",
+            topToolShareBps >= 8_500 ? "high" : "concentrated",
+            coverage,
+          ),
+        ],
+      });
+    }
   }
 
-  const providerCount = countMaterialDimensions(
-    metrics.byProvider,
-    metrics.total,
-    MONSTER_THRESHOLDS_V1.materialProviderShareBps
-  );
-  const topProviderShareBps = largestDimensionShareBps(
-    metrics.byProvider,
-    metrics.total
-  );
-  if (providerCount >= 2) {
-    traits.push({
-      id: "multi-provider",
-      reasonCode: "TRAIT_MULTI_PROVIDER_28D",
-      templateId: "monster.trait.multiProvider.v1",
-      inputs: [explanationInput("provider-diversity", "diverse", coverage)]
-    });
-  } else if (
-    topProviderShareBps >= MONSTER_THRESHOLDS_V1.providerFocusedShareBps
-  ) {
-    traits.push({
-      id: "provider-focused",
-      reasonCode: "TRAIT_PROVIDER_FOCUS_28D",
-      templateId: "monster.trait.providerFocused.v1",
-      inputs: [explanationInput("top-provider-share", "high", coverage)]
-    });
-  } else {
-    traits.push({
-      id: "balanced",
-      reasonCode: "TRAIT_BALANCED_FALLBACK_28D",
-      templateId: "monster.trait.balanced.v1",
-      inputs: [explanationInput("top-provider-share", "balanced", coverage)]
-    });
+  if (providerCoverageIsComplete(metrics)) {
+    const providerCount = countMaterialDimensions(
+      metrics.byProvider,
+      metrics.total,
+      MONSTER_THRESHOLDS_V1.materialProviderShareBps,
+    );
+    const topProviderShareBps = largestDimensionShareBps(
+      metrics.byProvider,
+      metrics.total,
+    );
+    if (providerCount >= 2) {
+      traits.push({
+        id: "multi-provider",
+        reasonCode: "TRAIT_MULTI_PROVIDER_28D",
+        templateId: "monster.trait.multiProvider.v1",
+        inputs: [explanationInput("provider-diversity", "diverse", coverage)],
+      });
+    } else if (
+      topProviderShareBps >= MONSTER_THRESHOLDS_V1.providerFocusedShareBps
+    ) {
+      traits.push({
+        id: "provider-focused",
+        reasonCode: "TRAIT_PROVIDER_FOCUS_28D",
+        templateId: "monster.trait.providerFocused.v1",
+        inputs: [explanationInput("top-provider-share", "high", coverage)],
+      });
+    } else {
+      traits.push({
+        id: "balanced",
+        reasonCode: "TRAIT_BALANCED_FALLBACK_28D",
+        templateId: "monster.trait.balanced.v1",
+        inputs: [explanationInput("top-provider-share", "balanced", coverage)],
+      });
+    }
   }
 
   const optional: OptionalTraitSelection[] = [];
   const cacheCoverageBps = cappedRatioBps(
     metrics.cacheCoveredTotal,
-    metrics.total
+    metrics.total,
   );
   const cacheShareBps = cappedRatioBps(
     metrics.cacheEligibleRead,
-    metrics.cacheEligibleInput + metrics.cacheEligibleRead
+    metrics.cacheEligibleInput + metrics.cacheEligibleRead,
   );
   if (
     cacheCoverageBps >= MONSTER_THRESHOLDS_V1.cacheCoverageBps &&
@@ -352,28 +371,29 @@ function selectTraits(
       reasonCode: "TRAIT_CACHE_SAVVY_28D",
       templateId: "monster.trait.cacheSavvy.v1",
       inputs: [
-        explanationInput("cache-share", "high", ratioCoverageBand(
-          cacheCoverageBps,
-          MONSTER_THRESHOLDS_V1.cacheCoverageBps
-        )),
+        explanationInput(
+          "cache-share",
+          "high",
+          ratioCoverageBand(
+            cacheCoverageBps,
+            MONSTER_THRESHOLDS_V1.cacheCoverageBps,
+          ),
+        ),
         explanationInput(
           "cache-observation",
           "available",
           ratioCoverageBand(
             cacheCoverageBps,
-            MONSTER_THRESHOLDS_V1.cacheCoverageBps
-          )
-        )
+            MONSTER_THRESHOLDS_V1.cacheCoverageBps,
+          ),
+        ),
       ],
       marginBps: cacheShareBps - MONSTER_THRESHOLDS_V1.cacheSavvyShareBps,
-      priority: 0
+      priority: 0,
     });
   }
 
-  const outputShareBps = cappedRatioBps(
-    metrics.output,
-    metrics.input + metrics.output
-  );
+  const outputShareBps = cappedRatioBps(metrics.output, metrics.total);
   if (outputShareBps >= MONSTER_THRESHOLDS_V1.outputHeavyShareBps) {
     optional.push({
       id: "output-heavy",
@@ -381,13 +401,13 @@ function selectTraits(
       templateId: "monster.trait.outputHeavy.v1",
       inputs: [explanationInput("output-share", "high", coverage)],
       marginBps: outputShareBps - MONSTER_THRESHOLDS_V1.outputHeavyShareBps,
-      priority: 1
+      priority: 1,
     });
   }
 
   const nightShareBps = cappedRatioBps(
     metrics.hourlyNight,
-    metrics.hourlyTotal
+    metrics.hourlyTotal,
   );
   if (
     metrics.hourlyObservedDays >=
@@ -404,28 +424,27 @@ function selectTraits(
         explanationInput(
           "local-night-share",
           "high",
-          hourlyCoverageBand(metrics.hourlyObservedDays)
+          hourlyCoverageBand(metrics.hourlyObservedDays),
         ),
         explanationInput(
           "local-hour-coverage",
           "available",
-          hourlyCoverageBand(metrics.hourlyObservedDays)
+          hourlyCoverageBand(metrics.hourlyObservedDays),
         ),
         explanationInput(
           "local-hour-quality",
           "available",
-          hourlyCoverageBand(metrics.hourlyObservedDays)
-        )
+          hourlyCoverageBand(metrics.hourlyObservedDays),
+        ),
       ],
-      marginBps:
-        nightShareBps - MONSTER_THRESHOLDS_V1.nightOrientedShareBps,
-      priority: 2
+      marginBps: nightShareBps - MONSTER_THRESHOLDS_V1.nightOrientedShareBps,
+      priority: 2,
     });
   }
 
   optional.sort(
     (left, right) =>
-      right.marginBps - left.marginBps || left.priority - right.priority
+      right.marginBps - left.marginBps || left.priority - right.priority,
   );
   const dominantOptional = optional[0];
   if (dominantOptional !== undefined) {
@@ -436,9 +455,12 @@ function selectTraits(
 }
 
 function compareRelativeActivity(
-  metrics: FootprintMetrics
+  metrics: FootprintMetrics,
+  latestDayCompleteness: ContentBlindFootprintV1["latestDayCompleteness"],
 ): "unavailable" | "inactive" | "low" | "stable" | "high" {
-  const latest = metrics.dailyTotals.at(-1) ?? null;
+  const latestIndex =
+    metrics.dailyTotals.length - (latestDayCompleteness === "complete" ? 1 : 2);
+  const latest = metrics.dailyTotals[latestIndex] ?? null;
   if (latest === null) {
     return "unavailable";
   }
@@ -448,7 +470,7 @@ function compareRelativeActivity(
 
   let priorSum = 0n;
   let priorObservedDays = 0n;
-  for (let index = 0; index < metrics.dailyTotals.length - 1; index += 1) {
+  for (let index = 0; index < latestIndex; index += 1) {
     const value = metrics.dailyTotals[index];
     if (value !== undefined && value !== null) {
       priorSum += value;
@@ -477,7 +499,7 @@ function compareRelativeActivity(
 
 function moodFor(
   ready: boolean,
-  relativeActivity: ReturnType<typeof compareRelativeActivity>
+  relativeActivity: ReturnType<typeof compareRelativeActivity>,
 ): {
   readonly mood: MonsterMoodIdV1;
   readonly reasonCode: MonsterReasonCodeV1;
@@ -491,7 +513,7 @@ function moodFor(
       reasonCode: "MOOD_LEARNING_COVERAGE_28D",
       templateId: "monster.mood.learning.v1",
       valueBand: "insufficient",
-      energyBand: "dormant"
+      energyBand: "dormant",
     };
   }
   if (relativeActivity === "unavailable") {
@@ -500,7 +522,7 @@ function moodFor(
       reasonCode: "MOOD_TODAY_UNAVAILABLE",
       templateId: "monster.mood.unknown.v1",
       valueBand: "unavailable",
-      energyBand: "dormant"
+      energyBand: "dormant",
     };
   }
   if (relativeActivity === "inactive") {
@@ -509,7 +531,7 @@ function moodFor(
       reasonCode: "MOOD_RESTING_TODAY",
       templateId: "monster.mood.resting.v1",
       valueBand: "inactive",
-      energyBand: "dormant"
+      energyBand: "dormant",
     };
   }
   if (relativeActivity === "low") {
@@ -518,7 +540,7 @@ function moodFor(
       reasonCode: "MOOD_RELATIVE_ACTIVITY_LOW",
       templateId: "monster.mood.quiet.v1",
       valueBand: "below-baseline",
-      energyBand: "low"
+      energyBand: "low",
     };
   }
   if (relativeActivity === "high") {
@@ -527,7 +549,7 @@ function moodFor(
       reasonCode: "MOOD_RELATIVE_ACTIVITY_HIGH",
       templateId: "monster.mood.lively.v1",
       valueBand: "above-baseline",
-      energyBand: "high"
+      energyBand: "high",
     };
   }
   return {
@@ -535,7 +557,7 @@ function moodFor(
     reasonCode: "MOOD_RELATIVE_ACTIVITY_STABLE",
     templateId: "monster.mood.steady.v1",
     valueBand: "near-baseline",
-    energyBand: "medium"
+    energyBand: "medium",
   };
 }
 
@@ -543,9 +565,17 @@ function traitIds(state: MonsterStateV1 | null): readonly MonsterTraitIdV1[] {
   return state?.traits.map((trait) => trait.id) ?? [];
 }
 
+function providerCoverageIsComplete(metrics: FootprintMetrics): boolean {
+  return (metrics.byProvider.get("other") ?? 0n) === 0n;
+}
+
+function toolCoverageIsComplete(metrics: FootprintMetrics): boolean {
+  return (metrics.byTool.get("other") ?? 0n) === 0n;
+}
+
 function equalTraits(
   left: readonly MonsterTraitIdV1[],
-  right: readonly MonsterTraitIdV1[]
+  right: readonly MonsterTraitIdV1[],
 ): boolean {
   return (
     left.length === right.length &&
@@ -561,21 +591,20 @@ function localDateNumber(value: string): number {
 
 function localDateDifference(from: string, to: string): number {
   return (
-    (localDateNumber(to) - localDateNumber(from)) /
-    MILLISECONDS_PER_LOCAL_DATE
+    (localDateNumber(to) - localDateNumber(from)) / MILLISECONDS_PER_LOCAL_DATE
   );
 }
 
 function validatePreviousWindow(
   current: FootprintWindowV1,
-  previous: MonsterStateV1 | null
+  previous: MonsterStateV1 | null,
 ): { readonly sameWindow: boolean } {
   if (previous === null) {
     return { sameWindow: false };
   }
   if (previous.window.timezone !== current.timezone) {
     throw new Error(
-      "Previous monster state timezone is incompatible with the current footprint."
+      "Previous monster state timezone is incompatible with the current footprint.",
     );
   }
 
@@ -588,7 +617,7 @@ function validatePreviousWindow(
     toAdvance > 1
   ) {
     throw new Error(
-      "Previous monster state must use the same footprint window or the immediately preceding contiguous local-day window."
+      "Previous monster state must use the same footprint window or the immediately preceding contiguous local-day window.",
     );
   }
   return { sameWindow: toAdvance === 0 };
@@ -596,11 +625,11 @@ function validatePreviousWindow(
 
 function advanceAtMostOneTrait(
   previous: readonly MonsterTraitIdV1[],
-  candidate: readonly MonsterTraitIdV1[]
+  candidate: readonly MonsterTraitIdV1[],
 ): readonly MonsterTraitIdV1[] {
   const firstDifference = Array.from(
     { length: Math.max(previous.length, candidate.length) },
-    (_, index) => index
+    (_, index) => index,
   ).find((index) => previous[index] !== candidate[index]);
   if (firstDifference === undefined) {
     return previous;
@@ -609,6 +638,13 @@ function advanceAtMostOneTrait(
   const next = [...previous];
   const candidateTrait = candidate[firstDifference];
   if (candidateTrait === undefined) {
+    next.splice(firstDifference, 1);
+  } else if (next.indexOf(candidateTrait, firstDifference + 1) !== -1) {
+    // Candidate lists contain only unique traits. When the desired trait is
+    // already present in a later semantic slot, removing the obsolete current
+    // slot is the sole daily edit. Replacing it would create a duplicate and
+    // compacting the previous list before comparison could silently remove
+    // several visible traits at once.
     next.splice(firstDifference, 1);
   } else if (firstDifference >= next.length) {
     next.push(candidateTrait);
@@ -626,7 +662,7 @@ function makeExplanation(
   templateId: MonsterTemplateIdV1,
   inputs: readonly MonsterExplanationInputV1[],
   before: MonsterExplanationStateValueV1 | null,
-  after: MonsterExplanationStateValueV1
+  after: MonsterExplanationStateValueV1,
 ): MonsterExplanationV1 {
   return {
     explanationId: `monster-v1:${window.to}:${subject}:${ordinal}`,
@@ -637,7 +673,7 @@ function makeExplanation(
     inputs: [...inputs],
     before,
     after,
-    templateId
+    templateId,
   };
 }
 
@@ -648,7 +684,7 @@ function makeExplanation(
 export function deriveMonsterState(
   footprintInput: unknown,
   previousInput: unknown,
-  configInput: unknown = DEFAULT_MONSTER_RULES_V1
+  configInput: unknown = DEFAULT_MONSTER_RULES_V1,
 ): MonsterDerivationV1 {
   const footprint = ContentBlindFootprintV1Schema.parse(footprintInput);
   const previous =
@@ -657,26 +693,53 @@ export function deriveMonsterState(
   const previousWindow = validatePreviousWindow(footprint.window, previous);
 
   const metrics = aggregateMetrics(footprint);
-  const coverage = metricCoverageBand(metrics.observedDays, metrics.activeDays);
-  const candidateReady = coverage !== "insufficient";
-  const selectedTraits = candidateReady
-    ? selectTraits(metrics, coverage)
+  const metricCoverage = metricCoverageBand(
+    metrics.observedDays,
+    metrics.activeDays,
+  );
+  const dayCoverageReady = metricCoverage !== "insufficient";
+  const selectedTraits = dayCoverageReady
+    ? selectTraits(metrics, metricCoverage)
     : [];
+  const traitEvidenceReady = selectedTraits.length > 0;
+  const candidateReady = dayCoverageReady && traitEvidenceReady;
   const candidateTraitIds = selectedTraits.map((trait) => trait.id);
+  const previousTraitIds = traitIds(previous);
 
   let identityStatus: MonsterStateV1["identityStatus"] = candidateReady
     ? "ready"
     : "learning";
   let visibleTraitIds: readonly MonsterTraitIdV1[] = candidateTraitIds;
-  if (previous !== null && previousWindow.sameWindow) {
+  let evidenceLossStartedDate: string | null = null;
+  if (previous?.identityStatus === "ready" && !candidateReady) {
+    const graceStarted =
+      previous.identityContinuity.evidenceLossStartedDate ??
+      footprint.window.to;
+    if (
+      localDateDifference(graceStarted, footprint.window.to) <
+      MONSTER_THRESHOLDS_V1.evidenceLossGraceDays
+    ) {
+      identityStatus = "ready";
+      visibleTraitIds = previousTraitIds;
+      evidenceLossStartedDate = graceStarted;
+    }
+  } else if (previous !== null && previousWindow.sameWindow) {
     identityStatus = previous.identityStatus;
-    visibleTraitIds = traitIds(previous);
+    visibleTraitIds = previousTraitIds;
   } else if (previous?.identityStatus === "ready") {
     identityStatus = "ready";
     visibleTraitIds = candidateReady
-      ? advanceAtMostOneTrait(traitIds(previous), candidateTraitIds)
-      : traitIds(previous);
+      ? advanceAtMostOneTrait(previousTraitIds, candidateTraitIds)
+      : previousTraitIds;
   }
+  if (identityStatus === "ready" && visibleTraitIds.length === 0) {
+    identityStatus = "learning";
+    visibleTraitIds = [];
+    evidenceLossStartedDate = null;
+  }
+
+  const coverage: MonsterCoverageBandV1 =
+    identityStatus === "ready" ? metricCoverage : "insufficient";
 
   const provisional =
     (identityStatus === "ready") !== candidateReady ||
@@ -689,34 +752,41 @@ export function deriveMonsterState(
   const identityInputs: MonsterExplanationInputV1[] = [
     explanationInput(
       "observed-days",
-      candidateReady ? "available" : "insufficient",
-      coverage
+      dayCoverageReady ? "available" : "insufficient",
+      metricCoverage,
     ),
     explanationInput(
       "active-days",
-      candidateReady ? "available" : "insufficient",
-      coverage
-    )
+      dayCoverageReady ? "available" : "insufficient",
+      metricCoverage,
+    ),
   ];
-  if (previous !== null && previousWindow.sameWindow) {
+  if (identityStatus === "learning" && !dayCoverageReady) {
+    identityReason = "IDENTITY_LEARNING_COVERAGE_28D";
+    identityTemplate = "monster.identity.learning.v1";
+  } else if (identityStatus === "learning" && !traitEvidenceReady) {
+    identityReason = "IDENTITY_LEARNING_EVIDENCE_28D";
+    identityTemplate = "monster.identity.learningEvidence.v1";
+    identityInputs.push(
+      explanationInput("trait-structure", "unavailable", "insufficient"),
+    );
+  } else if (evidenceLossStartedDate !== null) {
+    identityReason = "IDENTITY_HELD_EVIDENCE_GRACE_7D";
+    identityTemplate = "monster.identity.heldEvidenceGrace.v1";
+    identityInputs.push(explanationInput("trait-structure", "held", coverage));
+  } else if (previous !== null && previousWindow.sameWindow) {
     identityReason = "IDENTITY_HELD_SAME_WINDOW";
     identityTemplate = "monster.identity.heldSameWindow.v1";
-    identityInputs.push(
-      explanationInput("trait-structure", "held", coverage)
-    );
+    identityInputs.push(explanationInput("trait-structure", "held", coverage));
   } else if (provisional) {
     identityReason = "IDENTITY_PROVISIONAL_DAILY_LIMIT";
     identityTemplate = "monster.identity.provisionalDailyLimit.v1";
     identityInputs.push(
-      explanationInput("trait-structure", "provisional", coverage)
+      explanationInput("trait-structure", "provisional", coverage),
     );
   } else {
-    identityReason = candidateReady
-      ? "IDENTITY_READY_COVERAGE_28D"
-      : "IDENTITY_LEARNING_COVERAGE_28D";
-    identityTemplate = candidateReady
-      ? "monster.identity.ready.v1"
-      : "monster.identity.learning.v1";
+    identityReason = "IDENTITY_READY_COVERAGE_28D";
+    identityTemplate = "monster.identity.ready.v1";
   }
 
   const identityExplanation = makeExplanation(
@@ -727,28 +797,35 @@ export function deriveMonsterState(
     identityTemplate,
     identityInputs,
     previous?.identityStatus ?? null,
-    identityStatus
+    identityStatus,
   );
   explanations.push(identityExplanation);
 
   const traits = visibleTraitIds.map((traitId, index) => {
-    const candidate = selectedTraits[index];
+    const candidate = selectedTraits.find(
+      (selection) => selection.id === traitId,
+    );
     let trait: TraitSelection;
-    if (previous !== null && previousWindow.sameWindow) {
+    if (evidenceLossStartedDate !== null) {
+      trait = {
+        id: traitId,
+        reasonCode: "TRAIT_HELD_EVIDENCE_GRACE_7D",
+        templateId: "monster.trait.heldEvidenceGrace.v1",
+        inputs: [explanationInput("trait-structure", "held", coverage)],
+      };
+    } else if (previous !== null && previousWindow.sameWindow) {
       trait = {
         id: traitId,
         reasonCode: "TRAIT_HELD_SAME_WINDOW",
         templateId: "monster.trait.heldSameWindow.v1",
-        inputs: [explanationInput("trait-structure", "held", coverage)]
+        inputs: [explanationInput("trait-structure", "held", coverage)],
       };
     } else if (candidate?.id !== traitId) {
       trait = {
         id: traitId,
         reasonCode: "TRAIT_HELD_DAILY_LIMIT",
         templateId: "monster.trait.heldDailyLimit.v1",
-        inputs: [
-          explanationInput("trait-structure", "provisional", coverage)
-        ]
+        inputs: [explanationInput("trait-structure", "provisional", coverage)],
       };
     } else {
       trait = candidate;
@@ -761,18 +838,20 @@ export function deriveMonsterState(
       trait.reasonCode,
       trait.templateId,
       trait.inputs,
-      previous?.traits[index]?.id ?? null,
-      trait.id
+      previousTraitIds.includes(traitId)
+        ? traitId
+        : (previousTraitIds[index] ?? null),
+      trait.id,
     );
     explanations.push(explanation);
     return { id: trait.id, explanationId: explanation.explanationId };
   });
 
-  const relativeActivity = compareRelativeActivity(metrics);
-  const moodSelection = moodFor(
-    identityStatus === "ready",
-    relativeActivity
+  const relativeActivity = compareRelativeActivity(
+    metrics,
+    footprint.latestDayCompleteness,
   );
+  const moodSelection = moodFor(identityStatus === "ready", relativeActivity);
   const moodExplanation = makeExplanation(
     footprint.window,
     "mood",
@@ -783,11 +862,11 @@ export function deriveMonsterState(
       explanationInput(
         "relative-daily-activity",
         moodSelection.valueBand,
-        coverage
-      )
+        coverage,
+      ),
     ],
     previous?.mood.id ?? null,
-    moodSelection.mood
+    moodSelection.mood,
   );
   explanations.push(moodExplanation);
 
@@ -799,25 +878,25 @@ export function deriveMonsterState(
   const identityChanged =
     previous !== null &&
     (previous.identityStatus !== identityStatus ||
-      !equalTraits(traitIds(previous), nextTraitIds));
+      !equalTraits(previousTraitIds, nextTraitIds));
   const daysSinceIdentityReview =
     previous === null
       ? 0
       : localDateDifference(
           previous.identityContinuity.lastIdentityReviewDate,
-          footprint.window.to
+          footprint.window.to,
         );
 
-  if (previous !== null && previousWindow.sameWindow) {
-    evolution = "no-change";
-    evolutionReason = "EVOLUTION_NO_CHANGE";
-    evolutionTemplate = "monster.evolution.noChange.v1";
-    evolutionBand = "held";
-  } else if (identityStatus === "learning" && previous === null) {
+  if (identityStatus === "learning") {
     evolution = "awaiting-coverage";
     evolutionReason = "EVOLUTION_AWAITING_COVERAGE";
     evolutionTemplate = "monster.evolution.awaitingCoverage.v1";
     evolutionBand = "insufficient";
+  } else if (previous !== null && previousWindow.sameWindow) {
+    evolution = "no-change";
+    evolutionReason = "EVOLUTION_NO_CHANGE";
+    evolutionTemplate = "monster.evolution.noChange.v1";
+    evolutionBand = "held";
   } else if (identityStatus === "ready" && previous === null) {
     evolution = "initial-profile";
     evolutionReason = "EVOLUTION_INITIAL_PROFILE";
@@ -832,17 +911,10 @@ export function deriveMonsterState(
     evolutionTemplate = "monster.evolution.coverageComplete.v1";
     evolutionBand = "changed";
   } else if (identityChanged) {
-    if (identityStatus === "learning") {
-      evolution = "awaiting-coverage";
-      evolutionReason = "EVOLUTION_AWAITING_COVERAGE";
-      evolutionTemplate = "monster.evolution.awaitingCoverage.v1";
-      evolutionBand = "insufficient";
-    } else {
-      evolution = "identity-shift";
-      evolutionReason = "EVOLUTION_IDENTITY_SHIFT";
-      evolutionTemplate = "monster.evolution.identityShift.v1";
-      evolutionBand = "changed";
-    }
+    evolution = "identity-shift";
+    evolutionReason = "EVOLUTION_IDENTITY_SHIFT";
+    evolutionTemplate = "monster.evolution.identityShift.v1";
+    evolutionBand = "changed";
   } else if (
     identityStatus === "ready" &&
     !provisional &&
@@ -861,9 +933,14 @@ export function deriveMonsterState(
 
   let lastIdentityReviewDate =
     previous?.identityContinuity.lastIdentityReviewDate ?? footprint.window.to;
+  const enteredEvidenceLossGrace =
+    evidenceLossStartedDate !== null &&
+    previous?.identityContinuity.evidenceLossStartedDate === null;
   if (
     previous === null ||
+    enteredEvidenceLossGrace ||
     (!previousWindow.sameWindow &&
+      evidenceLossStartedDate === null &&
       (identityChanged || provisional || evolution === "weekly-review"))
   ) {
     lastIdentityReviewDate = footprint.window.to;
@@ -877,7 +954,7 @@ export function deriveMonsterState(
     evolutionTemplate,
     [explanationInput("trait-structure", evolutionBand, coverage)],
     previous?.evolution.event ?? null,
-    evolution
+    evolution,
   );
   explanations.push(evolutionExplanation);
 
@@ -892,12 +969,13 @@ export function deriveMonsterState(
     identityContinuity: {
       schemaVersion: "1",
       lastIdentityReviewDate,
-      provisional
+      evidenceLossStartedDate,
+      provisional,
     },
     traits,
     mood: {
       id: moodSelection.mood,
-      explanationId: moodExplanation.explanationId
+      explanationId: moodExplanation.explanationId,
     },
     evolution: {
       cadence:
@@ -907,9 +985,9 @@ export function deriveMonsterState(
             ? "none"
             : "event",
       event: evolution,
-      explanationId: evolutionExplanation.explanationId
+      explanationId: evolutionExplanation.explanationId,
     },
-    appearance: { energyBand: moodSelection.energyBand }
+    appearance: { energyBand: moodSelection.energyBand },
   };
 
   return MonsterDerivationV1Schema.parse({ state, explanations });

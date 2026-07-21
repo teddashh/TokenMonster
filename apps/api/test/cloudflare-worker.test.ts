@@ -7,8 +7,12 @@ import type {
 } from "@tokenmonster/api-domain";
 import {
   DeletionAcceptedResponseV1Schema,
+  DeletionStatusResponseV1Schema,
   EnrollmentResponseV1Schema,
-  IngestReceiptV1Schema
+  EnrollmentResponseV2Schema,
+  IngestReceiptV1Schema,
+  PauseResponseV1Schema,
+  ResumeResponseV1Schema
 } from "@tokenmonster/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -46,6 +50,12 @@ const rateKeyConfig = Object.freeze({
   enrollmentEdgeKey: key("rate-enrollment-v1", 4),
   ingestTokenKey: key("rate-ingest-v1", 5),
   deletionTokenKey: key("rate-deletion-v1", 6)
+});
+
+const V2_CREDENTIALS = Object.freeze({
+  uploadToken: `tm_u2_${"u".repeat(24)}.${"U".repeat(43)}`,
+  deletionToken: `tm_d2_${"d".repeat(24)}.${"D".repeat(42)}E`,
+  recoveryToken: `tm_r2_${"r".repeat(24)}.${"R".repeat(42)}I`
 });
 
 class RecordingRateLimit implements RateLimitPort {
@@ -132,19 +142,32 @@ function enrollmentBody(): unknown {
   };
 }
 
-function ingestBody(batchId: string): unknown {
+function recoverableEnrollmentBody(): unknown {
+  return {
+    contractVersion: 2,
+    credentials: V2_CREDENTIALS,
+    consent: {
+      purpose: "contribution",
+      documentRevision: "contribution-2026-07-15",
+      granted: true,
+      acknowledgedAt: new Date(Date.now() - 60_000).toISOString()
+    }
+  };
+}
+
+function ingestBody(batchId: string, sidecar = false): unknown {
   const now = new Date();
   const day = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
   ).toISOString();
   return {
-    schemaVersion: "1",
+    schemaVersion: sidecar ? "2" : "1",
     batchId,
     generatedAt: now.toISOString(),
     collector: {
-      kind: "tokscale",
+      kind: sidecar ? "tokentracker-sidecar" : "tokscale",
       adapterVersion: "0.1.0",
-      sourceVersion: "4.5.2"
+      sourceVersion: sidecar ? "0.80.0" : "4.5.2"
     },
     buckets: [
       {
@@ -195,6 +218,24 @@ async function enrollment(
   );
 }
 
+async function recoverableEnrollment(
+  worker: ReturnType<typeof createCloudflareApiWorker>,
+  env: CloudflareApiEnvironment,
+  body: unknown = recoverableEnrollmentBody()
+): Promise<Response> {
+  return worker.fetch(
+    new Request("https://api.tokenmonster.example/v2/enrollments", {
+      method: "POST",
+      headers: {
+        "CF-Connecting-IP": "203.0.113.8",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    }),
+    env
+  );
+}
+
 afterEach(() => {
   for (const database of databases.splice(0)) database.close();
 });
@@ -209,6 +250,7 @@ describe("Cloudflare Worker composition gates", () => {
     const fakeDeletion = `tm_d1_${"C".repeat(22)}.${"D".repeat(43)}`;
     const mutations = [
       await enrollment(worker, env),
+      await recoverableEnrollment(worker, env),
       await worker.fetch(
         new Request(
           "https://api.tokenmonster.example/v1/me/ingest-snapshots",
@@ -224,6 +266,24 @@ describe("Cloudflare Worker composition gates", () => {
             )
           }
         ),
+        env
+      ),
+      await worker.fetch(
+        new Request("https://api.tokenmonster.example/v1/me/pause", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${fakeUpload}` }
+        }),
+        env
+      ),
+      await worker.fetch(
+        new Request("https://api.tokenmonster.example/v1/me/resume", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${fakeUpload}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(enrollmentBody())
+        }),
         env
       ),
       await worker.fetch(
@@ -328,7 +388,86 @@ describe("Cloudflare Worker composition gates", () => {
 });
 
 describe("Cloudflare Worker production-shaped mutation composition", () => {
-  it("routes enrollment, ingest, and deletion through existing domain and D1 adapters", async () => {
+  it("creates, recovers, rotates, ingests, and deletes with client-owned V2 credentials", async () => {
+    const db = databaseWithPublicProjection();
+    const env = validEnvironment(db);
+    const runtime = runtimePorts();
+    const worker = createCloudflareApiWorker(runtime.ports);
+    const requestBody = recoverableEnrollmentBody();
+
+    const firstResponse = await recoverableEnrollment(worker, env, requestBody);
+    const firstText = await firstResponse.text();
+    const first = EnrollmentResponseV2Schema.parse(JSON.parse(firstText));
+    expect(firstResponse.status).toBe(201);
+    expect(firstText).not.toMatch(/tm_[udr]2_/u);
+
+    const replayResponse = await recoverableEnrollment(worker, env, requestBody);
+    expect(replayResponse.status).toBe(201);
+    expect(await replayResponse.json()).toEqual(first);
+    expect(
+      db.database.prepare(
+        "SELECT COUNT(*) AS count FROM recoverable_enrollments"
+      ).get()
+    ).toEqual({ count: 1 });
+
+    const rotatedEnv: CloudflareApiEnvironment = {
+      ...env,
+      TOKENMONSTER_CREDENTIAL_CONFIG_JSON: JSON.stringify({
+        ...credentialConfig,
+        currentPepper: key("credential-v2", 7),
+        previousPepper: credentialConfig.currentPepper
+      })
+    };
+    const rotatedReplay = await recoverableEnrollment(
+      worker,
+      rotatedEnv,
+      requestBody
+    );
+    expect(rotatedReplay.status).toBe(201);
+    expect(await rotatedReplay.json()).toEqual(first);
+
+    const batchId = "718f1f6c-7a4a-7f00-8000-123456789abc";
+    const ingest = await worker.fetch(
+      new Request(
+        "https://api.tokenmonster.example/v1/me/ingest-snapshots",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${V2_CREDENTIALS.uploadToken}`,
+            "Content-Type": "application/json",
+            "Idempotency-Key": batchId
+          },
+          body: JSON.stringify(ingestBody(batchId, true))
+        }
+      ),
+      rotatedEnv
+    );
+    expect(ingest.status, await ingest.clone().text()).toBe(200);
+    expect(IngestReceiptV1Schema.safeParse(await ingest.json()).success).toBe(
+      true
+    );
+
+    const deletion = await worker.fetch(
+      new Request("https://api.tokenmonster.example/v1/me/data", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${V2_CREDENTIALS.deletionToken}`,
+          "Idempotency-Key": "recoverable_delete_0001"
+        }
+      }),
+      rotatedEnv
+    );
+    expect(deletion.status).toBe(202);
+    expect(
+      DeletionAcceptedResponseV1Schema.safeParse(await deletion.json()).success
+    ).toBe(true);
+    const surface = JSON.stringify(runtime.rateLimit.requests);
+    expect(surface).not.toContain(V2_CREDENTIALS.uploadToken);
+    expect(surface).not.toContain(V2_CREDENTIALS.deletionToken);
+    expect(surface).not.toContain(V2_CREDENTIALS.recoveryToken);
+  });
+
+  it("routes enrollment, pause, blocked ingest, resume, ingest, and deletion through domain and D1", async () => {
     const db = databaseWithPublicProjection();
     const env = validEnvironment(db);
     const runtime = runtimePorts();
@@ -358,7 +497,7 @@ describe("Cloudflare Worker production-shaped mutation composition", () => {
             "Content-Type": "application/json",
             "Idempotency-Key": batchId
           },
-          body: JSON.stringify(ingestBody(batchId))
+          body: JSON.stringify(ingestBody(batchId, true))
         }
       ),
       env
@@ -366,6 +505,102 @@ describe("Cloudflare Worker production-shaped mutation composition", () => {
     const ingestJson = IngestReceiptV1Schema.parse(await ingestResponse.json());
     expect(ingestResponse.status).toBe(200);
     expect(ingestJson.summary.appliedBuckets).toBe(1);
+
+    const wrongScopePause = await worker.fetch(
+      new Request("https://api.tokenmonster.example/v1/me/pause", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${enrollmentJson.credentials.deletionToken}`
+        }
+      }),
+      env
+    );
+    const wrongScopeText = await wrongScopePause.text();
+    expect(wrongScopePause.status).toBe(401);
+    expect(JSON.parse(wrongScopeText)).toMatchObject({ code: "TOKEN_INVALID" });
+    expect(wrongScopeText).not.toContain(
+      enrollmentJson.credentials.deletionToken
+    );
+
+    const pauseResponse = await worker.fetch(
+      new Request("https://api.tokenmonster.example/v1/me/pause", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${enrollmentJson.credentials.uploadToken}`
+        }
+      }),
+      env
+    );
+    expect(pauseResponse.status).toBe(200);
+    expect(PauseResponseV1Schema.parse(await pauseResponse.json())).toMatchObject({
+      status: "paused",
+      futureUploadsBlocked: true,
+      identifiableCurrentDataRetained: true
+    });
+
+    const blockedBatchId = "118f1f6c-7a4a-7f00-8000-123456789abc";
+    const blockedIngest = await worker.fetch(
+      new Request(
+        "https://api.tokenmonster.example/v1/me/ingest-snapshots",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${enrollmentJson.credentials.uploadToken}`,
+            "Content-Type": "application/json",
+            "Idempotency-Key": blockedBatchId
+          },
+          body: JSON.stringify(ingestBody(blockedBatchId, true))
+        }
+      ),
+      env
+    );
+    expect(blockedIngest.status).toBe(403);
+    expect(await blockedIngest.json()).toMatchObject({
+      code: "INSTALLATION_PAUSED"
+    });
+
+    const resumeResponse = await worker.fetch(
+      new Request("https://api.tokenmonster.example/v1/me/resume", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${enrollmentJson.credentials.uploadToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(enrollmentBody())
+      }),
+      env
+    );
+    expect(resumeResponse.status).toBe(200);
+    expect(ResumeResponseV1Schema.parse(await resumeResponse.json())).toMatchObject({
+      status: "active",
+      consentReceipt: {
+        purpose: "contribution",
+        documentRevision: "contribution-2026-07-15",
+        granted: true
+      }
+    });
+
+    const resumedBatchId = "218f1f6c-7a4a-7f00-8000-123456789abc";
+    const resumedIngest = await worker.fetch(
+      new Request(
+        "https://api.tokenmonster.example/v1/me/ingest-snapshots",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${enrollmentJson.credentials.uploadToken}`,
+            "Content-Type": "application/json",
+            "Idempotency-Key": resumedBatchId
+          },
+          body: JSON.stringify(ingestBody(resumedBatchId, true))
+        }
+      ),
+      env
+    );
+    expect(resumedIngest.status).toBe(200);
+    expect(
+      IngestReceiptV1Schema.parse(await resumedIngest.json()).summary
+        .idempotentBuckets
+    ).toBe(1);
 
     const deletionKey = "delete_request_AAAAAAAAAAAA";
     const deletionResponse = await worker.fetch(
@@ -385,8 +620,34 @@ describe("Cloudflare Worker production-shaped mutation composition", () => {
     expect(deletionJson.status).toBe("queued");
     expect(runtime.suppressionLedger.entries).toHaveLength(1);
 
+    const deletionStatusResponse = await worker.fetch(
+      new Request(
+        `https://api.tokenmonster.example/v1/deletions/${deletionJson.jobId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${deletionJson.statusToken}`
+          }
+        }
+      ),
+      env
+    );
+    expect(deletionStatusResponse.status).toBe(200);
+    expect(
+      DeletionStatusResponseV1Schema.parse(
+        await deletionStatusResponse.json()
+      )
+    ).toMatchObject({
+      jobId: deletionJson.jobId,
+      status: "queued",
+      finishedAt: null
+    });
+
     expect(runtime.rateLimit.requests.map(({ route }) => route)).toEqual([
       "enrollment",
+      "ingest",
+      "lifecycle",
+      "ingest",
+      "lifecycle",
       "ingest",
       "delete"
     ]);
@@ -394,7 +655,15 @@ describe("Cloudflare Worker production-shaped mutation composition", () => {
       runtime.rateLimit.requests.map(({ subjectKey }) =>
         subjectKey.slice(0, 6)
       )
-    ).toEqual(["rl_e1_", "rl_i1_", "rl_d1_"]);
+    ).toEqual([
+      "rl_e1_",
+      "rl_i1_",
+      "rl_i1_",
+      "rl_i1_",
+      "rl_i1_",
+      "rl_i1_",
+      "rl_d1_"
+    ]);
     const rateSurface = JSON.stringify(runtime.rateLimit.requests);
     expect(rateSurface).not.toContain("203.0.113.8");
     expect(rateSurface).not.toContain(enrollmentJson.credentials.uploadToken);
@@ -412,6 +681,9 @@ describe("Cloudflare Worker production-shaped mutation composition", () => {
     expect(
       db.database.prepare("SELECT COUNT(*) AS count FROM usage_daily_current").get()
     ).toEqual({ count: 1 });
+    expect(
+      db.database.prepare("SELECT COUNT(*) AS count FROM consent_receipts").get()
+    ).toEqual({ count: 2 });
     expect(
       db.database.prepare("SELECT COUNT(*) AS count FROM deletion_jobs").get()
     ).toEqual({ count: 1 });
