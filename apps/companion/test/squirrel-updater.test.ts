@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   finalizeReviewedSquirrelVendorOverlay,
   prepareReviewedSquirrelVendorOverlay,
+  projectElectronWinstallerVendorInventoryForArchitecture,
   requireReviewedSquirrelReleaseMode,
   REVIEWED_SQUIRREL_UPDATER,
   verifyElectronWinstallerVendor,
@@ -29,6 +30,14 @@ const sourcePatchDirectory = join(
   ".github",
   "patches",
   "squirrel-updater",
+);
+const vendorReceiptPath = join(
+  repositoryRoot,
+  "apps",
+  "companion",
+  "packaging",
+  "squirrel-windows",
+  "electron-winstaller-5.4.4-vendor-hashes.txt",
 );
 
 afterEach(async () => {
@@ -107,6 +116,52 @@ describe("reviewed Squirrel updater", () => {
     });
     expect(binding.bytes).toBe(REVIEWED_SQUIRREL_UPDATER.bytes);
     expect(binding.sha256).toBe(REVIEWED_SQUIRREL_UPDATER.sha256);
+  });
+
+  it("projects only the receipt-bound 7-Zip aliases for an arm64 host", async () => {
+    const canonicalInventory = await readFile(vendorReceiptPath, "utf8");
+    const arm64Inventory =
+      projectElectronWinstallerVendorInventoryForArchitecture(
+        canonicalInventory,
+        "arm64",
+      );
+    const canonicalLines = canonicalInventory.trimEnd().split("\n");
+    const arm64Lines = arm64Inventory.trimEnd().split("\n");
+    const bindingFor = (lines: string[], name: string) => {
+      const line = lines.find((candidate) => candidate.endsWith(` ${name}`));
+      expect(line).toBeDefined();
+      return line?.slice(0, line.lastIndexOf(" "));
+    };
+
+    expect(arm64Lines).toHaveLength(33);
+    expect(bindingFor(arm64Lines, "7z.exe")).toBe(
+      bindingFor(canonicalLines, "7z-arm64.exe"),
+    );
+    expect(bindingFor(arm64Lines, "7z.dll")).toBe(
+      bindingFor(canonicalLines, "7z-arm64.dll"),
+    );
+    expect(
+      canonicalLines
+        .filter((line, index) => line !== arm64Lines[index])
+        .map((line) => line.slice(line.lastIndexOf(" ") + 1)),
+    ).toEqual(["7z.dll", "7z.exe"]);
+    expect(
+      projectElectronWinstallerVendorInventoryForArchitecture(
+        canonicalInventory,
+        "x64",
+      ),
+    ).toBe(canonicalInventory);
+  });
+
+  it("fails closed for an unsupported electron-winstaller host architecture", async () => {
+    const canonicalInventory = await readFile(vendorReceiptPath, "utf8");
+
+    expect(() =>
+      projectElectronWinstallerVendorInventoryForArchitecture(
+        canonicalInventory,
+        "riscv64",
+      ),
+    ).toThrow(/only x64 or arm64/u);
   });
 
   it("creates an exact disposable vendor overlay without changing node_modules", async () => {

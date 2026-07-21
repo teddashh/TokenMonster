@@ -17,6 +17,11 @@ export const REVIEWED_SQUIRREL_UPDATER: Readonly<
 
 export function requireReviewedSquirrelReleaseMode(releaseMode: unknown): void;
 
+export function projectElectronWinstallerVendorInventoryForArchitecture(
+  canonicalInventory: string,
+  architecture: unknown,
+): string;
+
 export function verifyReviewedSquirrelUpdater(): Promise<
   Readonly<SquirrelUpdaterBinding & { path: string }>
 >;

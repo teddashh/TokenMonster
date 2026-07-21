@@ -292,8 +292,7 @@ async function verifyNormalizedBuildEvidence() {
       REVIEWED_SQUIRREL_UPDATER.sourceTestDependencyInventorySha256 ||
     finalLineFeedStrippedSha256(xdtLicense.contents) !==
       REVIEWED_SQUIRREL_UPDATER.xdtLicenseSha256 ||
-    xdtAttribution.sha256 !==
-      REVIEWED_SQUIRREL_UPDATER.xdtAttributionSha256 ||
+    xdtAttribution.sha256 !== REVIEWED_SQUIRREL_UPDATER.xdtAttributionSha256 ||
     parsedProvenance?.candidateOnly !== true ||
     parsedProvenance?.workflowRunId !== "29794447787" ||
     parsedProvenance?.binarySha256 !== REVIEWED_SQUIRREL_UPDATER.sha256 ||
@@ -354,6 +353,84 @@ async function inventoryFlatVendorDirectory(directory, label) {
   return `${lines.join("\n")}\n`;
 }
 
+/**
+ * electron-winstaller's install script replaces the generic 7z.exe/7z.dll
+ * aliases with the copies for the npm install host. The committed receipt is
+ * still the canonical authority: it binds both supported architecture pairs
+ * and records the x64 pair in the generic aliases. Project only those two
+ * aliases after the receipt itself has been authenticated.
+ *
+ * @param {string} canonicalInventory
+ * @param {unknown} architecture
+ */
+export function projectElectronWinstallerVendorInventoryForArchitecture(
+  canonicalInventory,
+  architecture,
+) {
+  if (architecture !== "x64" && architecture !== "arm64") {
+    throw new Error(
+      "electron-winstaller vendor aliases support only x64 or arm64 hosts.",
+    );
+  }
+  const lines =
+    typeof canonicalInventory === "string" &&
+    canonicalInventory.endsWith("\n") &&
+    !canonicalInventory.endsWith("\n\n") &&
+    !canonicalInventory.includes("\r")
+      ? canonicalInventory.slice(0, -1).split("\n")
+      : [];
+  if (
+    lines.length !== EXPECTED_VENDOR_FILE_COUNT ||
+    lines.some(
+      (line) =>
+        !/^[a-f0-9]{64} [1-9][0-9]* [A-Za-z0-9][A-Za-z0-9._-]*$/u.test(line),
+    )
+  ) {
+    throw new Error(
+      "Canonical electron-winstaller vendor inventory is malformed.",
+    );
+  }
+  const entries = new Map();
+  for (const line of lines) {
+    const name = line.slice(line.lastIndexOf(" ") + 1);
+    if (entries.has(name)) {
+      throw new Error(
+        "Canonical electron-winstaller vendor inventory has duplicate names.",
+      );
+    }
+    entries.set(name, line.slice(0, line.lastIndexOf(" ")));
+  }
+  const projectedAliases = new Map();
+  for (const extension of ["dll", "exe"]) {
+    const aliasName = `7z.${extension}`;
+    const canonicalName = `7z-x64.${extension}`;
+    const architectureName = `7z-${architecture}.${extension}`;
+    const aliasBinding = entries.get(aliasName);
+    const canonicalBinding = entries.get(canonicalName);
+    const architectureBinding = entries.get(architectureName);
+    if (
+      typeof aliasBinding !== "string" ||
+      typeof canonicalBinding !== "string" ||
+      typeof architectureBinding !== "string" ||
+      aliasBinding !== canonicalBinding
+    ) {
+      throw new Error(
+        "Canonical electron-winstaller 7-Zip aliases differ from the receipt-bound x64 baseline.",
+      );
+    }
+    projectedAliases.set(aliasName, architectureBinding);
+  }
+  return `${lines
+    .map((line) => {
+      const name = line.slice(line.lastIndexOf(" ") + 1);
+      const projectedBinding = projectedAliases.get(name);
+      return projectedBinding === undefined
+        ? line
+        : `${projectedBinding} ${name}`;
+    })
+    .join("\n")}\n`;
+}
+
 async function expectedVendorInventory() {
   const { binding, contents } = await readPolicyFile(
     vendorInventoryPath,
@@ -384,7 +461,10 @@ async function expectedVendorInventory() {
   ) {
     throw new Error("electron-winstaller vendor receipt is malformed.");
   }
-  return contents;
+  return projectElectronWinstallerVendorInventoryForArchitecture(
+    contents,
+    process.arch,
+  );
 }
 
 async function electronWinstallerVendorDirectory() {
@@ -562,9 +642,7 @@ export async function finalizeReviewedSquirrelVendorOverlay(directory) {
       metadata.isSymbolicLink() ||
       metadata.size > BigInt(MAX_SQUIRREL_RELEASIFY_LOG_BYTES)
     ) {
-      throw new Error(
-        "Squirrel releasify log is not a bounded physical file.",
-      );
+      throw new Error("Squirrel releasify log is not a bounded physical file.");
     }
     await unlink(residuePath);
   }

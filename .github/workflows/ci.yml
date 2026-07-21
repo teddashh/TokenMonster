@@ -6,7 +6,7 @@ on:
     branches:
       - main
     tags:
-      - "*"
+      - "v*"
   workflow_dispatch:
     inputs:
       platforms:
@@ -28,15 +28,21 @@ on:
         options:
           - locked
           - derive
+      publish_internal_rc15:
+        description: "Publish exact main as private unsigned 0.1.0-rc.15 test prerelease"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  # Every public tag shares one non-cancelling writer lane across versions.
-  # Branch/PR runs retain per-ref cancellation for fast iteration.
-  group: ${{ github.ref_type == 'tag' && 'tokenmonster-public-tag-release' || format('ci-{0}-{1}', github.workflow, github.ref) }}
-  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+  # Public tags and the one-shot private rc.15 publication each use a separate
+  # non-cancelling writer lane. Other branch/PR runs retain per-ref cancellation.
+  group: >-
+    ${{ (github.event_name == 'workflow_dispatch' && inputs.publish_internal_rc15 && 'tokenmonster-private-internal-release') || (github.ref_type == 'tag' && 'tokenmonster-public-tag-release') || format('ci-{0}-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: >-
+    ${{ github.ref_type != 'tag' && !(github.event_name == 'workflow_dispatch' && inputs.publish_internal_rc15) }}
 
 jobs:
   rebuild-reviewed-squirrel-updater:
@@ -60,6 +66,7 @@ jobs:
     outputs:
       oses: ${{ steps.pick.outputs.oses }}
       installer-oses: ${{ steps.pick.outputs.installer-oses }}
+      internal-release-version: ${{ steps.pick.outputs.internal-release-version }}
     steps:
       - name: Pick runner platforms
         id: pick
@@ -67,7 +74,26 @@ jobs:
           PLATFORMS: ${{ inputs.platforms || (github.event_name == 'pull_request' && 'skip-macos') || 'all' }}
           EVENT_NAME: ${{ github.event_name }}
           REF_TYPE: ${{ github.ref_type }}
+          FULL_REF: ${{ github.ref }}
+          PUBLISH_INTERNAL_RC15: ${{ inputs.publish_internal_rc15 && 'true' || 'false' }}
+          REBUILD_SQUIRREL_UPDATER: ${{ inputs.rebuild_squirrel_updater && 'true' || 'false' }}
+          SQUIRREL_UPDATER_RECEIPT_MODE: ${{ inputs.squirrel_updater_receipt_mode || '' }}
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private && 'true' || 'false' }}
         run: |
+          echo 'internal-release-version=' >> "$GITHUB_OUTPUT"
+          if [[ "$PUBLISH_INTERNAL_RC15" == "true" ]]; then
+            if [[ "$EVENT_NAME" != "workflow_dispatch" || \
+                  "$REF_TYPE" != "branch" || \
+                  "$FULL_REF" != "refs/heads/main" || \
+                  "$PLATFORMS" != "all" || \
+                  "$REBUILD_SQUIRREL_UPDATER" != "true" || \
+                  "$SQUIRREL_UPDATER_RECEIPT_MODE" != "locked" || \
+                  "$REPOSITORY_PRIVATE" != "true" ]]; then
+              echo "Private rc.15 publication requires private main, all platforms, and a locked Squirrel rebuild." >&2
+              exit 1
+            fi
+            echo 'internal-release-version=0.1.0-rc.15' >> "$GITHUB_OUTPUT"
+          fi
           if [[ "$EVENT_NAME" == "push" && "$REF_TYPE" == "tag" ]]; then
             echo 'oses=["ubuntu-24.04","macos-15","windows-2025"]' >> "$GITHUB_OUTPUT"
           else
@@ -250,8 +276,8 @@ jobs:
         shell: bash
         run: npm test --workspace @tokenmonster/companion
 
-  # Unsigned internal installer builds never receive signing credentials and
-  # never publish GitHub Release assets.
+  # Unsigned internal installer builds never receive signing credentials. The
+  # one-shot private rc.15 job may consume their verified Actions artifacts.
   companion-installers:
     name: Companion installers [package] (${{ matrix.os }})
     if: github.ref_type != 'tag' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[package]'))
@@ -296,8 +322,13 @@ jobs:
 
       - name: Bind one desktop release version
         shell: bash
+        env:
+          INTERNAL_RELEASE_VERSION: ${{ needs.plan.outputs.internal-release-version }}
         run: |
-          release_version="$(node scripts/derive-companion-release-version.mjs)"
+          release_version="$INTERNAL_RELEASE_VERSION"
+          if [[ -z "$release_version" ]]; then
+            release_version="$(node scripts/derive-companion-release-version.mjs)"
+          fi
           echo "TOKENMONSTER_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
 
       - name: Make internal desktop installers
@@ -543,7 +574,9 @@ jobs:
 
   verify:
     name: Verify (Node 24)
-    needs: zstd-native-prebuilds
+    needs:
+      - plan
+      - zstd-native-prebuilds
     runs-on: ubuntu-24.04
     timeout-minutes: 25
 
@@ -613,8 +646,13 @@ jobs:
 
       - name: Bind verification desktop release version
         shell: bash
+        env:
+          INTERNAL_RELEASE_VERSION: ${{ needs.plan.outputs.internal-release-version }}
         run: |
-          release_version="$(node scripts/derive-companion-release-version.mjs)"
+          release_version="$INTERNAL_RELEASE_VERSION"
+          if [[ -z "$release_version" ]]; then
+            release_version="$(node scripts/derive-companion-release-version.mjs)"
+          fi
           echo "TOKENMONSTER_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
 
       - name: Package and inspect unsigned companion
@@ -674,7 +712,9 @@ jobs:
   # different artifacts and leave the eventual publish digest unidentified.
   release-candidate:
     name: Build release candidate once
-    needs: zstd-native-prebuilds
+    needs:
+      - plan
+      - zstd-native-prebuilds
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     outputs:
@@ -708,8 +748,13 @@ jobs:
       - name: Bind the CLI candidate to this tag or CI run
         id: bind-version
         shell: bash
+        env:
+          INTERNAL_RELEASE_VERSION: ${{ needs.plan.outputs.internal-release-version }}
         run: |
-          release_version="$(node scripts/derive-cli-release-version.mjs)"
+          release_version="$INTERNAL_RELEASE_VERSION"
+          if [[ -z "$release_version" ]]; then
+            release_version="$(node scripts/derive-cli-release-version.mjs)"
+          fi
           echo "version=$release_version" >> "$GITHUB_OUTPUT"
           echo "TOKENMONSTER_CLI_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
 
@@ -816,6 +861,309 @@ jobs:
           strace -f -s 256 -e trace=network -o "$trace_path" \
             node scripts/release/smoke-installed.mjs "${{ runner.temp }}/tokenmonster-install"
           node scripts/release/assert-loopback-network-trace.mjs "$trace_path"
+
+  # This one-shot lane publishes only inside the private repository. It never
+  # receives signing, npm, CDN, Worker, or public-release credentials.
+  publish-internal-prerelease:
+    name: Publish private unsigned rc.15 prerelease
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_internal_rc15 && github.ref == 'refs/heads/main'
+    needs:
+      - rebuild-reviewed-squirrel-updater
+      - plan
+      - companion-installers
+      - verify
+      - sidecar-compatibility
+      - companion-desktop
+      - release-candidate
+      - release-smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
+      INTERNAL_RELEASE_TAG: internal/v0.1.0-rc.15
+      INTERNAL_RELEASE_VERSION: 0.1.0-rc.15
+
+    steps:
+      - name: Download exact Windows x64 maker output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: tokenmonster-desktop-windows-2025
+          path: ${{ runner.temp }}/internal-release-input/windows
+
+      - name: Download exact macOS arm64 maker output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: tokenmonster-desktop-macos-15
+          path: ${{ runner.temp }}/internal-release-input/macos
+
+      - name: Download exact Linux x64 maker output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: tokenmonster-desktop-ubuntu-24.04
+          path: ${{ runner.temp }}/internal-release-input/linux
+
+      - name: Download cross-platform-smoked CLI candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: tokenmonster-release-candidate-${{ github.sha }}
+          path: ${{ runner.temp }}/internal-release-input/cli
+
+      - name: Assemble exact unsigned release inventory
+        id: assemble
+        shell: bash
+        run: |
+          set -euo pipefail
+          input_root="$RUNNER_TEMP/internal-release-input"
+          upload_dir="$RUNNER_TEMP/internal-release-upload"
+          notes_file="$RUNNER_TEMP/internal-release-notes.md"
+          mkdir "$upload_dir"
+
+          require_inventory() {
+            local directory="$1"
+            local expected_count="$2"
+            if [[ ! -d "$directory" ]] || \
+              find "$directory" ! -type d ! -type f -print -quit | grep -q .; then
+              echo "Internal release input contains a missing or non-regular entry: $directory" >&2
+              exit 1
+            fi
+            local actual_count
+            actual_count="$(find "$directory" -type f | wc -l | tr -d ' ')"
+            if [[ "$actual_count" != "$expected_count" ]]; then
+              echo "Internal release input count mismatch for $directory: $actual_count" >&2
+              exit 1
+            fi
+          }
+
+          require_inventory "$input_root/windows" 4
+          require_inventory "$input_root/macos" 2
+          require_inventory "$input_root/linux" 1
+          require_inventory "$input_root/cli" 2
+
+          sources=(
+            "$input_root/windows/squirrel.windows/x64/RELEASES"
+            "$input_root/windows/squirrel.windows/x64/TokenMonsterSetup.exe"
+            "$input_root/windows/squirrel.windows/x64/TokenMonster-0.1.0-rc15-full.nupkg"
+            "$input_root/windows/zip/win32/x64/TokenMonster-win32-x64-0.1.0-rc.15.zip"
+            "$input_root/macos/TokenMonster.dmg"
+            "$input_root/macos/zip/darwin/arm64/TokenMonster-darwin-arm64-0.1.0-rc.15.zip"
+            "$input_root/linux/zip/linux/x64/TokenMonster-linux-x64-0.1.0-rc.15.zip"
+            "$input_root/cli/tokenmonster-0.1.0-rc.15.tgz"
+            "$input_root/cli/SHASUMS256.txt"
+          )
+          targets=(
+            RELEASES
+            TokenMonsterSetup.exe
+            TokenMonster-0.1.0-rc15-full.nupkg
+            TokenMonster-win32-x64-0.1.0-rc.15.zip
+            TokenMonster.dmg
+            TokenMonster-darwin-arm64-0.1.0-rc.15.zip
+            TokenMonster-linux-x64-0.1.0-rc.15.zip
+            tokenmonster-0.1.0-rc.15.tgz
+            TokenMonster-cli-SHA256SUMS.txt
+          )
+          if [[ "${#sources[@]}" -ne "${#targets[@]}" ]]; then
+            echo "Internal release inventory mapping is incomplete." >&2
+            exit 1
+          fi
+          for index in "${!sources[@]}"; do
+            source_path="${sources[$index]}"
+            target_name="${targets[$index]}"
+            if [[ ! -f "$source_path" || -L "$source_path" ]] || \
+              [[ ! "$target_name" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
+              echo "Internal release expected artifact is missing or unsafe: $target_name" >&2
+              exit 1
+            fi
+            cp -- "$source_path" "$upload_dir/$target_name"
+          done
+
+          (
+            cd "$input_root/cli"
+            sha256sum --check --strict SHASUMS256.txt
+          )
+
+          # The single-quoted program references jq-bound, not shell, variables.
+          # shellcheck disable=SC2016
+          jq -n \
+            --arg version "$INTERNAL_RELEASE_VERSION" \
+            --arg tag "$INTERNAL_RELEASE_TAG" \
+            --arg sourceCommit "$GITHUB_SHA" \
+            --arg workflowRunId "$GITHUB_RUN_ID" \
+            --arg workflowRunAttempt "$GITHUB_RUN_ATTEMPT" \
+            '{
+              schemaVersion: 1,
+              version: $version,
+              tag: $tag,
+              sourceCommit: $sourceCommit,
+              workflowRunId: $workflowRunId,
+              workflowRunAttempt: $workflowRunAttempt,
+              releaseMode: "unsigned-internal",
+              distribution: "private-github-prerelease",
+              publicChannelsPromoted: false,
+              platforms: ["windows-x64", "macos-arm64", "linux-x64"]
+            }' > "$upload_dir/TokenMonster-internal-source-v1.json"
+
+          checksum_path="$RUNNER_TEMP/TokenMonster-internal-SHA256SUMS.txt"
+          (
+            cd "$upload_dir"
+            find . -mindepth 1 -maxdepth 1 -type f \
+              ! -name TokenMonster-internal-SHA256SUMS.txt -printf '%f\0' | \
+              LC_ALL=C sort -z | xargs -0 sha256sum \
+              > "$checksum_path"
+          )
+          mv -- "$checksum_path" "$upload_dir/TokenMonster-internal-SHA256SUMS.txt"
+          upload_count="$(find "$upload_dir" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          if [[ "$upload_count" != "11" ]]; then
+            echo "Internal release upload inventory must contain exactly 11 files." >&2
+            exit 1
+          fi
+
+          {
+            printf '%s\n' '> **PRIVATE, UNSIGNED TEST BUILD — READ BEFORE INSTALLING**'
+            printf '%s\n' '>'
+            printf '%s\n' '> - **Windows is unsigned.** Expect Microsoft Defender SmartScreen or publisher warnings; install only these checksum-verified private test bytes.'
+            printf '%s\n' '> - **macOS is ad-hoc signed and not notarized.** Expect Gatekeeper to block the first launch until you explicitly allow this private test build.'
+            printf '%s\n' '> - **Private GitHub login is required.** Every test machine must sign in to an account that can access this private repository before downloading.'
+            printf '%s\n' ''
+            printf 'Source: %s on main. Embedded version: %s.\n' "$GITHUB_SHA" "$INTERNAL_RELEASE_VERSION"
+            printf '%s\n' 'This build is not published to npm, CDN, the public updater feed, or any signed production channel. Install and update it manually.'
+            printf '%s\n' '' '### rc.7 後可以測的變化' ''
+            printf '%s\n' '- 永久版 local companion 路徑：CLI／桌面殼共用受管理的 TokenTracker sidecar、固定 loopback gateway 與 player UI。'
+            printf '%s\n' '- 乾淨安裝可從四位 starter 中選擇；10 位角色、解鎖、服裝、互動與進度都留在本機並可跨重啟驗證。'
+            printf '%s\n' '- 新增本機 28 天「今日默契」、用量／quota 更新狀態、本機 PNG 分享卡、提醒與完整 zh-TW／en 顯示流程。'
+            printf '%s\n' '- BYOK 控制與關閉流程已強化；provider key 只在本機 OS vault 或明示的記憶體模式中使用，不會送往 TokenMonster cloud。'
+            printf '%s\n' '- 匿名貢獻 v2 的預覽、暫停、刪除與復原介面可測，但預設仍關閉；一般 CLI 在原生安全憑證主機完成前會誠實顯示 unavailable／zero-cloud。'
+            printf '%s\n' '- 多程序復原、啟動／關閉、sidecar 租約、Windows install/uninstall 與三平台封裝驗證已加固。'
+          } > "$notes_file"
+
+          echo "upload-dir=$upload_dir" >> "$GITHUB_OUTPUT"
+          echo "notes-file=$notes_file" >> "$GITHUB_OUTPUT"
+
+      - name: Stage draft, verify remote bytes, and publish prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPLOAD_DIR: ${{ steps.assemble.outputs.upload-dir }}
+          NOTES_FILE: ${{ steps.assemble.outputs.notes-file }}
+        run: |
+          set -euo pipefail
+          release_title="TokenMonster 0.1.0-rc.15 — private unsigned test"
+          tag_ref="refs/tags/$INTERNAL_RELEASE_TAG"
+
+          if [[ "$(gh api "repos/$GITHUB_REPOSITORY" --jq '.private')" != "true" ]]; then
+            echo "Internal rc.15 publication is permitted only while the repository is private." >&2
+            exit 1
+          fi
+          gh_release_edit_help="$(gh release edit --help)"
+          if ! grep -Fq -- '--latest' <<< "$gh_release_edit_help"; then
+            echo "The runner gh version cannot explicitly keep this prerelease out of the Latest channel." >&2
+            exit 1
+          fi
+
+          tag_matches="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$INTERNAL_RELEASE_TAG")"
+          exact_tag_count="$(jq --arg ref "$tag_ref" '[.[] | select(.ref == $ref)] | length' <<< "$tag_matches")"
+          if [[ "$exact_tag_count" == "0" ]]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="$tag_ref" \
+              -f sha="$GITHUB_SHA" \
+              > /dev/null
+            tag_matches="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$INTERNAL_RELEASE_TAG")"
+            exact_tag_count="$(jq --arg ref "$tag_ref" '[.[] | select(.ref == $ref)] | length' <<< "$tag_matches")"
+          fi
+          if [[ "$exact_tag_count" != "1" ]] || \
+            [[ "$(jq -r --arg ref "$tag_ref" '.[] | select(.ref == $ref) | .object.type' <<< "$tag_matches")" != "commit" ]] || \
+            [[ "$(jq -r --arg ref "$tag_ref" '.[] | select(.ref == $ref) | .object.sha' <<< "$tag_matches")" != "$GITHUB_SHA" ]]; then
+            echo "Internal release tag is absent, ambiguous, annotated, or bound to different source bytes." >&2
+            exit 1
+          fi
+
+          release_list="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100")"
+          if [[ "$(jq 'length' <<< "$release_list")" -ge 100 ]]; then
+            echo "Release inventory reached the bounded page size; refusing an incomplete lookup." >&2
+            exit 1
+          fi
+          release_count="$(jq --arg tag "$INTERNAL_RELEASE_TAG" '[.[] | select(.tag_name == $tag)] | length' <<< "$release_list")"
+          if [[ "$release_count" == "0" ]]; then
+            gh release create "$INTERNAL_RELEASE_TAG" \
+              --verify-tag \
+              --draft \
+              --prerelease \
+              --latest=false \
+              --title "$release_title" \
+              --notes-file "$NOTES_FILE"
+          elif [[ "$release_count" != "1" ]]; then
+            echo "Internal release tag has an ambiguous GitHub Release." >&2
+            exit 1
+          fi
+
+          release_json="$(gh release view "$INTERNAL_RELEASE_TAG" --json assets,body,isDraft,isPrerelease,name,tagName)"
+          expected_notes="$(< "$NOTES_FILE")"
+          if [[ "$(jq -r '.tagName' <<< "$release_json")" != "$INTERNAL_RELEASE_TAG" || \
+                "$(jq -r '.isPrerelease' <<< "$release_json")" != "true" || \
+                "$(jq -r '.name' <<< "$release_json")" != "$release_title" || \
+                "$(jq -r '.body' <<< "$release_json")" != "$expected_notes" ]]; then
+            echo "Internal GitHub Release metadata differs from the reviewed prerelease." >&2
+            exit 1
+          fi
+          release_is_draft="$(jq -r '.isDraft' <<< "$release_json")"
+
+          remote_names="$RUNNER_TEMP/internal-remote-asset-names.txt"
+          jq -r '.assets[].name' <<< "$release_json" | LC_ALL=C sort > "$remote_names"
+          while IFS= read -r remote_name; do
+            if [[ -n "$remote_name" && ! -f "$UPLOAD_DIR/$remote_name" ]]; then
+              echo "Internal GitHub Release contains an unknown or stale asset: $remote_name" >&2
+              exit 1
+            fi
+          done < "$remote_names"
+
+          while IFS= read -r -d '' file; do
+            name="$(basename "$file")"
+            remote_count="$(jq --arg name "$name" '[.assets[] | select(.name == $name)] | length' <<< "$release_json")"
+            if [[ "$remote_count" == "0" ]]; then
+              if [[ "$release_is_draft" != "true" ]]; then
+                echo "Published internal prerelease is missing expected asset: $name" >&2
+                exit 1
+              fi
+              gh release upload "$INTERNAL_RELEASE_TAG" -- "$file"
+            elif [[ "$remote_count" != "1" ]]; then
+              echo "Internal GitHub Release asset name is not unique: $name" >&2
+              exit 1
+            fi
+          done < <(find "$UPLOAD_DIR" -mindepth 1 -maxdepth 1 -type f -print0)
+
+          remote_dir="$RUNNER_TEMP/internal-remote-release-assets"
+          mkdir "$remote_dir"
+          gh release download "$INTERNAL_RELEASE_TAG" --dir "$remote_dir" --pattern '*'
+          expected_count="$(find "$UPLOAD_DIR" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          remote_count="$(find "$remote_dir" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          if [[ "$expected_count" != "11" || "$remote_count" != "$expected_count" ]]; then
+            echo "Remote internal prerelease asset count differs from the exact local set." >&2
+            exit 1
+          fi
+          while IFS= read -r -d '' expected; do
+            name="$(basename "$expected")"
+            if [[ ! -f "$remote_dir/$name" ]] || ! cmp --silent "$expected" "$remote_dir/$name"; then
+              echo "Remote internal prerelease bytes differ for $name." >&2
+              exit 1
+            fi
+          done < <(find "$UPLOAD_DIR" -mindepth 1 -maxdepth 1 -type f -print0)
+
+          if [[ "$release_is_draft" == "true" ]]; then
+            gh release edit "$INTERNAL_RELEASE_TAG" \
+              --draft=false \
+              --prerelease \
+              --latest=false
+          fi
+          published_json="$(gh release view "$INTERNAL_RELEASE_TAG" --json body,isDraft,isPrerelease,name,tagName)"
+          if [[ "$(jq -r '.tagName' <<< "$published_json")" != "$INTERNAL_RELEASE_TAG" || \
+                "$(jq -r '.isDraft' <<< "$published_json")" != "false" || \
+                "$(jq -r '.isPrerelease' <<< "$published_json")" != "true" || \
+                "$(jq -r '.name' <<< "$published_json")" != "$release_title" || \
+                "$(jq -r '.body' <<< "$published_json")" != "$expected_notes" ]]; then
+            echo "Internal prerelease was not published with the exact reviewed metadata." >&2
+            exit 1
+          fi
 
   # Stage exact assets on the draft, but never publish it here. This protected
   # transition is rerun-safe: existing assets are downloaded and byte-compared;

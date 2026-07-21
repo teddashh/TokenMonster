@@ -57,8 +57,9 @@ replaces only `Squirrel.exe`; `node_modules` is never mutated. The candidate is
 internal-only while its merged Microsoft.Web.Xdt 2.1.1 redistribution terms and
 complete third-party notices are reviewed. Signed packaging fails closed before
 maker execution until that status is explicitly replaced by a reviewed public
-redistribution decision. Do not create or push a release tag while this gate is
-closed.
+redistribution decision. Do not create or push a public `v*` release tag while
+this gate is closed. The isolated private internal-test namespace documented
+below does not satisfy or bypass that public gate.
 
 The `Companion installers [package]` CI job packages the floating pet shell on
 Ubuntu, macOS, and Windows for manual `workflow_dispatch` runs and for pushed
@@ -67,6 +68,31 @@ unsigned internal evidence only. Each matrix runner uploads its complete direct
 maker directory as a seven-day GitHub Actions artifact named
 `tokenmonster-desktop-<os>`; no internal candidate is attached to a public
 GitHub Release.
+
+### Private internal test prerelease
+
+The one-shot `publish_internal_rc15` manual input exists so an owner can test
+the merged product on several machines without weakening the public release
+gate. It is accepted only from `main`, with all three runner platforms, the
+locked reviewed Squirrel rebuild, and the exact `0.1.0-rc.15` identity. A
+successful run publishes a **private, unsigned GitHub prerelease** under the
+isolated `internal/v0.1.0-rc.15` tag. That namespace does not match the public
+`v*` tag trigger and therefore cannot enter npm, R2/CDN, Worker, signing, or
+automatic-update promotion.
+
+The internal prerelease job waits for the full sidecar, desktop, repository,
+CLI, installer, and native smoke matrix. It accepts only the fixed Windows x64,
+macOS arm64, Linux x64, and CLI artifact inventory, records aggregate SHA-256
+digests plus the exact source commit, uploads to a draft, downloads every asset
+again for byte comparison, and only then exposes the prerelease. Reusing the
+version or tag with different bytes fails instead of overwriting it.
+
+Every test machine must be signed into GitHub with access to this private
+repository. Windows binaries are not Authenticode-signed and may trigger
+SmartScreen. The macOS application is ad-hoc signed but not notarized and may
+require right-clicking and choosing **Open**. This lane does not publish an npm
+package or update feed, so installation and upgrades are manual. A fix after
+rc.15 must use a new version such as rc.16; rc.15 is never rebuilt in place.
 
 A version-tag run deliberately narrows the installer matrix to Windows and
 requires signed mode. It decodes the bounded PFX secret into the runner's

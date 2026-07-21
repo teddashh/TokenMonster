@@ -5,6 +5,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rm,
   symlink,
   writeFile,
@@ -82,7 +83,9 @@ function tarArchive(path, bytes) {
 }
 
 async function prebuildFixture() {
-  const root = await mkdtemp(join(tmpdir(), "tokenmonster-zstd-bundle-test-"));
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "tokenmonster-zstd-bundle-test-")),
+  );
   const prebuilds = join(root, "authenticated-prebuilds");
   await mkdir(prebuilds);
   const policy = JSON.parse(JSON.stringify(ZSTD_NATIVE_POLICY));

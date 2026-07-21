@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -98,7 +99,9 @@ function tarArchive(entries) {
 }
 
 async function installedFixture() {
-  const root = await mkdtemp(join(tmpdir(), "tokenmonster-zstd-installed-test-"));
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "tokenmonster-zstd-installed-test-")),
+  );
   const sidecarPackageDirectory = join(root, "tokentracker-cli");
   const zstdPackageDirectory = join(root, "zstd");
   const bindingPath = join(zstdPackageDirectory, "build", "Release", "zstd.node");
@@ -407,7 +410,9 @@ describe("authenticated @mongodb-js/zstd native prebuild policy", () => {
   });
 
   it("allows authenticated output only for all platforms in a fresh directory", async () => {
-    const root = await mkdtemp(join(tmpdir(), "tokenmonster-zstd-output-test-"));
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "tokenmonster-zstd-output-test-")),
+    );
     const freshOutput = join(root, "fresh-output");
     const existingOutput = join(root, "existing-output");
     await mkdir(existingOutput);
