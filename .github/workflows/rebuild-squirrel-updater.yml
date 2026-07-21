@@ -155,9 +155,21 @@ jobs:
           $xdtTree = (git -C $xdtSource rev-parse "HEAD^{tree}").Trim()
           $xdtLicenseBlob = (git -C $xdtSource rev-parse "HEAD:LICENSE.txt").Trim()
           $xdtLicense = Get-Item -LiteralPath (Join-Path $xdtSource "LICENSE.txt") -Force
-          $xdtLicenseSha256 = (
-            Get-FileHash -LiteralPath $xdtLicense.FullName -Algorithm SHA256
-          ).Hash.ToLowerInvariant()
+          $xdtCanonicalLicenseText = [IO.File]::ReadAllText($xdtLicense.FullName)
+          $xdtCanonicalLicenseText = $xdtCanonicalLicenseText.Replace("`r`n", "`n")
+          $xdtCanonicalLicenseText = $xdtCanonicalLicenseText.Replace("`r", "`n")
+          $xdtCanonicalLicenseBytes = [Text.UTF8Encoding]::new($false).GetBytes(
+            $xdtCanonicalLicenseText
+          )
+          $xdtLicenseHasher = [Security.Cryptography.SHA256]::Create()
+          try {
+            $xdtLicenseSha256 = -join @(
+              $xdtLicenseHasher.ComputeHash($xdtCanonicalLicenseBytes) |
+                ForEach-Object { $_.ToString("x2") }
+            )
+          } finally {
+            $xdtLicenseHasher.Dispose()
+          }
           $xdtNoticePaths = @(
             git -C $xdtSource ls-tree -r --name-only HEAD |
               Where-Object {
@@ -178,7 +190,8 @@ jobs:
             $xdtTree -cne $env:XDT_SOURCE_TREE -or
             $xdtLicenseBlob -cne $env:XDT_LICENSE_BLOB -or
             $xdtLicense.PSIsContainer -or
-            $xdtLicense.Length -ne [int64]$env:XDT_LICENSE_BYTES -or
+            ($xdtLicense.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+            $xdtCanonicalLicenseBytes.Length -ne [int64]$env:XDT_LICENSE_BYTES -or
             $xdtLicenseSha256 -cne $env:XDT_LICENSE_SHA256 -or
             $xdtNoticePaths.Count -ne 0 -or
             $xdtDirty.Count -ne 0 -or
@@ -1359,7 +1372,15 @@ jobs:
           Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "squirrel-a/vendor/nuget/CREDITS.txt") -Destination (Join-Path $artifactDirectory "NUGET-SUBMODULE-CREDITS.txt")
           Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "ilrepack-source/LICENSE") -Destination (Join-Path $artifactDirectory "ILREPACK-LICENSE.txt")
           $xdtLicensePath = Join-Path $artifactDirectory "MICROSOFT-WEB-XDT-LICENSE.txt"
-          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "xdt-source/LICENSE.txt") -Destination $xdtLicensePath
+          $xdtSourceLicensePath = Join-Path $env:GITHUB_WORKSPACE "xdt-source/LICENSE.txt"
+          $xdtLicenseText = [IO.File]::ReadAllText($xdtSourceLicensePath)
+          $xdtLicenseText = $xdtLicenseText.Replace("`r`n", "`n")
+          $xdtLicenseText = $xdtLicenseText.Replace("`r", "`n")
+          [IO.File]::WriteAllText(
+            $xdtLicensePath,
+            $xdtLicenseText,
+            [Text.UTF8Encoding]::new($false)
+          )
           $xdtAttributionPath = Join-Path $artifactDirectory "MICROSOFT-WEB-XDT-ATTRIBUTION.txt"
           $xdtAttribution = @(
             "Microsoft.Web.Xdt 3.1.0"
