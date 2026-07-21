@@ -33,14 +33,11 @@ concurrency:
 
 jobs:
   rebuild-reviewed-squirrel-updater:
-    name: Derive reviewed Squirrel updater candidate
+    name: Rebuild locked reviewed Squirrel updater candidate
     if: github.event_name == 'workflow_dispatch' && inputs.rebuild_squirrel_updater
     uses: ./.github/workflows/rebuild-squirrel-updater.yml
     with:
-      # This branch-only iteration maps the existing default-branch dispatch
-      # input to quarantined receipt derivation. Lock it after the first
-      # reviewed candidate receipts are committed.
-      derive_candidate: true
+      derive_candidate: false
     permissions:
       contents: read
 
