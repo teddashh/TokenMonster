@@ -21,6 +21,14 @@ jobs:
           path: tokenmonster-policy
           persist-credentials: false
 
+      - name: Check out exact Microsoft.Web.Xdt source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: dotnet/xdt
+          ref: 5b67dee04d86740575f0f5022b79833213cc024a
+          path: xdt-source
+          persist-credentials: false
+
       - name: Check out exact upstream source A
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -74,6 +82,11 @@ jobs:
           PATCHED_UTILITY_TEST_BLOB: fb4c75a7910515bb4e98f38d09d1603a329b1e0e
           PATCHED_NUGET_CORE_PROJECT_BLOB: a00ea88e7de4b53cf02ef5611de6e05ded2d7554
           PATCHED_NUGET_CORE_PACKAGES_BLOB: 7b537c87913ae0f241c71e7d34889df098181d9d
+          XDT_SOURCE_COMMIT: 5b67dee04d86740575f0f5022b79833213cc024a
+          XDT_SOURCE_TREE: e7f17c790d0ede422e683f8617173df0ac63f1f1
+          XDT_LICENSE_BLOB: f49a4e16e68b128803cc2dcea614603632b04eac
+          XDT_LICENSE_SHA256: 43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1
+          XDT_LICENSE_BYTES: 11356
           ILREPACK_SOURCE_COMMIT: 5b55fa2f4d7c7b18ffb104e2fade2f794f4ccedf
           ILREPACK_SOURCE_TREE: 4c7e73b48c55a535790f9d3f56687258efc525d0
           ILREPACK_RELEASE_TAG_COMMIT: 92843eace06c4eff3d6296a6fc4470ba725c57aa
@@ -123,6 +136,43 @@ jobs:
               continue
             }
             throw "A reviewed Squirrel source patch does not match its exact contract."
+          }
+
+          $xdtSource = Join-Path $env:GITHUB_WORKSPACE "xdt-source"
+          $xdtHead = (git -C $xdtSource rev-parse HEAD).Trim()
+          $xdtTree = (git -C $xdtSource rev-parse "HEAD^{tree}").Trim()
+          $xdtLicenseBlob = (git -C $xdtSource rev-parse "HEAD:LICENSE.txt").Trim()
+          $xdtLicense = Get-Item -LiteralPath (Join-Path $xdtSource "LICENSE.txt") -Force
+          $xdtLicenseSha256 = (
+            Get-FileHash -LiteralPath $xdtLicense.FullName -Algorithm SHA256
+          ).Hash.ToLowerInvariant()
+          $xdtNoticePaths = @(
+            git -C $xdtSource ls-tree -r --name-only HEAD |
+              Where-Object {
+                [IO.Path]::GetFileName($_) -imatch "^NOTICE(?:\..*)?$"
+              }
+          )
+          $xdtDirty = @(git -C $xdtSource status --porcelain)
+          $xdtCredentials = @(
+            git -C $xdtSource config --local --get-regexp "^http\..*\.extraheader$" 2>$null
+          )
+          $xdtCredentialQueryExit = $LASTEXITCODE
+          if ($xdtCredentialQueryExit -notin @(0, 1)) {
+            throw "The Microsoft.Web.Xdt credential-state query failed."
+          }
+          $global:LASTEXITCODE = 0
+          if (
+            $xdtHead -cne $env:XDT_SOURCE_COMMIT -or
+            $xdtTree -cne $env:XDT_SOURCE_TREE -or
+            $xdtLicenseBlob -cne $env:XDT_LICENSE_BLOB -or
+            $xdtLicense.PSIsContainer -or
+            $xdtLicense.Length -ne [int64]$env:XDT_LICENSE_BYTES -or
+            $xdtLicenseSha256 -cne $env:XDT_LICENSE_SHA256 -or
+            $xdtNoticePaths.Count -ne 0 -or
+            $xdtDirty.Count -ne 0 -or
+            $xdtCredentials.Count -ne 0
+          ) {
+            throw "The Microsoft.Web.Xdt source is not the exact reviewed Apache-2.0 tree."
           }
 
           foreach ($sourceName in @("squirrel-a", "squirrel-b")) {
