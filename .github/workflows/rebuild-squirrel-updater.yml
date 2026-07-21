@@ -739,6 +739,164 @@ jobs:
             }
           }
 
+          function Get-ManagedMetadataReceipt {
+            param(
+              [Parameter(Mandatory)] [string] $Path
+            )
+
+            $stream = [IO.File]::Open(
+              $Path,
+              [IO.FileMode]::Open,
+              [IO.FileAccess]::Read,
+              [IO.FileShare]::Read
+            )
+            try {
+              $peReader = [Reflection.PortableExecutable.PEReader]::new($stream)
+              try {
+                if (-not $peReader.HasMetadata) {
+                  throw "A reviewed merge input has no managed metadata."
+                }
+                $metadata = [Reflection.Metadata.PEReaderExtensions]::GetMetadataReader($peReader)
+                $references = @(
+                  foreach ($handle in $metadata.AssemblyReferences) {
+                    $reference = $metadata.GetAssemblyReference($handle)
+                    $token = -join @(
+                      $metadata.GetBlobBytes($reference.PublicKeyOrToken) |
+                        ForEach-Object { $_.ToString("x2") }
+                    )
+                    [pscustomobject]@{
+                      Name = $metadata.GetString($reference.Name)
+                      Version = $reference.Version.ToString()
+                      PublicKeyToken = $token
+                    }
+                  }
+                )
+                $types = @(
+                  foreach ($handle in $metadata.TypeDefinitions) {
+                    $definition = $metadata.GetTypeDefinition($handle)
+                    $namespace = $metadata.GetString($definition.Namespace)
+                    $name = $metadata.GetString($definition.Name)
+                    if ([String]::IsNullOrEmpty($namespace)) {
+                      $name
+                    } else {
+                      "$namespace.$name"
+                    }
+                  }
+                )
+              } finally {
+                $peReader.Dispose()
+              }
+            } finally {
+              $stream.Dispose()
+            }
+            return [pscustomobject]@{
+              AssemblyReferences = $references
+              TypeDefinitions = $types
+            }
+          }
+
+          function Assert-MergedXdtBehavior {
+            param(
+              [Parameter(Mandatory)] [string] $Path
+            )
+
+            $assembly = [Reflection.Assembly]::LoadFrom($Path)
+            $documentType = $assembly.GetType(
+              "Microsoft.Web.XmlTransform.XmlTransformableDocument",
+              $true,
+              $false
+            )
+            $transformationType = $assembly.GetType(
+              "Microsoft.Web.XmlTransform.XmlTransformation",
+              $true,
+              $false
+            )
+            $instanceFlags = (
+              [Reflection.BindingFlags]::Instance -bor
+              [Reflection.BindingFlags]::Public -bor
+              [Reflection.BindingFlags]::NonPublic
+            )
+            $constructors = @(
+              $transformationType.GetConstructors($instanceFlags) |
+                Where-Object {
+                  $parameters = @($_.GetParameters())
+                  $parameters.Count -eq 3 -and
+                  $parameters[0].ParameterType -eq [string] -and
+                  $parameters[1].ParameterType -eq [bool] -and
+                  $parameters[2].ParameterType.FullName -ceq "Microsoft.Web.XmlTransform.IXmlTransformationLogger"
+                }
+            )
+            $applyMethods = @(
+              $transformationType.GetMethods($instanceFlags) |
+                Where-Object {
+                  $parameters = @($_.GetParameters())
+                  $_.Name -ceq "Apply" -and
+                  $parameters.Count -eq 1 -and
+                  $parameters[0].ParameterType -eq [Xml.XmlDocument]
+                }
+            )
+            if ($constructors.Count -ne 1 -or $applyMethods.Count -ne 1) {
+              throw "The internalized Microsoft.Web.Xdt reflection surface is unexpected."
+            }
+
+            $sourceXml = "<configuration><appSettings><add key=`"replace`" value=`"old`" /><add key=`"remove`" value=`"drop`" /></appSettings></configuration>"
+            $transformXml = "<configuration xmlns:xdt=`"http://schemas.microsoft.com/XML-Document-Transform`"><appSettings><add key=`"replace`" value=`"new`" xdt:Transform=`"Replace`" xdt:Locator=`"Match(key)`" /><add key=`"insert`" value=`"created`" xdt:Transform=`"InsertIfMissing`" xdt:Locator=`"Match(key)`" /><add key=`"remove`" xdt:Transform=`"Remove`" xdt:Locator=`"Match(key)`" /></appSettings></configuration>"
+            $document = [Activator]::CreateInstance($documentType, $true)
+            $document.PreserveWhitespace = $true
+            $document.LoadXml($sourceXml)
+            $transformation = $constructors[0].Invoke(
+              [object[]]@($transformXml, $false, $null)
+            )
+            try {
+              $applied = $applyMethods[0].Invoke(
+                $transformation,
+                [object[]]@($document)
+              )
+            } finally {
+              if ($transformation -is [IDisposable]) {
+                $transformation.Dispose()
+              }
+            }
+            $replace = $document.SelectSingleNode(
+              "/configuration/appSettings/add[@key='replace']"
+            )
+            $insert = $document.SelectSingleNode(
+              "/configuration/appSettings/add[@key='insert']"
+            )
+            $remove = $document.SelectSingleNode(
+              "/configuration/appSettings/add[@key='remove']"
+            )
+            $allSettings = $document.SelectNodes("/configuration/appSettings/add")
+            if (
+              $applied -ne $true -or
+              $null -eq $replace -or
+              $replace.GetAttribute("value") -cne "new" -or
+              $null -eq $insert -or
+              $insert.GetAttribute("value") -cne "created" -or
+              $null -ne $remove -or
+              $allSettings.Count -ne 2
+            ) {
+              throw "The internalized Microsoft.Web.Xdt behavior smoke failed."
+            }
+
+            $malformedRejected = $false
+            $malformedTransformation = $null
+            try {
+              $malformedTransformation = $constructors[0].Invoke(
+                [object[]]@("<configuration>", $false, $null)
+              )
+            } catch {
+              $malformedRejected = $true
+            } finally {
+              if ($malformedTransformation -is [IDisposable]) {
+                $malformedTransformation.Dispose()
+              }
+            }
+            if (-not $malformedRejected) {
+              throw "The internalized Microsoft.Web.Xdt accepted malformed transform XML."
+            }
+          }
+
           function Assert-XdtPackage {
             param(
               [Parameter(Mandatory)] [string] $Path
@@ -961,6 +1119,25 @@ jobs:
                 "$_`tsha256:$inputHash`tbytes:$((Get-Item -LiteralPath $inputPath).Length)"
               }
             )
+            foreach ($mergeInputName in $mergeInputNames) {
+              $metadataReceipt = Get-ManagedMetadataReceipt -Path (Join-Path $outputDirectory $mergeInputName)
+              $xdtReferences = @(
+                $metadataReceipt.AssemblyReferences |
+                  Where-Object { $_.Name -ieq "Microsoft.Web.XmlTransform" }
+              )
+              if ($mergeInputName -ceq "NuGet.Squirrel.dll") {
+                if (
+                  $xdtReferences.Count -ne 1 -or
+                  $xdtReferences[0].Name -cne "Microsoft.Web.XmlTransform" -or
+                  $xdtReferences[0].Version -cne $env:XDT_ASSEMBLY_VERSION -or
+                  $xdtReferences[0].PublicKeyToken -cne $env:XDT_PUBLIC_KEY_TOKEN
+                ) {
+                  throw "NuGet.Squirrel.dll does not contain the exact reviewed Microsoft.Web.Xdt reference."
+                }
+              } elseif ($xdtReferences.Count -ne 0) {
+                throw "An unexpected merge input contains a Microsoft.Web.Xdt reference."
+              }
+            }
             Write-Output "Reviewed pre-merge input inventory for $sourceName (fixed public filenames only):"
             $mergeInputInventory | ForEach-Object { Write-Output $_ }
             $mergeInputReceiptDifferences = @(
@@ -988,6 +1165,29 @@ jobs:
             }
             $output = Join-Path $outputDirectory "Update.exe"
             Move-Item -LiteralPath $mergedTemporaryOutput -Destination $output -Force
+            $mergedMetadataReceipt = Get-ManagedMetadataReceipt -Path $output
+            $mergedXdtReferences = @(
+              $mergedMetadataReceipt.AssemblyReferences |
+                Where-Object { $_.Name -ieq "Microsoft.Web.XmlTransform" }
+            )
+            $expectedMergedXdtTypes = @(
+              "Microsoft.Web.XmlTransform.XmlTransformation"
+              "Microsoft.Web.XmlTransform.XmlTransformableDocument"
+            )
+            $mergedXdtTypes = @(
+              $mergedMetadataReceipt.TypeDefinitions |
+                Where-Object { $expectedMergedXdtTypes -ccontains $_ }
+            )
+            $mergedTypeDifferences = @(
+              Compare-Object $expectedMergedXdtTypes $mergedXdtTypes -CaseSensitive
+            )
+            if (
+              $mergedXdtReferences.Count -ne 0 -or
+              $mergedXdtTypes.Count -ne 2 -or
+              $mergedTypeDifferences.Count -ne 0
+            ) {
+              throw "The merged updater did not internalize the exact reviewed Microsoft.Web.Xdt types."
+            }
             $outputs += $output
           }
 
@@ -1027,6 +1227,7 @@ jobs:
           if ($signature.Status -cne "NotSigned") {
             throw "The reviewed source build unexpectedly produced a signed updater."
           }
+          Assert-MergedXdtBehavior -Path $outputs[0]
 
           $artifactDirectory = Join-Path $env:RUNNER_TEMP "squirrel-updater-candidate"
           if (Test-Path -LiteralPath $artifactDirectory) {
@@ -1146,6 +1347,13 @@ jobs:
             xdtAssemblyMvid = $env:XDT_MVID
             xdtSelectedAsset = "lib/net40/Microsoft.Web.XmlTransform.dll"
             xdtRestorePathsVerified = @("global", "legacy")
+            xdtPreMergeReferenceScan = "exactly NuGet.Squirrel.dll => Microsoft.Web.XmlTransform 3.1.0.0, token 31bf3856ad364e35"
+            xdtMergedExternalReferenceCount = 0
+            xdtMergedTypesVerified = @(
+              "Microsoft.Web.XmlTransform.XmlTransformation"
+              "Microsoft.Web.XmlTransform.XmlTransformableDocument"
+            )
+            xdtBehaviorSmoke = "Replace, InsertIfMissing, Remove, and malformed-transform rejection passed"
             xdtUpstreamNoticePresent = $false
             runnerImage = $env:ImageOS
             runnerImageVersion = $env:ImageVersion
