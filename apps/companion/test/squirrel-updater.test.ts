@@ -8,7 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -23,6 +23,13 @@ import {
 } from "../packaging/squirrel-updater.mjs";
 
 const temporaryDirectories: string[] = [];
+const repositoryRoot = resolve(import.meta.dirname, "../../..");
+const sourcePatchDirectory = join(
+  repositoryRoot,
+  ".github",
+  "patches",
+  "squirrel-updater",
+);
 
 afterEach(async () => {
   await Promise.all(
@@ -33,6 +40,64 @@ afterEach(async () => {
 });
 
 describe("reviewed Squirrel updater", () => {
+  it("binds the next candidate source patches before remote execution", async () => {
+    const patches = [
+      {
+        bytes: 4_545,
+        name: "retry-delete-tree.patch",
+        sha256:
+          "81a6bb631b7459773fbad1b4fbe7a878c698ab9e6016899a3f422b3fa32e2b1a",
+      },
+      {
+        bytes: 640,
+        name: "xdt-3.1.0-squirrel.patch",
+        sha256:
+          "a781b27842680ae01b70b7308ea5a5154e3897e94c7c645a9cd172385fcc0137",
+      },
+      {
+        bytes: 665,
+        name: "xdt-3.1.0-nuget-core.patch",
+        sha256:
+          "31a098f17a1409f03ff270bc819b7cebf8bcf94ca872f1484aa2699d6e5a4dce",
+      },
+    ] as const;
+
+    const contents = await Promise.all(
+      patches.map(async (patch) => {
+        const bytes = await readFile(join(sourcePatchDirectory, patch.name));
+        expect(bytes.byteLength).toBe(patch.bytes);
+        expect(createHash("sha256").update(bytes).digest("hex")).toBe(
+          patch.sha256,
+        );
+        const source = bytes.toString("utf8");
+        expect(source).not.toContain("\r");
+        return source;
+      }),
+    );
+
+    expect(contents[0]).toContain("const int attempts = 32;");
+    expect(contents[0]).toContain("const int delayMilliseconds = 250;");
+    expect(contents[0]).toContain("await Task.Delay(5000);");
+    expect(contents[0]).toContain("Task.Delay(15000)");
+    expect(contents[0]).toContain(
+      "DeleteDirectoryOrJustGiveUpRetriesTransientFileLocks",
+    );
+    expect(contents[0]).toContain(
+      "DeleteDirectoryOrJustGiveUpReturnsAfterBoundedRetriesForPermanentFileLocks",
+    );
+    expect(contents[0]).toContain("FileShare.None");
+    expect(contents[1]).toContain(
+      '<PackageReference Include="Microsoft.Web.Xdt" Version="3.1.0" />',
+    );
+    expect(contents[2]).toContain("GIT binary patch");
+    expect(contents[2]).toContain(
+      "a5972a3ef600f41d2ca056872321e2c20757357d..a00ea88e7de4b53cf02ef5611de6e05ded2d7554",
+    );
+    expect(contents[2]).toContain(
+      "8cceb007316817f8855d5fe7e99fc725d0534dfc..7b537c87913ae0f241c71e7d34889df098181d9d",
+    );
+  });
+
   it("binds the vendored PE to both independent rebuild confirmations", async () => {
     const binding = await verifyReviewedSquirrelUpdater();
     expect(binding).toMatchObject({

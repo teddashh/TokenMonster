@@ -1,0 +1,13 @@
+diff --git a/src/Squirrel/Squirrel.csproj b/src/Squirrel/Squirrel.csproj
+index e0325bc2e2912bf2869a7e6d3d35631500a534da..fcc79959834f1d0cb4d33f7a834e0a6926ccfd0f 100644
+--- a/src/Squirrel/Squirrel.csproj
++++ b/src/Squirrel/Squirrel.csproj
+@@ -14,7 +14,7 @@
+ 
+   <ItemGroup>
+     <PackageReference Include="DeltaCompressionDotNet" Version="1.1.0.0" />
+-    <PackageReference Include="Microsoft.Web.Xdt" Version="2.1.1" />
++    <PackageReference Include="Microsoft.Web.Xdt" Version="3.1.0" />
+     <PackageReference Include="Mono.Cecil" Version="0.11.2" />
+     <PackageReference Include="SharpCompress" Version="0.17.1.0" />
+   </ItemGroup>
