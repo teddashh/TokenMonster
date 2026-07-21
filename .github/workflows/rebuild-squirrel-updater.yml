@@ -88,6 +88,8 @@ jobs:
           XDT_OUTER_PATCH_BYTES: 640
           XDT_INNER_PATCH_SHA256: 31a098f17a1409f03ff270bc819b7cebf8bcf94ca872f1484aa2699d6e5a4dce
           XDT_INNER_PATCH_BYTES: 665
+          SOURCE_TEST_RUNNER_SHA256: e427140dfe867dd1739f6b493864887c53b864218aac172a4af54a11841c3a54
+          SOURCE_TEST_RUNNER_BYTES: 5519
           PATCHED_SQUIRREL_PROJECT_BLOB: fcc79959834f1d0cb4d33f7a834e0a6926ccfd0f
           PATCHED_UTILITY_BLOB: 432a76a6c55c6a01c88eee2641abb3ad051d3fc8
           PATCHED_DETECTOR_TEST_BLOB: b9757252508228f50abb4aec0739905c52570bc2
@@ -148,6 +150,20 @@ jobs:
               continue
             }
             throw "A reviewed Squirrel source patch does not match its exact contract."
+          }
+
+          $sourceTestRunner = Join-Path $policy ".github/scripts/run-squirrel-source-tests.ps1"
+          $sourceTestRunnerFile = Get-Item -LiteralPath $sourceTestRunner -Force
+          $sourceTestRunnerSha256 = (
+            Get-FileHash -LiteralPath $sourceTestRunnerFile.FullName -Algorithm SHA256
+          ).Hash.ToLowerInvariant()
+          if (
+            $sourceTestRunnerFile.PSIsContainer -or
+            ($sourceTestRunnerFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+            $sourceTestRunnerFile.Length -ne [int64]$env:SOURCE_TEST_RUNNER_BYTES -or
+            $sourceTestRunnerSha256 -cne $env:SOURCE_TEST_RUNNER_SHA256
+          ) {
+            throw "The reviewed Squirrel source-test runner does not match its exact contract."
           }
 
           $xdtSource = Join-Path $env:GITHUB_WORKSPACE "xdt-source"
@@ -450,6 +466,8 @@ jobs:
           XDT_OUTER_PATCH_BYTES: 640
           XDT_INNER_PATCH_SHA256: 31a098f17a1409f03ff270bc819b7cebf8bcf94ca872f1484aa2699d6e5a4dce
           XDT_INNER_PATCH_BYTES: 665
+          SOURCE_TEST_RUNNER_SHA256: e427140dfe867dd1739f6b493864887c53b864218aac172a4af54a11841c3a54
+          SOURCE_TEST_RUNNER_BYTES: 5519
           XDT_SOURCE_COMMIT: 5b67dee04d86740575f0f5022b79833213cc024a
           XDT_SOURCE_TREE: e7f17c790d0ede422e683f8617173df0ac63f1f1
           XDT_LICENSE_BLOB: f49a4e16e68b128803cc2dcea614603632b04eac
@@ -478,6 +496,28 @@ jobs:
             default { throw "The updater receipt mode is invalid." }
           }
           $receiptMode = $env:RECEIPT_MODE
+
+          $sourceTestRunner = Join-Path $env:GITHUB_WORKSPACE "tokenmonster-policy/.github/scripts/run-squirrel-source-tests.ps1"
+          $sourceTestRunnerFile = Get-Item -LiteralPath $sourceTestRunner -Force
+          $sourceTestRunnerSha256 = (
+            Get-FileHash -LiteralPath $sourceTestRunnerFile.FullName -Algorithm SHA256
+          ).Hash.ToLowerInvariant()
+          if (
+            $sourceTestRunnerFile.PSIsContainer -or
+            ($sourceTestRunnerFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+            $sourceTestRunnerFile.Length -ne [int64]$env:SOURCE_TEST_RUNNER_BYTES -or
+            $sourceTestRunnerSha256 -cne $env:SOURCE_TEST_RUNNER_SHA256
+          ) {
+            throw "The reviewed Squirrel source-test runner changed after policy verification."
+          }
+          $windowsPowerShell = Join-Path $env:SystemRoot "System32/WindowsPowerShell/v1.0/powershell.exe"
+          $windowsPowerShellFile = Get-Item -LiteralPath $windowsPowerShell -Force
+          if (
+            $windowsPowerShellFile.PSIsContainer -or
+            ($windowsPowerShellFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
+          ) {
+            throw "The reviewed Windows runner lacks a physical Windows PowerShell executable."
+          }
 
           $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
           if (-not (Test-Path -LiteralPath $vswhere -PathType Leaf)) {
@@ -1267,45 +1307,69 @@ jobs:
             $testBuildArguments += "/p:PathMap="
             $testBuildArguments += "/p:DebugSymbols=true"
             $testBuildArguments += "/p:DebugType=full"
-            $sourceTestFilter = @(
-              "FullyQualifiedName=Squirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpRetriesTransientFileLocks"
-              "FullyQualifiedName=Squirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpReturnsAfterBoundedRetriesForPermanentFileLocks"
-              "FullyQualifiedName=Squirrel.Tests.SquirrelAwareExecutableDetectorTests.NotSquirrelAware"
-            ) -join "|"
-            & dotnet test $testProject --no-restore --filter $sourceTestFilter --logger "trx;LogFileName=reviewed-source-tests.trx" --results-directory $testResults @testBuildArguments
+            & $msbuild $testProject @testBuildArguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "The reviewed source-test assembly build failed."
+            }
+            $testAssembly = Join-Path $source "test/bin/Any CPU/Release/net45/Squirrel.Tests.dll"
+            $testAssemblyFile = Get-Item -LiteralPath $testAssembly -Force
+            $testSymbols = Join-Path $source "test/bin/Any CPU/Release/net45/Squirrel.Tests.pdb"
+            $testSymbolsFile = Get-Item -LiteralPath $testSymbols -Force
+            if (
+              $testAssemblyFile.PSIsContainer -or
+              ($testAssemblyFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+              $testAssemblyFile.Length -lt 1 -or
+              $testSymbolsFile.PSIsContainer -or
+              ($testSymbolsFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+              $testSymbolsFile.Length -lt 1
+            ) {
+              throw "The reviewed source-test build did not produce a physical assembly and full PDB."
+            }
+            $sourceTestReceipt = Join-Path $testResults "reviewed-source-tests.txt"
+            $sourceTestRunnerFile = Get-Item -LiteralPath $sourceTestRunner -Force
+            $sourceTestRunnerSha256 = (
+              Get-FileHash -LiteralPath $sourceTestRunnerFile.FullName -Algorithm SHA256
+            ).Hash.ToLowerInvariant()
+            if (
+              $sourceTestRunnerFile.PSIsContainer -or
+              ($sourceTestRunnerFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+              $sourceTestRunnerFile.Length -ne [int64]$env:SOURCE_TEST_RUNNER_BYTES -or
+              $sourceTestRunnerSha256 -cne $env:SOURCE_TEST_RUNNER_SHA256
+            ) {
+              throw "The reviewed Squirrel source-test runner changed before execution."
+            }
+            & $windowsPowerShell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $sourceTestRunnerFile.FullName -AssemblyPath $testAssemblyFile.FullName -ReceiptPath $sourceTestReceipt
             if ($LASTEXITCODE -ne 0) {
               throw "The reviewed bounded-delete and PE-reopen source tests failed."
             }
-            $trxPath = Join-Path $testResults "reviewed-source-tests.trx"
-            [xml]$trx = Get-Content -LiteralPath $trxPath -Raw
-            $trxNamespaces = [Xml.XmlNamespaceManager]::new($trx.NameTable)
-            $trxNamespaces.AddNamespace(
-              "t",
-              "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"
-            )
-            $trxCounters = $trx.SelectSingleNode(
-              "/t:TestRun/t:ResultSummary/t:Counters",
-              $trxNamespaces
-            )
-            $trxResults = @(
-              $trx.SelectNodes("//t:UnitTestResult", $trxNamespaces)
-            )
-            $failedTrxResults = @(
-              $trxResults |
-                Where-Object { $_.GetAttribute("outcome") -cne "Passed" }
-            )
+            $sourceTestReceiptFile = Get-Item -LiteralPath $sourceTestReceipt -Force
             if (
-              $null -eq $trxCounters -or
-              [int]$trxCounters.GetAttribute("total") -ne 3 -or
-              [int]$trxCounters.GetAttribute("executed") -ne 3 -or
-              [int]$trxCounters.GetAttribute("passed") -ne 3 -or
-              [int]$trxCounters.GetAttribute("failed") -ne 0 -or
-              $trxResults.Count -ne 3 -or
-              $failedTrxResults.Count -ne 0
+              $sourceTestReceiptFile.PSIsContainer -or
+              ($sourceTestReceiptFile.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
             ) {
+              throw "The reviewed source-test runner did not produce a physical receipt."
+            }
+            $expectedSourceTestReceipt = @(
+              "passed`tSquirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpRetriesTransientFileLocks"
+              "passed`tSquirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpReturnsAfterBoundedRetriesForPermanentFileLocks"
+              "passed`tSquirrel.Tests.SquirrelAwareExecutableDetectorTests.NotSquirrelAware"
+            )
+            $sourceTestReceiptLines = @(
+              Get-Content -LiteralPath $sourceTestReceiptFile.FullName -Encoding UTF8
+            )
+            $sourceTestReceiptMatches = $sourceTestReceiptLines.Count -eq 3
+            for ($sourceTestIndex = 0; $sourceTestIndex -lt 3; $sourceTestIndex++) {
+              if (
+                $sourceTestReceiptLines.Count -le $sourceTestIndex -or
+                $sourceTestReceiptLines[$sourceTestIndex] -cne $expectedSourceTestReceipt[$sourceTestIndex]
+              ) {
+                $sourceTestReceiptMatches = $false
+              }
+            }
+            if (-not $sourceTestReceiptMatches) {
               throw "The reviewed source-test result set was incomplete."
             }
-            $sourceTestPassCount += $trxResults.Count
+            $sourceTestPassCount += $sourceTestReceiptLines.Count
             $outputs += $output
           }
 
@@ -1535,6 +1599,9 @@ jobs:
             reviewedDependencyInventorySha256 = $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256
             sourceTestDependencyInventorySha256 = $testDependencyInventorySha256
             reviewedSourceTestDependencyInventorySha256 = $lockedTestDependencyInventorySha256
+            sourceTestRunnerSha256 = $env:SOURCE_TEST_RUNNER_SHA256
+            sourceTestRunnerBytes = [int64]$env:SOURCE_TEST_RUNNER_BYTES
+            sourceTestExecution = "Windows PowerShell 5.1 reflection runner; exact public instance Fact methods only; async Tasks awaited"
             sourceTests = @(
               "Squirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpRetriesTransientFileLocks"
               "Squirrel.Tests.Core.UtilityTests.DeleteDirectoryOrJustGiveUpReturnsAfterBoundedRetriesForPermanentFileLocks"
