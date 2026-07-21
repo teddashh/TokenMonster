@@ -19,7 +19,7 @@ const vendorInventoryPath = join(
 const confirmationProvenancePath = join(
   reviewedDirectory,
   "provenance",
-  "confirmation-run-29773025781.json",
+  "confirmation-run-29794447787.json",
 );
 const mergeInputReceiptPath = join(
   reviewedDirectory,
@@ -30,6 +30,21 @@ const dependencyReceiptPath = join(
   reviewedDirectory,
   "provenance",
   "nuget-content-hashes.txt",
+);
+const sourceTestDependencyReceiptPath = join(
+  reviewedDirectory,
+  "provenance",
+  "source-test-nuget-content-hashes.txt",
+);
+const xdtLicensePath = join(
+  reviewedDirectory,
+  "licenses",
+  "MICROSOFT-WEB-XDT-LICENSE.txt",
+);
+const xdtAttributionPath = join(
+  reviewedDirectory,
+  "licenses",
+  "MICROSOFT-WEB-XDT-ATTRIBUTION.txt",
 );
 const ELECTRON_WINSTALLER_VERSION = "5.4.4";
 const EXPECTED_VENDOR_FILE_COUNT = 33;
@@ -42,15 +57,21 @@ const EXPECTED_VENDOR_INVENTORY_SHA256 =
   "a7cacc76777553878f6f873c8471fe5e3b9242cb4e557f83cf7227eccbaf3919";
 
 export const REVIEWED_SQUIRREL_UPDATER = Object.freeze({
-  bytes: 1_840_640,
-  sha256: "1673161fd4e64d1123fb828a5e5f1580cbe3c3f6b3f0893f50bb920dada473fd",
+  bytes: 1_841_664,
+  sha256: "83b754a9b24742675678c5d8fa024a8140c2d18eb640116a87a364f0a897388a",
   sourceBaseCommit: "eef37460aef77b2f9de8cd2237c1e55b344a6554",
   sourceFixCommit: "c98244936f6876b080366417301268058028a53c",
   sourceFixTree: "0a1ebfa90cea6f8037907134d53562a26c6bb4c3",
   dependencyInventorySha256:
-    "fb9199730812ca5c569d0c44f8d79d910665651dba7b3fa4cf498996c17aac15",
+    "9ab90cdb2131c34d8c871c2eba37edc7cbc12d63e2abdfcea4306e4cea367b23",
+  sourceTestDependencyInventorySha256:
+    "f7fe9ed4bb26e0e812d86a8a04971ac6f71824e3dea483fab0ec21462267e4a6",
   mergeInputInventorySha256:
-    "abddfa18198a408cd1b1d3983ce6afdd4eab4a1f4dcec5cbd4b2a0437104c419",
+    "9086ab285b0959e8bbbd2e797b53865d80793468bff6d3aa8f76a9b4e88d03d2",
+  xdtLicenseSha256:
+    "43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1",
+  xdtAttributionSha256:
+    "5942a1e712f375fbc36e2ce62bd12b930d6d70c9d9ec74caea35d7ec48fbe1a2",
   integrationStatus: "reviewed-internal-candidate",
   publicReleaseStatus:
     "blocked-pending-redistribution-and-native-install-review",
@@ -219,25 +240,62 @@ function windowsArtifactTextSha256(contents, finalLineFeedOnly) {
   return createHash("sha256").update(artifactText, "utf8").digest("hex");
 }
 
+/** @param {string} contents */
+function finalLineFeedStrippedSha256(contents) {
+  if (
+    !contents.endsWith("\n") ||
+    contents.endsWith("\n\n") ||
+    contents.includes("\r")
+  ) {
+    return "";
+  }
+  return createHash("sha256")
+    .update(contents.slice(0, -1), "utf8")
+    .digest("hex");
+}
+
 async function verifyNormalizedBuildEvidence() {
-  const [provenance, mergeInputs, dependencies] = await Promise.all([
+  const [
+    provenance,
+    mergeInputs,
+    dependencies,
+    sourceTestDependencies,
+    xdtLicense,
+    xdtAttribution,
+  ] = await Promise.all([
     readPolicyFile(
       confirmationProvenancePath,
       "Squirrel confirmation provenance",
     ),
     readPolicyFile(mergeInputReceiptPath, "Squirrel merge-input receipt"),
     readPolicyFile(dependencyReceiptPath, "Squirrel dependency receipt"),
+    readPolicyFile(
+      sourceTestDependencyReceiptPath,
+      "Squirrel source-test dependency receipt",
+    ),
+    readPolicyFile(xdtLicensePath, "Microsoft.Web.Xdt license"),
+    hashPhysicalFile(
+      xdtAttributionPath,
+      "Microsoft.Web.Xdt attribution",
+      MAX_POLICY_FILE_BYTES,
+    ),
   ]);
   const parsedProvenance = JSON.parse(provenance.contents);
   if (
     windowsArtifactTextSha256(provenance.contents, true) !==
-      "b9d1e654e84c95af65389608caa969fd925cab9aa4d05574877be98f1f6edc45" ||
+      "153c1cf52c298f1da410b8cadfc16e309586214b2995f9ecfee22ce29acfeaf2" ||
     windowsArtifactTextSha256(mergeInputs.contents, false) !==
       REVIEWED_SQUIRREL_UPDATER.mergeInputInventorySha256 ||
     windowsArtifactTextSha256(dependencies.contents, false) !==
       REVIEWED_SQUIRREL_UPDATER.dependencyInventorySha256 ||
+    windowsArtifactTextSha256(sourceTestDependencies.contents, false) !==
+      REVIEWED_SQUIRREL_UPDATER.sourceTestDependencyInventorySha256 ||
+    finalLineFeedStrippedSha256(xdtLicense.contents) !==
+      REVIEWED_SQUIRREL_UPDATER.xdtLicenseSha256 ||
+    xdtAttribution.sha256 !==
+      REVIEWED_SQUIRREL_UPDATER.xdtAttributionSha256 ||
     parsedProvenance?.candidateOnly !== true ||
-    parsedProvenance?.workflowRunId !== "29773025781" ||
+    parsedProvenance?.workflowRunId !== "29794447787" ||
     parsedProvenance?.binarySha256 !== REVIEWED_SQUIRREL_UPDATER.sha256 ||
     parsedProvenance?.binaryBytes !== REVIEWED_SQUIRREL_UPDATER.bytes
   ) {
@@ -385,6 +443,9 @@ export async function verifyReviewedSquirrelUpdater() {
       "sourceBaseCommit",
       "sourceFixCommit",
       "sourceFixTree",
+      "sourceTestDependencyInventorySha256",
+      "xdtAttributionSha256",
+      "xdtLicenseSha256",
     ]) ||
     !confirmations.every(hasExactConfirmationKeys) ||
     binary.bytes !== REVIEWED_SQUIRREL_UPDATER.bytes ||
@@ -400,25 +461,22 @@ export async function verifyReviewedSquirrelUpdater() {
     review?.sourceFixTree !== REVIEWED_SQUIRREL_UPDATER.sourceFixTree ||
     review?.dependencyInventorySha256 !==
       REVIEWED_SQUIRREL_UPDATER.dependencyInventorySha256 ||
+    review?.sourceTestDependencyInventorySha256 !==
+      REVIEWED_SQUIRREL_UPDATER.sourceTestDependencyInventorySha256 ||
     review?.mergeInputInventorySha256 !==
       REVIEWED_SQUIRREL_UPDATER.mergeInputInventorySha256 ||
-    confirmations.length !== 2 ||
+    review?.xdtLicenseSha256 !== REVIEWED_SQUIRREL_UPDATER.xdtLicenseSha256 ||
+    review?.xdtAttributionSha256 !==
+      REVIEWED_SQUIRREL_UPDATER.xdtAttributionSha256 ||
+    confirmations.length !== 1 ||
     confirmations[0]?.workflowCommit !==
-      "97fcd56c7f5a459aa6f073ddacc665615c4feef6" ||
-    confirmations[0]?.workflowRunId !== "29772122109" ||
-    confirmations[0]?.artifactId !== "8473224183" ||
+      "548a2c94a77de337a4980fefd8a27b2965db642c" ||
+    confirmations[0]?.workflowRunId !== "29794447787" ||
+    confirmations[0]?.artifactId !== "8481535392" ||
     confirmations[0]?.artifactArchiveSha256 !==
-      "bcf3c20cddef260b8b32471e4ce0658d662f9b0e2e7a365416c7d8ba01bc9e39" ||
+      "c01b2dcde1c527a1d2010ea5aa6d8d752a381c6c2f40fbe4a450af6f7ba22a31" ||
     confirmations[0]?.artifactProvenanceSha256 !==
-      "b092efd7ce8f503711ef95a827321c6d2604481c806e4c33979dff99239a1dc4" ||
-    confirmations[1]?.workflowCommit !==
-      "a0dcd651366c9e44f720193e606d6a25ea7d6e0a" ||
-    confirmations[1]?.workflowRunId !== "29773025781" ||
-    confirmations[1]?.artifactId !== "8473574243" ||
-    confirmations[1]?.artifactArchiveSha256 !==
-      "94a9e43533601fa8a0433648b1bc503bcf031bdc053b49863dc97b47a9fb2cf3" ||
-    confirmations[1]?.artifactProvenanceSha256 !==
-      "b9d1e654e84c95af65389608caa969fd925cab9aa4d05574877be98f1f6edc45"
+      "153c1cf52c298f1da410b8cadfc16e309586214b2995f9ecfee22ce29acfeaf2"
   ) {
     throw new Error(
       "Reviewed Squirrel updater or integration record differs from policy.",

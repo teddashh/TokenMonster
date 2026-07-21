@@ -98,12 +98,12 @@ describe("reviewed Squirrel updater", () => {
     );
   });
 
-  it("binds the vendored PE to both independent rebuild confirmations", async () => {
+  it("binds the vendored PE to the locked rebuild confirmation", async () => {
     const binding = await verifyReviewedSquirrelUpdater();
     expect(binding).toMatchObject({
-      bytes: 1_840_640,
+      bytes: 1_841_664,
       sha256:
-        "1673161fd4e64d1123fb828a5e5f1580cbe3c3f6b3f0893f50bb920dada473fd",
+        "83b754a9b24742675678c5d8fa024a8140c2d18eb640116a87a364f0a897388a",
     });
     expect(binding.bytes).toBe(REVIEWED_SQUIRREL_UPDATER.bytes);
     expect(binding.sha256).toBe(REVIEWED_SQUIRREL_UPDATER.sha256);
