@@ -1243,7 +1243,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) {
               throw "The exact upstream source-test dependency restore failed."
             }
-            $testAssetsPath = Join-Path $source "build/obj/Squirrel.Tests/project.assets.json"
+            $testAssetsPath = Join-Path $source "test/obj/project.assets.json"
             Assert-IsolatedProjectAssets -AssetsPath $testAssetsPath -PackageRoot $testNugetPackageRoot -ConfigPath $nugetConfig
             $testInventory = @(
               Get-GlobalDependencyInventory -GlobalPackages $testDependencyCache
