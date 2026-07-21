@@ -2,7 +2,19 @@ name: Rebuild reviewed Squirrel updater
 
 on:
   workflow_call:
+    inputs:
+      derive_candidate:
+        description: Derive quarantined candidate receipts without accepting them
+        type: boolean
+        required: false
+        default: false
   workflow_dispatch:
+    inputs:
+      derive_candidate:
+        description: Derive quarantined candidate receipts without accepting them
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -395,6 +407,8 @@ jobs:
         id: build
         shell: pwsh
         env:
+          RECEIPT_MODE: ${{ inputs.derive_candidate && 'derive' || 'locked' }}
+          TOKENMONSTER_POLICY_SHA: ${{ github.workflow_sha }}
           BROKEN_UPDATER_SHA256: 76359cd4b0349a83337b941332ad042c90351c2bb0a4628307740324c97984cc
           DOTNET_CLI_TELEMETRY_OPTOUT: 1
           DOTNET_NOLOGO: 1
@@ -417,13 +431,30 @@ jobs:
           FIX_TREE: 0a1ebfa90cea6f8037907134d53562a26c6bb4c3
           UPSTREAM_MERGE_COMMIT: 45834cbfeae84d20ef2bed24ac863f02d0abec66
           NUGET_SUBMODULE_COMMIT: 50f8d9e438fe948d7109501bd10f6024d0585b70
-          REVIEWED_DEPENDENCY_INVENTORY_SHA256: fb9199730812ca5c569d0c44f8d79d910665651dba7b3fa4cf498996c17aac15
+          RETRY_PATCH_SHA256: 81a6bb631b7459773fbad1b4fbe7a878c698ab9e6016899a3f422b3fa32e2b1a
+          RETRY_PATCH_BYTES: 4545
+          XDT_OUTER_PATCH_SHA256: a781b27842680ae01b70b7308ea5a5154e3897e94c7c645a9cd172385fcc0137
+          XDT_OUTER_PATCH_BYTES: 640
+          XDT_INNER_PATCH_SHA256: 31a098f17a1409f03ff270bc819b7cebf8bcf94ca872f1484aa2699d6e5a4dce
+          XDT_INNER_PATCH_BYTES: 665
+          XDT_SOURCE_COMMIT: 5b67dee04d86740575f0f5022b79833213cc024a
+          XDT_SOURCE_TREE: e7f17c790d0ede422e683f8617173df0ac63f1f1
+          XDT_LICENSE_BLOB: f49a4e16e68b128803cc2dcea614603632b04eac
+          XDT_LICENSE_SHA256: 43070e2d4e532684de521b885f385d0841030efa2b1a20bafb76133a5e1379c1
+          REVIEWED_DEPENDENCY_INVENTORY_SHA256: 9ab90cdb2131c34d8c871c2eba37edc7cbc12d63e2abdfcea4306e4cea367b23
           REVIEWED_MERGE_INPUT_INVENTORY_SHA256: abddfa18198a408cd1b1d3983ce6afdd4eab4a1f4dcec5cbd4b2a0437104c419
           REVIEWED_UPDATER_SHA256: 1673161fd4e64d1123fb828a5e5f1580cbe3c3f6b3f0893f50bb920dada473fd
           REVIEWED_UPDATER_BYTES: 1840640
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
+
+          $deriveCandidate = switch -CaseSensitive ($env:RECEIPT_MODE) {
+            "derive" { $true; break }
+            "locked" { $false; break }
+            default { throw "The updater receipt mode is invalid." }
+          }
+          $receiptMode = $env:RECEIPT_MODE
 
           $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
           if (-not (Test-Path -LiteralPath $vswhere -PathType Leaf)) {
@@ -632,7 +663,7 @@ jobs:
             "global/microsoft.build.tasks.git/1.0.0-beta2-18618-05/microsoft.build.tasks.git.1.0.0-beta2-18618-05.nupkg.sha512`tkcnqXhm6lxU8UFtpVO8enW7L8Gisw05bI46B3cWlW7K1dgGPb4hAyfiGyGczYOU6n4RtHO9CCfh0Lk74qkbF6w=="
             "global/microsoft.sourcelink.common/1.0.0-beta2-18618-05/microsoft.sourcelink.common.1.0.0-beta2-18618-05.nupkg.sha512`teJP4JUDOiiWPBvwN+/0v1otoT8VPFOm6upABUAS6TwFbLfjRiLI2Ko44gyxF0nW+uMQHx186tnTDt+fg7je97Q=="
             "global/microsoft.sourcelink.github/1.0.0-beta2-18618-05/microsoft.sourcelink.github.1.0.0-beta2-18618-05.nupkg.sha512`t7cQMyVdud/ritrYqgc99LecTC0g9rA2QhO1QFi6OBubsA++gMXRiXx/ct1rmycxM9EvHJSNZ9DHbZHu42RLMLQ=="
-            "global/microsoft.web.xdt/2.1.1/microsoft.web.xdt.2.1.1.nupkg.sha512`t8aCgaay6cgnrSwSeIDCU0qG6gi5VdR/LZuHSyyNH/dmtOMq89nSYKEXiscvQNPTNm2CL7s9JRVU0Wl24f6p4kg=="
+            "global/microsoft.web.xdt/3.1.0/microsoft.web.xdt.3.1.0.nupkg.sha512`t3VApgkdgOglJWtrXSgYzz6o8Cp6IpvmFQMeICyQvvbKoy+OjNwco5ovzBBL1HHj7kEgLfe2ruXW/ZQ1k+2YxYw=="
             "global/mono.cecil/0.11.2/mono.cecil.0.11.2.nupkg.sha512`tBTpKT6mzbvLgXKWSilfGOn0we1JeJb7VWu2f1lJ3ABJqCqoZlNCdi90BMiTJl+9DdJ5MqH3pokN873IjM3vi/Q=="
             "global/nerdbank.gitversioning/3.0.50/nerdbank.gitversioning.3.0.50.nupkg.sha512`tNiT6vLHcTP8VM244+rfmoVHuWh7bPsG9XnKMm4rAEc2QmPFGQfruUBaqxgbsqz4z7yuEZlhjP1UURdhfz04wXg=="
             "global/sharpcompress/0.17.1/sharpcompress.0.17.1.nupkg.sha512`twLRtmFrUhhF6ljyYCWWcwfGRZ9pX1gNZDSF6+Rj5uxS85Rq497HvhP7CYLNXCyIP1s065D3ebHcRA6uK1NFtcQ=="
@@ -641,6 +672,7 @@ jobs:
             "legacy/microsoft.data.edm.5.6.1/microsoft.data.edm.5.6.1.nupkg`tsha256:2372dda0dbbc7c01a09883fbeb4ba245ac0913bce346795fd66f11db96945510"
             "legacy/microsoft.data.odata.5.6.1/microsoft.data.odata.5.6.1.nupkg`tsha256:82454bc4c599f79682130e30cd44cb6588dcd75661c3cbd637c9ae321ba84a8c"
             "legacy/microsoft.data.services.client.5.6.1/microsoft.data.services.client.5.6.1.nupkg`tsha256:a6405fb929a99739c3079024a4d1003dc1a4629ff6f40b95c454498d8e545ed8"
+            "legacy/microsoft.web.xdt.3.1.0/microsoft.web.xdt.3.1.0.nupkg`tsha256:38ece8d6523710f474391b03c824b66f5192c2a667940dbaa3f895b464c37e72"
             "legacy/system.spatial.5.6.1/system.spatial.5.6.1.nupkg`tsha256:0d6efec3c6097edaa50d02cc713a0bc80d3a1441992081d21104831a7e4f4d06"
           )
           $reviewedMergeInputInventory = @(
@@ -803,7 +835,7 @@ jobs:
             $mergeInputReceiptDifferences = @(
               Compare-Object $reviewedMergeInputInventory $mergeInputInventory -CaseSensitive
             )
-            if ($mergeInputReceiptDifferences.Count -ne 0) {
+            if (-not $deriveCandidate -and $mergeInputReceiptDifferences.Count -ne 0) {
               throw "The compiler outputs do not match the committed reviewed merge-input inventory."
             }
             $mergeInputInventories += ,$mergeInputInventory
@@ -843,26 +875,31 @@ jobs:
             }
           )
           $sizes = @($outputs | ForEach-Object { (Get-Item -LiteralPath $_).Length })
-          if (
+          $invalidRepeatedOutput = (
             $hashes.Count -ne 2 -or
             $hashes[0] -cne $hashes[1] -or
             $hashes[0] -ceq $env:BROKEN_UPDATER_SHA256 -or
-            $hashes[0] -cne $env:REVIEWED_UPDATER_SHA256 -or
             $sizes[0] -ne $sizes[1] -or
-            $sizes[0] -ne [int64]$env:REVIEWED_UPDATER_BYTES -or
             $sizes[0] -lt 1 -or
             $sizes[0] -gt 10485760
-          ) {
-            throw "The two isolated updater builds were not identical reviewed outputs."
+          )
+          $invalidLockedOutput = (
+            -not $deriveCandidate -and (
+              $hashes[0] -cne $env:REVIEWED_UPDATER_SHA256 -or
+              $sizes[0] -ne [int64]$env:REVIEWED_UPDATER_BYTES
+            )
+          )
+          if ($invalidRepeatedOutput -or $invalidLockedOutput) {
+            throw "The two isolated updater builds were not identical outputs for the selected receipt mode."
           }
           $signature = Get-AuthenticodeSignature -LiteralPath $outputs[0]
           if ($signature.Status -cne "NotSigned") {
             throw "The reviewed source build unexpectedly produced a signed updater."
           }
 
-          $artifactDirectory = Join-Path $env:RUNNER_TEMP "reviewed-squirrel-updater"
+          $artifactDirectory = Join-Path $env:RUNNER_TEMP "squirrel-updater-candidate"
           if (Test-Path -LiteralPath $artifactDirectory) {
-            throw "The reviewed updater artifact directory must start absent."
+            throw "The updater candidate artifact directory must start absent."
           }
           New-Item -ItemType Directory -Path $artifactDirectory | Out-Null
           $artifactBinary = Join-Path $artifactDirectory "Squirrel.exe"
@@ -886,7 +923,10 @@ jobs:
           $mergeInputInventorySha256 = (Get-FileHash -LiteralPath $mergeInputInventoryPath -Algorithm SHA256).Hash.ToLowerInvariant()
           if (
             $dependencyInventorySha256 -cne $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256 -or
-            $mergeInputInventorySha256 -cne $env:REVIEWED_MERGE_INPUT_INVENTORY_SHA256
+            (
+              -not $deriveCandidate -and
+              $mergeInputInventorySha256 -cne $env:REVIEWED_MERGE_INPUT_INVENTORY_SHA256
+            )
           ) {
             throw "The staged review inventories do not match their committed receipts."
           }
@@ -895,11 +935,28 @@ jobs:
           $dotnetInfoSha256 = (Get-FileHash -LiteralPath $dotnetInfoPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
           $versionInfo = (Get-Item -LiteralPath $outputs[0]).VersionInfo
+          $lockedMergeInputInventorySha256 = if ($deriveCandidate) {
+            $null
+          } else {
+            $env:REVIEWED_MERGE_INPUT_INVENTORY_SHA256
+          }
+          $lockedBinaryBytes = if ($deriveCandidate) {
+            $null
+          } else {
+            [int64]$env:REVIEWED_UPDATER_BYTES
+          }
+          $lockedBinarySha256 = if ($deriveCandidate) {
+            $null
+          } else {
+            $env:REVIEWED_UPDATER_SHA256
+          }
           $provenance = [ordered]@{
             contractVersion = 1
             candidateOnly = $true
+            receiptMode = $receiptMode
             workflowRepository = $env:GITHUB_REPOSITORY
-            workflowCommit = $env:GITHUB_SHA
+            workflowCommit = $env:TOKENMONSTER_POLICY_SHA
+            triggerCommit = $env:GITHUB_SHA
             workflowRunId = $env:GITHUB_RUN_ID
             workflowRunAttempt = $env:GITHUB_RUN_ATTEMPT
             sourceRepository = "https://github.com/Squirrel/Squirrel.Windows"
@@ -908,6 +965,18 @@ jobs:
             fixTree = $env:FIX_TREE
             upstreamMergeCommit = $env:UPSTREAM_MERGE_COMMIT
             nugetSubmoduleCommit = $env:NUGET_SUBMODULE_COMMIT
+            boundedDeletePatchSha256 = $env:RETRY_PATCH_SHA256
+            boundedDeletePatchBytes = [int64]$env:RETRY_PATCH_BYTES
+            xdtOuterPatchSha256 = $env:XDT_OUTER_PATCH_SHA256
+            xdtOuterPatchBytes = [int64]$env:XDT_OUTER_PATCH_BYTES
+            xdtInnerPatchSha256 = $env:XDT_INNER_PATCH_SHA256
+            xdtInnerPatchBytes = [int64]$env:XDT_INNER_PATCH_BYTES
+            xdtPackageVersion = "3.1.0"
+            xdtSourceCommit = $env:XDT_SOURCE_COMMIT
+            xdtSourceTree = $env:XDT_SOURCE_TREE
+            xdtLicenseBlob = $env:XDT_LICENSE_BLOB
+            xdtLicenseSha256 = $env:XDT_LICENSE_SHA256
+            xdtUpstreamNoticePresent = $false
             runnerImage = $env:ImageOS
             runnerImageVersion = $env:ImageVersion
             msbuildVersion = $msbuildVersion
@@ -943,15 +1012,15 @@ jobs:
             dependencyInventorySha256 = $dependencyInventorySha256
             reviewedDependencyInventorySha256 = $env:REVIEWED_DEPENDENCY_INVENTORY_SHA256
             mergeInputInventorySha256 = $mergeInputInventorySha256
-            reviewedMergeInputInventorySha256 = $env:REVIEWED_MERGE_INPUT_INVENTORY_SHA256
+            reviewedMergeInputInventorySha256 = $lockedMergeInputInventorySha256
             compilerDeterministic = $true
             compilerPathMap = "source checkout root => /_/squirrel"
             compilerDebugSymbols = $false
             compilerDebugType = "None"
             binaryBytes = $sizes[0]
             binarySha256 = $hashes[0]
-            reviewedBinaryBytes = [int64]$env:REVIEWED_UPDATER_BYTES
-            reviewedBinarySha256 = $env:REVIEWED_UPDATER_SHA256
+            reviewedBinaryBytes = $lockedBinaryBytes
+            reviewedBinarySha256 = $lockedBinarySha256
             productVersion = $versionInfo.ProductVersion
             fileVersion = $versionInfo.FileVersion
             repeatability = "same-job byte equality across two path-mapped source trees, isolated NuGet caches, deterministic compiler inputs, and the reviewed deterministic merge tool"
@@ -962,14 +1031,15 @@ jobs:
             (($provenance | ConvertTo-Json -Depth 4) + "`n"),
             [Text.UTF8Encoding]::new($false)
           )
+          "receipt-mode=$receiptMode" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "binary-sha256=$($hashes[0])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "binary-bytes=$($sizes[0])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          Write-Output "Rebuilt identical reviewed Squirrel updater bytes twice: SHA-256 $($hashes[0]), $($sizes[0]) bytes."
+          Write-Output "Rebuilt identical $receiptMode Squirrel updater candidate bytes twice: SHA-256 $($hashes[0]), $($sizes[0]) bytes."
 
-      - name: Upload reviewed updater and provenance
+      - name: Upload updater candidate and provenance
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: reviewed-squirrel-updater-${{ steps.build.outputs.binary-sha256 }}
-          path: ${{ runner.temp }}/reviewed-squirrel-updater/
+          name: squirrel-updater-${{ steps.build.outputs.receipt-mode }}-${{ steps.build.outputs.binary-sha256 }}
+          path: ${{ runner.temp }}/squirrel-updater-candidate/
           if-no-files-found: error
           retention-days: 7
