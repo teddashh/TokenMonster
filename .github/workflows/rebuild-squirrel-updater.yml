@@ -686,16 +686,16 @@ jobs:
             }
             $compile = $xdtTargets[0].Value.PSObject.Properties["compile"]
             $runtime = $xdtTargets[0].Value.PSObject.Properties["runtime"]
-            $compilePaths = if ($null -eq $compile) {
-              @()
-            } else {
-              @($compile.Value.PSObject.Properties.Name)
-            }
-            $runtimePaths = if ($null -eq $runtime) {
-              @()
-            } else {
-              @($runtime.Value.PSObject.Properties.Name)
-            }
+            $compilePaths = @(
+              if ($null -ne $compile) {
+                $compile.Value.PSObject.Properties.Name
+              }
+            )
+            $runtimePaths = @(
+              if ($null -ne $runtime) {
+                $runtime.Value.PSObject.Properties.Name
+              }
+            )
             if (
               $compilePaths.Count -ne 1 -or
               $compilePaths[0] -cne "lib/net40/Microsoft.Web.XmlTransform.dll" -or
