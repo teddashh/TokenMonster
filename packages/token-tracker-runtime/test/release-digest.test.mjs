@@ -80,6 +80,12 @@ const CLI_ZSTD_PREINSTALL = resolve(
   "preinstall-zstd.cjs",
 );
 const ZSTD_PACKAGE_PREFIX = "node_modules/@mongodb-js/zstd";
+const FORBIDDEN_RELEASE_DEVELOPMENT_PACKAGES = [
+  "@cloudflare/vite-plugin",
+  "miniflare",
+  "sharp",
+  "wrangler",
+];
 const UPSTREAM_ZSTD_MANIFEST = JSON.parse(
   await readFile(join(WORKSPACE_ZSTD_PACKAGE, "package.json"), "utf8"),
 );
@@ -203,6 +209,17 @@ async function fixture(entryName = "index.js", options = {}) {
   await mkdir(packageDirectory);
   const zstdDependency = options.zstdDependency ?? "2.0.1";
   const bundleDependencies = options.bundleDependencies ?? ["@mongodb-js/zstd"];
+  const releaseDependencies = options.releaseDependencies ?? {
+    "@mongodb-js/zstd": zstdDependency,
+  };
+  const releaseBundleDependencies =
+    options.releaseBundleDependencies ?? bundleDependencies;
+  const shrinkwrapRootDependencies =
+    options.shrinkwrapRootDependencies ?? {
+      "@mongodb-js/zstd": zstdDependency,
+    };
+  const shrinkwrapRootBundleDependencies =
+    options.shrinkwrapRootBundleDependencies ?? bundleDependencies;
   const releaseScripts = Object.prototype.hasOwnProperty.call(
     options,
     "releaseScripts",
@@ -212,8 +229,8 @@ async function fixture(entryName = "index.js", options = {}) {
   const releaseManifest = {
     name: "tokenmonster",
     version,
-    dependencies: { "@mongodb-js/zstd": zstdDependency },
-    bundleDependencies,
+    dependencies: releaseDependencies,
+    bundleDependencies: releaseBundleDependencies,
   };
   if (releaseScripts !== undefined) releaseManifest.scripts = releaseScripts;
   await writeFile(
@@ -335,8 +352,8 @@ async function fixture(entryName = "index.js", options = {}) {
       "": {
         name: "tokenmonster",
         version,
-        dependencies: { "@mongodb-js/zstd": zstdDependency },
-        bundleDependencies,
+        dependencies: shrinkwrapRootDependencies,
+        bundleDependencies: shrinkwrapRootBundleDependencies,
       },
       [ZSTD_PACKAGE_PREFIX]: zstdShrinkwrapEntry(
         options.zstdShrinkwrapOverrides,
@@ -346,6 +363,7 @@ async function fixture(entryName = "index.js", options = {}) {
         : {
             [options.additionalZstdShrinkwrapPath]: zstdShrinkwrapEntry(),
           }),
+      ...(options.additionalShrinkwrapPackages ?? {}),
     },
   };
   await writeFile(
@@ -505,6 +523,76 @@ describe("cross-platform release digest verifier", () => {
     await expect(verifyFixture(denied.directory)).rejects.toThrow(
       /forbidden binary asset/u,
     );
+  });
+
+  it.each(FORBIDDEN_RELEASE_DEVELOPMENT_PACKAGES)(
+    "rejects development-only package %s by name from every release surface",
+    async (packageName) => {
+      const expectedError = new RegExp(
+        `forbidden development-only package ${packageName.replace(
+          /[.*+?^${}()|[\]\\]/gu,
+          "\\$&",
+        )}`,
+        "u",
+      );
+      const dependencyVersion = "1.0.0";
+      const candidates = [
+        await fixture("index.js", {
+          releaseDependencies: {
+            "@mongodb-js/zstd": "2.0.1",
+            [packageName]: dependencyVersion,
+          },
+        }),
+        await fixture("index.js", {
+          releaseBundleDependencies: ["@mongodb-js/zstd", packageName],
+        }),
+        await fixture("index.js", {
+          shrinkwrapRootDependencies: {
+            "@mongodb-js/zstd": "2.0.1",
+            [packageName]: dependencyVersion,
+          },
+        }),
+        await fixture("index.js", {
+          shrinkwrapRootBundleDependencies: [
+            "@mongodb-js/zstd",
+            packageName,
+          ],
+        }),
+        await fixture("index.js", {
+          additionalShrinkwrapPackages: {
+            [`node_modules/${packageName}`]: { version: dependencyVersion },
+          },
+        }),
+      ];
+      for (const candidate of candidates) {
+        await expect(verifyFixture(candidate.directory)).rejects.toThrow(
+          expectedError,
+        );
+      }
+
+      expect(() =>
+        verifyPublicTarballEntries([
+          "package/",
+          `package/node_modules/${packageName}/index.js`,
+        ]),
+      ).toThrow(expectedError);
+    },
+  );
+
+  it("keeps package-name boundaries exact in the tar inventory allowlist", () => {
+    for (const packageName of [
+      "@cloudflare/vite-plugin-extra",
+      "miniflare-worker",
+      "sharpness",
+      "wrangler-tools",
+    ]) {
+      expect(() =>
+        verifyPublicTarballEntries([
+          "package/",
+          `package/node_modules/${packageName}/index.js`,
+        ]),
+      ).not.toThrow();
+    }
   });
 
   it("requires the fixed embedded starter inventory by default", async () => {

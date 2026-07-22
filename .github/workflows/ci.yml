@@ -678,15 +678,36 @@ jobs:
             exit 1
           fi
 
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
+      - name: Audit shipped root dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Capture and verify temporary development audit exception
+        shell: bash
+        run: |
+          mkdir -p release-evidence
+          audit_json="release-evidence/npm-audit-full.json"
+          audit_status_file="release-evidence/npm-audit-full-exit-status.txt"
+          exception_receipt="release-evidence/npm-audit-temporary-exception.json"
+
+          set +e
+          npm audit --json > "$audit_json"
+          audit_status=$?
+          set -e
+          printf '%s\n' "$audit_status" > "$audit_status_file"
+
+          node scripts/release/verify-temporary-dev-audit-exception.mjs \
+            --audit "$audit_json" \
+            --lock package-lock.json \
+            --web-package apps/web/package.json \
+            --audit-exit-status "$audit_status" \
+            | tee "$exception_receipt"
 
       - name: Generate release evidence
         run: |
           mkdir -p release-evidence
           # Release evidence covers shipped (production) dependencies. The
-          # separately verified direct packaging tools are dev-only and never
-          # enter the application runtime inventory.
+          # complete development audit and bounded exception receipt are
+          # retained above; those tools never enter the runtime inventory.
           npm sbom --sbom-format cyclonedx --omit dev > release-evidence/sbom.cdx.json
           npm pack --dry-run --json --workspaces > release-evidence/npm-pack-inventory.json
           LC_ALL=C find apps/web/dist apps/api/dist apps/companion/out/make packages/*/dist \
@@ -767,6 +788,29 @@ jobs:
 
       - name: Verify candidate digest and inventory
         run: node scripts/release/verify-release-digest.mjs dist-release --expected-version "$TOKENMONSTER_CLI_RELEASE_VERSION"
+
+      - name: Audit exact shipped candidate dependencies
+        shell: bash
+        run: |
+          tarballs=(dist-release/tokenmonster-*.tgz)
+          if [[ "${#tarballs[@]}" -ne 1 || ! -f "${tarballs[0]}" ]]; then
+            echo "Expected exactly one verified release tarball" >&2
+            exit 1
+          fi
+
+          audit_root="$RUNNER_TEMP/tokenmonster-exact-candidate-audit"
+          if [[ -e "$audit_root" ]]; then
+            echo "Exact candidate audit directory already exists" >&2
+            exit 1
+          fi
+          mkdir "$audit_root"
+          tar -xzf "${tarballs[0]}" -C "$audit_root"
+          test -f "$audit_root/package/package.json"
+          test -f "$audit_root/package/npm-shrinkwrap.json"
+          (
+            cd "$audit_root/package"
+            npm audit --package-lock-only --omit=dev --audit-level=high
+          )
 
       - name: Upload immutable candidate bytes
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

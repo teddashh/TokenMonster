@@ -297,6 +297,94 @@ describe("release workflow publication policy", () => {
     expect(candidate).not.toContain("derive-companion-release-version.mjs");
   });
 
+  it("blocks on shipped dependencies and narrowly verifies the temporary development audit exception", () => {
+    const verification = job("verify");
+    const shippedAudit = step(
+      verification,
+      "Audit shipped root dependencies",
+    );
+    const developmentAudit = step(
+      verification,
+      "Capture and verify temporary development audit exception",
+    );
+    const evidence = step(verification, "Generate release evidence");
+    const upload = step(verification, "Upload immutable release evidence");
+
+    expect(shippedAudit).toContain(
+      "npm audit --omit=dev --audit-level=high",
+    );
+    expect(shippedAudit).not.toContain("set +e");
+    expect(shippedAudit).not.toContain("|| true");
+
+    expect(developmentAudit).toContain(
+      'audit_json="release-evidence/npm-audit-full.json"',
+    );
+    expect(developmentAudit).toContain(
+      'audit_status_file="release-evidence/npm-audit-full-exit-status.txt"',
+    );
+    expect(developmentAudit).toContain(
+      'exception_receipt="release-evidence/npm-audit-temporary-exception.json"',
+    );
+    expect(developmentAudit).toContain(
+      'npm audit --json > "$audit_json"',
+    );
+    expect(developmentAudit).toContain("audit_status=$?");
+    expect(developmentAudit).toContain(
+      'printf \'%s\\n\' "$audit_status" > "$audit_status_file"',
+    );
+    expect(developmentAudit).toContain(
+      "node scripts/release/verify-temporary-dev-audit-exception.mjs",
+    );
+    expect(developmentAudit).toContain('--audit "$audit_json"');
+    expect(developmentAudit).toContain("--lock package-lock.json");
+    expect(developmentAudit).toContain(
+      "--web-package apps/web/package.json",
+    );
+    expect(developmentAudit).toContain(
+      '--audit-exit-status "$audit_status"',
+    );
+    expect(developmentAudit).toContain('| tee "$exception_receipt"');
+    expect(occurrences(developmentAudit, "set +e")).toBe(1);
+    expect(occurrences(developmentAudit, "set -e")).toBe(1);
+    expect(developmentAudit).not.toContain("|| true");
+    expect(upload).toContain("release-evidence/");
+    expect(verification.indexOf(shippedAudit)).toBeLessThan(
+      verification.indexOf(developmentAudit),
+    );
+    expect(verification.indexOf(developmentAudit)).toBeLessThan(
+      verification.indexOf(evidence),
+    );
+    expect(verification.indexOf(evidence)).toBeLessThan(
+      verification.indexOf(upload),
+    );
+  });
+
+  it("audits the exact verified tarball production lock before candidate upload", () => {
+    const candidate = job("release-candidate");
+    const build = step(candidate, "Build release artifact");
+    const digest = step(candidate, "Verify candidate digest and inventory");
+    const audit = step(candidate, "Audit exact shipped candidate dependencies");
+    const upload = step(candidate, "Upload immutable candidate bytes");
+
+    expect(audit).toContain("tarballs=(dist-release/tokenmonster-*.tgz)");
+    expect(audit).toContain(
+      'audit_root="$RUNNER_TEMP/tokenmonster-exact-candidate-audit"',
+    );
+    expect(audit).toContain('tar -xzf "${tarballs[0]}" -C "$audit_root"');
+    expect(audit).toContain(
+      'test -f "$audit_root/package/npm-shrinkwrap.json"',
+    );
+    expect(audit).toContain('cd "$audit_root/package"');
+    expect(audit).toContain(
+      "npm audit --package-lock-only --omit=dev --audit-level=high",
+    );
+    expect(audit).not.toContain("|| true");
+    expect(audit).not.toContain("set +e");
+    expect(candidate.indexOf(build)).toBeLessThan(candidate.indexOf(digest));
+    expect(candidate.indexOf(digest)).toBeLessThan(candidate.indexOf(audit));
+    expect(candidate.indexOf(audit)).toBeLessThan(candidate.indexOf(upload));
+  });
+
   it("authenticates one all-platform zstd set before scripted installs", () => {
     const authentication = job("zstd-native-prebuilds");
     const audit = step(

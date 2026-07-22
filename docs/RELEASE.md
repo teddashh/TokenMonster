@@ -173,6 +173,39 @@ repository. This lane does not publish an npm package or update feed, so
 installation and upgrades are manual. A fix after rc.17 must use a new version
 such as rc.18; rc.17 is never rebuilt in place.
 
+##### Current rc.17 dependency-audit boundary
+
+As of 2026-07-21, a complete root `npm audit --json` exits `1` and reports four
+high-severity dependency records. They are one exact development-only advisory
+graph from the two direct `apps/web` development tools. Its lock edges are:
+
+- `@cloudflare/vite-plugin@1.45.0 -> miniflare@4.20260710.0`
+- `@cloudflare/vite-plugin@1.45.0 -> wrangler@4.111.0`
+- `wrangler@4.111.0 -> miniflare@4.20260710.0 -> sharp@0.34.5`
+
+The underlying advisory is `GHSA-f88m-g3jw-g9cj`; npm also reports the two
+direct tools and `miniflare` as affected dependents, producing the four records.
+These packages are not in the CLI tarball's production closure. Root
+`npm audit --omit=dev --audit-level=high` and
+`npm audit --package-lock-only --omit=dev --audit-level=high` from the exact
+extracted rc.17 tarball both report zero vulnerabilities.
+
+This is a bounded development-tool exception, not a general audit waiver. CI
+retains the complete audit JSON, its exit status, and the verifier receipt in
+`release-evidence/`; the exact lock, direct development declarations, advisory
+graph, and status are checked by
+`scripts/release/verify-temporary-dev-audit-exception.mjs`. The verifier uses
+the real clock and the exception expires at `2026-07-29T00:00:00.000Z`. Any
+graph drift, different audit result, or expired clock fails the release gate.
+After building and digest-verifying the candidate, CI separately extracts that
+exact tgz under the runner's temporary directory and runs the production-only
+lock audit there before uploading the candidate bytes.
+
+This exception does not make a public release eligible. The reviewed Squirrel
+updater's Microsoft.Web.Xdt redistribution and notice review, signing, and the
+other public-release gates remain closed; do not create or push a public `v*`
+tag from rc.17.
+
 A version-tag run deliberately narrows the installer matrix to Windows and
 requires signed mode. It decodes the bounded PFX secret into the runner's
 temporary directory, verifies every signable PE except the single raw-policy-

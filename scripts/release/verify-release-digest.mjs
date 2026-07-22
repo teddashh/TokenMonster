@@ -76,6 +76,15 @@ const ZSTD_POLICY_ENTRY =
 const ZSTD_VERIFIER_ENTRY =
   "package/node_modules/@tokenmonster/token-tracker-runtime/dist/zstd-native-verifier.js";
 const NPM_REGISTRY_PREFIX = "https://registry.npmjs.org/";
+const FORBIDDEN_RELEASE_DEVELOPMENT_PACKAGES = Object.freeze([
+  "@cloudflare/vite-plugin",
+  "miniflare",
+  "sharp",
+  "wrangler",
+]);
+const FORBIDDEN_RELEASE_DEVELOPMENT_PACKAGE_NAMES = new Set(
+  FORBIDDEN_RELEASE_DEVELOPMENT_PACKAGES,
+);
 const CHECKSUM_PATTERN =
   /^([0-9a-f]{64})  (tokenmonster-[0-9A-Za-z.-]+\.tgz)\n$/u;
 const TRUSTED_ASSET_SLOT_SOURCE_ROOT = fileURLToPath(
@@ -128,6 +137,48 @@ function exactJson(left, right) {
     );
   }
   return left === right;
+}
+
+function rejectForbiddenReleaseDevelopmentPackage(packageName, label) {
+  if (FORBIDDEN_RELEASE_DEVELOPMENT_PACKAGE_NAMES.has(packageName)) {
+    fail(`${label} contains forbidden development-only package ${packageName}`);
+  }
+}
+
+function rejectForbiddenReleaseDevelopmentDependencies(value, label) {
+  const packageNames = Array.isArray(value)
+    ? value
+    : isPlainRecord(value)
+      ? Object.keys(value)
+      : [];
+  for (const packageName of packageNames) {
+    rejectForbiddenReleaseDevelopmentPackage(packageName, label);
+  }
+}
+
+function forbiddenReleaseDevelopmentPackageFromNodeModulesPath(path) {
+  if (typeof path !== "string") return null;
+  for (const packageName of FORBIDDEN_RELEASE_DEVELOPMENT_PACKAGES) {
+    const marker = `node_modules/${packageName}`;
+    let offset = path.indexOf(marker);
+    while (offset !== -1) {
+      const beforeIsBoundary = offset === 0 || path[offset - 1] === "/";
+      const afterOffset = offset + marker.length;
+      const afterIsBoundary =
+        afterOffset === path.length || path[afterOffset] === "/";
+      if (beforeIsBoundary && afterIsBoundary) return packageName;
+      offset = path.indexOf(marker, offset + 1);
+    }
+  }
+  return null;
+}
+
+function rejectForbiddenReleaseDevelopmentPackagePath(path, label) {
+  const packageName =
+    forbiddenReleaseDevelopmentPackageFromNodeModulesPath(path);
+  if (packageName !== null) {
+    fail(`${label} contains forbidden development-only package ${packageName}`);
+  }
 }
 
 function verifyExactRegistryDependencyPins(
@@ -338,6 +389,10 @@ export function verifyPublicTarballEntries(entries) {
   const seen = new Set();
   const portableEntries = new Map();
   for (const entry of entries) {
+    rejectForbiddenReleaseDevelopmentPackagePath(
+      entry,
+      "release tarball inventory",
+    );
     try {
       requirePublicTarEntry(entry);
     } catch (error) {
@@ -640,6 +695,14 @@ function verifyReleaseManifest(tarballBytes, tarballName, expectedVersion) {
   ) {
     fail("release package manifest has an unexpected package name");
   }
+  rejectForbiddenReleaseDevelopmentDependencies(
+    manifest.dependencies,
+    "release package manifest dependencies",
+  );
+  rejectForbiddenReleaseDevelopmentDependencies(
+    manifest.bundleDependencies,
+    "release package manifest bundleDependencies",
+  );
   let version;
   try {
     version = requireCanonicalCliVersion(manifest.version);
@@ -829,7 +892,23 @@ function verifyReleaseZstdBundle(
   ) {
     fail("release npm shrinkwrap has an invalid root identity");
   }
+  for (const lockPath of Object.keys(shrinkwrap.packages)) {
+    rejectForbiddenReleaseDevelopmentPackagePath(
+      lockPath,
+      "release npm shrinkwrap package paths",
+    );
+  }
   const shrinkwrapRoot = shrinkwrap.packages[""];
+  if (isPlainRecord(shrinkwrapRoot)) {
+    rejectForbiddenReleaseDevelopmentDependencies(
+      shrinkwrapRoot.dependencies,
+      "release npm shrinkwrap root dependencies",
+    );
+    rejectForbiddenReleaseDevelopmentDependencies(
+      shrinkwrapRoot.bundleDependencies,
+      "release npm shrinkwrap root bundleDependencies",
+    );
+  }
   if (
     !isPlainRecord(shrinkwrapRoot) ||
     !isPlainRecord(shrinkwrapRoot.dependencies) ||
