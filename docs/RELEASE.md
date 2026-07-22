@@ -134,6 +134,7 @@ After the exact reviewed commit is on `main`, trigger only this bounded lane:
 gh workflow run ci.yml --ref main \
   -f platforms=all \
   -f rebuild_squirrel_updater=false \
+  -f squirrel_updater_receipt_mode=locked \
   -f publish_internal_rc17=true
 ```
 

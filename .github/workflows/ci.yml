@@ -951,15 +951,11 @@ jobs:
             --arg version "$INTERNAL_RELEASE_VERSION" \
             --arg tag "$INTERNAL_RELEASE_TAG" \
             --arg sourceCommit "$GITHUB_SHA" \
-            --arg workflowRunId "$GITHUB_RUN_ID" \
-            --arg workflowRunAttempt "$GITHUB_RUN_ATTEMPT" \
             '{
               schemaVersion: 1,
               version: $version,
               tag: $tag,
               sourceCommit: $sourceCommit,
-              workflowRunId: $workflowRunId,
-              workflowRunAttempt: $workflowRunAttempt,
               releaseMode: "unsigned-internal-cli",
               distribution: "private-github-prerelease",
               publicChannelsPromoted: false,
