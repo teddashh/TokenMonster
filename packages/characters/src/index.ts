@@ -11,3 +11,4 @@ export * from "./letter-wardrobe.js";
 export * from "./progression.js";
 export * from "./progression-store.js";
 export * from "./approved-manifest.js";
+export * from "./embedded-starter-assets.js";

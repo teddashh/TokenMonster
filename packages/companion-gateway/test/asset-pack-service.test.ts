@@ -27,6 +27,12 @@ import {
 
 const temporaryDirectories: string[] = [];
 const CRASHED_OWNER_ID = "30000000-0000-4000-8000-000000000003";
+const BASE_MANIFEST: AssetManifest = Object.freeze({
+  schemaVersion: "1",
+  generatedAt: "2026-07-18T11:00:00.000Z",
+  characters: [],
+  voice: [],
+});
 
 afterEach(async () => {
   await Promise.all(
@@ -230,7 +236,7 @@ describe("player-controlled fixed asset pack service", () => {
     expect(setActiveManifest).not.toHaveBeenCalled();
   });
 
-  it("transitions in one session from letter to verified doll and back to letter", async () => {
+  it("overrides embedded base assets with the complete pack and restores them on revoke", async () => {
     const local = await paths();
     let cacheComplete = false;
     const activations: Array<AssetManifest | null> = [];
@@ -249,6 +255,7 @@ describe("player-controlled fixed asset pack service", () => {
     const service = createAssetPackService(
       {
         configuration: approvedConfiguration(),
+        fallbackManifest: BASE_MANIFEST,
         ...local,
         setActiveManifest: (manifest) => activations.push(manifest),
       },
@@ -279,7 +286,11 @@ describe("player-controlled fixed asset pack service", () => {
       consented: false,
       enabled: false,
     });
-    expect(activations).toEqual([null, expect.any(Object), null]);
+    expect(activations).toEqual([
+      BASE_MANIFEST,
+      expect.any(Object),
+      BASE_MANIFEST,
+    ]);
     expect(install).toHaveBeenCalledTimes(1);
     expect(removeCache).toHaveBeenCalledTimes(2);
     expect(
@@ -512,6 +523,39 @@ describe("player-controlled fixed asset pack service", () => {
       setActiveManifest.mock.calls.every(([manifest]) => manifest === null),
     ).toBe(true);
     expect(JSON.stringify(service.getStatus())).not.toContain("private");
+  });
+
+  it("restores embedded base assets after a failed complete-pack download", async () => {
+    const local = await paths();
+    const setActiveManifest = vi.fn();
+    const service = createAssetPackService(
+      {
+        configuration: approvedConfiguration(),
+        fallbackManifest: BASE_MANIFEST,
+        ...local,
+        setActiveManifest,
+      },
+      {
+        recoverCache: noOpRecoverCache,
+        install: vi.fn(async () => {
+          throw new Error("network unavailable");
+        }),
+        cacheIsComplete: vi.fn(async () => false),
+        removeCache: vi.fn(async () => undefined),
+      },
+    );
+
+    await service.initialize();
+    await expect(service.setEnabled(true)).resolves.toMatchObject({
+      phase: "available",
+      enabled: false,
+      lastError: "download-failed",
+    });
+    expect(setActiveManifest).toHaveBeenLastCalledWith(BASE_MANIFEST);
+    expect(setActiveManifest.mock.calls.map(([manifest]) => manifest)).toEqual([
+      BASE_MANIFEST,
+      BASE_MANIFEST,
+    ]);
   });
 
   it("does not activate when an installer returns before the full cache verifies", async () => {

@@ -82,6 +82,10 @@ describe("companion static assets", () => {
     expect(html).toContain("data-asset-pack-revoke");
     expect(html).toContain("一次下載完整固定素材包");
     expect(html).toContain("不會傳送你的用量、目前角色、解鎖狀態或服裝選擇");
+    expect(html).toContain(
+      "內建四位元祖角色的基本服裝圖像與文字不受影響",
+    );
+    expect(html).toContain("取消啟用並清除下載素材");
     expect(html).toContain("data-character-profile");
     expect(html).toContain("data-profile-reason-list");
     expect(html).toContain("今日默契");
@@ -217,6 +221,11 @@ describe("companion static assets", () => {
       'const CHARACTER_ASSET_PACK_STATUS_ENDPOINT = "/api/characters/assets"',
     );
     expect(js).toContain("不會自動重試");
+    expect(js).toContain(
+      "內建四位元祖角色的基本服裝圖像與文字仍可使用",
+    );
+    expect(js).toContain("移除只會刪除下載的完整素材");
+    expect(js).not.toContain("回到字母模式");
     expect(js).toMatch(/imageFallback\.reset\(\);\s*await pollCharacters\(\);/u);
     expect(js).toContain('const USAGE_QUOTA_API_ENDPOINT = "/api/usage/quota"');
     expect(js).toContain(

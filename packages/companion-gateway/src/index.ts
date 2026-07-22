@@ -25,7 +25,10 @@ export {
   CHARACTER_PROFILE_FILE,
   characterProfilePath,
 } from "./character-profile-service.js";
-export { getApprovedAssetPackConfiguration } from "@tokenmonster/characters";
+export {
+  getApprovedAssetPackConfiguration,
+  getEmbeddedStarterAssetConfiguration,
+} from "@tokenmonster/characters";
 export type {
   CompanionByokAvailability,
   CompanionByokChatErrorCode,
@@ -38,6 +41,7 @@ export type {
   CompanionByokPersistence,
   CompanionByokRequestErrorResponse,
   CompanionByokStatusResponse,
+  CompanionBaseAssets,
   CompanionContributionAvailability,
   CompanionContributionAction,
   CompanionContributionController,

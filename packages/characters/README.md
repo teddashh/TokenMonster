@@ -5,12 +5,12 @@ engine for TokenMonster.
 
 The starter-sister catalog has four stable IDs:
 
-| ID | Alias | Inspiration |
-| --- | --- | --- |
-| `chatgpt` | Aster | OpenAI ChatGPT-inspired |
-| `claude` | Cedar | Anthropic Claude-inspired |
-| `gemini` | Mira | Google Gemini-inspired |
-| `grok` | Rook | xAI Grok-inspired |
+| ID        | Alias | Inspiration               |
+| --------- | ----- | ------------------------- |
+| `chatgpt` | Aster | OpenAI ChatGPT-inspired   |
+| `claude`  | Cedar | Anthropic Claude-inspired |
+| `gemini`  | Mira  | Google Gemini-inspired    |
+| `grok`    | Rook  | xAI Grok-inspired         |
 
 Every entry is explicitly `provider-inspired` and
 `independent-unaffiliated`. The characters are fictional TokenMonster
@@ -25,8 +25,11 @@ fixed-pack verification/cache primitive used only by the gateway-owned
 explicit consent lifecycle. It remains absent from the main import. The
 repository's `packages/characters/ASSET_PACK.md` records its request contract,
 rights/descriptor gates, restart behavior, and revocation rules; that
-subpath and implementation are part of the release package, while the current
-generated authority remains `null` and therefore permits no request.
+subpath and implementation are part of the release package. The current three
+generated slots authorize the image-only release
+`ai-sister-images-11-2026.07.21` at reviewed origin `https://cdn.ted-h.com` and
+the generated exact pack path; they do not authorize any per-object request or
+voice asset.
 
 The companion progression roster is broader: 11 visible character IDs,
 including GLM as a friend. The progression-only `reserved` sentinel is not a
@@ -107,48 +110,78 @@ license must be decided before an external release.
 
 A code-native letter-character placeholder is always available. The legacy
 `resolveCharacterVisual` and `resolveCharacterVisualFromManifest` APIs always
-return that placeholder. `getApprovedAssetManifest()` reads the package's one
-generated authority slot, `src/approved-release-v2.json`; that slot is currently
-`null`, so every public entry point remains letter-only. A future non-null value
-must pass the strict schema-v2 rights/provenance contract before it is projected
-to the cache-serving runtime shape. No image or audio binary is copied into the
-npm package.
+return that placeholder. Release staging additionally places an exact built-in
+starter set beneath `dist/embedded-starter-assets/`: eight approved WebPs,
+415,470 bytes total, containing one avatar and one `tech` base outfit for each
+of ChatGPT, Claude, Gemini, and Grok. `getEmbeddedStarterAssetConfiguration()`
+validates that complete inventory, byte count, SHA-256, and WebP signature
+all-or-nothing; an ordinary source build has no staged raster directory and
+returns `null` instead of weakening the letter fallback. The package also
+compiles 168 original fixed text lines for those four starters: seven triggers,
+three variants, and the `zh-TW` and `en` locales. These lines are text, not
+prerecorded voice.
 
-The four entries currently pinned in
-[`asset-manifest.json`](asset-manifest.json) all remain blocked pending an
-explicit redistribution grant and brand review. No AI-Sister portrait binary is
-copied into this package. The manifest and its schema are repository-only audit
-records and are excluded from the package's release files. The historical
+`getApprovedAssetManifest()` reads the package's generated rights-authority
+slot, `src/approved-release-v2.json`.
+`getApprovedAssetPackConfiguration()` joins it with the generated
+`src/approved-asset-pack-descriptor-v1.json` and
+`src/approved-asset-pack-allowlist-v1.json` transport slots. All three are
+non-null and strictly cross-bound to image-only release
+`ai-sister-images-11-2026.07.21`: 891 image associations for 11 characters, 0
+voice associations, manifest canonical SHA-256
+`924c95cff70fac69f8622cecb499e7691a23e9d4c51e5a8c53dc9bbe2dd513e1`, and
+one 65,574,180-byte ZIP with SHA-256
+`b1bff7d70342006982f9a3dd5b06ecf9b86291fea01dd3caba8822a012e48bb7`.
+The complete 891-image pack is not copied into the npm tarball. Only the exact
+eight starter WebPs above are release-staged there; no audio binary is embedded.
+
+The four entries pinned in [`asset-manifest.json`](asset-manifest.json) remain
+historical schema-v1 candidate records and do not themselves grant rights.
+Their former `blocked` values are superseded for the current image release only
+by the structured v2 authority and its private approval evidence. Those legacy
+rows do not authorize or select the release-staged starter subset; the release
+policy cross-binds each of the eight exact bytes to the current v2 authority.
+The manifest and its schema are repository-only audit records and are excluded
+from the package's release files. The historical
 `src/approved-manifest.json` likewise contains schema-v1 integrity metadata,
 not public rights approval; release staging removes it and rejects every
-character runtime JSON except the exact v2 authority slot. Its historical name
-must not be treated as a legal or brand decision.
+character runtime JSON except the exact three generated release slots. Its
+historical name must not be treated as a legal or brand decision.
 
-Before any public asset release, every existing and new image/voice association
-must migrate to schema v2 (or later) with the complete structured provenance,
-grant/license scope, brand/content review, disclosure, and release fields in
-the technical specification. Existing schema-v1 rows are not grandfathered;
+Every new image or voice association must pass schema v2 (or later) with the
+complete structured provenance, grant/license scope, brand/content review,
+disclosure, and release fields in the technical specification. The 891 current
+image rows passed that gate. Existing schema-v1 rows are not grandfathered;
 source availability and a successful hash build are not approval.
 
 The broader AI-Sister roster, 20 wardrobe themes, pose vocabulary, layered
 candidate inventory, semantic action map, and planned delivery boundary are
 recorded in [`ai-sister-source-map.json`](ai-sister-source-map.json). That map
 and its schema are also repository-only and never compile into this package.
-After approval, pre-rendered versioned assets may remain on AI-Sister's
-Cloudflare R2/CDN under `tokenmonster/characters/v1`. The TokenMonster gateway
-still rejects per-object origins and accepts only `cdnBaseUrl: null`; selected-
-file requests would reveal local progression through their public hashes. Its
-separate fixed-pack consent path can make one state-independent request only
-when a rights-approved v2 authority, descriptor, and exact HTTPS allowlist all
-join successfully. Those transport constants currently remain null, so the UI
-control stays hidden and no public asset request is possible. Raw layered parts
+The approved pre-rendered image pack and manifest are published on AI-Sister's
+Cloudflare R2/CDN. The reviewed origin is `https://cdn.ted-h.com`; immutable
+paths remain below `/tokenmonster/characters/v1/` and are authorized only by
+the generated exact-path allowlist.
+
+The TokenMonster gateway still rejects per-object origins and accepts only
+`cdnBaseUrl: null`; selected-file requests would reveal local progression
+through their public hashes. Its separate fixed-pack consent path makes exactly
+one state-independent request after the player explicitly enables it. Default,
+no-consent, offline-without-cache, failed, and revoked states remain zero-GET:
+the four original starters use their release-embedded avatar, `tech` outfit,
+and bilingual text, while art outside that base uses the letter/silent fallback.
+A failed install or revocation returns to the same base set. Raw layered parts
 are not copied or downloaded.
 
 Voice playback is local-preference controlled and defaults off. The gateway
 exposes only bounded lines for unlocked characters, and shipping entry points
 play only hash-verified WAV cache hits. Trigger-selected network fetches are
-disabled. Voice requires a rights/content gate independent from the associated
-image and the same future fixed-pack privacy gate.
+disabled. The current pack contains no WAV. Owner approval for the historical
+50 cloned WAV files is stored privately, but those artifacts remain excluded
+because the required clone-consent/provenance chain, per-clip spoken-content
+review, and metadata-stripping evidence are incomplete. Voice therefore needs
+a new combined image + voice immutable release rather than a voice-only slot
+that would replace the current image authority.
 
 ## Monster-engine integration
 

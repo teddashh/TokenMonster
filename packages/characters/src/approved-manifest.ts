@@ -2,24 +2,29 @@ import type { AssetManifest } from "./asset-manifest.js";
 import embeddedApprovedReleaseV2 from "./approved-release-v2.json" with {
   type: "json",
 };
+import embeddedAssetPackAllowlistV1 from "./approved-asset-pack-allowlist-v1.json" with {
+  type: "json",
+};
+import embeddedAssetPackDescriptorV1 from "./approved-asset-pack-descriptor-v1.json" with {
+  type: "json",
+};
 import {
   resolveApprovedAssetAuthority,
   resolveApprovedAssetPackAuthority,
   type ApprovedAssetPackConfiguration,
 } from "./approved-authority.js";
-
-// These generated release constants deliberately stay null until the fixed
-// archive is published and its exact descriptor/origin have been reviewed.
-// Keeping them separate from the v2 rights authority prevents approved art by
-// itself from enabling transport.
-const embeddedAssetPackDescriptorV1: unknown = null;
-const embeddedAssetPackAllowlistV1: unknown = null;
+import {
+  installedEmbeddedStarterAssetDirectory,
+  loadEmbeddedStarterAssetConfiguration,
+  type EmbeddedStarterAssetConfiguration,
+} from "./embedded-starter-assets.js";
 
 /**
- * The generated JSON beside this module is the only embedded public authority
- * slot. It defaults to null, so public builds stay letter-only until a
- * schema-v2 release manifest has passed every rights and provenance gate.
- * Repository schema-v1 JSON is pipeline input only and is never consulted.
+ * The generated release JSON beside this module is the rights authority slot.
+ * A slot may be null only for an unconfigured fail-closed build; production
+ * release policy pins the reviewed non-null bytes after every rights and
+ * provenance gate passes. Repository schema-v1 JSON is pipeline input only
+ * and is never consulted.
  */
 export function getApprovedAssetManifest(): AssetManifest | null {
   return resolveApprovedAssetAuthority(embeddedApprovedReleaseV2);
@@ -34,4 +39,19 @@ export function getApprovedAssetPackConfiguration(): ApprovedAssetPackConfigurat
   );
 }
 
+/** Return the exact built-in starter set, or fail closed in source builds. */
+export function getEmbeddedStarterAssetConfiguration(): EmbeddedStarterAssetConfiguration | null {
+  const approved = getApprovedAssetManifest();
+  if (approved === null) return null;
+  try {
+    return loadEmbeddedStarterAssetConfiguration(
+      approved,
+      installedEmbeddedStarterAssetDirectory(),
+    );
+  } catch {
+    return null;
+  }
+}
+
 export type { ApprovedAssetPackConfiguration } from "./approved-authority.js";
+export type { EmbeddedStarterAssetConfiguration } from "./embedded-starter-assets.js";

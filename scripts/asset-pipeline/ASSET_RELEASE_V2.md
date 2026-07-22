@@ -73,9 +73,15 @@ spoken-content-review reference. There is deliberately no cloned-voice source
 type and no field for a transcript.
 
 `build-manifest.mjs` does not invent upstream evidence. On the controlled build
-host, `build-provenance.mjs` requires an exact `AssetSourceEvidenceBundleV1`
-and a private receipt root, re-hashes every receipt/source/output, proves the
-selected source set and step chains, and then emits `AssetBuildProvenanceV1`.
+host, `prepare-source-evidence.mjs` can derive the exact image source set from
+the integrity manifest and its sibling report, require an otherwise empty
+read-only staging bank, and create private mode-`0600` factual import receipts
+plus a strict `AssetSourceEvidenceBundleV1`. It requires caller-supplied safe
+inventory/repository IDs and an exact 40/64-hex source revision; it does not
+infer a revision, copy prompts, or assert rights. `build-provenance.mjs` then
+requires that exact evidence bundle and private receipt root, re-hashes every
+receipt/source/output, proves the selected source set and step chains, and
+emits `AssetBuildProvenanceV1`.
 Receipt contents stay private and are never parsed or copied into public
 provenance. Do not derive a fake Git revision for the untracked source bank: the
 repository revision identifies the reviewed source workflow, while the
@@ -90,7 +96,20 @@ auditor can verify the exact public provenance file independently while the
 fixed runtime pack remains limited to approved objects.
 
 Producing v2 does not enable runtime transport or authorize an upload by
-itself. Runtime remains cache-only. A separately reviewed, explicitly
-consented fixed-pack implementation must still prove that request set and
-ordering are independent of character, unlock, theme, pose, trigger, and local
-usage.
+itself. TokenMonster's separately reviewed runtime permits only one explicitly
+consented fixed-pack request whose set and ordering are independent of
+character, unlock, theme, pose, trigger, and local usage; it never performs
+per-object fetches.
+
+Release candidates also derive, rather than independently approve, an exact
+starter subset with `prepare-embedded-starter-release.mjs`. It contains eight
+WebPs／415,470 bytes: the avatar and `tech` outfit for each of ChatGPT, Claude,
+Gemini, and Grok. Release assembly cross-binds those associations to the full v2
+authority and verifies exact paths, byte lengths, SHA-256 digests, and WebP
+signatures before injecting them into the candidate tarball. Installed clients
+use those bytes with zero runtime GETs; a failed or revoked complete-pack state
+falls back to this base, while other missing art still uses the letter renderer.
+The four starters' 168 `zh-TW`/`en` fixed lines are compiled text rather than
+voice assets. Neither the embedded base nor the current 891-image,
+65,574,180-byte explicitly consented pack contains audio. These pipeline facts
+do not mean an application release has been published.

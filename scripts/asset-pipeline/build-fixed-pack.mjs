@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   link,
@@ -15,6 +14,8 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { crc32 } from "node:zlib";
+
+import { buildCharactersPackage } from "./build-characters-package.mjs";
 
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "../..");
 const MAX_JSON_BYTES = 16 * 1024 * 1024;
@@ -83,27 +84,6 @@ function parseArguments(argv) {
     if (options[key] === null) throw new Error(`${flag} is required`);
   }
   return options;
-}
-
-function buildCharactersPackage() {
-  const result = spawnSync(
-    process.execPath,
-    [
-      join(REPOSITORY_ROOT, "node_modules", "typescript", "bin", "tsc"),
-      "-p",
-      "tsconfig.build.json",
-    ],
-    {
-      cwd: join(REPOSITORY_ROOT, "packages", "characters"),
-      encoding: "utf8",
-      maxBuffer: 32 * 1024 * 1024,
-    },
-  );
-  if (result.status !== 0) {
-    throw new Error(
-      `Could not build @tokenmonster/characters: ${(result.stderr ?? result.stdout ?? "").trim()}`,
-    );
-  }
 }
 
 function isMissing(error) {
@@ -198,7 +178,8 @@ function assertMediaSignature(mediaType, bytes) {
     (mediaType === "image/png" && isPng) ||
     (mediaType === "image/webp" && isWebp) ||
     (mediaType === "audio/wav" && isWav);
-  if (!matches) throw new Error("object media signature does not match manifest");
+  if (!matches)
+    throw new Error("object media signature does not match manifest");
 }
 
 async function readVerifiedObject(assetRoot, expected) {
@@ -361,12 +342,18 @@ async function publishFile(temporaryPath, finalPath) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  if (options.releaseManifest === options.out || options.assetRoot === options.out) {
+  if (
+    options.releaseManifest === options.out ||
+    options.assetRoot === options.out
+  ) {
     throw new Error("--out must be distinct from every input");
   }
   await assertFreshOutput(options.out);
   await assertDirectory(options.assetRoot, "--asset-root");
-  await assertDirectory(join(options.assetRoot, "objects"), "objects directory");
+  await assertDirectory(
+    join(options.assetRoot, "objects"),
+    "objects directory",
+  );
   const releaseManifestInput = await readJsonFile(
     options.releaseManifest,
     "--release-manifest",
@@ -381,9 +368,8 @@ async function main() {
   );
   const releaseModule = await import(releaseModuleUrl.href);
   const packModule = await import(packModuleUrl.href);
-  const releaseManifest = releaseModule.AssetReleaseManifestV2Schema.parse(
-    releaseManifestInput,
-  );
+  const releaseManifest =
+    releaseModule.AssetReleaseManifestV2Schema.parse(releaseManifestInput);
   const outputs = expectedOutputs(releaseManifest);
   const extractedBytes = outputs.reduce(
     (total, output) => total + output.bytes,
@@ -447,7 +433,9 @@ async function main() {
     );
   } catch (error) {
     if (outputCreated) {
-      await rm(options.out, { recursive: true, force: true }).catch(() => undefined);
+      await rm(options.out, { recursive: true, force: true }).catch(
+        () => undefined,
+      );
     }
     throw error;
   }
@@ -466,7 +454,9 @@ main().catch((error) => {
         typeof issue?.message === "string" ? issue.message : "invalid value";
       return `${path || "input"}: ${message}`;
     });
-    console.error(`Fixed asset-pack validation failed:\n- ${messages.join("\n- ")}`);
+    console.error(
+      `Fixed asset-pack validation failed:\n- ${messages.join("\n- ")}`,
+    );
   } else {
     console.error(
       error instanceof Error ? error.message : "Fixed asset-pack build failed",

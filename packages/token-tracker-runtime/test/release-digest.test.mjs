@@ -12,7 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -24,10 +24,18 @@ import {
 import {
   portablePublicTarEntryKey,
   PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY,
+  PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRIES,
+  PUBLIC_ASSET_PACK_ALLOWLIST_ARCHIVE_ENTRY,
+  PUBLIC_ASSET_PACK_DESCRIPTOR_ARCHIVE_ENTRY,
+  PUBLIC_EMBEDDED_STARTER_ARCHIVE_ENTRIES,
+  PUBLIC_EMBEDDED_STARTER_ASSETS,
   PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRIES,
   PUBLIC_ZSTD_PREINSTALL_ARCHIVE_ENTRY,
   PUBLIC_ZSTD_PREINSTALL_COMMAND,
+  requireApprovedPublicAssetRelease,
+  requirePublicEmbeddedStarterAsset,
   requirePublicAssetAuthority,
+  requirePublicAssetReleaseSlots,
   requirePublicStagedFile,
   requirePublicTarEntry,
   requirePublicZstdPrebuildArchive,
@@ -76,6 +84,15 @@ const UPSTREAM_ZSTD_MANIFEST = JSON.parse(
   await readFile(join(WORKSPACE_ZSTD_PACKAGE, "package.json"), "utf8"),
 );
 const ZSTD_PREINSTALL_BOOTSTRAP = await readFile(CLI_ZSTD_PREINSTALL);
+const CHARACTER_SLOT_SOURCE_ROOT = resolve(
+  import.meta.dirname,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "characters",
+  "src",
+);
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -240,6 +257,24 @@ async function fixture(entryName = "index.js", options = {}) {
     await mkdir(dirname(additionalPath), { recursive: true });
     await writeFile(additionalPath, "additional fixture text\n");
   }
+  if (options.includeAssetSlots !== false) {
+    for (const archiveEntry of PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRIES) {
+      if ((options.omitAssetSlots ?? []).includes(archiveEntry)) continue;
+      const destination = join(
+        packageDirectory,
+        archiveEntry.slice("package/".length),
+      );
+      await mkdir(dirname(destination), { recursive: true });
+      const override = options.assetSlotOverrides?.[archiveEntry];
+      await writeFile(
+        destination,
+        override ??
+          (await readFile(
+            join(CHARACTER_SLOT_SOURCE_ROOT, basename(archiveEntry)),
+          )),
+      );
+    }
+  }
   if (options.includeZstdPolicy !== false) {
     const policyPath = join(packageDirectory, ZSTD_POLICY_ENTRY);
     await mkdir(dirname(policyPath), { recursive: true });
@@ -336,6 +371,9 @@ async function fixture(entryName = "index.js", options = {}) {
 
 function verifyFixture(directory, options = {}) {
   return verifyReleaseDigest(directory, {
+    // Unit fixtures contain no committed raster bytes. Production callers do
+    // not provide this override and must carry the exact reviewed starter set.
+    embeddedStarterAssets: [],
     zstdPolicy: TEST_ZSTD.policy,
     ...options,
   });
@@ -348,7 +386,7 @@ describe("cross-platform release digest verifier", () => {
       tarballName,
       bytes,
       sha256: digest,
-      entryCount: 31,
+      entryCount: 36,
       version: "0.1.0-rc.11",
     });
     await expect(
@@ -469,6 +507,15 @@ describe("cross-platform release digest verifier", () => {
     );
   });
 
+  it("requires the fixed embedded starter inventory by default", async () => {
+    const missing = await fixture();
+    await expect(
+      verifyReleaseDigest(missing.directory, {
+        zstdPolicy: TEST_ZSTD.policy,
+      }),
+    ).rejects.toThrow(/embedded starter asset inventory/u);
+  });
+
   it("allows only the exact reviewed zstd archives and bootstrap", () => {
     expect(PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRIES).toHaveLength(3);
     const platform = TEST_ZSTD.policy.platforms["linux-x64"];
@@ -559,6 +606,26 @@ describe("cross-platform release digest verifier", () => {
         duplicatePolicy,
       ),
     ).toThrow(/one entry/u);
+  });
+
+  it("allows only the eight hash-pinned embedded starter WebP paths", () => {
+    expect(PUBLIC_EMBEDDED_STARTER_ARCHIVE_ENTRIES).toHaveLength(8);
+    expect(PUBLIC_EMBEDDED_STARTER_ASSETS).toHaveLength(8);
+    for (const entry of PUBLIC_EMBEDDED_STARTER_ARCHIVE_ENTRIES) {
+      expect(requirePublicTarEntry(entry)).toBe(entry);
+    }
+    expect(() =>
+      requirePublicTarEntry(
+        "package/node_modules/@tokenmonster/characters/dist/embedded-starter-assets/objects/unreviewed.webp",
+      ),
+    ).toThrow(/forbidden binary asset/u);
+    const expected = PUBLIC_EMBEDDED_STARTER_ASSETS[0];
+    expect(() =>
+      requirePublicEmbeddedStarterAsset(
+        expected.archiveEntry,
+        Buffer.alloc(expected.bytes),
+      ),
+    ).toThrow(/bytes differ/u);
   });
 
   it("accepts the portable shapes used by the current public inventory", () => {
@@ -802,10 +869,12 @@ describe("cross-platform release digest verifier", () => {
     );
   });
 
-  it("allows only the one fixed character authority JSON path", async () => {
-    const exact = await fixture(
-      "node_modules/@tokenmonster/characters/dist/approved-release-v2.json",
-    );
+  it("allows only the three fixed character authority JSON paths", async () => {
+    for (const entry of PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRIES) {
+      expect(requirePublicTarEntry(entry)).toBe(entry);
+    }
+
+    const exact = await fixture();
     await expect(verifyFixture(exact.directory)).resolves.toBeDefined();
 
     const legacy = await fixture(
@@ -814,6 +883,39 @@ describe("cross-platform release digest verifier", () => {
     await expect(verifyFixture(legacy.directory)).rejects.toThrow(
       /non-authority character JSON/u,
     );
+  });
+
+  it("requires all three trusted asset slots with exact source bytes", async () => {
+    const missing = await fixture("index.js", {
+      includeAssetSlots: false,
+    });
+    await expect(verifyFixture(missing.directory)).rejects.toThrow(
+      /omits trusted asset slot/u,
+    );
+
+    const partial = await fixture("index.js", {
+      omitAssetSlots: [PUBLIC_ASSET_PACK_ALLOWLIST_ARCHIVE_ENTRY],
+    });
+    await expect(verifyFixture(partial.directory)).rejects.toThrow(
+      /omits trusted asset slot/u,
+    );
+
+    const tampered = await fixture("index.js", {
+      assetSlotOverrides: {
+        [PUBLIC_ASSET_PACK_DESCRIPTOR_ARCHIVE_ENTRY]: Buffer.from("null \n"),
+      },
+    });
+    await expect(verifyFixture(tampered.directory)).rejects.toThrow(
+      /differs from trusted source bytes/u,
+    );
+
+    expect(() =>
+      requireApprovedPublicAssetRelease({
+        releaseManifest: Buffer.from("null\n"),
+        descriptor: Buffer.from("null\n"),
+        allowlist: Buffer.from("null\n"),
+      }),
+    ).toThrow(/differs from the reviewed release policy/u);
   });
 
   it("rejects malformed and legacy authority content before staging", () => {
@@ -844,5 +946,90 @@ describe("cross-platform release digest verifier", () => {
         strictV2,
       ),
     ).toThrow(/strict v2 validation failed/u);
+  });
+
+  it("requires all three asset release slots to be null or strictly cross-bound", () => {
+    const nullSlot = Buffer.from("null\n");
+    const release = Buffer.from(
+      '{"schemaVersion":"2","releaseId":"valid-release"}\n',
+    );
+    const descriptor = Buffer.from(
+      '{"schemaVersion":"1","releaseId":"valid-release"}\n',
+    );
+    const allowlist = Buffer.from(
+      '{"schemaVersion":"1","releaseId":"valid-release"}\n',
+    );
+    const validators = {
+      validateReleaseV2: (value) => value,
+      validateDescriptorV1: (value) => value,
+      validateAllowlistV1: (value) => value,
+      validateBinding: ({
+        releaseManifest,
+        descriptor: candidateDescriptor,
+      }) => {
+        if (releaseManifest.releaseId !== candidateDescriptor.releaseId) {
+          throw new Error("strict cross-binding failed");
+        }
+      },
+    };
+
+    expect(
+      requirePublicAssetReleaseSlots(
+        {
+          releaseManifest: nullSlot,
+          descriptor: nullSlot,
+          allowlist: nullSlot,
+        },
+        validators,
+      ),
+    ).toBeNull();
+    expect(() =>
+      requirePublicAssetReleaseSlots(
+        { releaseManifest: release, descriptor: nullSlot, allowlist: nullSlot },
+        validators,
+      ),
+    ).toThrow(/all null or all configured/u);
+    expect(() =>
+      requirePublicAssetReleaseSlots(
+        {
+          releaseManifest: release,
+          descriptor: Buffer.from('{"schemaVersion":"2"}\n'),
+          allowlist,
+        },
+        validators,
+      ),
+    ).toThrow(/pack descriptor must be null or schema-v1/u);
+    expect(() =>
+      requirePublicAssetReleaseSlots(
+        { releaseManifest: release, descriptor, allowlist },
+        {
+          validateReleaseV2: validators.validateReleaseV2,
+          validateDescriptorV1: validators.validateDescriptorV1,
+          validateAllowlistV1: validators.validateAllowlistV1,
+        },
+      ),
+    ).toThrow(/strict cross-binding validation/u);
+    expect(
+      requirePublicAssetReleaseSlots(
+        { releaseManifest: release, descriptor, allowlist },
+        validators,
+      ),
+    ).toMatchObject({
+      releaseManifest: { releaseId: "valid-release" },
+      descriptor: { releaseId: "valid-release" },
+      allowlist: { releaseId: "valid-release" },
+    });
+    expect(() =>
+      requirePublicAssetReleaseSlots(
+        {
+          releaseManifest: release,
+          descriptor: Buffer.from(
+            '{"schemaVersion":"1","releaseId":"other-release"}\n',
+          ),
+          allowlist,
+        },
+        validators,
+      ),
+    ).toThrow(/strict cross-binding failed/u);
   });
 });

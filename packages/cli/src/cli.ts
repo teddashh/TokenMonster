@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   createCompanionGateway,
   getApprovedAssetPackConfiguration,
+  getEmbeddedStarterAssetConfiguration,
 } from "@tokenmonster/companion-gateway";
 import { getCompanionUiAssetDirectory } from "@tokenmonster/companion-ui";
 import { createMemorySecretSlot } from "@tokenmonster/secret-vault";
@@ -73,9 +74,9 @@ function installedPackageVersion(): string {
 // rewrites that manifest to the rc version, so --version cannot drift from the
 // artifact users actually installed.
 export const TOKENMONSTER_CLI_VERSION = installedPackageVersion();
-// Per-object asset acquisition stays disabled. A future non-null embedded
-// fixed-pack authority is exposed only through the gateway's explicit,
-// state-independent complete-pack consent control.
+// Per-object asset acquisition stays disabled. The embedded fixed-pack
+// authority is exposed only through the gateway's explicit, state-independent
+// complete-pack consent control.
 export const DEFAULT_CHARACTER_CDN_BASE_URL = null;
 
 const HELP = `TokenMonster
@@ -107,6 +108,7 @@ const defaultDependencies: TokenMonsterCliDependencies = Object.freeze({
   createAdapter: createTokenTrackerAdapter,
   createGateway: createCompanionGateway,
   getApprovedAssetPackConfiguration,
+  getEmbeddedStarterAssetConfiguration,
   getAssetDirectory: getCompanionUiAssetDirectory,
   // Node itself exposes no audited native keychain API. Platform launchers
   // inject a reviewed host explicitly; absence is default-off and zero-cloud.
@@ -173,6 +175,7 @@ function normalizeDependencies(
     typeof dependencies.createAdapter !== "function" ||
     typeof dependencies.createGateway !== "function" ||
     typeof dependencies.getApprovedAssetPackConfiguration !== "function" ||
+    typeof dependencies.getEmbeddedStarterAssetConfiguration !== "function" ||
     typeof dependencies.getAssetDirectory !== "function" ||
     typeof dependencies.getContributionCredentialHost !== "function" ||
     typeof dependencies.createContributionRuntime !== "function" ||
@@ -353,6 +356,7 @@ export async function runTokenMonster(
           assetDirectory: dependencies.getAssetDirectory(),
           characters: {
             manifest: null,
+            baseAssets: dependencies.getEmbeddedStarterAssetConfiguration(),
             assetPack: parsed.characterDownloads
               ? dependencies.getApprovedAssetPackConfiguration()
               : null,

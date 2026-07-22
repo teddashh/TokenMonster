@@ -6,7 +6,10 @@ import {
 import { z } from "zod";
 
 import { CharacterIdSchema, type CharacterId } from "./catalog.js";
-import { STARTER_CHARACTER_BY_PROVIDER_FAMILY } from "./starter-selection.js";
+import {
+  STARTER_BASE_THEME_ID,
+  STARTER_CHARACTER_BY_PROVIDER_FAMILY,
+} from "./starter-selection.js";
 
 export const PROGRESSION_SCHEMA_VERSION = "2" as const;
 
@@ -1135,26 +1138,39 @@ export function evaluateProgression(input: unknown): ProgressionState {
           ? character.unlockRule.threshold
           : 0;
       const threshold = Math.max(selectedThreshold, characterUnlockFloor);
-      const requirementMet = unlocked && signalValue >= threshold;
+      const starterBaseThemeSelectedAt =
+        theme.themeId === STARTER_BASE_THEME_ID &&
+        selection?.characterId === character.id
+          ? selection.selectedAt
+          : null;
+      const requirementMet =
+        unlocked &&
+        (starterBaseThemeSelectedAt !== null || signalValue >= threshold);
       const themeUnlockedAt = resolveUnlockedAt(
         itemUnlockKey("theme", character.id, theme.themeId),
         requirementMet,
-        parsed.evaluatedAt,
+        starterBaseThemeSelectedAt ?? parsed.evaluatedAt,
         parsed.persistedUnlockedAt,
       );
       const remaining = Math.max(0, threshold - signalValue);
-      const currentThemeProgress: UnlockProgress = {
-        value: unlocked ? ratio(signalValue, threshold) : 0,
-        explanation: !unlocked
-          ? `先解鎖 ${character.displayName}，才能解鎖服裝主題。`
-          : remaining === 0
-            ? wardrobeRule.signal === "provider-cumulative-total"
-              ? `本機 ${character.providerId} 已達第 ${effectiveIndex + 1} 階，解鎖 ${theme.themeId} 主題。`
-              : `本機總用量已達第 ${effectiveIndex + 1} 階，解鎖 ${theme.themeId} 主題。`
-            : wardrobeRule.signal === "provider-cumulative-total"
-              ? `已累積 ${formatCount(signalValue)} 個本機 ${character.providerId} token，再 ${formatCount(remaining)} 個即可解鎖 ${character.displayName} 的 ${theme.themeId} 主題。`
-              : `本機累積總用量已達 ${formatCount(signalValue)} tokens，再 ${formatCount(remaining)} tokens 即可解鎖 ${character.displayName} 的 ${theme.themeId} 主題。`,
-      };
+      const currentThemeProgress: UnlockProgress =
+        starterBaseThemeSelectedAt !== null
+          ? {
+              value: 1,
+              explanation: `${character.displayName} 是你選擇的起始角色，立即開放 ${STARTER_BASE_THEME_ID} 基本服裝。`,
+            }
+          : {
+              value: unlocked ? ratio(signalValue, threshold) : 0,
+              explanation: !unlocked
+                ? `先解鎖 ${character.displayName}，才能解鎖服裝主題。`
+                : remaining === 0
+                  ? wardrobeRule.signal === "provider-cumulative-total"
+                    ? `本機 ${character.providerId} 已達第 ${effectiveIndex + 1} 階，解鎖 ${theme.themeId} 主題。`
+                    : `本機總用量已達第 ${effectiveIndex + 1} 階，解鎖 ${theme.themeId} 主題。`
+                  : wardrobeRule.signal === "provider-cumulative-total"
+                    ? `已累積 ${formatCount(signalValue)} 個本機 ${character.providerId} token，再 ${formatCount(remaining)} 個即可解鎖 ${character.displayName} 的 ${theme.themeId} 主題。`
+                    : `本機累積總用量已達 ${formatCount(signalValue)} tokens，再 ${formatCount(remaining)} tokens 即可解鎖 ${character.displayName} 的 ${theme.themeId} 主題。`,
+            };
       const themeProgress = monotonicProgress(
         themeUnlockedAt,
         currentThemeProgress,

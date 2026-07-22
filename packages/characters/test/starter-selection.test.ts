@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  STARTER_BASE_THEME_ID,
   STARTER_CHARACTER_BY_PROVIDER_FAMILY,
   STARTER_PROVIDER_FAMILIES,
   selectStarterCharacter,
@@ -26,6 +27,7 @@ function totalsWithLeader(
 
 describe("starter character selection", () => {
   it("maps the four provider families to the four stable characters", () => {
+    expect(STARTER_BASE_THEME_ID).toBe("tech");
     expect(STARTER_PROVIDER_FAMILIES).toEqual([
       "openai",
       "anthropic",

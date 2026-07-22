@@ -83,10 +83,10 @@ export const ENGLISH_UI_COPY = Object.freeze({
   "刪除本機 OpenAI key": "Delete the local OpenAI key",
   完整角色圖素材包: "Complete character art pack",
   "正在確認本機素材。": "Checking local character assets.",
-  "啟用時會一次下載完整固定素材包。這個請求只取素材，不會傳送你的用量、目前角色、解鎖狀態或服裝選擇；之後可隨時移除並回到字母模式。":
-    "Enabling downloads the complete fixed asset pack once. The request fetches assets only and sends no usage, selected character, unlock state, or outfit choice. You can remove it and return to letter mode at any time.",
+  "啟用時會一次下載完整固定素材包。這個請求只取素材，不會傳送你的用量、目前角色、解鎖狀態或服裝選擇；之後可隨時移除下載的完整素材，內建四位元祖角色的基本服裝圖像與文字不受影響。":
+    "Enabling downloads the complete fixed asset pack once. The request fetches assets only and sends no usage, selected character, unlock state, or outfit choice. You can remove the downloaded full assets at any time; the built-in basic-outfit art and text for the four original starter characters are unaffected.",
   啟用完整角色圖: "Enable full character art",
-  取消啟用並清除素材: "Disable and remove assets",
+  取消啟用並清除下載素材: "Disable and remove downloaded assets",
   "這是受供應商產品啟發的虛構角色；TokenMonster 為獨立產品，未與該供應商合作、隸屬或獲其背書。":
     "These fictional characters are inspired by provider products. TokenMonster is independent and is not affiliated with or endorsed by those providers.",
   "這是受供應商產品啟發的虛構角色；TokenMonster":
@@ -309,31 +309,31 @@ export const ENGLISH_UI_COPY = Object.freeze({
     "Automatic checks are off. TokenMonster connects only when you check manually.",
 
   再按一次確認移除: "Press again to confirm removal",
-  "正在取得並驗證完整素材；完成前會維持字母模式。":
-    "Fetching and verifying the complete asset pack. Letter mode stays active until it is ready.",
+  "正在取得並驗證完整素材；完成前仍可使用內建四位元祖角色的基本服裝圖像與文字。":
+    "Fetching and verifying the complete asset pack. The built-in basic-outfit art and text for the four original starter characters remain available until it is ready.",
   "正在下載完整素材包…": "Downloading the complete asset pack…",
-  "移除後會立即回到字母模式；若確定要刪除本機素材，請再按一次。":
-    "Removing it returns to letter mode immediately. Press again to delete local assets.",
+  "移除只會刪除下載的完整素材；內建四位元祖角色的基本服裝圖像與文字會保留。若確定，請再按一次。":
+    "Removal deletes only the downloaded full assets. The built-in basic-outfit art and text for the four original starter characters remain. Press again to confirm.",
   "完整素材已驗證並保存在本機；角色圖現在可以離線顯示。":
     "The complete asset pack is verified and stored locally. Character art now works offline.",
   重新下載完整素材: "Download the complete assets again",
   再次清除殘留素材: "Remove remaining assets again",
-  "取消啟用會清除已下載的部分素材；若確定，請再按一次。":
-    "Disabling removes partially downloaded assets. Press again to confirm.",
-  "已立即回到字母模式，但本機停用設定沒有保存；請在重啟前再試一次。":
-    "Letter mode is active, but the local disabled setting was not saved. Try again before restarting.",
-  "你曾同意啟用，但本機素材不完整；不會自動重試。你可以重新取得完整包，或取消啟用並清除素材。":
-    "You previously enabled the pack, but local assets are incomplete. It will not retry automatically. Download the full pack again or disable and remove it.",
-  "已回到字母模式，但部分素材暫時無法移除。關閉正在使用圖片的程式後，可在這裡再次清除。":
-    "Letter mode is active, but some assets could not be removed. Close programs using the images and try again here.",
-  "這次下載或驗證沒有完成；仍維持字母模式，可以稍後再試。":
-    "Download or verification did not finish. Letter mode remains active; try again later.",
-  "本機素材空間暫時無法使用；仍維持字母模式。":
-    "Local asset storage is unavailable. Letter mode remains active.",
-  "本機啟用設定暫時無法保存；仍維持字母模式。":
-    "The local enable setting could not be saved. Letter mode remains active.",
-  "目前使用零下載的字母模式；只有你按下啟用後才會取得素材。":
-    "Zero-download letter mode is active. Assets are fetched only after you enable them.",
+  "取消啟用只會清除已下載的完整素材；內建四位元祖角色的基本服裝圖像與文字會保留。若確定，請再按一次。":
+    "Disabling removes only the downloaded full assets. The built-in basic-outfit art and text for the four original starter characters remain. Press again to confirm.",
+  "下載的完整素材已停用，內建四位元祖角色的基本服裝圖像與文字仍可使用，但本機停用設定沒有保存；請在重啟前再試一次。":
+    "Downloaded full assets are disabled and the built-in basic-outfit art and text for the four original starter characters remain available, but the local disabled setting was not saved. Try again before restarting.",
+  "你曾同意啟用，但本機完整素材不完整；不會自動重試。你可以重新取得完整包，或取消啟用並清除下載素材；內建四位元祖角色的基本服裝圖像與文字仍可使用。":
+    "You previously enabled the pack, but the local full assets are incomplete. It will not retry automatically. Download the full pack again or disable and remove the downloaded assets; the built-in basic-outfit art and text for the four original starter characters remain available.",
+  "內建四位元祖角色的基本服裝圖像與文字仍可使用，但部分下載素材暫時無法移除。關閉正在使用圖片的程式後，可在這裡再次清除。":
+    "The built-in basic-outfit art and text for the four original starter characters remain available, but some downloaded assets could not be removed. Close programs using the images and try again here.",
+  "這次下載或驗證沒有完成；內建四位元祖角色的基本服裝圖像與文字仍可使用，可以稍後再試。":
+    "Download or verification did not finish. The built-in basic-outfit art and text for the four original starter characters remain available; try again later.",
+  "本機完整素材空間暫時無法使用；內建四位元祖角色的基本服裝圖像與文字仍可使用。":
+    "Local full-asset storage is unavailable. The built-in basic-outfit art and text for the four original starter characters remain available.",
+  "本機啟用設定暫時無法保存；內建四位元祖角色的基本服裝圖像與文字仍可使用。":
+    "The local enable setting could not be saved. The built-in basic-outfit art and text for the four original starter characters remain available.",
+  "目前使用內建四位元祖角色的基本服裝圖像與文字；只有你按下啟用後才會下載完整素材。":
+    "The built-in basic-outfit art and text for the four original starter characters are active. The full assets download only after you enable them.",
   "沒有確認這次素材設定已套用；已顯示目前狀態，請再試一次。":
     "The asset setting was not confirmed. The current state is shown; try again.",
 
@@ -768,7 +768,7 @@ type DynamicRule = Readonly<{
 }>;
 
 const DYNAMIC_ENGLISH_RULES: readonly DynamicRule[] = Object.freeze([
-  { pattern: /^啟用時會一次下載約 (.+) 的完整固定素材包（(.+) bytes）。這個請求只取素材，不會傳送你的用量、目前角色、解鎖狀態或服裝選擇；之後可隨時移除並回到字母模式。$/u, replace: (size, bytes) => `Enabling downloads the complete fixed asset pack once (about ${size}; ${bytes} bytes). The request fetches assets only and sends no usage, selected character, unlock state, or outfit choice. You can remove it and return to letter mode at any time.` },
+  { pattern: /^啟用時會一次下載約 (.+) 的完整固定素材包（(.+) bytes）。這個請求只取素材，不會傳送你的用量、目前角色、解鎖狀態或服裝選擇；之後可隨時移除下載的完整素材，內建四位元祖角色的基本服裝圖像與文字不受影響。$/u, replace: (size, bytes) => `Enabling downloads the complete fixed asset pack once (about ${size}; ${bytes} bytes). The request fetches assets only and sends no usage, selected character, unlock state, or outfit choice. You can remove the downloaded full assets at any time; the built-in basic-outfit art and text for the four original starter characters are unaffected.` },
   { pattern: /^安靜時段 (.+)–(.+)$/u, replace: (start, end) => `Quiet hours ${start}–${end}` },
   { pattern: /^每天 (.+) 檢查本機摘要；(.+)。$/u, replace: (time, quiet) => `Check the local summary daily at ${time}; ${quiet}.` },
   { pattern: /^TokenMonster (.+) 已準備好安裝。$/u, replace: (version) => `TokenMonster ${version} is ready to install.` },

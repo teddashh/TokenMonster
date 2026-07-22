@@ -71,6 +71,8 @@ export interface AssetPackService {
 
 interface AssetPackServiceOptions {
   readonly configuration: ApprovedAssetPackConfiguration | null;
+  /** Manifest to restore whenever the optional complete pack is inactive. */
+  readonly fallbackManifest?: AssetManifest | null;
   readonly cacheDirectory: string;
   readonly progressionStorePath: string;
   readonly setActiveManifest: (manifest: AssetManifest | null) => void;
@@ -158,7 +160,7 @@ function isMissing(error: unknown): boolean {
   );
 }
 
-function mediaSignatureMatches(
+export function mediaSignatureMatches(
   mediaType: "image/webp" | "image/png" | "audio/wav",
   bytes: Uint8Array,
 ): boolean {
@@ -375,6 +377,16 @@ export function createAssetPackService(
 ): AssetPackService {
   validateServiceOptions(options);
   const configuration = normalizeAssetPackConfiguration(options.configuration);
+  let fallbackManifest: AssetManifest | null;
+  try {
+    fallbackManifest =
+      options.fallbackManifest === null ||
+      options.fallbackManifest === undefined
+        ? null
+        : parseAssetManifest(options.fallbackManifest);
+  } catch {
+    throw new Error("invalid asset pack service options");
+  }
   const stateFile = consentPath(options.progressionStorePath);
   let initialized = false;
   let closed = false;
@@ -404,7 +416,7 @@ export function createAssetPackService(
       status = unavailableStatus();
       return;
     }
-    options.setActiveManifest(null);
+    options.setActiveManifest(fallbackManifest);
     let localStateAvailable = true;
     try {
       consented = (await loadConsentState(stateFile, configuration.releaseId))
@@ -514,7 +526,7 @@ export function createAssetPackService(
     async setEnabled(enabled: boolean): Promise<CompanionAssetPackStatusResponse> {
       if (!enabled && configuration !== null) {
         activeInstall?.abort();
-        options.setActiveManifest(null);
+        options.setActiveManifest(fallbackManifest);
       }
       await serialize(async () => {
         await initializeInternal();
@@ -606,7 +618,7 @@ export function createAssetPackService(
             null,
           );
         } catch (error) {
-          options.setActiveManifest(null);
+          options.setActiveManifest(fallbackManifest);
           const interrupted =
             controller.signal.aborted ||
             (error instanceof AssetPackError &&

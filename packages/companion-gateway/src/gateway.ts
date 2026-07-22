@@ -1214,6 +1214,7 @@ export function createCompanionGateway(
   });
   const assetPackService = createAssetPackService({
     configuration: normalized.characters.assetPack,
+    fallbackManifest: normalized.characters.baseAssets?.manifest ?? null,
     cacheDirectory: normalized.characters.cacheDirectory,
     progressionStorePath: normalized.characters.progressionStorePath,
     setActiveManifest: (manifest) => characterService.setManifest(manifest),

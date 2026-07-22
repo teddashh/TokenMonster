@@ -26,17 +26,22 @@ import {
   selectTapLine,
   withManualSisterSelection,
   withProgressionEvaluation,
+  type ApprovedAssetPackConfiguration,
   type AssetManifest,
   type DailyProviderBucket,
   type LocalProgressionStore,
   type MonsterMood,
   type MonsterTrait,
+  type ObjectRef,
   type ProgressionState,
   type WardrobeThemeId,
 } from "@tokenmonster/characters";
 import type { TokenTrackerAdapter } from "@tokenmonster/token-tracker-adapter";
 
-import { normalizeAssetPackConfiguration } from "./asset-pack-service.js";
+import {
+  mediaSignatureMatches,
+  normalizeAssetPackConfiguration,
+} from "./asset-pack-service.js";
 import type {
   CompanionCharacter,
   CompanionCharacterInteractionResponse,
@@ -113,9 +118,16 @@ interface CharacterInteractionStore {
 
 interface NormalizedCharacterOptions {
   readonly manifest: AssetManifest | null;
-  readonly assetPack: ReturnType<typeof normalizeAssetPackConfiguration>;
+  readonly baseAssets: NormalizedBaseAssets | null;
+  readonly assetPack: ApprovedAssetPackConfiguration | null;
   readonly cacheDirectory: string;
   readonly progressionStorePath: string;
+}
+
+interface NormalizedBaseAssets {
+  readonly manifest: AssetManifest;
+  /** Returns a defensive copy so response consumers cannot mutate authority. */
+  readonly readObject: (path: string) => Buffer | null;
 }
 
 interface CharacterServiceOptions {
@@ -164,6 +176,117 @@ function isPlainRecord(value: unknown): value is Record<PropertyKey, unknown> {
   }
   const prototype = Object.getPrototypeOf(value) as unknown;
   return prototype === Object.prototype || prototype === null;
+}
+
+function ownDataValue(
+  value: Record<PropertyKey, unknown>,
+  key: PropertyKey,
+): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  if (descriptor === undefined || !("value" in descriptor)) {
+    throw new Error("invalid character configuration");
+  }
+  return descriptor.value;
+}
+
+function sameObjectRef(left: ObjectRef, right: ObjectRef): boolean {
+  return (
+    left.path === right.path &&
+    left.bytes === right.bytes &&
+    left.sha256 === right.sha256 &&
+    left.width === right.width &&
+    left.height === right.height
+  );
+}
+
+function manifestObjectRefs(
+  manifest: AssetManifest,
+): ReadonlyMap<string, ObjectRef> {
+  const refs = new Map<string, ObjectRef>();
+  const add = (ref: ObjectRef): void => {
+    const previous = refs.get(ref.path);
+    if (previous !== undefined && !sameObjectRef(previous, ref)) {
+      throw new Error("invalid character configuration");
+    }
+    refs.set(ref.path, ref);
+  };
+  for (const character of manifest.characters) {
+    add(character.avatar);
+    for (const theme of character.themes) {
+      add(theme.outfit);
+      for (const pose of Object.values(theme.poses)) {
+        if (pose !== undefined) add(pose);
+      }
+    }
+  }
+  for (const voice of manifest.voice) {
+    for (const line of voice.lines) add(line.object);
+  }
+  return refs;
+}
+
+function mediaTypeForObjectPath(
+  path: string,
+): "image/webp" | "image/png" | "audio/wav" {
+  if (path.endsWith(".webp")) return "image/webp";
+  if (path.endsWith(".png")) return "image/png";
+  return "audio/wav";
+}
+
+function normalizeBaseAssets(value: unknown): NormalizedBaseAssets | null {
+  if (value === null || value === undefined) return null;
+  if (
+    !isPlainRecord(value) ||
+    Reflect.ownKeys(value).length !== 2 ||
+    !Reflect.ownKeys(value).includes("manifest") ||
+    !Reflect.ownKeys(value).includes("objects")
+  ) {
+    throw new Error("invalid character configuration");
+  }
+
+  let manifest: AssetManifest;
+  try {
+    manifest = parseAssetManifest(ownDataValue(value, "manifest"));
+  } catch {
+    throw new Error("invalid character configuration");
+  }
+  const objectValue = ownDataValue(value, "objects");
+  if (!isPlainRecord(objectValue)) {
+    throw new Error("invalid character configuration");
+  }
+  const refs = manifestObjectRefs(manifest);
+  const keys = Reflect.ownKeys(objectValue);
+  if (
+    keys.length !== refs.size ||
+    keys.some((key) => typeof key !== "string" || !refs.has(key))
+  ) {
+    throw new Error("invalid character configuration");
+  }
+
+  const verified = new Map<string, Buffer>();
+  for (const [path, ref] of refs) {
+    const bytesValue = ownDataValue(objectValue, path);
+    if (!(bytesValue instanceof Uint8Array)) {
+      throw new Error("invalid character configuration");
+    }
+    const bytes = Buffer.from(bytesValue);
+    if (
+      bytes.byteLength !== ref.bytes ||
+      createHash("sha256").update(bytes).digest("hex") !== ref.sha256 ||
+      !mediaSignatureMatches(mediaTypeForObjectPath(path), bytes)
+    ) {
+      throw new Error("invalid character configuration");
+    }
+    verified.set(path, bytes);
+  }
+
+  return Object.freeze({
+    manifest,
+    readObject: (path: string): Buffer | null => {
+      const bytes = verified.get(path);
+      return bytes === undefined ? null : Buffer.from(bytes);
+    },
+  });
 }
 
 function isRosterId(value: unknown): value is RosterId {
@@ -570,21 +693,26 @@ function characterDto(
   progression: ProgressionState,
   manifest: AssetManifest | null,
   preferences: CharacterPreferences,
-  forceLetterMode: boolean,
 ): CompanionCharacter {
   const status = progression.characters.find(
     (character) => character.characterId === characterId,
   )!;
-  const assets = forceLetterMode
-    ? undefined
-    : manifest?.characters.find(
-        (character) => character.characterId === characterId,
-      );
-  const preferredThemeId = preferences.activeThemeByCharacter[characterId];
-  const preferredTheme = status.themes.find(
-    (theme) => theme.themeId === preferredThemeId && theme.unlocked,
+  const assets = manifest?.characters.find(
+    (character) => character.characterId === characterId,
   );
-  const firstUnlockedTheme = status.themes.find((theme) => theme.unlocked);
+  const preferredThemeId = preferences.activeThemeByCharacter[characterId];
+  const themeHasActiveAssets = (themeId: WardrobeThemeId): boolean =>
+    assets === undefined ||
+    assets.themes.some((theme) => theme.themeId === themeId);
+  const preferredTheme = status.themes.find(
+    (theme) =>
+      theme.themeId === preferredThemeId &&
+      theme.unlocked &&
+      themeHasActiveAssets(theme.themeId),
+  );
+  const firstUnlockedTheme = status.themes.find(
+    (theme) => theme.unlocked && themeHasActiveAssets(theme.themeId),
+  );
   const activeThemeId =
     preferredTheme?.themeId ?? firstUnlockedTheme?.themeId ?? null;
   const activeAssetTheme = assets?.themes.find(
@@ -608,9 +736,18 @@ function characterDto(
     (entry) => entry.characterId === characterId,
   );
   const starterPersona = starterPersonaDto(characterId);
+  const mayShowAvatarWithoutTheme =
+    activeThemeId === null &&
+    (status.unlocked ||
+      (starterPersona !== null && progression.selection === null));
 
   let visual: CompanionCharacter["visual"];
-  if (assets === undefined || activeAssetTheme === undefined) {
+  // A clean-install starter has no unlocked wardrobe yet, but the reviewed
+  // avatar is still the identity shown on the four-choice onboarding sheet.
+  if (
+    assets === undefined ||
+    (!mayShowAvatarWithoutTheme && activeAssetTheme === undefined)
+  ) {
     const [glyph, defaultBackground, defaultForeground, defaultAccent] =
       LETTER_VISUALS[characterId];
     const activeLetterTheme = LETTER_WARDROBE_CATALOG.find(
@@ -720,8 +857,17 @@ function assetIsUnlocked(
     const character = progression.characters.find(
       (candidate) => candidate.characterId === characterAssets.characterId,
     );
+    // Starter avatars are selection UI, not wardrobe rewards. Expose only the
+    // avatar during the explicit first-choice state; themes remain lock-gated.
+    if (
+      characterAssets.avatar.path === objectPath &&
+      (character?.unlocked === true ||
+        (progression.selection === null &&
+          isSisterId(characterAssets.characterId)))
+    ) {
+      return true;
+    }
     if (character?.unlocked !== true) continue;
-    if (characterAssets.avatar.path === objectPath) return true;
     for (const theme of characterAssets.themes) {
       const themeStatus = character.themes.find(
         (candidate) => candidate.themeId === theme.themeId,
@@ -753,7 +899,7 @@ export function createCharacterService(
   options: CharacterServiceOptions,
 ): CharacterService {
   const { adapter, characters, clock } = options;
-  let activeManifest = characters.manifest;
+  let activeManifest = characters.baseAssets?.manifest ?? characters.manifest;
   const progressionOptions = Object.freeze({
     path: characters.progressionStorePath,
   });
@@ -920,7 +1066,7 @@ export function createCharacterService(
       const generatedAt = clock().toISOString();
       let progression: ProgressionState;
       let preferences: CharacterPreferences;
-      let forceLetterMode = false;
+      let displayManifest = activeManifest;
       try {
         [progression, preferences] = await Promise.all([
           loadEvaluated().then((state) => state.progression),
@@ -929,7 +1075,11 @@ export function createCharacterService(
       } catch {
         progression = fallbackProgression(generatedAt);
         preferences = emptyPreferences();
-        forceLetterMode = true;
+        // A progression failure must never reveal the consented full pack or
+        // infer prior unlocks. The reviewed built-in starter projection is
+        // safe to show with the empty fallback state, though: it exposes only
+        // the four onboarding avatars while wardrobe assets remain locked.
+        displayManifest = characters.baseAssets?.manifest ?? null;
       }
       const resolvedSelection = resolveCharacterSelection(
         progression,
@@ -949,13 +1099,7 @@ export function createCharacterService(
         selection,
         voiceEnabled: true,
         characters: CHARACTER_ROSTER_IDS.map((characterId) =>
-          characterDto(
-            characterId,
-            progression,
-            activeManifest,
-            preferences,
-            forceLetterMode,
-          ),
+          characterDto(characterId, progression, displayManifest, preferences),
         ),
       };
     },
@@ -1254,13 +1398,29 @@ export function createCharacterService(
         return Object.freeze({ status: 404 });
       }
       const sha256 = match[1]!;
+      const objectPath = `objects/${fileName}`;
+      const embeddedBody = characters.baseAssets?.readObject(objectPath);
       try {
-        const progression = await getStateForAsset();
-        if (!assetIsUnlocked(fileName, manifest, progression)) {
+        let authorizationManifest = manifest;
+        let progression: ProgressionState;
+        try {
+          progression = await getStateForAsset();
+        } catch {
+          if (embeddedBody === null || characters.baseAssets === null) {
+            throw new Error("progression unavailable");
+          }
+          // Fail closed to the embedded projection. With an empty progression
+          // only the four starter-selection avatars pass assetIsUnlocked; the
+          // built-in outfits and every full-pack object remain inaccessible.
+          authorizationManifest = characters.baseAssets.manifest;
+          progression = fallbackProgression(clock().toISOString());
+        }
+        if (!assetIsUnlocked(fileName, authorizationManifest, progression)) {
           return Object.freeze({ status: 404 });
         }
         const cachePath = join(characters.cacheDirectory, fileName);
-        const body = await readVerifiedCache(cachePath, sha256);
+        const body =
+          embeddedBody ?? (await readVerifiedCache(cachePath, sha256));
         if (body === null) return Object.freeze({ status: 404 });
         const contentType =
           match[2] === "webp"
@@ -1285,6 +1445,7 @@ export function normalizeCharacterOptions(
 ): NormalizedCharacterOptions {
   const keys = new Set<PropertyKey>([
     "manifest",
+    "baseAssets",
     "assetPack",
     "cacheDirectory",
     "cdnBaseUrl",
@@ -1308,9 +1469,28 @@ export function normalizeCharacterOptions(
   } catch {
     throw new Error("invalid character configuration");
   }
-  let assetPack: ReturnType<typeof normalizeAssetPackConfiguration>;
+  let assetPack: ApprovedAssetPackConfiguration | null;
   try {
-    assetPack = normalizeAssetPackConfiguration(value["assetPack"]);
+    const normalizedAssetPack = normalizeAssetPackConfiguration(
+      value["assetPack"],
+    );
+    assetPack =
+      normalizedAssetPack === null
+        ? null
+        : Object.freeze({
+            releaseManifest: normalizedAssetPack.releaseManifest,
+            descriptor: normalizedAssetPack.descriptor,
+            allowlist: normalizedAssetPack.allowlist,
+          });
+  } catch {
+    throw new Error("invalid character configuration");
+  }
+  let baseAssets: NormalizedBaseAssets | null;
+  try {
+    const baseAssetsValue = Reflect.ownKeys(value).includes("baseAssets")
+      ? ownDataValue(value, "baseAssets")
+      : undefined;
+    baseAssets = normalizeBaseAssets(baseAssetsValue);
   } catch {
     throw new Error("invalid character configuration");
   }
@@ -1327,11 +1507,12 @@ export function normalizeCharacterOptions(
   if (value["cdnBaseUrl"] !== null) {
     throw new Error("invalid character configuration");
   }
-  if (manifest !== null && assetPack !== null) {
+  if (manifest !== null && (assetPack !== null || baseAssets !== null)) {
     throw new Error("invalid character configuration");
   }
   return Object.freeze({
     manifest,
+    baseAssets,
     assetPack,
     cacheDirectory,
     progressionStorePath,

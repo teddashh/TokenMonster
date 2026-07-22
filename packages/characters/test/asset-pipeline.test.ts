@@ -54,11 +54,13 @@ describe("asset pipeline", () => {
       const report = JSON.parse(
         await readFile(join(out, "report.json"), "utf8"),
       ) as {
+        builtAt: string;
         perPersona: { qwen: { avatarSource: string } };
         voice: { characters: number; lines: number; bytes: number };
       };
 
       expect(manifest.generatedAt).toBe("2023-11-14T22:13:20.000Z");
+      expect(report.builtAt).toBe(manifest.generatedAt);
       expect(manifest.characters).toHaveLength(1);
       expect(manifest.voice).toEqual([]);
       expect(manifest.characters[0]!.avatar).toMatchObject({
@@ -105,6 +107,10 @@ describe("asset pipeline", () => {
     const staleReceiptProvenancePath = join(
       fixtureRoot,
       "stale-receipt-build-provenance-v1.json",
+    );
+    const staleTimestampProvenancePath = join(
+      fixtureRoot,
+      "stale-timestamp-build-provenance-v1.json",
     );
     const incompleteEvidencePath = join(
       fixtureRoot,
@@ -180,6 +186,32 @@ describe("asset pipeline", () => {
       expect(JSON.stringify(parsed)).not.toMatch(
         /(?:prompt|\/home\/|[A-Z]:\\)/u,
       );
+
+      const reportPath = join(out, "report.json");
+      const originalReportBytes = await readFile(reportPath);
+      const staleTimestampReport = JSON.parse(
+        originalReportBytes.toString("utf8"),
+      ) as { builtAt: string };
+      staleTimestampReport.builtAt = "2026-07-21T12:00:01.000Z";
+      await writeFile(
+        reportPath,
+        `${JSON.stringify(staleTimestampReport, null, 2)}\n`,
+      );
+      const staleTimestamp = await runBuildProvenance(
+        bank,
+        join(out, "manifest.json"),
+        sourceEvidencePath,
+        receiptRoot,
+        staleTimestampProvenancePath,
+      );
+      expect(staleTimestamp.status).not.toBe(0);
+      expect(staleTimestamp.stderr).toContain(
+        "build timestamp does not match manifest.json",
+      );
+      await expect(readFile(staleTimestampProvenancePath)).rejects.toMatchObject(
+        { code: "ENOENT" },
+      );
+      await writeFile(reportPath, originalReportBytes);
 
       const unsafeEvidence = structuredClone(sourceEvidence) as unknown as {
         entries: Array<{

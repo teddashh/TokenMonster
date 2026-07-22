@@ -9,6 +9,129 @@ import {
 
 export const PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY =
   "package/node_modules/@tokenmonster/characters/dist/approved-release-v2.json";
+export const PUBLIC_ASSET_PACK_DESCRIPTOR_ARCHIVE_ENTRY =
+  "package/node_modules/@tokenmonster/characters/dist/approved-asset-pack-descriptor-v1.json";
+export const PUBLIC_ASSET_PACK_ALLOWLIST_ARCHIVE_ENTRY =
+  "package/node_modules/@tokenmonster/characters/dist/approved-asset-pack-allowlist-v1.json";
+export const PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRIES = Object.freeze([
+  PUBLIC_ASSET_PACK_ALLOWLIST_ARCHIVE_ENTRY,
+  PUBLIC_ASSET_PACK_DESCRIPTOR_ARCHIVE_ENTRY,
+  PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY,
+]);
+export const APPROVED_PUBLIC_ASSET_RELEASE = Object.freeze({
+  releaseId: "ai-sister-images-11-2026.07.21",
+  slotSha256: Object.freeze({
+    releaseManifest:
+      "bd83619ca9b3179b7b0e6a1a9c8048c2c44491d7faa40909b213a1dae9b8775f",
+    descriptor:
+      "73f9cd26a5a8dafb8d3dfcb52f8743f2ea6bbc41d8d8f95bf7d0acd9c21a547e",
+    allowlist:
+      "153a9f1ebeeadd59e7f2f4481a4231136b69d2278b6810d34e900501b25e52b2",
+  }),
+});
+export const PUBLIC_EMBEDDED_STARTER_SOURCE_PACK = Object.freeze({
+  url: "https://cdn.ted-h.com/tokenmonster/characters/v1/bootstrap/ai-sister-images-11-2026.07.21/99301d903406a5c800a0e6a258fc83ed48af522b3014e09fa1ff100fa6a6269b.zip",
+  bytes: 417_332,
+  sha256: "99301d903406a5c800a0e6a258fc83ed48af522b3014e09fa1ff100fa6a6269b",
+});
+const EMBEDDED_STARTER_ARCHIVE_PREFIX =
+  "package/node_modules/@tokenmonster/characters/dist/embedded-starter-assets/";
+export const PUBLIC_EMBEDDED_STARTER_ASSETS = Object.freeze(
+  [
+    {
+      characterId: "chatgpt",
+      kind: "outfit",
+      themeId: "tech",
+      objectPath:
+        "objects/0a725ec07f71ddd4366aaae352532dbd7978c5673119a1826628f8c2c5f70314.webp",
+      bytes: 63_198,
+      sha256:
+        "0a725ec07f71ddd4366aaae352532dbd7978c5673119a1826628f8c2c5f70314",
+    },
+    {
+      characterId: "chatgpt",
+      kind: "avatar",
+      objectPath:
+        "objects/2966f68a3e702c47a29d11c19b901a4d850a8914ec2b78252b617d757c04fca3.webp",
+      bytes: 17_722,
+      sha256:
+        "2966f68a3e702c47a29d11c19b901a4d850a8914ec2b78252b617d757c04fca3",
+    },
+    {
+      characterId: "grok",
+      kind: "avatar",
+      objectPath:
+        "objects/41377cc281b8f5685628da087f82055cbf7806949b33dcc19c8814240c3d4995.webp",
+      bytes: 15_012,
+      sha256:
+        "41377cc281b8f5685628da087f82055cbf7806949b33dcc19c8814240c3d4995",
+    },
+    {
+      characterId: "gemini",
+      kind: "outfit",
+      themeId: "tech",
+      objectPath:
+        "objects/539f8fb9d004e8047ab80e0d66ce5b97d733613e7d189d0fca95bb2c8c518012.webp",
+      bytes: 97_304,
+      sha256:
+        "539f8fb9d004e8047ab80e0d66ce5b97d733613e7d189d0fca95bb2c8c518012",
+    },
+    {
+      characterId: "grok",
+      kind: "outfit",
+      themeId: "tech",
+      objectPath:
+        "objects/6ac1e5a8dfd219cb1119ff06b723e9babdff64bd042e033d452d590ce2ed071b.webp",
+      bytes: 74_946,
+      sha256:
+        "6ac1e5a8dfd219cb1119ff06b723e9babdff64bd042e033d452d590ce2ed071b",
+    },
+    {
+      characterId: "gemini",
+      kind: "avatar",
+      objectPath:
+        "objects/c4fa29dbd7142705b3ef35477c86aa5372d6c66cc9ef6c5a3f7c55b2bac926ef.webp",
+      bytes: 19_898,
+      sha256:
+        "c4fa29dbd7142705b3ef35477c86aa5372d6c66cc9ef6c5a3f7c55b2bac926ef",
+    },
+    {
+      characterId: "claude",
+      kind: "avatar",
+      objectPath:
+        "objects/f4b50a1ffa8f717a2717bd14551c84a2258b4985e3e8b7f4b18d6008a660f2ae.webp",
+      bytes: 19_088,
+      sha256:
+        "f4b50a1ffa8f717a2717bd14551c84a2258b4985e3e8b7f4b18d6008a660f2ae",
+    },
+    {
+      characterId: "claude",
+      kind: "outfit",
+      themeId: "tech",
+      objectPath:
+        "objects/fa39c624f4b1263b90a665230491f238f5a24d6fc91e39de0f169c8351345c73.webp",
+      bytes: 108_302,
+      sha256:
+        "fa39c624f4b1263b90a665230491f238f5a24d6fc91e39de0f169c8351345c73",
+    },
+  ]
+    .map((asset) =>
+      Object.freeze({
+        ...asset,
+        archiveEntry: `${EMBEDDED_STARTER_ARCHIVE_PREFIX}${asset.objectPath}`,
+      }),
+    )
+    .sort((left, right) =>
+      left.archiveEntry < right.archiveEntry
+        ? -1
+        : left.archiveEntry > right.archiveEntry
+          ? 1
+          : 0,
+    ),
+);
+export const PUBLIC_EMBEDDED_STARTER_ARCHIVE_ENTRIES = Object.freeze(
+  PUBLIC_EMBEDDED_STARTER_ASSETS.map(({ archiveEntry }) => archiveEntry),
+);
 export const PUBLIC_ZSTD_PREINSTALL_ARCHIVE_ENTRY =
   "package/preinstall-zstd.cjs";
 export const PUBLIC_ZSTD_PREINSTALL_COMMAND = "node preinstall-zstd.cjs";
@@ -29,9 +152,15 @@ export const PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRIES = Object.freeze(
 const PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRY_SET = new Set(
   PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRIES,
 );
+const PUBLIC_EMBEDDED_STARTER_ASSET_BY_ENTRY = new Map(
+  PUBLIC_EMBEDDED_STARTER_ASSETS.map((asset) => [asset.archiveEntry, asset]),
+);
 
 const CHARACTERS_DIST_JSON_PREFIX =
   "package/node_modules/@tokenmonster/characters/dist/";
+const PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY_SET = new Set(
+  PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRIES,
+);
 
 const FORBIDDEN_PUBLIC_EXTENSIONS = new Set([
   ".7z",
@@ -139,7 +268,8 @@ export function requirePublicTarEntry(entry) {
   if (
     !directory &&
     FORBIDDEN_PUBLIC_EXTENSIONS.has(asciiLowercase(extname(path))) &&
-    !PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRY_SET.has(entry)
+    !PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRY_SET.has(entry) &&
+    !PUBLIC_EMBEDDED_STARTER_ASSET_BY_ENTRY.has(entry)
   ) {
     throw new Error(
       `Release tarball contains a forbidden binary asset: ${entry}`,
@@ -159,7 +289,7 @@ export function requirePublicTarEntry(entry) {
     !directory &&
     path.startsWith(CHARACTERS_DIST_JSON_PREFIX) &&
     asciiLowercase(extname(path)) === ".json" &&
-    path !== PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY
+    !PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY_SET.has(path)
   ) {
     throw new Error(
       `Release tarball contains a non-authority character JSON: ${entry}`,
@@ -183,6 +313,10 @@ export function requirePublicStagedFile(
     requirePublicZstdPrebuildArchive(entry, contents, policy);
     return entry;
   }
+  if (PUBLIC_EMBEDDED_STARTER_ASSET_BY_ENTRY.has(entry)) {
+    requirePublicEmbeddedStarterAsset(entry, contents);
+    return entry;
+  }
   if (entry === PUBLIC_ZSTD_PREINSTALL_ARCHIVE_ENTRY) {
     requirePublicZstdPreinstallBootstrap(entry, contents);
     return entry;
@@ -191,6 +325,26 @@ export function requirePublicStagedFile(
     throw new Error(
       `Release staging contains an unknown binary file: ${entry}`,
     );
+  }
+  return entry;
+}
+
+export function requirePublicEmbeddedStarterAsset(entry, contents) {
+  requirePublicTarEntry(entry);
+  const expected = PUBLIC_EMBEDDED_STARTER_ASSET_BY_ENTRY.get(entry);
+  if (expected === undefined || !(contents instanceof Uint8Array)) {
+    throw new Error("Release embedded starter asset is outside policy.");
+  }
+  if (contents.byteLength !== expected.bytes) {
+    throw new Error("Release embedded starter asset size differs from policy.");
+  }
+  const bytes = Buffer.from(contents);
+  if (
+    bytes.subarray(0, 4).toString("ascii") !== "RIFF" ||
+    bytes.subarray(8, 12).toString("ascii") !== "WEBP" ||
+    createHash("sha256").update(bytes).digest("hex") !== expected.sha256
+  ) {
+    throw new Error("Release embedded starter asset bytes differ from policy.");
   }
   return entry;
 }
@@ -277,4 +431,132 @@ export function requirePublicAssetAuthority(
     throw new Error("Release asset authority requires strict v2 validation.");
   }
   return validateReleaseV2(authority);
+}
+
+function requirePublicAssetPackSlot(
+  entry,
+  contents,
+  expectedEntry,
+  label,
+  validateV1,
+) {
+  requirePublicStagedFile(entry, contents);
+  if (entry !== expectedEntry) {
+    throw new Error(`Release asset ${label} must use its one fixed path.`);
+  }
+  if (contents.byteLength > 64 * 1024) {
+    throw new Error(`Release asset ${label} exceeds its size bound.`);
+  }
+
+  let value;
+  try {
+    value = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(contents),
+    );
+  } catch {
+    throw new Error(`Release asset ${label} must be valid UTF-8 JSON.`);
+  }
+  if (value === null) return null;
+  if (
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    value.schemaVersion !== "1"
+  ) {
+    throw new Error(`Release asset ${label} must be null or schema-v1.`);
+  }
+  if (typeof validateV1 !== "function") {
+    throw new Error(`Release asset ${label} requires strict v1 validation.`);
+  }
+  return validateV1(value);
+}
+
+export function requirePublicAssetPackDescriptor(
+  entry,
+  contents,
+  validateDescriptorV1,
+) {
+  return requirePublicAssetPackSlot(
+    entry,
+    contents,
+    PUBLIC_ASSET_PACK_DESCRIPTOR_ARCHIVE_ENTRY,
+    "pack descriptor",
+    validateDescriptorV1,
+  );
+}
+
+export function requirePublicAssetPackAllowlist(
+  entry,
+  contents,
+  validateAllowlistV1,
+) {
+  return requirePublicAssetPackSlot(
+    entry,
+    contents,
+    PUBLIC_ASSET_PACK_ALLOWLIST_ARCHIVE_ENTRY,
+    "pack allowlist",
+    validateAllowlistV1,
+  );
+}
+
+/**
+ * Validate the complete generated release slot set. A release may ship with
+ * all three slots null, or with all three strictly validated and bound. A
+ * partial configuration is a packaging error even though runtime resolution
+ * would independently fail closed.
+ */
+export function requirePublicAssetReleaseSlots(contents, validators) {
+  const releaseManifest = requirePublicAssetAuthority(
+    PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY,
+    contents.releaseManifest,
+    validators.validateReleaseV2,
+  );
+  const descriptor = requirePublicAssetPackDescriptor(
+    PUBLIC_ASSET_PACK_DESCRIPTOR_ARCHIVE_ENTRY,
+    contents.descriptor,
+    validators.validateDescriptorV1,
+  );
+  const allowlist = requirePublicAssetPackAllowlist(
+    PUBLIC_ASSET_PACK_ALLOWLIST_ARCHIVE_ENTRY,
+    contents.allowlist,
+    validators.validateAllowlistV1,
+  );
+  const configuredCount = [releaseManifest, descriptor, allowlist].filter(
+    (value) => value !== null,
+  ).length;
+  if (configuredCount === 0) return null;
+  if (configuredCount !== 3) {
+    throw new Error(
+      "Release asset authority, pack descriptor, and pack allowlist must be all null or all configured.",
+    );
+  }
+  if (typeof validators.validateBinding !== "function") {
+    throw new Error("Release asset slots require strict cross-binding validation.");
+  }
+  validators.validateBinding({ releaseManifest, descriptor, allowlist });
+  return Object.freeze({ releaseManifest, descriptor, allowlist });
+}
+
+/**
+ * Bind a production CLI artifact to one deliberately reviewed, non-null
+ * release slot set. Runtime parsing may remain fail-closed for all-null local
+ * builds, but a public production artifact must never silently regress to it.
+ */
+export function requireApprovedPublicAssetRelease(contents) {
+  const slots = [
+    ["release manifest", contents.releaseManifest, "releaseManifest"],
+    ["pack descriptor", contents.descriptor, "descriptor"],
+    ["pack allowlist", contents.allowlist, "allowlist"],
+  ];
+  for (const [label, bytes, key] of slots) {
+    if (!(bytes instanceof Uint8Array)) {
+      throw new Error(`Approved public asset ${label} must contain bytes.`);
+    }
+    const actualSha256 = createHash("sha256").update(bytes).digest("hex");
+    if (actualSha256 !== APPROVED_PUBLIC_ASSET_RELEASE.slotSha256[key]) {
+      throw new Error(
+        `Approved public asset ${label} differs from the reviewed release policy.`,
+      );
+    }
+  }
+  return APPROVED_PUBLIC_ASSET_RELEASE;
 }

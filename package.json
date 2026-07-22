@@ -20,6 +20,7 @@
     "make:companion:internal": "npm run make:internal --workspace @tokenmonster/companion",
     "make:companion:signed": "npm run make:signed --workspace @tokenmonster/companion",
     "package:companion:internal": "npm run package:internal --workspace @tokenmonster/companion",
+    "prepare:asset-release-slots": "node scripts/asset-pipeline/prepare-release-slots.mjs",
     "test": "node scripts/run-workspaces.mjs test",
     "typecheck": "node scripts/run-workspaces.mjs typecheck && tsc -p tsconfig.release-scripts.json",
     "verify:artifacts": "node scripts/verify-release-artifacts.mjs",

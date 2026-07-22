@@ -4,7 +4,7 @@
 the workspace without publishing any package to a registry.
 
 ```
-node scripts/release/build-release.mjs [--version <exact>] [--version-suffix rc.1] [--out <dir>] [--skip-build]
+node scripts/release/build-release.mjs [--version <exact>] [--version-suffix rc.1] [--out <dir>] [--embedded-starter-pack <zip>] [--skip-build]
 ```
 
 What it does:
@@ -27,26 +27,60 @@ What it does:
    have a public-registry `resolved` URL and SHA-512 integrity; missing,
    development-only, non-registry, peer-dependent, or version-drifted entries
    fail the build.
-5. Creates `dist-release/tokenmonster-<version>.tgz` with `tar` (the staging
+5. Obtains the exact pinned 417,332-byte starter source ZIP, either from the
+   immutable build-only bootstrap URL or the optional local
+   `--embedded-starter-pack` override, and verifies its SHA-256 and complete ZIP
+   inventory. It release-stages only eight WebPs under
+   `@tokenmonster/characters/dist/embedded-starter-assets/`: one avatar and one
+   `tech` outfit for ChatGPT, Claude, Gemini, and Grok, 415,470 extracted bytes.
+   This is a build input; installed clients do not request the bootstrap URL.
+6. Creates `dist-release/tokenmonster-<version>.tgz` with `tar` (the staging
    directory is already named `package/`, which is the layout npm expects) and
    writes `SHASUMS256.txt`.
 
-No image, audio, approved asset association, or other binary asset is inside
-the tarball. The characters package carries exactly one generated authority
-slot, `dist/approved-release-v2.json`, whose current value is `null`; staging
-removes the historical schema-v1 JSON, rejects any additional character JSON,
-and strictly validates any future non-null slot as schema v2. The shipped
-gateway and characters subpath implement the explicit-consent fixed-pack
-lifecycle, but no descriptor/origin is configured while that authority is
-null, so the UI stays hidden and the product makes zero asset requests. The
-gateway still exposes no per-object downloader; missing or revoked assets use
-letter mode or silence without network access.
+The tarball contains exactly those eight approved starter WebPs and no audio
+asset. The characters package also carries exactly three generated authority
+slots: `dist/approved-release-v2.json`,
+`dist/approved-asset-pack-descriptor-v1.json`, and
+`dist/approved-asset-pack-allowlist-v1.json`. All three are non-null and
+strictly cross-bound to image-only release `ai-sister-images-11-2026.07.21`,
+whose schema-v2 manifest contains 891 images for 11 characters and 0 voice.
+Its canonical manifest SHA-256 is
+`924c95cff70fac69f8622cecb499e7691a23e9d4c51e5a8c53dc9bbe2dd513e1`.
+Staging removes the historical schema-v1 JSON, rejects any additional character
+JSON, and accepts only either three null slots or three strictly validated,
+cross-bound authorities. For the non-null current set, the artifact verifier
+also requires all eight starter WebPs, their exact 415,470 total bytes, hashes,
+media signatures, paths, and associations, and rejects every other raster. The
+four starters' 168 `zh-TW`/`en` fixed text lines are compiled JavaScript copy,
+not voice assets.
+
+The shipped gateway and characters subpath implement the explicit-consent
+fixed-pack lifecycle. Default, no-consent, offline-without-cache, failed, and
+revoked states make zero runtime asset requests and use the embedded four-starter
+base; art outside that base uses letter mode or silence. An explicit enable
+action may make exactly one state-independent GET to
+`https://cdn.ted-h.com` for the 65,574,180-byte ZIP whose SHA-256 is
+`b1bff7d70342006982f9a3dd5b06ecf9b86291fea01dd3caba8822a012e48bb7`.
+That full pack contains 891 images. Failure or revocation returns to the base,
+and the gateway still exposes no per-object downloader. Neither the embedded
+base nor the complete image pack contains voice.
+
+Non-null slots must come byte-for-byte from
+`npm run prepare:asset-release-slots -- ...`, which consumes the approved
+manifest and fixed-pack builder descriptor, derives the exact allowlist path
+from that descriptor plus one reviewed HTTPS origin, and publishes only to a
+fresh output directory. Do not edit those generated files during promotion.
 The assembler rejects a stale build containing the former production CDN
 literal, `TOKENMONSTER_CHARACTER_CDN`, or removed downloader signatures,
 including with `--skip-build`, and rejects unsupported or symbolic staging
-entries. A future network path requires a separately reviewed, explicitly
-consented fixed pack whose request set is independent of local usage and
-progression.
+entries. Every later image or combined image + voice release requires a new,
+separately reviewed immutable pack whose request set is independent of local
+usage and progression. The historical 50 cloned WAV files are excluded from
+the current pack despite privately stored owner approval: their technical
+clone-consent/provenance, per-clip content-review, and metadata-stripping
+evidence remains incomplete, so they cannot be added without a new combined
+release identity and hashes.
 
 ## Desktop installers
 
@@ -69,30 +103,74 @@ maker directory as a seven-day GitHub Actions artifact named
 `tokenmonster-desktop-<os>`; no internal candidate is attached to a public
 GitHub Release.
 
-### Private internal test prerelease
+### Private internal test prereleases
 
-The one-shot `publish_internal_rc15` manual input exists so an owner can test
-the merged product on several machines without weakening the public release
-gate. It is accepted only from `main`, with all three runner platforms, the
-locked reviewed Squirrel rebuild, and the exact `0.1.0-rc.15` identity. A
-successful run publishes a **private, unsigned GitHub prerelease** under the
-isolated `internal/v0.1.0-rc.15` tag. That namespace does not match the public
-`v*` tag trigger and therefore cannot enter npm, R2/CDN, Worker, signing, or
-automatic-update promotion.
+#### Historical full rc.15 evidence
 
-The internal prerelease job waits for the full sidecar, desktop, repository,
-CLI, installer, and native smoke matrix. It accepts only the fixed Windows x64,
-macOS arm64, Linux x64, and CLI artifact inventory, records aggregate SHA-256
-digests plus the exact source commit, uploads to a draft, downloads every asset
-again for byte comparison, and only then exposes the prerelease. Reusing the
-version or tag with different bytes fails instead of overwriting it.
+The retired one-shot `publish_internal_rc15` lane published the already-fixed
+`internal/v0.1.0-rc.15` private unsigned prerelease. Its exact 11-file inventory
+contains the Windows x64 maker set, macOS arm64 DMG and ZIP, Linux x64 ZIP, CLI
+tarball, source receipt, and aggregate checksums. Windows is not
+Authenticode-signed; macOS is ad-hoc signed and not notarized. That immutable
+release remains useful as historical three-platform packaging evidence, but
+its legacy Electron artifacts do not contain the newer embedded starter base
+and must not be relabeled as rc.17. The rc.15 input is no longer active, and
+rc.15 is never rebuilt or overwritten.
+
+#### Current CLI-only rc.17 prerelease
+
+The one-shot `publish_internal_rc17` manual input exists so an owner can test
+the corrected CLI install on several machines without weakening the public
+release gate. It is accepted only from private `main`, with all three runner
+platforms selected, `rebuild_squirrel_updater=false`, and the exact
+`0.1.0-rc.17` identity. A successful run publishes a **private, unsigned,
+CLI-only GitHub prerelease** under the isolated `internal/v0.1.0-rc.17` tag.
+That namespace does not match the public `v*` tag trigger and therefore cannot
+enter npm, R2/CDN, Worker, signing, or automatic-update promotion.
+
+After the exact reviewed commit is on `main`, trigger only this bounded lane:
+
+```sh
+gh workflow run ci.yml --ref main \
+  -f platforms=all \
+  -f rebuild_squirrel_updater=false \
+  -f publish_internal_rc17=true
+```
+
+The job creates and binds `internal/v0.1.0-rc.17` itself. Do not push a public
+`v0.1.0-rc.17` tag for this internal test release.
+
+The job deliberately skips `Companion installers [package]`, downloads no
+desktop maker artifact, and waits for repository verification, sidecar
+compatibility, the exact CLI candidate, and installed-release smoke on Linux,
+macOS, and Windows. It uploads exactly four files:
+
+- `tokenmonster-0.1.0-rc.17.tgz`
+- `TokenMonster-cli-SHA256SUMS.txt`
+- `TokenMonster-internal-source-v1.json`
+- `TokenMonster-internal-SHA256SUMS.txt`
+
+The source receipt records `releaseMode: "unsigned-internal-cli"`, the exact
+source commit, and all three smoked platforms. The publication job first makes
+a draft, downloads and byte-compares all four assets, and only then exposes it
+as a prerelease with `latest=false`. Reusing the version or tag with different
+bytes fails instead of overwriting it.
+
+The CLI tarball contains ChatGPT, Claude, Gemini, and Grok avatars, their
+`tech` base outfits, and 168 `zh-TW`/`en` fixed text lines. No desktop installer
+is attached. The complete 891-image pack remains outside the tarball and is
+downloaded only after explicit consent. Download the tarball from the private
+release and install it manually:
+
+```sh
+npm install /path/to/tokenmonster-0.1.0-rc.17.tgz
+npx tokenmonster
+```
 
 Every test machine must be signed into GitHub with access to this private
-repository. Windows binaries are not Authenticode-signed and may trigger
-SmartScreen. The macOS application is ad-hoc signed but not notarized and may
-require right-clicking and choosing **Open**. This lane does not publish an npm
-package or update feed, so installation and upgrades are manual. A fix after
-rc.15 must use a new version such as rc.16; rc.15 is never rebuilt in place.
+repository. This lane does not publish an npm package or update feed, so
+installation and upgrades are manual. A fix after rc.17 must use a new version
+such as rc.18; rc.17 is never rebuilt in place.
 
 A version-tag run deliberately narrows the installer matrix to Windows and
 requires signed mode. It decodes the bounded PFX secret into the runner's

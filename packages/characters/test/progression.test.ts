@@ -259,6 +259,56 @@ describe("evaluateProgression", () => {
       unlocked: true,
       unlockedAt: "2026-07-15T08:00:00.000Z",
     });
+    expect(character(state, "claude").themes[0]).toMatchObject({
+      themeId: "tech",
+      unlocked: true,
+      unlockedAt: "2026-07-15T08:00:00.000Z",
+      progress: {
+        value: 1,
+        explanation:
+          "Claude 是你選擇的起始角色，立即開放 tech 基本服裝。",
+      },
+    });
+    expect(character(state, "claude").themes[1]).toMatchObject({
+      themeId: "finance",
+      unlocked: false,
+    });
+    expect(character(state, "chatgpt").themes[0]).toMatchObject({
+      themeId: "tech",
+      unlocked: false,
+    });
+  });
+
+  it("keeps a former starter's base theme unlocked after selection changes", () => {
+    const firstState = evaluateProgression(
+      input([], { selection: manualSelection("claude") }),
+    );
+    const persisted = withProgressionEvaluation(
+      createEmptyLocalProgressionStore(),
+      firstState,
+    );
+    const nextState = evaluateProgression(
+      input([], {
+        persistedUnlockedAt: persisted.unlockedAt,
+        selection: {
+          manualCharacterId: "chatgpt",
+          manualSelectedAt: "2026-07-16T10:00:00.000Z",
+          autoStarterCharacterId: null,
+          autoStarterSelectedAt: null,
+        },
+      }),
+    );
+
+    expect(character(nextState, "claude").themes[0]).toMatchObject({
+      themeId: "tech",
+      unlocked: true,
+      unlockedAt: "2026-07-15T08:00:00.000Z",
+    });
+    expect(character(nextState, "chatgpt").themes[0]).toMatchObject({
+      themeId: "tech",
+      unlocked: true,
+      unlockedAt: "2026-07-16T10:00:00.000Z",
+    });
   });
 
   it("supports single-provider heavy use without inventing provider breadth", () => {

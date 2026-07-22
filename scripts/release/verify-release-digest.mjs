@@ -8,11 +8,18 @@ import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRIES,
+  PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY,
+  PUBLIC_ASSET_PACK_ALLOWLIST_ARCHIVE_ENTRY,
+  PUBLIC_ASSET_PACK_DESCRIPTOR_ARCHIVE_ENTRY,
+  PUBLIC_EMBEDDED_STARTER_ASSETS,
   PUBLIC_ZSTD_PREBUILD_ARCHIVE_ENTRIES,
   PUBLIC_ZSTD_PREINSTALL_ARCHIVE_ENTRY,
   PUBLIC_ZSTD_PREINSTALL_BYTES,
   PUBLIC_ZSTD_PREINSTALL_COMMAND,
   portablePublicTarEntryKey,
+  requireApprovedPublicAssetRelease,
+  requirePublicEmbeddedStarterAsset,
   requirePublicTarEntry,
   requirePublicZstdPrebuildArchive,
   requirePublicZstdPreinstallBootstrap,
@@ -39,6 +46,8 @@ const MAX_ZSTD_POLICY_BYTES = 16 * 1_024;
 const MAX_ZSTD_VERIFIER_BYTES = 256 * 1_024;
 const MAX_ZSTD_MANIFEST_BYTES = 32 * 1_024;
 const MAX_LICENSE_BYTES = 64 * 1_024;
+const MAX_ASSET_AUTHORITY_BYTES = 32 * 1_024 * 1_024;
+const MAX_ASSET_PACK_SLOT_BYTES = 64 * 1_024;
 const ZSTD_PACKAGE_PREFIX = "package/node_modules/@mongodb-js/zstd/";
 const ZSTD_MANIFEST_ENTRY = `${ZSTD_PACKAGE_PREFIX}package.json`;
 const ZSTD_LICENSE_ENTRY = `${ZSTD_PACKAGE_PREFIX}LICENSE.md`;
@@ -69,6 +78,21 @@ const ZSTD_VERIFIER_ENTRY =
 const NPM_REGISTRY_PREFIX = "https://registry.npmjs.org/";
 const CHECKSUM_PATTERN =
   /^([0-9a-f]{64})  (tokenmonster-[0-9A-Za-z.-]+\.tgz)\n$/u;
+const TRUSTED_ASSET_SLOT_SOURCE_ROOT = fileURLToPath(
+  new URL("../../packages/characters/src/", import.meta.url),
+);
+const TRUSTED_ASSET_SLOTS = Object.freeze(
+  PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRIES.map((archiveEntry) =>
+    Object.freeze({
+      archiveEntry,
+      maximumBytes:
+        archiveEntry === PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY
+          ? MAX_ASSET_AUTHORITY_BYTES
+          : MAX_ASSET_PACK_SLOT_BYTES,
+      sourceFileName: basename(archiveEntry),
+    }),
+  ),
+);
 const VERIFIED_READ_FLAGS =
   fsConstants.O_RDONLY |
   (process.platform === "win32" ? 0 : (fsConstants.O_NOFOLLOW ?? 0));
@@ -287,12 +311,7 @@ function extractTarballEntry(tarballBytes, entry, maximumBytes, label) {
 }
 
 function extractTarballJson(tarballBytes, entry, maximumBytes, label) {
-  const bytes = extractTarballEntry(
-    tarballBytes,
-    entry,
-    maximumBytes,
-    label,
-  );
+  const bytes = extractTarballEntry(tarballBytes, entry, maximumBytes, label);
   let text;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -396,6 +415,171 @@ function verifyPublicTarballInventory(tarballBytes) {
     }
   }
   return verifyPublicTarballEntries(entries);
+}
+
+async function verifyReleaseAssetSlots(tarballBytes, inventory) {
+  if (
+    TRUSTED_ASSET_SLOTS.length !== 3 ||
+    new Set(TRUSTED_ASSET_SLOTS.map((slot) => slot.archiveEntry)).size !== 3 ||
+    !TRUSTED_ASSET_SLOTS.some(
+      (slot) => slot.archiveEntry === PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY,
+    ) ||
+    !TRUSTED_ASSET_SLOTS.some(
+      (slot) =>
+        slot.archiveEntry === PUBLIC_ASSET_PACK_DESCRIPTOR_ARCHIVE_ENTRY,
+    ) ||
+    !TRUSTED_ASSET_SLOTS.some(
+      (slot) => slot.archiveEntry === PUBLIC_ASSET_PACK_ALLOWLIST_ARCHIVE_ENTRY,
+    )
+  ) {
+    fail("trusted asset slot policy must contain exactly three fixed entries");
+  }
+  for (const slot of TRUSTED_ASSET_SLOTS) {
+    if (!inventory.has(slot.archiveEntry)) {
+      fail(`release tarball omits trusted asset slot: ${slot.archiveEntry}`);
+    }
+  }
+
+  const initialSourceRoot = await requirePhysicalDirectory(
+    TRUSTED_ASSET_SLOT_SOURCE_ROOT,
+    "trusted asset slot source root",
+  );
+  const slots = await Promise.all(
+    TRUSTED_ASSET_SLOTS.map(async (slot) => {
+      const sourcePath = join(initialSourceRoot.path, slot.sourceFileName);
+      const sourceBytes = await readBoundedPhysicalFile(
+        sourcePath,
+        slot.maximumBytes,
+        `trusted asset slot ${slot.sourceFileName}`,
+      );
+      const archiveBytes = extractTarballEntry(
+        tarballBytes,
+        slot.archiveEntry,
+        slot.maximumBytes,
+        `release asset slot ${slot.sourceFileName}`,
+      );
+      if (!archiveBytes.equals(sourceBytes)) {
+        fail(
+          `release asset slot differs from trusted source bytes: ${slot.sourceFileName}`,
+        );
+      }
+      return Object.freeze({ ...slot, sourceBytes, sourcePath });
+    }),
+  );
+  const slotBytesByArchiveEntry = new Map(
+    slots.map(({ archiveEntry, sourceBytes }) => [archiveEntry, sourceBytes]),
+  );
+  requireApprovedPublicAssetRelease({
+    releaseManifest: slotBytesByArchiveEntry.get(
+      PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY,
+    ),
+    descriptor: slotBytesByArchiveEntry.get(
+      PUBLIC_ASSET_PACK_DESCRIPTOR_ARCHIVE_ENTRY,
+    ),
+    allowlist: slotBytesByArchiveEntry.get(
+      PUBLIC_ASSET_PACK_ALLOWLIST_ARCHIVE_ENTRY,
+    ),
+  });
+  return Object.freeze({
+    rootMetadata: initialSourceRoot.metadata,
+    rootPath: initialSourceRoot.path,
+    slots: Object.freeze(slots),
+  });
+}
+
+async function verifyTrustedAssetSlotsUnchanged(initial) {
+  const finalSourceBytes = await Promise.all(
+    initial.slots.map((slot) =>
+      readBoundedPhysicalFile(
+        slot.sourcePath,
+        slot.maximumBytes,
+        `trusted asset slot ${slot.sourceFileName}`,
+      ),
+    ),
+  );
+  if (
+    finalSourceBytes.some(
+      (bytes, index) => !bytes.equals(initial.slots[index].sourceBytes),
+    )
+  ) {
+    fail("trusted asset slot source bytes changed during verification");
+  }
+  const finalSourceRoot = await requirePhysicalDirectory(
+    TRUSTED_ASSET_SLOT_SOURCE_ROOT,
+    "trusted asset slot source root",
+  );
+  if (
+    !samePlatformPath(initial.rootPath, finalSourceRoot.path) ||
+    !samePhysicalDirectory(initial.rootMetadata, finalSourceRoot.metadata)
+  ) {
+    fail("trusted asset slot source root changed during verification");
+  }
+}
+
+function verifyReleaseEmbeddedStarterAssets(
+  tarballBytes,
+  inventory,
+  trustedAssetSlots,
+  expectedAssets = PUBLIC_EMBEDDED_STARTER_ASSETS,
+) {
+  const prefix =
+    "package/node_modules/@tokenmonster/characters/dist/embedded-starter-assets/";
+  const actualFiles = [...inventory]
+    .filter((entry) => entry.startsWith(prefix) && !entry.endsWith("/"))
+    .sort();
+  const expectedFiles = expectedAssets
+    .map(({ archiveEntry }) => archiveEntry)
+    .sort();
+  if (!exactJson(actualFiles, expectedFiles)) {
+    fail("embedded starter asset inventory differs from its fixed policy");
+  }
+  const releaseSlot = trustedAssetSlots.slots.find(
+    (slot) => slot.archiveEntry === PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY,
+  );
+  let approvedRelease;
+  try {
+    approvedRelease = JSON.parse(releaseSlot.sourceBytes.toString("utf8"));
+  } catch {
+    fail("trusted approved asset release is not valid JSON");
+  }
+  if (!Array.isArray(approvedRelease.assets)) {
+    fail("trusted approved asset release has no asset inventory");
+  }
+  for (const expected of expectedAssets) {
+    const approved = approvedRelease.assets.filter(
+      (asset) => asset?.output?.path === expected.objectPath,
+    );
+    const association = approved[0]?.association;
+    const output = approved[0]?.output;
+    if (
+      approved.length !== 1 ||
+      association?.characterId !== expected.characterId ||
+      association?.kind !== expected.kind ||
+      (expected.kind === "outfit" &&
+        association?.themeId !== expected.themeId) ||
+      (expected.kind === "avatar" && "themeId" in association) ||
+      output?.bytes !== expected.bytes ||
+      output?.sha256 !== expected.sha256 ||
+      output?.media?.mediaType !== "image/webp"
+    ) {
+      fail("embedded starter asset differs from the approved release");
+    }
+    const contents = extractTarballEntry(
+      tarballBytes,
+      expected.archiveEntry,
+      expected.bytes,
+      `embedded starter asset ${expected.characterId}/${expected.kind}`,
+    );
+    try {
+      requirePublicEmbeddedStarterAsset(expected.archiveEntry, contents);
+    } catch (error) {
+      fail(
+        error instanceof Error
+          ? error.message
+          : "embedded starter asset is invalid",
+      );
+    }
+  }
 }
 
 function verifyReleaseZstdAuthority(
@@ -732,6 +916,16 @@ export async function verifyReleaseDigest(directory, options = {}) {
   const actualDigest = createHash("sha256").update(tarballBytes).digest("hex");
   if (actualDigest !== expectedDigest) fail("tarball SHA-256 differs");
   const inventory = verifyPublicTarballInventory(tarballBytes);
+  const trustedAssetSlots = await verifyReleaseAssetSlots(
+    tarballBytes,
+    inventory.entries,
+  );
+  verifyReleaseEmbeddedStarterAssets(
+    tarballBytes,
+    inventory.entries,
+    trustedAssetSlots,
+    options.embeddedStarterAssets ?? PUBLIC_EMBEDDED_STARTER_ASSETS,
+  );
   const policy = verifyReleaseZstdAuthority(
     tarballBytes,
     inventory.entries,
@@ -749,16 +943,8 @@ export async function verifyReleaseDigest(directory, options = {}) {
     policy,
   );
   const [finalChecksumBytes, finalTarballBytes] = await Promise.all([
-    readBoundedPhysicalFile(
-      checksumPath,
-      MAX_CHECKSUM_BYTES,
-      "SHASUMS256.txt",
-    ),
-    readBoundedPhysicalFile(
-      tarballPath,
-      MAX_TARBALL_BYTES,
-      "release tarball",
-    ),
+    readBoundedPhysicalFile(checksumPath, MAX_CHECKSUM_BYTES, "SHASUMS256.txt"),
+    readBoundedPhysicalFile(tarballPath, MAX_TARBALL_BYTES, "release tarball"),
   ]);
   if (
     !finalChecksumBytes.equals(checksumBytes) ||
@@ -766,6 +952,7 @@ export async function verifyReleaseDigest(directory, options = {}) {
   ) {
     fail("release inputs changed during verification");
   }
+  await verifyTrustedAssetSlotsUnchanged(trustedAssetSlots);
   const finalRoot = await requirePhysicalDirectory(
     requestedRoot,
     "release root",

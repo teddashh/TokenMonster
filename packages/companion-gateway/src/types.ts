@@ -215,11 +215,30 @@ export interface CompanionUiAssets {
   readonly scripts: Readonly<Record<string, string | Uint8Array>>;
 }
 
+/**
+ * Small, reviewed character subset shipped inside the lightweight runtime.
+ * Every manifest object must have one exact in-memory byte entry and the map
+ * must contain no unreferenced objects. The gateway copies and verifies these
+ * bytes during construction before any route can observe them.
+ */
+export interface CompanionBaseAssets {
+  readonly manifest: AssetManifest;
+  readonly objects: Readonly<Record<string, Uint8Array>>;
+}
+
 export interface CompanionCharacterOptions {
   readonly manifest: AssetManifest | null;
   /**
-   * Complete fixed-pack authority. Omission and null are both letter-only;
-   * production entry points pass the embedded fail-closed getter result.
+   * Optional cache-independent starter assets. These may coexist with the
+   * complete fixed pack: base assets remain local while the complete pack is
+   * still acquired only after explicit player consent.
+   */
+  readonly baseAssets?: CompanionBaseAssets | null;
+  /**
+   * Complete fixed-pack authority. Omission and null disable acquisition;
+   * rendering then uses validated base assets when present, otherwise the
+   * legacy manifest or letter mode. Production entry points pass the embedded
+   * fail-closed getter result.
    */
   readonly assetPack?: ApprovedAssetPackConfiguration | null;
   readonly cacheDirectory: string;

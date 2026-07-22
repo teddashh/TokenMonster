@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tokenmonster.app/schemas/ai-sister-source-map-v1.json",
   "title": "TokenMonster AI-Sister source asset map",
-  "description": "Repository-only audit map for blocked AI-Sister character candidates. This is not a runtime or release manifest.",
+  "description": "Repository-only audit map for AI-Sister source candidates and the reviewed fixed-pack publication state. This is not a runtime or release manifest.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -48,6 +48,7 @@
         "owner",
         "storage",
         "publicDelivery",
+        "publicOrigin",
         "objectPrefix",
         "manifestObjectPattern",
         "packObjectPattern",
@@ -68,6 +69,7 @@
         "owner": { "const": "ai-sister" },
         "storage": { "const": "cloudflare-r2" },
         "publicDelivery": { "const": "ai-sister-cdn" },
+        "publicOrigin": { "const": "https://cdn.ted-h.com" },
         "objectPrefix": { "$ref": "#/$defs/relativeReference" },
         "manifestObjectPattern": {
           "const": "tokenmonster/characters/v1/releases/{releaseId}/asset-release-manifest-v2.json"
@@ -98,7 +100,9 @@
         "networkFailureFallback": {
           "const": "tokenmonster-letter-avatar-v1"
         },
-        "status": { "const": "planned-release-blocked" }
+        "status": {
+          "enum": ["planned-release-blocked", "published-image-fixed-pack"]
+        }
       }
     },
     "rosterAudit": {
@@ -394,7 +398,12 @@
         "fallbackRenderer"
       ],
       "properties": {
-        "runtimeUse": { "const": "blocked" },
+        "runtimeUse": {
+          "enum": [
+            "blocked",
+            "approved-explicit-consent-image-fixed-pack"
+          ]
+        },
         "copyCandidateBinariesIntoRepository": { "const": false },
         "requiredBeforeRuntimeUse": {
           "type": "array",

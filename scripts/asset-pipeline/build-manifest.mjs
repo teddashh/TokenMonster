@@ -25,6 +25,8 @@ import {
 import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
+import { buildCharactersPackage } from "./build-characters-package.mjs";
+
 const PERSONAS = [
   "chatgpt",
   "claude",
@@ -109,7 +111,7 @@ Options:
 
 Environment:
   ASSET_BANK_DIR        Read-only tachie bank root (required)
-  SOURCE_DATE_EPOCH     Optional manifest timestamp override, in Unix seconds`;
+  SOURCE_DATE_EPOCH     Optional manifest/report timestamp override, in Unix seconds`;
 }
 
 function parseList(value, allowedValues, flag) {
@@ -194,21 +196,6 @@ function run(command, args, options = {}) {
   });
 }
 
-function buildCharactersPackage() {
-  // Spawn tsc through the current Node binary instead of the npm shim:
-  // .cmd shims cannot be spawned without a shell on Windows.
-  const result = run(
-    process.execPath,
-    [join(SCRIPT_ROOT, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.build.json"],
-    { cwd: join(SCRIPT_ROOT, "packages", "characters") },
-  );
-  if (result.status !== 0) {
-    throw new Error(
-      `Could not build @tokenmonster/characters before validation: ${(result.stderr ?? result.stdout ?? "").trim()}`,
-    );
-  }
-}
-
 function probeEncoder(allowPngPassthrough) {
   const encoders = run("ffmpeg", ["-hide_banner", "-encoders"]);
   const output = `${encoders.stdout ?? ""}\n${encoders.stderr ?? ""}`;
@@ -248,7 +235,10 @@ function sha256(bytes) {
 
 function imageMetadata(bytes, sourcePath) {
   const signature = "89504e470d0a1a0a";
-  if (bytes.length >= 24 && bytes.subarray(0, 8).toString("hex") === signature) {
+  if (
+    bytes.length >= 24 &&
+    bytes.subarray(0, 8).toString("hex") === signature
+  ) {
     const width = bytes.readUInt32BE(16);
     const height = bytes.readUInt32BE(20);
     if (width < 1 || height < 1) {
@@ -259,18 +249,7 @@ function imageMetadata(bytes, sourcePath) {
 
   if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
     const startOfFrameMarkers = new Set([
-      0xc0,
-      0xc1,
-      0xc2,
-      0xc3,
-      0xc5,
-      0xc6,
-      0xc7,
-      0xc9,
-      0xca,
-      0xcb,
-      0xcd,
-      0xce,
+      0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce,
       0xcf,
     ]);
     let offset = 2;
@@ -340,7 +319,9 @@ function voiceMetadata(bytes, sourcePath) {
     const chunkStart = offset + 8;
     const chunkEnd = chunkStart + chunkSize;
     if (chunkEnd > bytes.length) {
-      throw new Error(`Voice clip has a truncated ${chunkId} chunk: ${sourcePath}`);
+      throw new Error(
+        `Voice clip has a truncated ${chunkId} chunk: ${sourcePath}`,
+      );
     }
 
     if (chunkId === "fmt ") {
@@ -367,12 +348,16 @@ function voiceMetadata(bytes, sourcePath) {
 
     offset = chunkEnd + (chunkSize % 2);
     if (offset > bytes.length) {
-      throw new Error(`Voice clip has a missing chunk padding byte: ${sourcePath}`);
+      throw new Error(
+        `Voice clip has a missing chunk padding byte: ${sourcePath}`,
+      );
     }
   }
 
   if (format === null || dataBytes === null) {
-    throw new Error(`Voice clip must contain fmt and data chunks: ${sourcePath}`);
+    throw new Error(
+      `Voice clip must contain fmt and data chunks: ${sourcePath}`,
+    );
   }
   if (format.audioFormat !== 1) {
     throw new Error(`Voice clip must use PCM format 1: ${sourcePath}`);
@@ -384,10 +369,14 @@ function voiceMetadata(bytes, sourcePath) {
     throw new Error(`Voice clip must be mono: ${sourcePath}`);
   }
   if (format.sampleRate !== 22_050) {
-    throw new Error(`Voice clip must use a 22050 Hz sample rate: ${sourcePath}`);
+    throw new Error(
+      `Voice clip must use a 22050 Hz sample rate: ${sourcePath}`,
+    );
   }
   if (format.blockAlign !== 2 || format.byteRate !== 44_100) {
-    throw new Error(`Voice clip has inconsistent PCM rate fields: ${sourcePath}`);
+    throw new Error(
+      `Voice clip has inconsistent PCM rate fields: ${sourcePath}`,
+    );
   }
   if (dataBytes % format.blockAlign !== 0) {
     throw new Error(`Voice clip data is not sample-aligned: ${sourcePath}`);
@@ -466,7 +455,9 @@ async function readCache(cachePath) {
 
 async function writeCache(cachePath, entries) {
   const sortedEntries = Object.fromEntries(
-    Object.entries(entries).sort(([left], [right]) => left.localeCompare(right)),
+    Object.entries(entries).sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
   );
   await atomicWriteFile(
     cachePath,
@@ -525,7 +516,9 @@ function generatedAtFromSources(latestSourceMtimeMs) {
     }
     return date.toISOString();
   }
-  return new Date(Math.floor(latestSourceMtimeMs / 1_000) * 1_000).toISOString();
+  return new Date(
+    Math.floor(latestSourceMtimeMs / 1_000) * 1_000,
+  ).toISOString();
 }
 
 async function main() {
@@ -601,13 +594,7 @@ async function main() {
 
   buildCharactersPackage();
   const charactersModuleUrl = pathToFileURL(
-    join(
-      SCRIPT_ROOT,
-      "packages",
-      "characters",
-      "dist",
-      "asset-manifest.js",
-    ),
+    join(SCRIPT_ROOT, "packages", "characters", "dist", "asset-manifest.js"),
   );
   const { ASSET_VOICE_TRIGGERS, parseAssetManifest } = await import(
     charactersModuleUrl.href
@@ -833,11 +820,7 @@ async function main() {
         const encodedSha256 = sha256(encodedBytes);
         const targetPath = join(objectsDir, `${encodedSha256}.${extension}`);
         if (
-          !(await objectMatches(
-            targetPath,
-            encodedSha256,
-            encodedBytes.length,
-          ))
+          !(await objectMatches(targetPath, encodedSha256, encodedBytes.length))
         ) {
           await atomicWriteFile(targetPath, encodedBytes);
         }
@@ -954,7 +937,10 @@ async function main() {
         );
         const poseSource = await findSource(posePath);
         if (poseSource === null) {
-          await recordMissing(characterId, "pose", posePath, { themeId, state });
+          await recordMissing(characterId, "pose", posePath, {
+            themeId,
+            state,
+          });
           continue;
         }
         poses[state] = await processImage(characterId, "pose", poseSource);
@@ -1007,7 +993,10 @@ async function main() {
   };
   const report = {
     schemaVersion: "1",
-    builtAt: new Date().toISOString(),
+    // Keep the public provenance sidecar reproducible with the manifest. The
+    // build-provenance step projects this value into `createdAt`, so using the
+    // wall clock here would change an otherwise byte-identical release.
+    builtAt: generatedAtFromSources(latestSourceMtimeMs),
     encoder: encoderProbe.encoder,
     encoderVersion: encoderProbe.ffmpegToolVersion,
     warnings,

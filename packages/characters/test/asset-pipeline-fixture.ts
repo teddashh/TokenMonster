@@ -16,6 +16,12 @@ const PROVENANCE_PATH = join(
   "asset-pipeline",
   "build-provenance.mjs",
 );
+const SOURCE_EVIDENCE_PREPARER_PATH = join(
+  REPOSITORY_ROOT,
+  "scripts",
+  "asset-pipeline",
+  "prepare-source-evidence.mjs",
+);
 const RIGHTS_LEDGER_PATH = join(
   REPOSITORY_ROOT,
   "scripts",
@@ -195,6 +201,65 @@ export async function runBuildProvenance(
       receiptRoot,
       "--out",
       out,
+    ],
+    {
+      cwd: REPOSITORY_ROOT,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => {
+    stdout += chunk;
+  });
+  child.stderr.on("data", (chunk: string) => {
+    stderr += chunk;
+  });
+  return await new Promise<{
+    status: number | null;
+    signal: NodeJS.Signals | null;
+    stdout: string;
+    stderr: string;
+  }>((resolveResult, reject) => {
+    child.once("error", reject);
+    child.once("close", (status, signal) => {
+      resolveResult({ status, signal, stdout, stderr });
+    });
+  });
+}
+
+export async function runPrepareSourceEvidence(
+  options: Readonly<{
+    integrity: string;
+    bank: string;
+    inventoryId?: string;
+    repositoryId?: string;
+    sourceRevision?: string;
+    receiptRoot: string;
+    out: string;
+  }>,
+) {
+  const child = spawn(
+    process.execPath,
+    [
+      SOURCE_EVIDENCE_PREPARER_PATH,
+      "--integrity",
+      options.integrity,
+      "--asset-bank",
+      options.bank,
+      "--inventory-id",
+      options.inventoryId ?? "test-reviewed-inventory",
+      "--repository-id",
+      options.repositoryId ?? "test-source-repository",
+      "--source-revision",
+      options.sourceRevision ?? "d".repeat(40),
+      "--receipt-root",
+      options.receiptRoot,
+      "--out",
+      options.out,
     ],
     {
       cwd: REPOSITORY_ROOT,

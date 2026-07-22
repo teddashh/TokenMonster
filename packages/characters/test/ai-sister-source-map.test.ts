@@ -7,7 +7,15 @@ import {
 } from "@tokenmonster/monster-engine";
 import { describe, expect, it } from "vitest";
 
-import { PROGRESSION_CHARACTER_IDS } from "../src/index.js";
+import {
+  AssetReleaseManifestV2Schema,
+  PROGRESSION_CHARACTER_IDS,
+} from "../src/index.js";
+import {
+  AssetPackAllowlistV1Schema,
+  AssetPackDescriptorV1Schema,
+  planFixedAssetPack,
+} from "../src/asset-pack.js";
 
 const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
 const REPOSITORY_ROOT = resolve(PACKAGE_ROOT, "../..");
@@ -65,6 +73,7 @@ interface AiSisterSourceMap {
     owner: string;
     storage: string;
     publicDelivery: string;
+    publicOrigin: string;
     objectPrefix: string;
     manifestObjectPattern: string;
     packObjectPattern: string;
@@ -668,11 +677,12 @@ describe("AI-Sister repository-only source map", () => {
     ).toEqual(["wardrobe-unlocked"]);
   });
 
-  it("keeps AI-Sister R2 delivery planned, immutable, integrity-bound, and blocked", () => {
+  it("keeps the published AI-Sister image pack immutable and integrity-bound", () => {
     expect(sourceMap.cloudDelivery).toMatchObject({
       owner: "ai-sister",
       storage: "cloudflare-r2",
       publicDelivery: "ai-sister-cdn",
+      publicOrigin: "https://cdn.ted-h.com",
       manifestTrust: "release-embedded-approved-copy",
       publisherRunsIn: "ai-sister",
       tokenMonsterRole: "manifest-consumer-and-local-cache",
@@ -683,7 +693,7 @@ describe("AI-Sister repository-only source map", () => {
       integrity: "sha256-per-object",
       rawLayerPartsPublished: false,
       networkFailureFallback: "tokenmonster-letter-avatar-v1",
-      status: "planned-release-blocked",
+      status: "published-image-fixed-pack",
     });
     expect(sourceMap.cloudDelivery.manifestObjectPattern).toBe(
       `${sourceMap.cloudDelivery.objectPrefix}/releases/{releaseId}/asset-release-manifest-v2.json`,
@@ -699,9 +709,9 @@ describe("AI-Sister repository-only source map", () => {
     );
   });
 
-  it("remains blocked and contains no copied candidate binary assets", () => {
+  it("binds approved runtime use to the exact non-null release slots without copying binaries", () => {
     expect(sourceMap.releasePolicy).toMatchObject({
-      runtimeUse: "blocked",
+      runtimeUse: "approved-explicit-consent-image-fixed-pack",
       copyCandidateBinariesIntoRepository: false,
       fallbackRenderer: "tokenmonster-letter-avatar-v1",
     });
@@ -715,6 +725,54 @@ describe("AI-Sister repository-only source map", () => {
         "explicit-consent-fixed-pack-delivery",
       ]),
     );
+
+    const releaseManifest = AssetReleaseManifestV2Schema.parse(
+      JSON.parse(
+        readFileSync(
+          join(PACKAGE_ROOT, "src", "approved-release-v2.json"),
+          "utf8",
+        ),
+      ) as unknown,
+    );
+    const descriptor = AssetPackDescriptorV1Schema.parse(
+      JSON.parse(
+        readFileSync(
+          join(
+            PACKAGE_ROOT,
+            "src",
+            "approved-asset-pack-descriptor-v1.json",
+          ),
+          "utf8",
+        ),
+      ) as unknown,
+    );
+    const allowlist = AssetPackAllowlistV1Schema.parse(
+      JSON.parse(
+        readFileSync(
+          join(
+            PACKAGE_ROOT,
+            "src",
+            "approved-asset-pack-allowlist-v1.json",
+          ),
+          "utf8",
+        ),
+      ) as unknown,
+    );
+    const plan = planFixedAssetPack({ releaseManifest, descriptor, allowlist });
+    expect(releaseManifest.assets).toHaveLength(891);
+    expect(
+      releaseManifest.assets.filter(
+        ({ association }) => association.kind === "voice",
+      ),
+    ).toEqual([]);
+    expect(allowlist.origin).toBe(sourceMap.cloudDelivery.publicOrigin);
+    expect(descriptor.pack.path).toBe(allowlist.path);
+    expect(plan.url).toBe(`${allowlist.origin}${allowlist.path}`);
+    expect(
+      descriptor.pack.path.startsWith(
+        `/${sourceMap.cloudDelivery.objectPrefix}/packs/`,
+      ),
+    ).toBe(true);
 
     const forbiddenCandidateExtensions = new Set([
       ".avif",

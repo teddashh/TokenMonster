@@ -3,7 +3,6 @@ import { join } from "node:path";
 
 import {
   createCompanionGateway,
-  getApprovedAssetPackConfiguration,
   type CompanionCharacterOptions,
   type CompanionGateway,
   type CompanionGatewayOptions
@@ -26,9 +25,8 @@ import {
 
 import { resolveSidecarExecutable, utilityProcessSpawn } from "./sidecar.js";
 
-// Keep the retired Electron entry point on the same policy as the CLI:
-// per-object transport is disabled and only the explicit fixed-pack consent
-// lifecycle may acquire a complete approved release.
+// The retired Electron entry point remains cache-only. Fixed-pack acquisition
+// belongs to the permanent CLI/loopback UI composition, not this legacy shell.
 export const PET_CHARACTER_CDN_BASE_URL = null;
 
 export const PET_STARTUP_MESSAGES = Object.freeze({
@@ -77,15 +75,11 @@ export interface PetServices {
 }
 
 export function createPetCharacterOptions(
-  homeDirectory: string,
-  approvedAssetPack: () =>
-    | NonNullable<CompanionCharacterOptions["assetPack"]>
-    | null =
-    getApprovedAssetPackConfiguration
+  homeDirectory: string
 ): CompanionCharacterOptions {
   return Object.freeze({
     manifest: null,
-    assetPack: approvedAssetPack(),
+    assetPack: null,
     cacheDirectory: join(homeDirectory, ".tokenmonster", "asset-cache"),
     cdnBaseUrl: PET_CHARACTER_CDN_BASE_URL,
     progressionStorePath: join(

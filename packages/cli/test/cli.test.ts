@@ -157,6 +157,7 @@ function compositionDependencies(
       return gateway;
     },
     getApprovedAssetPackConfiguration: () => null,
+    getEmbeddedStarterAssetConfiguration: () => null,
     getAssetDirectory: () => "/package/companion-ui/dist/public",
     getContributionCredentialHost: () => null,
     createContributionRuntime: vi.fn(async () => {
@@ -239,6 +240,25 @@ describe("CLI surface", () => {
     expect(stderr.value).toContain("不支援這個參數");
   });
 
+  it("rejects a non-callable embedded starter authority before startup", async () => {
+    const stderr = new CapturedOutput();
+    const startRuntime = vi.fn();
+
+    await expect(
+      runTokenMonster({
+        stderr,
+        dependencies: {
+          startRuntime,
+          getEmbeddedStarterAssetConfiguration:
+            null as unknown as TokenMonsterCliDependencies["getEmbeddedStarterAssetConfiguration"],
+        },
+      }),
+    ).resolves.toBe(2);
+
+    expect(startRuntime).not.toHaveBeenCalled();
+    expect(stderr.value).toContain("不支援這個參數");
+  });
+
   it("composes the announced runtime URL, adapter, UI, gateway, and browser", async () => {
     const stdout = new CapturedOutput();
     const stderr = new CapturedOutput();
@@ -271,6 +291,7 @@ describe("CLI surface", () => {
       assetDirectory: "/package/companion-ui/dist/public",
       characters: {
         manifest: null,
+        baseAssets: null,
         assetPack: null,
         cacheDirectory: join("/home/tester", ".tokenmonster", "asset-cache"),
         cdnBaseUrl: DEFAULT_CHARACTER_CDN_BASE_URL,
@@ -396,14 +417,21 @@ describe("CLI surface", () => {
     expect(stdout.value).not.toContain(ERROR_CANARY);
   });
 
-  it("passes the complete approved fixed-pack authority without pre-activating art", async () => {
+  it("passes embedded starter assets with the complete fixed-pack authority", async () => {
+    const baseAssets = Object.freeze({
+      marker: "embedded-starters",
+    }) as unknown as NonNullable<
+      CompanionGatewayOptions["characters"]["baseAssets"]
+    >;
     const assetPack = Object.freeze({
       marker: "approved-pack",
     }) as unknown as NonNullable<
       CompanionGatewayOptions["characters"]["assetPack"]
     >;
+    const getEmbeddedStarterAssetConfiguration = vi.fn(() => baseAssets);
     const getApprovedAssetPackConfiguration = vi.fn(() => assetPack);
     const { dependencies, captured } = compositionDependencies({
+      getEmbeddedStarterAssetConfiguration,
       getApprovedAssetPackConfiguration,
     });
 
@@ -411,8 +439,10 @@ describe("CLI surface", () => {
       runTokenMonster({ argv: ["--no-open"], dependencies }),
     ).resolves.toBe(0);
 
+    expect(getEmbeddedStarterAssetConfiguration).toHaveBeenCalledTimes(1);
     expect(getApprovedAssetPackConfiguration).toHaveBeenCalledTimes(1);
     expect(captured.gatewayOptions?.characters.manifest).toBeNull();
+    expect(captured.gatewayOptions?.characters.baseAssets).toBe(baseAssets);
     expect(captured.gatewayOptions?.characters.assetPack).toBe(assetPack);
   });
 
@@ -493,8 +523,16 @@ describe("CLI surface", () => {
       ),
     });
 
-    const second = compositionDependencies();
-    const getter = vi.spyOn(
+    const baseAssets = Object.freeze({
+      marker: "embedded-starters",
+    }) as unknown as NonNullable<
+      CompanionGatewayOptions["characters"]["baseAssets"]
+    >;
+    const getEmbeddedStarterAssetConfiguration = vi.fn(() => baseAssets);
+    const second = compositionDependencies({
+      getEmbeddedStarterAssetConfiguration,
+    });
+    const assetPackGetter = vi.spyOn(
       second.dependencies,
       "getApprovedAssetPackConfiguration",
     );
@@ -510,8 +548,12 @@ describe("CLI surface", () => {
       }),
     ).resolves.toBe(0);
     expect(second.captured.gatewayOptions?.characters.cdnBaseUrl).toBeNull();
+    expect(second.captured.gatewayOptions?.characters.baseAssets).toBe(
+      baseAssets,
+    );
     expect(second.captured.gatewayOptions?.characters.assetPack).toBeNull();
-    expect(getter).not.toHaveBeenCalled();
+    expect(getEmbeddedStarterAssetConfiguration).toHaveBeenCalledTimes(1);
+    expect(assetPackGetter).not.toHaveBeenCalled();
   });
 
   it("sanitizes runtime startup failures and never starts the gateway", async () => {

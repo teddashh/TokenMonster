@@ -965,7 +965,7 @@ export function startCompanionUi(): void {
     }
     const controlMode = characterAssetPackControlMode(pack);
     assetPackControl.hidden = false;
-    assetPackDisclosure.textContent = `啟用時會一次下載約 ${formatAssetPackSize(pack.downloadBytes!)} 的完整固定素材包（${numberFormatter.format(pack.downloadBytes!)} bytes）。這個請求只取素材，不會傳送你的用量、目前角色、解鎖狀態或服裝選擇；之後可隨時移除並回到字母模式。`;
+    assetPackDisclosure.textContent = `啟用時會一次下載約 ${formatAssetPackSize(pack.downloadBytes!)} 的完整固定素材包（${numberFormatter.format(pack.downloadBytes!)} bytes）。這個請求只取素材，不會傳送你的用量、目前角色、解鎖狀態或服裝選擇；之後可隨時移除下載的完整素材，內建四位元祖角色的基本服裝圖像與文字不受影響。`;
     assetPackButton.hidden = controlMode.primaryAction === null;
     assetPackButton.disabled =
       assetPackBusy || controlMode.primaryAction === "installing";
@@ -974,17 +974,17 @@ export function startCompanionUi(): void {
       assetPackBusy || pack.phase === "installing";
     assetPackRevokeButton.textContent = assetPackRemovalConfirmationPending
       ? "再按一次確認移除"
-      : "取消啟用並清除素材";
+      : "取消啟用並清除下載素材";
     if (assetPackBusy || pack.phase === "installing") {
       assetPackStatusElement.textContent =
-        "正在取得並驗證完整素材；完成前會維持字母模式。";
+        "正在取得並驗證完整素材；完成前仍可使用內建四位元祖角色的基本服裝圖像與文字。";
       assetPackButton.textContent = "正在下載完整素材包…";
       return;
     }
     if (pack.phase === "installed") {
       assetPackStatusElement.textContent =
         assetPackRemovalConfirmationPending
-          ? "移除後會立即回到字母模式；若確定要刪除本機素材，請再按一次。"
+          ? "移除只會刪除下載的完整素材；內建四位元祖角色的基本服裝圖像與文字會保留。若確定，請再按一次。"
           : "完整素材已驗證並保存在本機；角色圖現在可以離線顯示。";
       return;
     }
@@ -1005,24 +1005,24 @@ export function startCompanionUi(): void {
     if (pack.phase === "repair-needed") {
       assetPackStatusElement.textContent =
         assetPackRemovalConfirmationPending
-          ? "取消啟用會清除已下載的部分素材；若確定，請再按一次。"
+          ? "取消啟用只會清除已下載的完整素材；內建四位元祖角色的基本服裝圖像與文字會保留。若確定，請再按一次。"
           : pack.lastError === "local-state-unavailable"
-          ? "已立即回到字母模式，但本機停用設定沒有保存；請在重啟前再試一次。"
+          ? "下載的完整素材已停用，內建四位元祖角色的基本服裝圖像與文字仍可使用，但本機停用設定沒有保存；請在重啟前再試一次。"
           : pack.consented
-            ? "你曾同意啟用，但本機素材不完整；不會自動重試。你可以重新取得完整包，或取消啟用並清除素材。"
-            : "已回到字母模式，但部分素材暫時無法移除。關閉正在使用圖片的程式後，可在這裡再次清除。";
+            ? "你曾同意啟用，但本機完整素材不完整；不會自動重試。你可以重新取得完整包，或取消啟用並清除下載素材；內建四位元祖角色的基本服裝圖像與文字仍可使用。"
+            : "內建四位元祖角色的基本服裝圖像與文字仍可使用，但部分下載素材暫時無法移除。關閉正在使用圖片的程式後，可在這裡再次清除。";
       return;
     }
     assetPackStatusElement.textContent = (() => {
       switch (pack.lastError) {
         case "download-failed":
-          return "這次下載或驗證沒有完成；仍維持字母模式，可以稍後再試。";
+          return "這次下載或驗證沒有完成；內建四位元祖角色的基本服裝圖像與文字仍可使用，可以稍後再試。";
         case "cache-unavailable":
-          return "本機素材空間暫時無法使用；仍維持字母模式。";
+          return "本機完整素材空間暫時無法使用；內建四位元祖角色的基本服裝圖像與文字仍可使用。";
         case "local-state-unavailable":
-          return "本機啟用設定暫時無法保存；仍維持字母模式。";
+          return "本機啟用設定暫時無法保存；內建四位元祖角色的基本服裝圖像與文字仍可使用。";
         case null:
-          return "目前使用零下載的字母模式；只有你按下啟用後才會取得素材。";
+          return "目前使用內建四位元祖角色的基本服裝圖像與文字；只有你按下啟用後才會下載完整素材。";
       }
     })();
   }

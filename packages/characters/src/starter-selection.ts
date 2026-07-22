@@ -20,6 +20,8 @@ export const STARTER_CHARACTER_BY_PROVIDER_FAMILY = Object.freeze({
   xai: "grok",
 } as const satisfies Readonly<Record<StarterProviderFamily, CharacterId>>);
 
+export const STARTER_BASE_THEME_ID = "tech" as const;
+
 const ProviderTotal28DaysSchema = z
   .number()
   .int()

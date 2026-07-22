@@ -175,7 +175,7 @@ describe("typed companion UI locale catalog", () => {
     setUiLocale("en");
     expectEnglish(
       localizeUiText(
-        "啟用時會一次下載約 12 MB 的完整固定素材包（12,345,678 bytes）。這個請求只取素材，不會傳送你的用量、目前角色、解鎖狀態或服裝選擇；之後可隨時移除並回到字母模式。",
+        "啟用時會一次下載約 12 MB 的完整固定素材包（12,345,678 bytes）。這個請求只取素材，不會傳送你的用量、目前角色、解鎖狀態或服裝選擇；之後可隨時移除下載的完整素材，內建四位元祖角色的基本服裝圖像與文字不受影響。",
       ),
       localizeUiText("近 28 天共 12,345 tokens，來自 3 個供應商家族。"),
       localizeUiText("上次更新於本機時間 09:41"),

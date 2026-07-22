@@ -74,24 +74,30 @@ work. Chat revalidates the configured status and key immediately before every
 provider request. Gateway close aborts and joins accepted BYOK initialization,
 control, late-write, and protective-cleanup work before resolving.
 
-Character objects are cache-only. Configuration accepts exactly
-`cdnBaseUrl: null`; there is no fetch hook or per-object downloader. An
-allowlisted, unlocked object is served only after its cache bytes match the
-SHA-256 filename and size bound. A missing, corrupt, locked, malformed, or
-unapproved object returns a fail-closed response, and the UI uses code-native
-letter art or silence. Any future network delivery requires a separately
-reviewed, explicitly consented fixed-pack protocol whose request set and order
-are independent of local usage and progression.
+Character objects have two local sources. Release builds may inject an exact
+415,470-byte starter base containing one avatar and one `tech` outfit for each
+of ChatGPT, Claude, Gemini, and Grok; the gateway accepts it only after strict
+all-or-nothing path, size, SHA-256, and WebP validation. The remaining approved
+objects are served from the content-addressed full-pack cache only after their
+bytes match the SHA-256 filename and size bound. Configuration still accepts
+exactly `cdnBaseUrl: null`; there is no fetch hook or per-object downloader. A
+missing, corrupt, locked, malformed, or unapproved object outside the valid
+base returns a fail-closed response, and the UI uses code-native letter art or
+silence. The four starters' 168 `zh-TW`/`en` fixed text lines are compiled copy,
+not voice assets, and require no asset request.
 
-That fixed-pack protocol is implemented behind default-null authorities. It
-accepts only a complete schema-v2 release, descriptor, and exact HTTPS
+The separately consented fixed-pack protocol accepts only a complete schema-v2
+release, descriptor, and exact HTTPS
 origin/path binding. `GET /api/characters/assets` reads only local status, and
 `POST /api/characters/assets/consent` accepts exactly one boolean. Enable
-verifies or downloads the one immutable complete pack before activating art.
+verifies or downloads the one immutable 891-image, 65,574,180-byte complete pack
+before activating its extended art.
 Restart verifies a consented cache without automatic network retry. Disable
-switches to letter mode immediately, persists revocation, and removes only the
-release's exact objects without network I/O. Status errors are stable codes and
-never include an origin, local path, response body, or thrown text.
+switches to the embedded starter base immediately, persists revocation, and
+removes only the downloaded release objects without network I/O. A failed
+download likewise retains the base. The current base and complete pack embed no
+voice. Status errors are stable codes and never include an origin, local path,
+response body, or thrown text.
 
 `POST /api/characters/interact` accepts only the currently selected, unlocked
 character with action `tap` and locale `zh-TW` or `en`. It returns either one

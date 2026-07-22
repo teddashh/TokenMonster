@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import { createMemorySecretSlot } from "@tokenmonster/secret-vault";
 import { TokenTrackerRuntimeError } from "@tokenmonster/token-tracker-runtime";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   PET_CHARACTER_CDN_BASE_URL,
@@ -38,22 +38,6 @@ describe("pet character transport privacy", () => {
         "progression-v1.json"
       )
     });
-  });
-
-  it("passes the complete approved fixed-pack authority without pre-activating art", () => {
-    const assetPack = Object.freeze({ marker: "approved-pack" }) as unknown as NonNullable<
-      ReturnType<typeof createPetCharacterOptions>["assetPack"]
-    >;
-    const approvedAssetPack = vi.fn(() => assetPack);
-
-    const options = createPetCharacterOptions(
-      "/home/tester",
-      approvedAssetPack
-    );
-
-    expect(approvedAssetPack).toHaveBeenCalledTimes(1);
-    expect(options.manifest).toBeNull();
-    expect(options.assetPack).toBe(assetPack);
   });
 
   it("passes the caller-owned BYOK authority through without inspecting it", async () => {

@@ -4,6 +4,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -14,6 +15,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   ASSET_PACK_ALLOWLIST_SCHEMA_VERSION,
+  AssetPackAllowlistV1Schema,
   AssetPackDescriptorV1Schema,
   installFixedAssetPack,
   planFixedAssetPack,
@@ -25,7 +27,10 @@ import {
   computeAssetReleaseManifestV2Sha256,
   type AssetAssociation,
 } from "../src/asset-release.js";
-import { runFixedPackBuilder } from "./fixed-pack-builder-fixture.js";
+import {
+  runFixedPackBuilder,
+  runReleaseSlotPreparer,
+} from "./fixed-pack-builder-fixture.js";
 
 const PRIVATE_ORIGIN = "https://assets.example.test";
 const PNG_SIGNATURE = Buffer.from([
@@ -262,6 +267,116 @@ describe("fixed asset-pack builder", () => {
         await readFile(join(cacheDirectory, basename(object.output.path))),
       ).toEqual(object.bytes);
     }
+  }, 60_000);
+
+  it("derives and atomically publishes the exact three runtime release slots", async () => {
+    const fixture = await createFixture();
+    const packOut = join(fixture.root, "release-pack");
+    const built = await runFixedPackBuilder(
+      fixture.manifestPath,
+      fixture.assetRoot,
+      packOut,
+    );
+    expect(built.status, `${built.stdout}\n${built.stderr}`).toBe(0);
+    const descriptorPath = join(packOut, "asset-pack-descriptor-v1.json");
+    const slotOut = join(fixture.root, "release-slots");
+    const prepared = await runReleaseSlotPreparer(
+      fixture.manifestPath,
+      descriptorPath,
+      PRIVATE_ORIGIN,
+      slotOut,
+    );
+    expect(prepared.status, `${prepared.stdout}\n${prepared.stderr}`).toBe(0);
+    expect((await readdir(slotOut)).sort()).toEqual([
+      "approved-asset-pack-allowlist-v1.json",
+      "approved-asset-pack-descriptor-v1.json",
+      "approved-release-v2.json",
+    ]);
+    await expect(
+      readFile(join(slotOut, "approved-release-v2.json")),
+    ).resolves.toEqual(await readFile(fixture.manifestPath));
+    await expect(
+      readFile(join(slotOut, "approved-asset-pack-descriptor-v1.json")),
+    ).resolves.toEqual(await readFile(descriptorPath));
+
+    const descriptor = AssetPackDescriptorV1Schema.parse(
+      JSON.parse(await readFile(descriptorPath, "utf8")) as unknown,
+    );
+    const allowlist = AssetPackAllowlistV1Schema.parse(
+      JSON.parse(
+        await readFile(
+          join(slotOut, "approved-asset-pack-allowlist-v1.json"),
+          "utf8",
+        ),
+      ) as unknown,
+    );
+    expect(allowlist).toEqual({
+      schemaVersion: ASSET_PACK_ALLOWLIST_SCHEMA_VERSION,
+      origin: PRIVATE_ORIGIN,
+      path: descriptor.pack.path,
+    });
+    expect(
+      planFixedAssetPack({
+        releaseManifest: fixture.manifest,
+        descriptor,
+        allowlist,
+      }),
+    ).toMatchObject({
+      releaseId: fixture.manifest.releaseId,
+      url: `${PRIVATE_ORIGIN}${descriptor.pack.path}`,
+    });
+  }, 60_000);
+
+  it("publishes no release-slot directory for an invalid origin or stale binding", async () => {
+    const fixture = await createFixture();
+    const packOut = join(fixture.root, "rejected-release-pack");
+    const built = await runFixedPackBuilder(
+      fixture.manifestPath,
+      fixture.assetRoot,
+      packOut,
+    );
+    expect(built.status, `${built.stdout}\n${built.stderr}`).toBe(0);
+    const descriptorPath = join(packOut, "asset-pack-descriptor-v1.json");
+    const invalidOriginOut = join(fixture.root, "invalid-origin-slots");
+    const invalidOrigin = await runReleaseSlotPreparer(
+      fixture.manifestPath,
+      descriptorPath,
+      "http://assets.example.test",
+      invalidOriginOut,
+    );
+    expect(invalidOrigin.status).toBe(1);
+    await expect(lstat(invalidOriginOut)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+
+    const descriptor = AssetPackDescriptorV1Schema.parse(
+      JSON.parse(await readFile(descriptorPath, "utf8")) as unknown,
+    );
+    const staleDescriptorPath = join(fixture.root, "stale-descriptor.json");
+    await writeFile(
+      staleDescriptorPath,
+      `${JSON.stringify(
+        { ...descriptor, releaseManifestSha256: "0".repeat(64) },
+        null,
+        2,
+      )}\n`,
+    );
+    const staleBindingOut = join(fixture.root, "stale-binding-slots");
+    const staleBinding = await runReleaseSlotPreparer(
+      fixture.manifestPath,
+      staleDescriptorPath,
+      PRIVATE_ORIGIN,
+      staleBindingOut,
+    );
+    expect(staleBinding.status).toBe(1);
+    await expect(lstat(staleBindingOut)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(
+      (await readdir(fixture.root)).some((name) =>
+        name.startsWith(".tokenmonster-release-slots-"),
+      ),
+    ).toBe(false);
   }, 60_000);
 
   it("rejects a stale object and leaves no partial output", async () => {

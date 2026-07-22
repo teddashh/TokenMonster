@@ -1,12 +1,18 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
 import {
+  AssetReleaseManifestV2Schema,
   computeAssetReleaseManifestV2Sha256,
   getApprovedAssetManifest,
   getApprovedAssetPackConfiguration,
 } from "../src/index.js";
+import {
+  AssetPackAllowlistV1Schema,
+  AssetPackDescriptorV1Schema,
+  planFixedAssetPack,
+} from "../src/asset-pack.js";
 import {
   resolveApprovedAssetAuthority,
   resolveApprovedAssetPackAuthority,
@@ -82,18 +88,44 @@ function approvedAvatarRelease(): unknown {
 }
 
 describe("approved asset manifest", () => {
-  it("fails closed to letter-only until a schema-v2 rights release exists", () => {
-    expect(getApprovedAssetManifest()).toBeNull();
-    expect(getApprovedAssetPackConfiguration()).toBeNull();
-  });
+  it("emits exactly three all-null or strictly cross-bound release-authority slots", async () => {
+    const dist = new URL("../dist/", import.meta.url);
+    const jsonNames = (await readdir(dist))
+      .filter((name) => name.endsWith(".json"))
+      .sort();
+    expect(jsonNames).toEqual([
+      "approved-asset-pack-allowlist-v1.json",
+      "approved-asset-pack-descriptor-v1.json",
+      "approved-release-v2.json",
+    ]);
+    const [allowlistInput, descriptorInput, releaseInput] = await Promise.all(
+      jsonNames.map((name) =>
+        readFile(new URL(name, dist), "utf8").then(
+          (contents) => JSON.parse(contents) as unknown,
+        ),
+      ),
+    );
+    const configuredCount = [allowlistInput, descriptorInput, releaseInput].filter(
+      (value) => value !== null,
+    ).length;
+    expect([0, 3]).toContain(configuredCount);
 
-  it("emits the one null v2 authority slot beside the compiled getter", async () => {
-    await expect(
-      readFile(
-        new URL("../dist/approved-release-v2.json", import.meta.url),
-        "utf8",
-      ).then((contents) => JSON.parse(contents) as unknown),
-    ).resolves.toBeNull();
+    if (configuredCount === 0) {
+      expect(getApprovedAssetManifest()).toBeNull();
+      expect(getApprovedAssetPackConfiguration()).toBeNull();
+      return;
+    }
+
+    const releaseManifest = AssetReleaseManifestV2Schema.parse(releaseInput);
+    const descriptor = AssetPackDescriptorV1Schema.parse(descriptorInput);
+    const allowlist = AssetPackAllowlistV1Schema.parse(allowlistInput);
+    expect(planFixedAssetPack({ releaseManifest, descriptor, allowlist })).toBeDefined();
+    expect(getApprovedAssetManifest()).not.toBeNull();
+    expect(getApprovedAssetPackConfiguration()).toEqual({
+      releaseManifest,
+      descriptor,
+      allowlist,
+    });
   });
 
   it("rejects null, legacy v1, and malformed v2 authority input", () => {

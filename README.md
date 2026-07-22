@@ -3,7 +3,7 @@
 [English](README.en.md) · 繁體中文
 
 TokenMonster 是一個 local-first 的 AI 使用量夥伴：它在本機整理 token
-用量、呈現內容不可知的趨勢，並讓可解釋的字母人角色依本機使用里程碑產生互動。使用者也可在
+用量、呈現內容不可知的趨勢，並讓可解釋的角色依本機使用里程碑產生互動。使用者也可在
 明確預覽與同意後，選擇把嚴格限縮的 UTC 每日彙總貢獻給公開計數器。
 
 > **目前狀態：可測試的 source vertical slice，尚未上線。** Companion、Web、API、
@@ -62,17 +62,20 @@ TokenMonster 的隱私邊界是產品需求，不是日後才補上的設定。
   第一次一律由玩家從四位姊妹中選擇，不會因電腦上已有哪一家 provider 的歷史用量
   就替玩家決定。既有用量仍可照明確里程碑解鎖角色，已從舊版保存的選擇也會保留。
 - 角色依 provider family 累積量、總用量、活躍日連續或 provider 廣度等明確的本機里程碑
-  解鎖。每位有圖像的角色有 20 種衣櫥主題與 `supported`、`challenged`、`victory`
-  pose art；GLM 目前使用內建字母模式。所有解鎖都只存在本機、單向保留且不可購買。
-- 娃娃圖與預錄語音不包在 npm package 內。目前嵌入的固定素材 authority／descriptor／
-  allowlist 仍為 `null`，所以 CLI 與 Electron 都只驗證本機 cache、缺少時使用字母模式／
-  靜音，且發出零次角色素材請求。`--no-character-downloads` 暫時只是向後相容參數。
-  worktree 已實作明確同意、一次固定整包、完整 hash 驗證、離線重啟、修復與移除流程；
-  它只會在 schema-v2 權利核准後嵌入同一份 immutable authority 才顯示。先前按解鎖狀態
-  逐物件下載的設計維持停用，避免 object key 洩漏本機角色或衣裝狀態。
-  Schema-v1 runtime integrity manifest
-  已含 50 條預錄 voice refs；UI 預設關閉，且在 schema-v2 獨立 voice rights／content
-  gate 完成前不得把 v1 列入視為 public approval。
+  解鎖。11 位角色都有核准的 avatar、20 種衣櫥主題與 `supported`、`challenged`、
+  `victory` pose art。所有解鎖都只存在本機、單向保留且不可購買。
+- Release staging 會在候選 npm tarball 中加入精確 8 個已核准 WebP，共 415,470 bytes：
+  ChatGPT、Claude、Gemini、Grok 各一張 avatar 與一張 `tech` 基本服裝。四位元祖角色另有
+  4 × 7 triggers × 3 variants × 2 locales，共 168 條內建 `zh-TW`／`en` 固定文字；tarball
+  不含 WAV 或其他角色語音。這些基本圖文不需 runtime 下載，乾淨安裝、未同意完整包、
+  離線無完整 cache、完整包失敗或撤銷時都維持零次素材 GET。四位以內建基本圖文運作，
+  其他缺圖狀態才回退到字母模式／靜音。使用者明確啟用後，只會從
+  `https://cdn.ted-h.com` 下載一次與本機角色、解鎖、衣裝、pose、trigger 或 usage 無關的
+  65,574,180-byte 固定整包；完整驗證後可離線使用、修復或移除，移除後回到內建基本圖文。
+  `ai-sister-images-11-2026.07.21` 只含 891 張圖片、11 位角色與 0 條語音；歷史 50 條
+  cloned WAV 雖已有 owner approval 私有憑證，仍因 clone consent/provenance、逐條 content
+  review 與 metadata 清理證據不足而排除，必須另做新的 image + voice 合併 immutable
+  release。先前按解鎖狀態逐物件下載的設計維持停用，避免 object key 洩漏本機狀態。
 
 在預設未加入匿名貢獻的情況下，companion 不會主動連到 TokenMonster 營運基礎設施。
 匿名 UTC 日彙總仍只會在另行明確 opt in 後傳送；BYOK 請求則由本機直接連到使用者選定的
@@ -80,19 +83,19 @@ provider。
 
 ## 現有功能與發行狀態
 
-| 區域 | 目前 source slice | 上線前狀態 |
-| --- | --- | --- |
-| Local companion（sidecar path） | 輕量 localhost UI、compact pet 內的四選一起始流程、真實 UTC 今日／7／28 日 totals 與每日趨勢 | 已淘汰的 rc.12 bytes 留有 clean Linux installed smoke 與 loopback-only trace 歷史證據；post-hardening 的新版本仍須重做 clean install、registry gate 與原生 Windows／macOS smoke |
-| Collector | exact-pinned `tokentracker-cli@0.80.0` child、local-only refresh、strict loopback adapter／gateway；legacy slice 仍含 `tokscale@4.5.2` | 歷史 rc.12 安裝包曾驗證 exact 41-package sidecar closure 與 Linux zstd prebuild；下一個唯一版本須重做 closure、registry、Windows／macOS CI smoke 與 cutover 證據 |
-| Legacy Electron companion | 本機 SQLite、舊 7／28 日趨勢、traits／固定台詞、share card、export／reset | Migration-only；不再作為支援的安裝或 collection 路徑，sidecar cutover 後移除或降為 thin shell |
-| Characters | 11 位可切換角色；本機起始角色、單向解鎖、10 位的 20 種衣櫥與 pose art／50 條預錄 voice refs，GLM 使用 letter mode | 固定整包同意／驗證／修復／移除與 letter fallback 已完成；使用者回報 GLM 已獲核准，正式證據轉錄、非空 authority 與可選圖包發布仍待完成，但不阻擋 letter-mode 主程式發布 |
-| BYOK | Companion main process 直接呼叫 OpenAI Responses API；`store: false`、`background: false`，不使用 tools／files／conversation IDs | 已實作；仍需安全 release host 與真實 key 的人工 network smoke |
-| 匿名貢獻 | 預設關閉、精確 payload preview、accountless enrollment、背景 sync／冪等 retry、stop、delete／status／recovery | Protocol、runtime、gateway／UI 控制與條件式 CLI composition 已完成本機測試；一般 pure-Node 啟動仍缺經稽核的原生 OS credential host，因此維持 unavailable、預設關閉與 zero-cloud，staging／cloud-off packet-capture E2E 也仍待完成 |
-| Web／API | zh-TW-first React/Vite SPA、Hono Worker API、公開 totals、enrollment／ingest／delete／status | 已實作、build 及 fail-closed dry-run；未配置遠端環境 |
-| Cloud data | D1 guarded mutation、deletion、projection、retention、Durable Object rate limit／suppression | 已實作及本機測試；仍需真實 D1 migration、容量及故障演練 |
-| 匿名 compaction | 完整 UTC day 的 `day-all-v1`、`k = 20` gate、mapping-free rollup、commit-time race guards | 已實作及本機測試；尚未有 staging／production E2E |
-| Scheduled maintenance | deletion → compaction → retention → projection；retention 保留 compaction-owned input，避免部分日期被先刪除 | 已實作及本機測試；尚未在真實 Cron Trigger／D1 驗證 |
-| 安裝包／更新 feed | 歷史 rc.12 unsigned Linux ZIP 曾通過 ASAR／fuse／maker／collector／sidecar 驗證，但已不可晉升；Windows release tooling 會嚴格驗證單一 full `.nupkg` 的 `RELEASES` hash/bytes，並產生 deterministic `latest`／`next` promotion plan | 尚無 post-hardening installer；此工作站的 packaged boot 因 Chromium sandbox 主機政策而 fail closed，新版本的 signing、notarization、DMG、Squirrel current-channel 回讀／credential deploy／公開 readback 與原生 install-update smoke 仍為 STOP |
+| 區域                            | 目前 source slice                                                                                                                                                                                                                  | 上線前狀態                                                                                                                                                                                                                                                            |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local companion（sidecar path） | 輕量 localhost UI、compact pet 內的四選一起始流程、真實 UTC 今日／7／28 日 totals 與每日趨勢                                                                                                                                       | 已淘汰的 rc.12 bytes 留有 clean Linux installed smoke 與 loopback-only trace 歷史證據；post-hardening 的新版本仍須重做 clean install、registry gate 與原生 Windows／macOS smoke                                                                                       |
+| Collector                       | exact-pinned `tokentracker-cli@0.80.0` child、local-only refresh、strict loopback adapter／gateway；legacy slice 仍含 `tokscale@4.5.2`                                                                                             | 歷史 rc.12 安裝包曾驗證 exact 41-package sidecar closure 與 Linux zstd prebuild；下一個唯一版本須重做 closure、registry、Windows／macOS CI smoke 與 cutover 證據                                                                                                      |
+| Legacy Electron companion       | 本機 SQLite、舊 7／28 日趨勢、traits／固定台詞、share card、export／reset                                                                                                                                                          | Migration-only；不再作為支援的安裝或 collection 路徑，sidecar cutover 後移除或降為 thin shell                                                                                                                                                                         |
+| Characters                      | 11 位可切換角色；四位元祖各有 release-only avatar＋`tech` 基本服裝與 168 條雙語文字，另有 11 位的完整 avatar、20 種衣櫥與 pose art；內嵌語音仍為 0                                                                                     | 8 個基本 WebP（415,470 bytes）在候選 tarball 內零 GET 使用；891-image／65,574,180-byte 固定整包已公開並完成 immutable readback，但仍只在明確同意後單次下載。失敗／撤銷回到基本圖文，其他缺圖狀態才 letter/silent fallback；整體 Alpha 仍受其他 release gates 阻擋 |
+| BYOK                            | Companion main process 直接呼叫 OpenAI Responses API；`store: false`、`background: false`，不使用 tools／files／conversation IDs                                                                                                   | 已實作；仍需安全 release host 與真實 key 的人工 network smoke                                                                                                                                                                                                         |
+| 匿名貢獻                        | 預設關閉、精確 payload preview、accountless enrollment、背景 sync／冪等 retry、stop、delete／status／recovery                                                                                                                      | Protocol、runtime、gateway／UI 控制與條件式 CLI composition 已完成本機測試；一般 pure-Node 啟動仍缺經稽核的原生 OS credential host，因此維持 unavailable、預設關閉與 zero-cloud，staging／cloud-off packet-capture E2E 也仍待完成                                     |
+| Web／API                        | zh-TW-first React/Vite SPA、Hono Worker API、公開 totals、enrollment／ingest／delete／status                                                                                                                                       | 已實作、build 及 fail-closed dry-run；未配置遠端環境                                                                                                                                                                                                                  |
+| Cloud data                      | D1 guarded mutation、deletion、projection、retention、Durable Object rate limit／suppression                                                                                                                                       | 已實作及本機測試；仍需真實 D1 migration、容量及故障演練                                                                                                                                                                                                               |
+| 匿名 compaction                 | 完整 UTC day 的 `day-all-v1`、`k = 20` gate、mapping-free rollup、commit-time race guards                                                                                                                                          | 已實作及本機測試；尚未有 staging／production E2E                                                                                                                                                                                                                      |
+| Scheduled maintenance           | deletion → compaction → retention → projection；retention 保留 compaction-owned input，避免部分日期被先刪除                                                                                                                        | 已實作及本機測試；尚未在真實 Cron Trigger／D1 驗證                                                                                                                                                                                                                    |
+| 安裝包／更新 feed               | 歷史 rc.12 unsigned Linux ZIP 曾通過 ASAR／fuse／maker／collector／sidecar 驗證，但已不可晉升；Windows release tooling 會嚴格驗證單一 full `.nupkg` 的 `RELEASES` hash/bytes，並產生 deterministic `latest`／`next` promotion plan | 尚無 post-hardening installer；此工作站的 packaged boot 因 Chromium sandbox 主機政策而 fail closed，新版本的 signing、notarization、DMG、Squirrel current-channel 回讀／credential deploy／公開 readback 與原生 install-update smoke 仍為 STOP                        |
 
 ## 已接受的目標架構
 
@@ -204,10 +207,14 @@ npm exec -- tokenmonster --no-open
 在有桌面瀏覽器的本機可省略它。這條路徑會沿用 TokenTracker 的本機 collector；
 不需要 clone 或另外啟動 TokenTracker repository。
 
-角色 asset 現在強制為 cache-only；gateway 設定只接受 `cdnBaseUrl: null`，且沒有網路
-fetch hook 或逐物件 downloader。`--no-character-downloads` 為向後相容參數。
-Companion 只讀取 `~/.tokenmonster/asset-cache` 中逐次重新驗證的內容，缺少時回退到內建
-字母模式／靜音；用量整理、圖表與解鎖進度不受影響。
+角色的逐物件 `cdnBaseUrl` 維持 `null`，也沒有依本機狀態 lazy-fetch 的 downloader。
+明確同意的 fixed-pack 路徑只允許 `https://cdn.ted-h.com` 上 release
+`ai-sister-images-11-2026.07.21` 的單一 immutable ZIP；未同意、撤銷或離線缺少完整
+cache 時不發出素材 GET，並使用 release 內嵌的四位元祖 avatar、`tech` 基本服裝與雙語
+固定文字；其他缺圖角色才回退到字母模式／靜音。完整 pack 安裝後，Companion 只從
+`~/.tokenmonster/asset-cache` 逐次重新驗證並顯示本機已解鎖圖片；完整 pack 失敗或撤銷時
+回到內嵌基本圖文。用量整理、圖表與解鎖進度不受影響；`--no-character-downloads` 只停用
+完整包控制，為向後相容參數，不移除內建基本素材。
 
 以下 Web／Electron 指令屬於既有公開網站或 legacy migration slice，不是新的
 companion 啟動方式。
@@ -356,8 +363,9 @@ Production／staging 目前都是 **STOP**，至少還缺：
   平台的 native packaged smoke；
 - 加密 logical backup、deletion suppression replay、restore-from-zero 與 rollback drill；
 - privacy／terms／legal review、project license 決策與 third-party redistribution review；
-- 現有 50 條及後續 voice pack 的獨立 schema-v2 rights／brand／content gate；
-  schema-v1 runtime manifest 的語音 refs 不構成 public approval。
+- 歷史 50 條 cloned WAV 與後續 voice pack 的 clone consent/provenance、逐條
+  content review、metadata 清理及 schema-v2 gate；owner approval 已私下保存，但
+  schema-v1 refs 不能因此視為可發布，語音必須進入新的 combined immutable release。
 
 在所有 gate 有可重現證據以前，不要建立 production D1、開啟 mutation flag、發布
 download link，或把本專案稱為已上線。
@@ -374,9 +382,12 @@ cross-platform contract／privacy／one-command smoke 後才合併。
 sidecar cutover 後會移除。兩種來源在 migration 期間不得涵蓋同一時間窗或相加。
 
 AI-Sister／`multi-ai-chat-app` 是設計與 persona 來源，但不是 TokenMonster 的 runtime
-依賴。Release 內嵌的 schema-v1 integrity manifest 列出 10 位角色、每位 20 種主題與 pose
-的 immutable hash-named outputs；GLM 沒有對應圖像 bundle，因此維持 TokenMonster-owned
-letter mode。正式入口只會顯示逐次驗證過的本機 cache；按本機狀態 lazy fetch 已停用。
+依賴。Release 內嵌的 image-only schema-v2 authority 列出 11 位角色的 avatars、每位
+20 種主題與 pose，共 891 張 immutable image associations；固定 pack 只在明確同意後
+取得。候選 tarball 另在 release staging 嵌入四位元祖各一張 avatar 與 `tech` 基本服裝，
+共 8 個 WebP／415,470 bytes，搭配 168 條 `zh-TW`／`en` 內建文字且不含語音。正式入口只
+顯示逐次驗證過的 release 內嵌 bytes 或本機 cache；按本機狀態 lazy fetch 已停用。沒有
+完整 pack 時四位元祖保留基本圖文，其他缺圖角色回退到 TokenMonster-owned letter mode。
 原始 parts、生成工具、prompt 與 publisher credential 都不進入 TokenMonster。詳見
 [Character wardrobe map](docs/CHARACTER_WARDROBE_MAP.md)。
 

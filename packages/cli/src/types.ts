@@ -48,6 +48,9 @@ export interface TokenMonsterCliDependencies {
   readonly getApprovedAssetPackConfiguration: () => NonNullable<
     CompanionGatewayOptions["characters"]["assetPack"]
   > | null
+  readonly getEmbeddedStarterAssetConfiguration: () => NonNullable<
+    CompanionGatewayOptions["characters"]["baseAssets"]
+  > | null
   readonly getAssetDirectory: () => string
   /** Pure Node defaults to null until an audited native host injects this. */
   readonly getContributionCredentialHost: () => ContributionCredentialHost | null

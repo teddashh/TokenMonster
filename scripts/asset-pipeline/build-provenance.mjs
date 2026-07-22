@@ -13,6 +13,8 @@ import {
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { buildCharactersPackage } from "./build-characters-package.mjs";
+
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "../..");
 const PIPELINE_PATH = join(
   REPOSITORY_ROOT,
@@ -102,27 +104,6 @@ async function readJson(path, label) {
     return JSON.parse(await readFile(path, "utf8"));
   } catch {
     throw new Error(`${label} must contain valid JSON`);
-  }
-}
-
-function buildCharactersPackage() {
-  const result = spawnSync(
-    process.execPath,
-    [
-      join(REPOSITORY_ROOT, "node_modules", "typescript", "bin", "tsc"),
-      "-p",
-      "tsconfig.build.json",
-    ],
-    {
-      cwd: join(REPOSITORY_ROOT, "packages", "characters"),
-      encoding: "utf8",
-      maxBuffer: 32 * 1024 * 1024,
-    },
-  );
-  if (result.status !== 0) {
-    throw new Error(
-      `Could not build @tokenmonster/characters: ${(result.stderr ?? result.stdout ?? "").trim()}`,
-    );
   }
 }
 
@@ -508,6 +489,9 @@ async function main() {
     computeAssetIntegrityManifestV1Sha256,
   } = await import(moduleUrl.href);
   const integrity = AssetIntegrityManifestV1Schema.parse(integrityInput);
+  if (report.builtAt !== integrity.generatedAt) {
+    throw new Error("report.json build timestamp does not match manifest.json");
+  }
   const sourceEvidence =
     AssetSourceEvidenceBundleV1Schema.parse(sourceEvidenceInput);
   if (sourceEvidence.inventoryId !== options.inventoryId) {

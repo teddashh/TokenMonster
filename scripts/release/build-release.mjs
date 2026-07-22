@@ -14,6 +14,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import yauzl from "yauzl";
 
 import {
   collectSidecarClosure,
@@ -21,8 +22,11 @@ import {
   exactSidecarDependencyPins,
 } from "./sidecar-lock.mjs";
 import {
-  PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY,
-  requirePublicAssetAuthority,
+  PUBLIC_EMBEDDED_STARTER_ASSETS,
+  PUBLIC_EMBEDDED_STARTER_SOURCE_PACK,
+  requireApprovedPublicAssetRelease,
+  requirePublicEmbeddedStarterAsset,
+  requirePublicAssetReleaseSlots,
   requirePublicStagedFile,
 } from "./public-artifact-policy.mjs";
 import { resolveCliReleaseVersion } from "./cli-release-version.mjs";
@@ -83,6 +87,8 @@ Options:
   --version <v>          Use one exact release version, e.g. 0.1.0-rc.11
   --version-suffix <s>   Append a prerelease suffix, e.g. rc.1
   --zstd-prebuilds <dir> Authenticated @mongodb-js/zstd native archives (required)
+  --embedded-starter-pack <zip>
+                         Use a local copy of the exact pinned starter ZIP
   --skip-build           Skip the workspace build step
   --help                 Show this help`;
 }
@@ -92,6 +98,7 @@ function parseArguments(argv) {
   let exactVersion = null;
   let versionSuffix = null;
   let zstdPrebuildsDirectory = null;
+  let embeddedStarterPack = null;
   let skipBuild = false;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -107,7 +114,8 @@ function parseArguments(argv) {
       argument === "--out" ||
       argument === "--version" ||
       argument === "--version-suffix" ||
-      argument === "--zstd-prebuilds"
+      argument === "--zstd-prebuilds" ||
+      argument === "--embedded-starter-pack"
     ) {
       const value = argv[index + 1];
       if (value === undefined || value.startsWith("--")) {
@@ -120,6 +128,8 @@ function parseArguments(argv) {
         exactVersion = value;
       } else if (argument === "--zstd-prebuilds") {
         zstdPrebuildsDirectory = resolve(value);
+      } else if (argument === "--embedded-starter-pack") {
+        embeddedStarterPack = resolve(value);
       } else {
         versionSuffix = value;
       }
@@ -135,6 +145,7 @@ function parseArguments(argv) {
   }
   return {
     exactVersion,
+    embeddedStarterPack,
     outDir,
     versionSuffix,
     zstdPrebuildsDirectory,
@@ -156,6 +167,191 @@ function run(command, args, options = {}) {
 
 async function readJson(path) {
   return JSON.parse(await readFile(path, "utf8"));
+}
+
+function requirePinnedEmbeddedStarterPack(bytes) {
+  if (
+    !Buffer.isBuffer(bytes) ||
+    bytes.length !== PUBLIC_EMBEDDED_STARTER_SOURCE_PACK.bytes ||
+    createHash("sha256").update(bytes).digest("hex") !==
+      PUBLIC_EMBEDDED_STARTER_SOURCE_PACK.sha256
+  ) {
+    throw new Error("Embedded starter source pack differs from policy");
+  }
+  return bytes;
+}
+
+async function readLocalEmbeddedStarterPack(path) {
+  const before = await lstat(path);
+  if (
+    before.isSymbolicLink() ||
+    !before.isFile() ||
+    before.nlink !== 1 ||
+    before.size !== PUBLIC_EMBEDDED_STARTER_SOURCE_PACK.bytes
+  ) {
+    throw new Error("--embedded-starter-pack must be one exact physical file");
+  }
+  const bytes = await readFile(path);
+  const after = await lstat(path);
+  if (
+    after.isSymbolicLink() ||
+    !after.isFile() ||
+    before.dev !== after.dev ||
+    before.ino !== after.ino ||
+    before.size !== after.size ||
+    before.mtimeMs !== after.mtimeMs ||
+    before.ctimeMs !== after.ctimeMs
+  ) {
+    throw new Error("--embedded-starter-pack changed while staging");
+  }
+  return requirePinnedEmbeddedStarterPack(bytes);
+}
+
+async function downloadEmbeddedStarterPack() {
+  const response = await fetch(PUBLIC_EMBEDDED_STARTER_SOURCE_PACK.url, {
+    method: "GET",
+    redirect: "error",
+    credentials: "omit",
+    cache: "no-store",
+    referrer: "",
+    referrerPolicy: "no-referrer",
+    headers: {
+      Accept: "application/zip",
+      "Accept-Encoding": "identity",
+    },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok || response.status !== 200 || response.body === null) {
+    throw new Error("Could not fetch the pinned embedded starter source pack");
+  }
+  const declaredLength = response.headers.get("content-length");
+  if (
+    declaredLength !== null &&
+    declaredLength !== String(PUBLIC_EMBEDDED_STARTER_SOURCE_PACK.bytes)
+  ) {
+    throw new Error("Embedded starter source pack has an unexpected length");
+  }
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of response.body) {
+    const bytes = Buffer.from(chunk);
+    total += bytes.length;
+    if (total > PUBLIC_EMBEDDED_STARTER_SOURCE_PACK.bytes) {
+      throw new Error("Embedded starter source pack exceeds its byte limit");
+    }
+    chunks.push(bytes);
+  }
+  return requirePinnedEmbeddedStarterPack(Buffer.concat(chunks, total));
+}
+
+async function readEmbeddedStarterPack(localPath) {
+  return localPath === null
+    ? downloadEmbeddedStarterPack()
+    : readLocalEmbeddedStarterPack(localPath);
+}
+
+function openZipBuffer(bytes) {
+  return new Promise((resolvePromise, reject) => {
+    yauzl.fromBuffer(
+      bytes,
+      {
+        autoClose: false,
+        lazyEntries: true,
+        decodeStrings: true,
+        validateEntrySizes: true,
+        strictFileNames: true,
+      },
+      (error, zipFile) => {
+        if (error !== null) reject(error);
+        else resolvePromise(zipFile);
+      },
+    );
+  });
+}
+
+function readZipEntry(zipFile, entry, maximumBytes) {
+  return new Promise((resolvePromise, reject) => {
+    zipFile.openReadStream(entry, (error, stream) => {
+      if (error !== null) {
+        reject(error);
+        return;
+      }
+      const chunks = [];
+      let total = 0;
+      stream.on("data", (chunk) => {
+        total += chunk.length;
+        if (total > maximumBytes) {
+          stream.destroy(new Error("Embedded starter ZIP entry is too large"));
+          return;
+        }
+        chunks.push(Buffer.from(chunk));
+      });
+      stream.once("error", reject);
+      stream.once("end", () => resolvePromise(Buffer.concat(chunks, total)));
+    });
+  });
+}
+
+async function stageEmbeddedStarterAssets(stagingDir, localPackPath) {
+  const packBytes = await readEmbeddedStarterPack(localPackPath);
+  const expectedByObjectPath = new Map(
+    PUBLIC_EMBEDDED_STARTER_ASSETS.map((asset) => [asset.objectPath, asset]),
+  );
+  const seen = new Set();
+  const zipFile = await openZipBuffer(packBytes);
+  try {
+    await new Promise((resolvePromise, reject) => {
+      let settled = false;
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        zipFile.close();
+        reject(error);
+      };
+      zipFile.once("error", fail);
+      zipFile.once("end", () => {
+        if (settled) return;
+        settled = true;
+        if (
+          seen.size !== PUBLIC_EMBEDDED_STARTER_ASSETS.length ||
+          [...expectedByObjectPath.keys()].some((path) => !seen.has(path))
+        ) {
+          reject(new Error("Embedded starter ZIP inventory is incomplete"));
+          return;
+        }
+        resolvePromise();
+      });
+      zipFile.on("entry", (entry) => {
+        void (async () => {
+          const expected = expectedByObjectPath.get(entry.fileName);
+          if (
+            expected === undefined ||
+            seen.has(entry.fileName) ||
+            entry.fileName.endsWith("/") ||
+            entry.compressionMethod !== 0 ||
+            entry.compressedSize !== expected.bytes ||
+            entry.uncompressedSize !== expected.bytes ||
+            (entry.generalPurposeBitFlag & 0x0001) !== 0
+          ) {
+            throw new Error("Embedded starter ZIP inventory differs from policy");
+          }
+          const contents = await readZipEntry(zipFile, entry, expected.bytes);
+          requirePublicEmbeddedStarterAsset(expected.archiveEntry, contents);
+          const destination = join(
+            stagingDir,
+            ...expected.archiveEntry.slice("package/".length).split("/"),
+          );
+          await mkdir(dirname(destination), { recursive: true });
+          await writeFile(destination, contents, { flag: "wx", mode: 0o644 });
+          seen.add(entry.fileName);
+          zipFile.readEntry();
+        })().catch(fail);
+      });
+      zipFile.readEntry();
+    });
+  } finally {
+    zipFile.close();
+  }
 }
 
 async function stageZstdPreinstallAuthority(stagingDir) {
@@ -380,7 +576,7 @@ async function copyPackageFiles(packageDir, destinationFor) {
   return manifest;
 }
 
-async function requireStagedAssetAuthority(stagingDir) {
+async function requireStagedAssetAuthorities(stagingDir) {
   const charactersDist = join(
     stagingDir,
     "node_modules",
@@ -396,21 +592,50 @@ async function requireStagedAssetAuthority(stagingDir) {
     .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
     .map((entry) => entry.name)
     .sort();
-  if (JSON.stringify(jsonFileNames) !== '["approved-release-v2.json"]') {
+  const expectedJsonFileNames = [
+    "approved-asset-pack-allowlist-v1.json",
+    "approved-asset-pack-descriptor-v1.json",
+    "approved-release-v2.json",
+  ];
+  if (JSON.stringify(jsonFileNames) !== JSON.stringify(expectedJsonFileNames)) {
     throw new Error(
-      `Character runtime JSON inventory is not the single v2 authority slot: ${JSON.stringify(jsonFileNames)}`,
+      `Character runtime JSON inventory is not the exact release authority slot set: ${JSON.stringify(jsonFileNames)}`,
     );
   }
 
-  const authorityPath = join(charactersDist, "approved-release-v2.json");
-  const releaseModule = await import(
-    pathToFileURL(join(charactersDist, "asset-release.js")).href
+  const [releaseModule, packModule] = await Promise.all([
+    import(pathToFileURL(join(charactersDist, "asset-release.js")).href),
+    import(pathToFileURL(join(charactersDist, "asset-pack.js")).href),
+  ]);
+  const [releaseManifest, descriptor, allowlist] = await Promise.all([
+    readFile(join(charactersDist, "approved-release-v2.json")),
+    readFile(join(charactersDist, "approved-asset-pack-descriptor-v1.json")),
+    readFile(join(charactersDist, "approved-asset-pack-allowlist-v1.json")),
+  ]);
+  const releaseSlots = { releaseManifest, descriptor, allowlist };
+  const validatedAssetRelease = requirePublicAssetReleaseSlots(
+    releaseSlots,
+    {
+      validateReleaseV2: (value) =>
+        releaseModule.AssetReleaseManifestV2Schema.parse(value),
+      validateDescriptorV1: (value) =>
+        packModule.AssetPackDescriptorV1Schema.parse(value),
+      validateAllowlistV1: (value) =>
+        packModule.AssetPackAllowlistV1Schema.parse(value),
+      validateBinding: (configuration) => {
+        packModule.planFixedAssetPack(configuration);
+        releaseModule.projectAssetReleaseManifestV2ToRuntimeManifest(
+          configuration.releaseManifest,
+        );
+      },
+    },
   );
-  requirePublicAssetAuthority(
-    PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY,
-    await readFile(authorityPath),
-    (authority) => releaseModule.AssetReleaseManifestV2Schema.parse(authority),
-  );
+  if (validatedAssetRelease === null) {
+    throw new Error(
+      "Public production releases require the configured approved asset release.",
+    );
+  }
+  requireApprovedPublicAssetRelease(releaseSlots);
 }
 
 async function assertAssetTransportDisabled(directory, root = directory) {
@@ -525,7 +750,8 @@ async function main() {
     throw new Error("Could not derive the tokentracker-cli pin");
   }
 
-  await requireStagedAssetAuthority(stagingDir);
+  await requireStagedAssetAuthorities(stagingDir);
+  await stageEmbeddedStarterAssets(stagingDir, options.embeddedStarterPack);
 
   const rootLock = await readJson(join(SCRIPT_ROOT, "package-lock.json"));
   // npm ignores a dependency package's shrinkwrap when installing the public

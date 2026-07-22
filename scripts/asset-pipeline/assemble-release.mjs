@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
 import { link, lstat, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+
+import { buildCharactersPackage } from "./build-characters-package.mjs";
 
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "../..");
 const MAX_JSON_BYTES = 16 * 1024 * 1024;
@@ -62,27 +63,6 @@ function parseArguments(argv) {
     }
   }
   return options;
-}
-
-function buildCharactersPackage() {
-  const result = spawnSync(
-    process.execPath,
-    [
-      join(REPOSITORY_ROOT, "node_modules", "typescript", "bin", "tsc"),
-      "-p",
-      "tsconfig.build.json",
-    ],
-    {
-      cwd: join(REPOSITORY_ROOT, "packages", "characters"),
-      encoding: "utf8",
-      maxBuffer: 32 * 1024 * 1024,
-    },
-  );
-  if (result.status !== 0) {
-    throw new Error(
-      `Could not build @tokenmonster/characters: ${(result.stderr ?? result.stdout ?? "").trim()}`,
-    );
-  }
 }
 
 async function readJsonFile(path, label) {

@@ -2,15 +2,26 @@
 
 Status: the acquisition primitive and player consent/revocation path are
 implemented and tested. The embedded schema-v2 release, descriptor, and exact
-origin/path authority still default to null, so current builds remain
-letter-only and make no asset request.
+origin/path authority are a non-null, strictly cross-bound generated set for
+image-only release `ai-sister-images-11-2026.07.21`. Release staging also embeds
+an exact 415,470-byte starter base: ChatGPT, Claude, Gemini, and Grok each have
+one avatar and one `tech` outfit, for eight WebPs total. A clean install renders
+that base with zero runtime asset requests; explicit enablement authorizes
+exactly one GET for the separate complete fixed pack.
+
+The starter base is derived only from the approved full-release associations.
+The release policy checks its exact paths, sizes, SHA-256 digests, and WebP
+signatures before placing it under the characters package. It is paired with
+168 compiled `zh-TW`/`en` fixed text lines for the four starters and contains no
+WAV or other voice binary. The build-time source ZIP is not a runtime endpoint:
+installed clients already have the eight verified WebPs and never fetch them.
 
 `@tokenmonster/characters/asset-pack` is the fail-closed acquisition primitive
-for a later public, rights-approved character release. Its presence does not
-authorize a download. Current product entry points remain cache-only and the
-gateway still requires `cdnBaseUrl: null`.
+for the public, rights-approved character image release. Its presence alone
+does not authorize a download: the gateway requires a same-session player
+choice and keeps the per-object `cdnBaseUrl` at `null`.
 
-The runtime remains fail-closed until all of these release inputs exist:
+The runtime remains fail-closed unless all of these release inputs exist:
 
 1. an embedded strict schema-v2 asset release manifest whose every association
    passed its image or voice rights, grant, brand, content, and disclosure gate;
@@ -22,29 +33,40 @@ The runtime remains fail-closed until all of these release inputs exist:
 5. installed-build packet-capture review proving that no character, unlock,
    theme, pose, voice trigger, or usage state affects the request.
 
-Until then, letter/silent fallback is the public behavior. There is no real
-origin or pack descriptor in this repository.
+The current image release supplies the first four inputs. Its public origin is
+`https://cdn.ted-h.com`; its 891-entry, 65,574,180-byte ZIP has SHA-256
+`b1bff7d70342006982f9a3dd5b06ecf9b86291fea01dd3caba8822a012e48bb7`, and
+its embedded manifest has canonical SHA-256
+`924c95cff70fac69f8622cecb499e7691a23e9d4c51e5a8c53dc9bbe2dd513e1`.
+Installed-build packet-capture review remains a release-evidence gate; this
+document does not declare the overall Alpha ready. Release staging accepts the
+three slots only when they are either all null or all strictly validated and
+cross-bound.
 
 ## Player consent lifecycle
 
 The gateway exposes a session-gated, exact-key status DTO and one boolean-only
 control. The UI discloses the descriptor's actual byte count, that the action
 downloads one complete fixed pack, and that no usage, selected character,
-unlock, wardrobe, pose, or voice state is sent. A clean install starts in
-letter mode and performs no asset request.
+unlock, wardrobe, pose, or voice state is sent. A clean install starts with the
+four-starter base art and bilingual text and performs no asset request; other
+unavailable art keeps the letter/silent fallback.
 
 Enable first verifies whether the complete immutable pack is already cached.
 Only a complete cache hit or one successful fixed-pack install activates the
-schema-v2 projection. Consent is then persisted locally in a mode-0600 atomic
-file. A partial or failed install stays letter-only. On restart, a prior
+complete 891-image projection over the starter base. Consent is then persisted
+locally in a mode-0600 atomic
+file. A partial or failed full-pack install stays on the embedded starter base.
+On restart, a prior
 consent verifies local cache bytes only; an incomplete cache becomes
 `repair-needed` and never triggers an automatic network retry.
 
-Disable switches the same running session back to the letter manifest before
-returning, persists revocation, and removes only the exact objects named by the
-fixed release. It never performs a network request. Re-enabling clears the UI's
-image-failure memory and refreshes the roster in the same session so newly
-verified art can render immediately.
+Disable switches the same running session back to the embedded starter manifest
+before returning, persists revocation, and removes only the downloaded objects
+named by the fixed release. It never removes the release-staged eight WebPs or
+the bilingual text and never performs a network request. Re-enabling clears the
+UI's image-failure memory and refreshes the roster in the same session so newly
+verified full-pack art can render immediately.
 
 ## Immutable request contract
 
@@ -56,12 +78,20 @@ production TokenMonster descriptor/allowlist to use exactly:
 /tokenmonster/characters/v1/packs/<release-id>/<pack-sha256>.zip
 ```
 
-The primitive does not compile that currently forbidden publisher namespace;
-the future embedded allowlist is its authority. It requires a canonical safe
-namespace ending in `/packs/<release-id>/<pack-sha256>.zip`, then separately
-pins one credential-free HTTPS origin and that same exact path. Queries,
-fragments, credentials, alternate paths, and non-HTTPS origins fail before
-network I/O. A consented invocation performs one `GET` with
+The primitive does not compile a publisher namespace; the embedded allowlist is
+its authority. The current origin and exact path are kept separate so packaged
+source never becomes an alternate combined-prefix authority:
+
+```text
+origin: https://cdn.ted-h.com
+path: /tokenmonster/characters/v1/packs/ai-sister-images-11-2026.07.21/b1bff7d70342006982f9a3dd5b06ecf9b86291fea01dd3caba8822a012e48bb7.zip
+```
+
+The validator requires a canonical safe namespace ending in
+`/packs/<release-id>/<pack-sha256>.zip`, then separately pins one
+credential-free HTTPS origin and that same exact path. Queries, fragments,
+credentials, alternate paths, and non-HTTPS origins fail before network I/O. A
+consented invocation performs one `GET` with
 `redirect: "error"`, `credentials: "omit"`, an empty referrer, `no-referrer`,
 `no-store`, `Accept: application/zip`, and `Accept-Encoding: identity`. It
 never retries, probes with `HEAD`, or requests individual objects.
@@ -92,10 +122,27 @@ regular-file status, declared size, SHA-256, and media signature before that
 input enters the archive. Duplicate release associations that reference the
 same object create one pack entry, matching the installer plan.
 
-This builder is not a publisher or runtime authorization. The credentialed
-publisher must upload the archive to the descriptor's exact hash-named path,
-and a separately reviewed embedded HTTPS allowlist and user-consent flow remain
-required before any product entry point may call the installer.
+This builder is not a publisher or runtime authorization. For the current image
+release, the credentialed publisher uploaded the archive to the descriptor's
+exact hash-named path and byte-verified both it and the release manifest through
+the public CDN. Future releases must repeat that publication/readback step and
+still require a separately reviewed embedded HTTPS allowlist and user-consent
+flow before any product entry point may call the installer.
+
+After publication, `npm run prepare:asset-release-slots -- --release-manifest
+<path> --descriptor <path> --origin <exact-https-origin> --out <fresh-dir>`
+derives the allowlist path from the descriptor, validates the complete
+production plan, and atomically emits the three fixed runtime slot filenames.
+The fresh directory is the only supported input for promoting non-null source
+slots; do not hand-author or independently edit a hash, path, or URL.
+
+The current ZIP contains 891 images for 11 characters and no voice files. The
+historical 50 cloned WAV files are not silently appended: despite a privately
+stored owner approval, they still lack the complete clone-consent/provenance,
+per-clip content-review, and metadata-stripping evidence required by the voice
+schema. They require a new combined immutable release. Image and audio binaries
+from the complete pack remain outside the npm tarball; the only embedded raster
+binaries are the exact eight starter WebPs, and no audio binary is embedded.
 
 ## Explicit limits and ZIP profile
 

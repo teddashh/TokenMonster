@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   access,
   chmod,
@@ -21,6 +22,7 @@ import {
   packageNameFromLockPath,
 } from "./sidecar-lock.mjs";
 import { requireDisabledRemoteLimitsResponse } from "./smoke-installed-policy.mjs";
+import { PUBLIC_EMBEDDED_STARTER_ASSETS } from "./public-artifact-policy.mjs";
 import { verifyInstalledZstdNative } from "./zstd-native-verifier.mjs";
 
 const BOOTSTRAP_TIMEOUT_MS = 120_000;
@@ -29,6 +31,8 @@ const SHUTDOWN_TIMEOUT_MS = 15_000;
 const BOOTSTRAP_URL_PATTERN = /http:\/\/127\.0\.0\.1:\d+\/\S+/u;
 const SESSION_COOKIE_PATTERN =
   /(?:^|;\s*)tokenmonster_session=([A-Za-z0-9_-]+)(?:;|$)/u;
+const EXPECTED_ASSET_RELEASE_ID = "ai-sister-images-11-2026.07.21";
+const EXPECTED_ASSET_PACK_BYTES = 65_574_180;
 const DEFAULT_UNAVAILABLE_CONTRIBUTION_STATUS = Object.freeze({
   status: "ok",
   availability: "unavailable",
@@ -46,7 +50,9 @@ const DEFAULT_UNAVAILABLE_CONTRIBUTION_STATUS = Object.freeze({
 });
 
 function step(name, detail) {
-  console.log(`SMOKE ${name}: PASS${detail === undefined ? "" : ` (${detail})`}`);
+  console.log(
+    `SMOKE ${name}: PASS${detail === undefined ? "" : ` (${detail})`}`,
+  );
 }
 
 function fail(message) {
@@ -83,7 +89,10 @@ function isUtcDate(value) {
     return false;
   }
   const instant = new Date(`${value}T00:00:00.000Z`);
-  return Number.isFinite(instant.getTime()) && instant.toISOString().slice(0, 10) === value;
+  return (
+    Number.isFinite(instant.getTime()) &&
+    instant.toISOString().slice(0, 10) === value
+  );
 }
 
 function isIsoInstantWithMilliseconds(value) {
@@ -188,7 +197,10 @@ function isCleanLearningCharacterProfile(value) {
   ) {
     return false;
   }
-  return JSON.stringify(value.reasons) === JSON.stringify(CLEAN_LEARNING_PROFILE_REASONS);
+  return (
+    JSON.stringify(value.reasons) ===
+    JSON.stringify(CLEAN_LEARNING_PROFILE_REASONS)
+  );
 }
 
 async function verifyInstalledSidecarClosure(installDirectory) {
@@ -223,7 +235,9 @@ async function verifyInstalledSidecarClosure(installDirectory) {
       sidecarPin,
     });
   } catch (error) {
-    fail(error instanceof Error ? error.message : "sidecar closure check failed");
+    fail(
+      error instanceof Error ? error.message : "sidecar closure check failed",
+    );
   }
 
   for (const identity of closure) {
@@ -518,7 +532,9 @@ async function verifyInstalledPlayerFeatureArtifacts(tokenMonsterRoot) {
       metadata.size < 1 ||
       metadata.size > 4 * 1_024 * 1_024
     ) {
-      fail(`installed player feature artifact is missing or invalid: ${feature.path}`);
+      fail(
+        `installed player feature artifact is missing or invalid: ${feature.path}`,
+      );
     }
     const contents = await readFile(feature.path, "utf8");
     const missingMarker = feature.markers.find(
@@ -579,7 +595,9 @@ async function createHermeticSmokeEnvironment(isolatedHome, pathOverride) {
     TEMP: temporaryDirectory,
     PATH:
       pathOverride ??
-      (process.platform === "win32" ? "" : ["/usr/bin", "/bin"].join(delimiter)),
+      (process.platform === "win32"
+        ? ""
+        : ["/usr/bin", "/bin"].join(delimiter)),
     NO_COLOR: "1",
   };
   for (const key of [
@@ -594,7 +612,11 @@ async function createHermeticSmokeEnvironment(isolatedHome, pathOverride) {
     "LC_CTYPE",
   ]) {
     const value = process.env[key];
-    if (typeof value === "string" && value.length > 0 && !value.includes("\0")) {
+    if (
+      typeof value === "string" &&
+      value.length > 0 &&
+      !value.includes("\0")
+    ) {
       environment[key] = value;
     }
   }
@@ -622,7 +644,7 @@ async function createNativeEgressFixture(isolatedHome) {
         `pathlib.Path(${JSON.stringify(marker)}).write_text("invoked", encoding="utf-8")`,
         "sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)",
         "sock.setblocking(False)",
-        "sock.connect_ex((\"198.51.100.1\", 9))",
+        'sock.connect_ex(("198.51.100.1", 9))',
         "sock.close()",
         "",
       ].join("\n"),
@@ -759,7 +781,8 @@ function waitForBootstrapUrl(child, captured) {
       finish(reject, new Error("installed binary could not be spawned"));
     });
     child.once("exit", (code, signal) => {
-      const result = signal === null ? `code ${code ?? "unknown"}` : `signal ${signal}`;
+      const result =
+        signal === null ? `code ${code ?? "unknown"}` : `signal ${signal}`;
       finish(
         reject,
         new Error(`installed binary exited before bootstrap URL (${result})`),
@@ -789,7 +812,9 @@ async function stopChild(child) {
   if (child.exitCode === null && child.signalCode === null) child.kill();
   if (await waitForExit(child, SHUTDOWN_TIMEOUT_MS)) return;
   child.kill("SIGKILL");
-  throw new Error("installed binary did not exit within the 15s shutdown grace");
+  throw new Error(
+    "installed binary did not exit within the 15s shutdown grace",
+  );
 }
 
 async function getJson(response, label) {
@@ -809,6 +834,73 @@ async function request(url, options, label) {
   } catch {
     fail(`${label} request failed`);
   }
+}
+
+async function requireEmbeddedStarterImage(
+  origin,
+  cookie,
+  path,
+  expected,
+  label,
+) {
+  const response = await request(
+    `${origin}${path}`,
+    { headers: { Cookie: cookie } },
+    label,
+  );
+  if (
+    response.status !== 200 ||
+    response.headers.get("content-type") !== "image/webp"
+  ) {
+    fail(`${label} did not return an embedded WebP`);
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (
+    bytes.length !== expected.bytes ||
+    bytes.subarray(0, 4).toString("ascii") !== "RIFF" ||
+    bytes.subarray(8, 12).toString("ascii") !== "WEBP" ||
+    createHash("sha256").update(bytes).digest("hex") !== expected.sha256
+  ) {
+    fail(`${label} bytes differed from the reviewed embedded asset`);
+  }
+}
+
+async function verifyInstalledEmbeddedStarterAssets(tokenMonsterRoot) {
+  const objectDirectory = join(
+    tokenMonsterRoot,
+    "node_modules",
+    "@tokenmonster",
+    "characters",
+    "dist",
+    "embedded-starter-assets",
+  );
+  let totalBytes = 0;
+  for (const expected of PUBLIC_EMBEDDED_STARTER_ASSETS) {
+    const path = join(objectDirectory, ...expected.objectPath.split("/"));
+    const metadata = await lstat(path).catch(() => null);
+    if (
+      metadata === null ||
+      metadata.isSymbolicLink() ||
+      !metadata.isFile() ||
+      metadata.nlink !== 1 ||
+      metadata.size !== expected.bytes
+    ) {
+      fail(`installed embedded starter asset is missing or invalid: ${path}`);
+    }
+    const bytes = await readFile(path);
+    if (
+      bytes.subarray(0, 4).toString("ascii") !== "RIFF" ||
+      bytes.subarray(8, 12).toString("ascii") !== "WEBP" ||
+      createHash("sha256").update(bytes).digest("hex") !== expected.sha256
+    ) {
+      fail(`installed embedded starter asset bytes differ: ${path}`);
+    }
+    totalBytes += bytes.length;
+  }
+  step(
+    "embedded starter inventory",
+    `${PUBLIC_EMBEDDED_STARTER_ASSETS.length} exact WebPs, ${totalBytes} bytes`,
+  );
 }
 
 async function postJson(origin, cookie, path, body, label) {
@@ -864,31 +956,21 @@ async function runSmoke(installDirectory, isolatedHome) {
   );
   const smokeEnvironment = await createHermeticSmokeEnvironment(isolatedHome);
   const progressionDirectory = join(isolatedHome, ".tokenmonster");
-  const staleStoreLock = join(
-    progressionDirectory,
-    "progression-v1.json.lock",
-  );
+  const staleStoreLock = join(progressionDirectory, "progression-v1.json.lock");
   await mkdir(progressionDirectory, { recursive: true, mode: 0o700 });
   await writeFile(staleStoreLock, "", { flag: "wx", mode: 0o600 });
   const staleLockTime = new Date(Date.now() - 60_000);
   await utimes(staleStoreLock, staleLockTime, staleLockTime);
-  const binary = join(
-    tokenMonsterRoot,
-    "dist",
-    "bin.js",
-  );
+  const binary = join(tokenMonsterRoot, "dist", "bin.js");
   verifyInstalledCliVersion(binary, releaseManifest, smokeEnvironment);
   await verifyInstalledPlayerFeatureArtifacts(tokenMonsterRoot);
+  await verifyInstalledEmbeddedStarterAssets(tokenMonsterRoot);
   const captured = { stdout: "", stderr: "" };
-  const child = spawn(
-    process.execPath,
-    [binary, "--no-open"],
-    {
-      env: smokeEnvironment,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    },
-  );
+  const child = spawn(process.execPath, [binary, "--no-open"], {
+    env: smokeEnvironment,
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
 
   let failure;
   try {
@@ -911,7 +993,10 @@ async function runSmoke(installDirectory, isolatedHome) {
     }
     const cookie = `tokenmonster_session=${cookieMatch[1]}`;
     const origin = new URL(bootstrapUrl).origin;
-    step("bootstrap", `HTTP ${bootstrapResponse.status}, session cookie captured`);
+    step(
+      "bootstrap",
+      `HTTP ${bootstrapResponse.status}, session cookie captured`,
+    );
 
     const statusResponse = await request(
       `${origin}/api/companion/status`,
@@ -919,7 +1004,9 @@ async function runSmoke(installDirectory, isolatedHome) {
       "companion status",
     );
     if (statusResponse.status !== 200) {
-      fail(`companion status returned HTTP ${statusResponse.status}, expected 200`);
+      fail(
+        `companion status returned HTTP ${statusResponse.status}, expected 200`,
+      );
     }
     const status = await getJson(statusResponse, "companion status");
     if (
@@ -929,7 +1016,10 @@ async function runSmoke(installDirectory, isolatedHome) {
     ) {
       fail("companion status JSON did not contain a string phase field");
     }
-    step("companion status", `HTTP ${statusResponse.status}, phase is a string`);
+    step(
+      "companion status",
+      `HTTP ${statusResponse.status}, phase is a string`,
+    );
 
     const contributionStatusResponse = await request(
       `${origin}/api/contribution/status`,
@@ -1029,8 +1119,11 @@ async function runSmoke(installDirectory, isolatedHome) {
       ),
     ];
     if (
-      (await Promise.all(unexpectedContributionState.map((path) => exists(path))))
-        .some(Boolean)
+      (
+        await Promise.all(
+          unexpectedContributionState.map((path) => exists(path)),
+        )
+      ).some(Boolean)
     ) {
       fail("installed default CLI created contribution SQLite or vault state");
     }
@@ -1045,9 +1138,14 @@ async function runSmoke(installDirectory, isolatedHome) {
       "initial BYOK status",
     );
     if (initialByokResponse.status !== 200) {
-      fail(`initial BYOK status returned HTTP ${initialByokResponse.status}, expected 200`);
+      fail(
+        `initial BYOK status returned HTTP ${initialByokResponse.status}, expected 200`,
+      );
     }
-    const initialByok = await getJson(initialByokResponse, "initial BYOK status");
+    const initialByok = await getJson(
+      initialByokResponse,
+      "initial BYOK status",
+    );
     const byokStatusKeys = [
       "status",
       "availability",
@@ -1067,9 +1165,13 @@ async function runSmoke(installDirectory, isolatedHome) {
       initialByok.provider !== "OpenAI" ||
       initialByok.model !== "gpt-5.6-luna"
     ) {
-      fail("installed CLI did not expose the exact initial memory-only BYOK status");
+      fail(
+        "installed CLI did not expose the exact initial memory-only BYOK status",
+      );
     }
-    const byokKeyCanary = ["sk", "installed_1234567890abcdef_KEY_CANARY"].join("-");
+    const byokKeyCanary = ["sk", "installed_1234567890abcdef_KEY_CANARY"].join(
+      "-",
+    );
     const configuredByokResponse = await postJson(
       origin,
       cookie,
@@ -1078,7 +1180,9 @@ async function runSmoke(installDirectory, isolatedHome) {
       "configure installed memory-only BYOK",
     );
     if (configuredByokResponse.status !== 200) {
-      fail(`installed BYOK configure returned HTTP ${configuredByokResponse.status}, expected 200`);
+      fail(
+        `installed BYOK configure returned HTTP ${configuredByokResponse.status}, expected 200`,
+      );
     }
     const configuredByok = await getJson(
       configuredByokResponse,
@@ -1100,7 +1204,10 @@ async function runSmoke(installDirectory, isolatedHome) {
       { confirmation: "clear-openai-byok" },
       "clear installed memory-only BYOK",
     );
-    const clearedByok = await getJson(clearedByokResponse, "cleared installed BYOK status");
+    const clearedByok = await getJson(
+      clearedByokResponse,
+      "cleared installed BYOK status",
+    );
     if (
       clearedByokResponse.status !== 200 ||
       !hasExactKeys(clearedByok, byokStatusKeys) ||
@@ -1109,7 +1216,10 @@ async function runSmoke(installDirectory, isolatedHome) {
     ) {
       fail("installed BYOK clear did not remove the key authority");
     }
-    step("BYOK memory slot", "configure/status/clear stayed RAM-only and key-free");
+    step(
+      "BYOK memory slot",
+      "configure/status/clear stayed RAM-only and key-free",
+    );
 
     const profileResponse = await request(
       `${origin}/api/characters/profile`,
@@ -1146,7 +1256,9 @@ async function runSmoke(installDirectory, isolatedHome) {
       "characters",
     );
     if (charactersResponse.status !== 200) {
-      fail(`characters returned HTTP ${charactersResponse.status}, expected 200`);
+      fail(
+        `characters returned HTTP ${charactersResponse.status}, expected 200`,
+      );
     }
     const characters = await getJson(charactersResponse, "characters");
     if (
@@ -1161,19 +1273,78 @@ async function runSmoke(installDirectory, isolatedHome) {
     ) {
       fail("clean characters JSON did not expose 11 unselected characters");
     }
-    const initialStarter = characters.characters.find(
-      (character) => character?.characterId === "chatgpt",
-    );
-    if (
-      initialStarter === undefined ||
-      initialStarter.isStarter !== true ||
-      initialStarter.unlocked !== false
-    ) {
-      fail("clean install did not expose chatgpt as a locked starter choice");
+    const starterIds = ["chatgpt", "claude", "gemini", "grok"];
+    for (const starterId of starterIds) {
+      const initialStarter = characters.characters.find(
+        (character) => character?.characterId === starterId,
+      );
+      const avatar = PUBLIC_EMBEDDED_STARTER_ASSETS.find(
+        (asset) => asset.characterId === starterId && asset.kind === "avatar",
+      );
+      if (
+        initialStarter === undefined ||
+        avatar === undefined ||
+        initialStarter.isStarter !== true ||
+        initialStarter.unlocked !== false ||
+        initialStarter.activeThemeId !== null ||
+        initialStarter.visual?.mode !== "doll" ||
+        initialStarter.visual.avatarPath !==
+          `/assets/characters/${avatar.objectPath}`
+      ) {
+        fail(
+          `clean install did not expose ${starterId} with built-in avatar art`,
+        );
+      }
+      await requireEmbeddedStarterImage(
+        origin,
+        cookie,
+        initialStarter.visual.avatarPath,
+        avatar,
+        `${starterId} built-in avatar`,
+      );
     }
     step(
       "characters",
-      `HTTP ${charactersResponse.status}, 11 characters and no forced starter`,
+      `HTTP ${charactersResponse.status}, four built-in starter avatars, 11 characters and no forced starter`,
+    );
+
+    const assetPackStatusResponse = await request(
+      `${origin}/api/characters/assets`,
+      { headers: { Cookie: cookie, Origin: origin } },
+      "asset pack status",
+    );
+    if (assetPackStatusResponse.status !== 200) {
+      fail(
+        `asset pack status returned HTTP ${assetPackStatusResponse.status}, expected 200`,
+      );
+    }
+    const assetPackStatus = await getJson(
+      assetPackStatusResponse,
+      "asset pack status",
+    );
+    if (
+      !hasExactKeys(assetPackStatus, [
+        "status",
+        "phase",
+        "consented",
+        "enabled",
+        "releaseId",
+        "downloadBytes",
+        "lastError",
+      ]) ||
+      assetPackStatus.status !== "ok" ||
+      assetPackStatus.phase !== "available" ||
+      assetPackStatus.consented !== false ||
+      assetPackStatus.enabled !== false ||
+      assetPackStatus.releaseId !== EXPECTED_ASSET_RELEASE_ID ||
+      assetPackStatus.downloadBytes !== EXPECTED_ASSET_PACK_BYTES ||
+      assetPackStatus.lastError !== null
+    ) {
+      fail("asset pack status was not the exact reviewed default-off contract");
+    }
+    step(
+      "asset pack authority",
+      `${EXPECTED_ASSET_RELEASE_ID}, ${EXPECTED_ASSET_PACK_BYTES} bytes, default off`,
     );
 
     const blockedSelectResponse = await postJson(
@@ -1207,9 +1378,14 @@ async function runSmoke(installDirectory, isolatedHome) {
       "explicit stale rc.7 lock repair",
     );
     if (repairResponse.status !== 200) {
-      fail(`stale rc.7 repair returned HTTP ${repairResponse.status}, expected 200`);
+      fail(
+        `stale rc.7 repair returned HTTP ${repairResponse.status}, expected 200`,
+      );
     }
-    const repair = await getJson(repairResponse, "explicit stale rc.7 lock repair");
+    const repair = await getJson(
+      repairResponse,
+      "explicit stale rc.7 lock repair",
+    );
     if (
       repair?.status !== "ok" ||
       repair?.outcome !== "repaired" ||
@@ -1226,7 +1402,9 @@ async function runSmoke(installDirectory, isolatedHome) {
       "starter selection after explicit repair",
     );
     if (selectResponse.status !== 200) {
-      fail(`starter selection returned HTTP ${selectResponse.status}, expected 200`);
+      fail(
+        `starter selection returned HTTP ${selectResponse.status}, expected 200`,
+      );
     }
     const selection = await getJson(selectResponse, "starter selection");
     if (
@@ -1261,10 +1439,36 @@ async function runSmoke(installDirectory, isolatedHome) {
     if (
       selectedCharacters?.selection?.characterId !== "chatgpt" ||
       selectedCharacters?.selection?.selectedBy !== "manual" ||
-      selectedStarter?.unlocked !== true
+      selectedStarter?.unlocked !== true ||
+      selectedStarter?.activeThemeId !== "tech" ||
+      selectedStarter?.visual?.mode !== "doll"
     ) {
       fail("starter choice was not persisted as the unlocked active companion");
     }
+    const baseOutfit = PUBLIC_EMBEDDED_STARTER_ASSETS.find(
+      (asset) =>
+        asset.characterId === "chatgpt" &&
+        asset.kind === "outfit" &&
+        asset.themeId === "tech",
+    );
+    const activeBaseTheme = selectedStarter.visual.themes.find(
+      (theme) => theme.themeId === "tech",
+    );
+    if (
+      baseOutfit === undefined ||
+      activeBaseTheme?.unlocked !== true ||
+      activeBaseTheme.outfitPath !==
+        `/assets/characters/${baseOutfit.objectPath}`
+    ) {
+      fail("selected starter did not receive the built-in tech base outfit");
+    }
+    await requireEmbeddedStarterImage(
+      origin,
+      cookie,
+      activeBaseTheme.outfitPath,
+      baseOutfit,
+      "chatgpt built-in base outfit",
+    );
     if (await exists(staleStoreLock)) {
       fail("stale zero-byte progression lock was not recovered");
     }
@@ -1310,7 +1514,9 @@ async function runSmoke(installDirectory, isolatedHome) {
     const missingAssetStatus = missingAssetResponse.status;
     await missingAssetResponse.body?.cancel();
     if (missingAssetStatus !== 404) {
-      fail(`unknown character asset returned HTTP ${missingAssetStatus}, expected 404`);
+      fail(
+        `unknown character asset returned HTTP ${missingAssetStatus}, expected 404`,
+      );
     }
     step("unknown character asset", `HTTP ${missingAssetStatus}`);
 
@@ -1322,7 +1528,9 @@ async function runSmoke(installDirectory, isolatedHome) {
     const anonymousStatus = anonymousResponse.status;
     await anonymousResponse.body?.cancel();
     if (anonymousStatus !== 404) {
-      fail(`anonymous characters returned HTTP ${anonymousStatus}, expected 404`);
+      fail(
+        `anonymous characters returned HTTP ${anonymousStatus}, expected 404`,
+      );
     }
     step("anonymous characters", `HTTP ${anonymousStatus}`);
   } catch (error) {
@@ -1342,7 +1550,9 @@ async function runSmoke(installDirectory, isolatedHome) {
 
 const installDirectory = process.argv[2];
 if (process.argv.length !== 3 || installDirectory === undefined) {
-  console.error("SMOKE usage: node scripts/release/smoke-installed.mjs <install-dir>");
+  console.error(
+    "SMOKE usage: node scripts/release/smoke-installed.mjs <install-dir>",
+  );
   process.exit(1);
 }
 
@@ -1361,7 +1571,8 @@ try {
 }
 
 if (failure !== undefined) {
-  const message = failure instanceof Error ? failure.message : "unknown failure";
+  const message =
+    failure instanceof Error ? failure.message : "unknown failure";
   console.error(`SMOKE FAIL: ${message}`);
   process.exit(1);
 }

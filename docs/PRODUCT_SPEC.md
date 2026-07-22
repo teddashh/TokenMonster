@@ -5,14 +5,14 @@
 > Conflicting Tokscale/Electron or fork language is legacy and is superseded by
 > [ADR 0005](adr/0005-permanent-tokentracker-sidecar-adapter.md).
 
-| 欄位 | 內容 |
-| --- | --- |
+| 欄位     | 內容                                                                   |
+| -------- | ---------------------------------------------------------------------- |
 | 文件狀態 | Launch target + tested source-slice baseline；不是 production evidence |
-| 文件版本 | 0.3 |
-| 更新日期 | 2026-07-16 |
-| 產品名稱 | TokenMonster |
-| 首要目標 | 將產品安全、可信地上線，並驗證「AI 使用足跡可以養出像自己的角色」 |
-| 規格範圍 | 產品承諾、MVP、使用流程、成功指標、驗收條件與待決策項目 |
+| 文件版本 | 0.3                                                                    |
+| 更新日期 | 2026-07-21                                                             |
+| 產品名稱 | TokenMonster                                                           |
+| 首要目標 | 將產品安全、可信地上線，並驗證「AI 使用足跡可以養出像自己的角色」      |
+| 規格範圍 | 產品承諾、MVP、使用流程、成功指標、驗收條件與待決策項目                |
 
 ## 1. 文件用語與決策層級
 
@@ -29,7 +29,7 @@
 2. MVP 實作範圍：為了可安全上線、可驗證核心價值而收斂的第一版。
 3. 建議預設：尚未被產品負責人裁決，但團隊可依此先行，不應阻塞低風險工作。
 
-### 1.1 目前實作快照（2026-07-16）
+### 1.1 目前實作快照（2026-07-21）
 
 Local Companion、exact-pinned TokenTracker sidecar、11 位角色與本機進度引擎、角色
 asset integrity cache／letter fallback、BYOK 對話、
@@ -45,13 +45,19 @@ rollup。
 這些都只是 source-level evidence，不是 production evidence。Companion background
 sync的packet capture／wake soak、Cloudflare account／D1／domain／secrets、remote rehearsal／staging E2E、
 backup/restore與suppression replay、signed installer、平台實機smoke、專案 license／
-法律文件與後續 voice 資產權利仍是上線閘門。本文其餘需求描述的是完整 launch
+法律文件與 voice 技術證據仍是上線閘門。本文其餘需求描述的是完整 launch
 target；不得因列在本規格中就宣稱已部署或已對外提供。
 
 `tokentracker-cli@0.80.0` 是現有唯一 authoritative collector，Tokscale／Electron
-是 migration-only legacy slice。圖像不包在 npm artifact；release 只內嵌 integrity
-manifest，正式入口目前只讀取逐次驗證的本機 cache。先前依解鎖狀態按需下載的路徑已因
-object-key side channel 停用。
+是 migration-only legacy slice。候選 npm artifact 在 release staging 精確加入 8 個
+rights-approved WebP／415,470 bytes：ChatGPT、Claude、Gemini、Grok 各一張 avatar 與
+`tech` 基本服裝，並編入四位的 168 條 `zh-TW`／`en` 固定文字；不嵌入任何語音。
+Release 另內嵌 non-null image-only schema-v2 authority、descriptor 與 exact HTTPS
+allowlist。Default、no-consent、offline-without-cache、完整包失敗或 revoked 時，四位
+基本圖文仍以 zero runtime GET 使用，其他缺圖狀態才 letter/silent fallback；使用者明確
+啟用時才取得一個不隨本機狀態改變的 891-image 固定整包。先前依解鎖狀態按需下載的
+路徑已因 object-key side channel 停用。這是候選 artifact 行為，不代表 application
+release 已發布。
 
 ## 2. 產品摘要
 
@@ -72,7 +78,7 @@ TokenMonster 的差異化不是另一個成本報表，而是：
 - `tokscale@4.5.2`、`collector-core` 與舊 `tokentracker-bridge` contract 是 migration-only contribution slice，不是支援的 local collector，也不得接收新產品功能或與 sidecar totals 相加。
 - TokenMonster 不 fork、vendor、submodule、deep-import 或複製 TokenTracker parser／hook code，也不直接讀它的 queue files 或 provider databases。
 - AI-Sister / multi-ai-chat-app 現有角色設計是 raster 圖像資產，不是 Live2D 模型，也沒有可直接使用的 3D rig。
-- 四張候選核心角色圖在 owner public-use grant 與 brand review 完成前一律是 `blocked`。MVP 角色系統必須能以 placeholder 完整運作，不得把未清權素材包進公開 artifact。
+- Image release `ai-sister-images-11-2026.07.21` 已以 schema-v2 核准 11 位角色的 891 張 raster，並發布為一個 immutable fixed pack；候選 npm artifact 只抽取其中四位元祖的 avatar＋`tech` 基本服裝，共 8 個 WebP／415,470 bytes。任何未清權的新素材都維持 `blocked`；未同意、離線缺完整 cache、失敗與撤銷時，四位基本圖文仍完整運作，其他缺圖狀態才使用 placeholder。
 
 ### 3.2 資料可取得性的限制
 
@@ -126,23 +132,23 @@ TokenMonster 的差異化不是另一個成本報表，而是：
 
 ## 5. 已承諾的產品需求
 
-| ID | 已承諾需求 | MVP 狀態 |
-| --- | --- | --- |
-| C-01 | 提供可下載的本機 Token collector | 必須 |
-| C-02 | 彙總多工具、多 provider、model 與 Token 使用量 | 必須；依支援矩陣誠實標示 |
-| C-03 | 避免重掃、重啟與重傳造成重複計數 | 必須 |
-| C-04 | 提供本地圖表與累積用量檢視 | 必須 |
-| C-05 | 以 AI-Sister core-four 候選設計作為 AI 字母人視覺方向 | 必須；只發布 `approved` raster，未清權時用 placeholder |
-| C-06 | 字母人依 tooling、provider/model 比例、使用節律等 coding style 產生特色 | 必須 |
-| C-07 | 字母人有短期情緒、較長期發展與用量提醒 | 必須；提醒預設關閉 |
-| C-08 | 字母人的發展是水平客製化，不是更強或高低排名 | 必須 |
-| C-09 | 使用者可選擇是否匿名上傳彙總數據 | 必須；預設關閉 |
-| C-10 | 公開網站顯示自願 contributors 的累積數字 | 必須 |
-| C-11 | 使用者可自行提供 API key 與字母人對話 | MVP 必須支援本機 OpenAI Responses BYOK 路徑 |
-| C-12 | 未提供 API key 時，字母人仍能說固定系統台詞 | 必須 |
-| C-13 | 圖表與角色體驗可切換 | 必須 |
-| C-14 | 皮膚、語音包與收藏機制 | 後續階段；純 cosmetic，不做戰力 |
-| C-15 | 角色可被分享並表達自己的 AI 使用風格 | MVP 新增的策略性必要需求 |
+| ID   | 已承諾需求                                                              | MVP 狀態                                                                            |
+| ---- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| C-01 | 提供可下載的本機 Token collector                                        | 必須                                                                                |
+| C-02 | 彙總多工具、多 provider、model 與 Token 使用量                          | 必須；依支援矩陣誠實標示                                                            |
+| C-03 | 避免重掃、重啟與重傳造成重複計數                                        | 必須                                                                                |
+| C-04 | 提供本地圖表與累積用量檢視                                              | 必須                                                                                |
+| C-05 | 以 AI-Sister 11-character raster catalog 作為 AI 字母人視覺方向         | 必須；只使用 schema-v2 `approved` raster，四位基本圖隨候選包內嵌，其餘未同意、無完整 cache 或未清權時用 placeholder |
+| C-06 | 字母人依 tooling、provider/model 比例、使用節律等 coding style 產生特色 | 必須                                                                                |
+| C-07 | 字母人有短期情緒、較長期發展與用量提醒                                  | 必須；提醒預設關閉                                                                  |
+| C-08 | 字母人的發展是水平客製化，不是更強或高低排名                            | 必須                                                                                |
+| C-09 | 使用者可選擇是否匿名上傳彙總數據                                        | 必須；預設關閉                                                                      |
+| C-10 | 公開網站顯示自願 contributors 的累積數字                                | 必須                                                                                |
+| C-11 | 使用者可自行提供 API key 與字母人對話                                   | MVP 必須支援本機 OpenAI Responses BYOK 路徑                                         |
+| C-12 | 未提供 API key 時，字母人仍能說固定系統台詞                             | 必須                                                                                |
+| C-13 | 圖表與角色體驗可切換                                                    | 必須                                                                                |
+| C-14 | 皮膚、語音包與收藏機制                                                  | 後續階段；純 cosmetic，不做戰力                                                     |
+| C-15 | 角色可被分享並表達自己的 AI 使用風格                                    | MVP 新增的策略性必要需求                                                            |
 
 ## 6. 非目標
 
@@ -199,7 +205,7 @@ Collector 狀態依序為 `starting` → `syncing` → `ready`；無支援資料
 1. 使用者從公開網站下載 collector／desktop companion。
 2. 安裝頁清楚說明 collector 會讀取什麼、不會讀取什麼。
 3. collector 掃描可支援的本地來源，列出偵測結果與資料精確度。
-4. 初始 roster 顯示四位姊妹與七位朋友。系統可依下節規則建議一位 starter，但使用者選擇永遠優先；GLM 固定使用內建字母模式。
+4. 初始 roster 顯示四位姊妹與七位朋友。系統可依下節規則建議一位 starter，但使用者選擇永遠優先；未明確啟用完整圖片包時，四位元祖使用候選包內嵌的 avatar、`tech` 基本服裝與雙語文字，其他缺圖角色使用內建字母模式。
 5. 系統匯入並去重歷史 usage，建立本地 dashboard。
 6. 證據足夠時，系統生成第一組 1 至 3 個主 traits，並為每個 trait 顯示原因；證據不足時維持「認識中」，不為了湊數猜測第二個 trait。
 7. 系統詢問是否開啟通知；預設不開。
@@ -274,7 +280,7 @@ Collector 狀態依序為 `starting` → `syncing` → `ready`；無支援資料
 
 #### C. AI 字母人
 
-- Launch roster 是 11 位角色；release-embedded schema-v1 integrity manifest 為其中 10 位列出各 20 種衣櫥與 pose art，GLM 使用 letter mode。V1 不構成 public rights approval，schema-v2 gate仍為 STOP。
+- Launch roster 是 11 位角色；release-embedded image-only schema-v2 authority 為每位列出 avatar、20 種衣櫥與三類 pose，共 891 張核准圖片。候選 tarball 先內嵌四位元祖各一張 avatar 與 `tech` 基本服裝；完整 891-image 圖片包仍必須由使用者明確啟用，fallback 支援其餘缺圖狀態。
 - 使用圖像切換、裁切、色彩效果、配件 overlay、對話框與輕量 CSS/canvas 動畫呈現狀態。
 - 不要求 Live2D、3D rig 或即時嘴型。
 - 側寫成形時顯示 1 至 3 個可解釋主 traits；證據不足時保持「認識中」。
@@ -405,11 +411,11 @@ Upload bearer secret 只存在 Authorization header；獨立 deletion secret 只
 
 建議將三種時間尺度分開：
 
-| 層級 | 建議時間窗 | 目的 | 範例 |
-| --- | --- | --- | --- |
-| Identity | 28 日 rolling profile | 穩定、可辨識的主 traits | CLI-heavy、multi-model、night owl |
-| Mood | 最近完整 UTC 日相對更早可用日；attested hourly 上游完成後升級為同時段 rolling rhythm | 穩定且不受部分日偏差的短期回饋 | 安靜、穩定、活躍、未知 |
-| Evolution | 每週或明確的本機結構變化 | 可看見的長期發展 | 新配件、色彩變化、台詞分支 |
+| 層級      | 建議時間窗                                                                           | 目的                           | 範例                              |
+| --------- | ------------------------------------------------------------------------------------ | ------------------------------ | --------------------------------- |
+| Identity  | 28 日 rolling profile                                                                | 穩定、可辨識的主 traits        | CLI-heavy、multi-model、night owl |
+| Mood      | 最近完整 UTC 日相對更早可用日；attested hourly 上游完成後升級為同時段 rolling rhythm | 穩定且不受部分日偏差的短期回饋 | 安靜、穩定、活躍、未知            |
+| Evolution | 每週或明確的本機結構變化                                                             | 可看見的長期發展               | 新配件、色彩變化、台詞分支        |
 
 可用且 content-blind 的候選特徵：
 
@@ -426,12 +432,12 @@ Upload bearer secret 只存在 Authorization header；獨立 deletion secret 只
 ### 10.6 AI-Sister raster 角色呈現
 
 - Launch roster 有 11 位：ChatGPT、Claude、Gemini、Grok、DeepSeek、Qwen、Mistral、Venice／Llama、Sakana、Perplexity 與 GLM。
-- Release 內嵌 schema-v1 integrity manifest，列出前 10 位角色各 20 種衣櫥與 `supported`、`challenged`、`victory` pose objects；GLM 使用 code-native letter mode。V1 只證 association／hash，不是 public rights approval；全部 entries仍需 schema-v2 migration。
-- 圖像不打包進 npm artifact。Gateway 設定只接受 `cdnBaseUrl: null`，沒有 fetch hook 或逐物件 downloader；CLI 與 legacy Electron 只使用逐次驗證的本機 cache 與 letter fallback。用量、圖表與進度不受影響，`--no-character-downloads` 暫時保留為相容參數。
+- Release 內嵌 non-null image-only schema-v2 authority、fixed-pack descriptor 與 exact HTTPS allowlist，列出 11 個 avatars、220 個 outfits 與 660 個 `supported`／`challenged`／`victory` poses；manifest canonical SHA-256 為 `924c95cff70fac69f8622cecb499e7691a23e9d4c51e5a8c53dc9bbe2dd513e1`。
+- Release staging 只把該 authority 中精確 8 個 WebP 放進候選 npm artifact：四位元祖各一張 avatar 與 `tech` 基本服裝，共 415,470 bytes；另有 168 條 `zh-TW`／`en` 內建文字。Gateway 的逐物件設定只接受 `cdnBaseUrl: null`，沒有 lazy-fetch hook 或逐物件 downloader。Default、no-consent、offline-without-cache、failed或revoked狀態都發出零次素材 GET，並回到四位基本圖文；其他缺圖狀態使用 letter/silent fallback。`--no-character-downloads` 只停用完整包，不移除內建基本素材。
 - 狀態式 lazy GET 不是可發布方案：即使沒有 query，hash-named object key 仍可映回自動角色、已解鎖衣裝、pose 或 voice trigger，從而揭露本機用量衍生狀態。
-- 未來 delivery 必須先通過 schema-v2 rights gate，並由使用者在充分揭露後明確啟動固定整包下載；整次網路物件集合不得依角色選擇、解鎖、token、provider 或 trigger 改變。下載後的顯示與反應選擇仍只在本機 cache 內完成。
+- 使用者在充分揭露後明確啟用，才可從 `https://cdn.ted-h.com` 單次取得 release `ai-sister-images-11-2026.07.21` 的 891-image、65,574,180-byte immutable ZIP；其 SHA-256 為 `b1bff7d70342006982f9a3dd5b06ecf9b86291fea01dd3caba8822a012e48bb7`。整次網路物件集合不得依角色選擇、解鎖、token、provider 或 trigger 改變；下載後的顯示與反應選擇只在本機 cache 內完成，失敗或撤銷則回到內嵌基本圖文。
 - 角色圖像不是 Live2D 或 3D rig；狀態透過核准的 pre-rendered pose 與輕量 UI 效果呈現。原始 parts、生成工具、prompt 與 publisher credential 不進入 TokenMonster。
-- Schema-v1 runtime integrity manifest 已含前 10 位各五條、共 50 條預錄語音 refs；GLM 無語音，UI 預設關閉，且正式入口只播放已驗證 cache 命中。V1 rows 不含完整 rights evidence，全部 voice 在 schema-v2 獨立 consent／rights／content gate 與 privacy-safe fixed-pack delivery 完成前不得視為 public-approved。
+- 候選 tarball 的基本素材與 current 891-image pack 都明確含 0 voice；168 條雙語內容是文字，不是音訊。歷史 schema-v1 inventory 的 50 條 cloned WAV 雖已有私下保存的 owner approval，仍缺 speaker/clone consent provenance、逐 clip spoken-content review與 metadata-stripping evidence，不能視為 current public capability。完成後也必須建立新的 image + voice combined immutable release，不能用 voice-only authority 取代圖片。
 - 每個角色都應共用同一套 trait 意義，避免角色選擇本身改變 usage 分析結果。
 
 ### 10.7 BYOK 與固定台詞
@@ -533,7 +539,7 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 交付：
 
 - exact-pinned TokenTracker 0.80.0 managed-child／adapter／runtime 的 compatibility、privacy、lifecycle與license審查；legacy tokscale／collector-core只作移除前的migration audit。
-- AI-Sister raster asset inventory、checksum、授權與 brand review 狀態；未核准素材維持 blocked。
+- AI-Sister raster asset inventory、checksum、授權與 brand review 狀態；目前核准的 891 張圖片以 immutable fixed pack 固定，其他素材維持 blocked。
 - local snapshot 與 cloud `IngestSnapshotV1` schema。
 - threat model、privacy data map 與 contributor wording。
 - 首發平台、單一 Worker hosting 架構與 Tier-1 adapter 決策。
@@ -542,14 +548,14 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 
 - 沒有阻擋依賴／發布的 license 問題。
 - 四條 Tier-1 fixture 可證明欄位投影、token semantics 與重算冪等。
-- 實際要對外發布的角色已核准；任一候選資產未清權時它不進 artifact，placeholder roster 已通過完整流程。
+- 實際候選 artifact 只允許 8 個已核准基本 WebP；任一其他候選資產未清權時不進 artifact，四位基本圖文與其餘 placeholder roster 都須通過完整流程。
 
 ### Phase 1：Local dogfood
 
 交付：
 
 - collector、local DB、支援矩陣與 dashboard。
-- core-four character catalog；候選 WebP 仍為 `blocked` 時只使用 placeholder。
+- 11-character catalog、四位內嵌基本圖文、explicit fixed-pack consent 與完整 letter/silent fallback；blocked 或超出基本組且無完整本機 cache 的圖片使用 placeholder。
 - identity／mood engine 與原因說明。
 - 固定台詞、角色／圖表切換與本機 OpenAI Responses BYOK vertical slice。
 
@@ -619,15 +625,15 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 
 樣本：至少 30 位、過去 30 天使用過至少兩種 AI coding／CLI／IDE 工具的使用者，連續測試 7 天。
 
-| 指標 | 目標 |
-| --- | --- |
-| Identity resonance | 至少 60% 能正確說明主要 traits 為何像自己 |
-| Archetype comprehension | 陌生評審至少 50% 可分到合理 archetype |
-| Opt-in rate | 至少 40% |
-| D7 主動開啟 | 至少 35% |
-| 主動分享卡 | 參考門檻至少 20%；以明確 share action 或使用者自報計算 |
-| Collector detection success | 已宣告支援的環境至少 90% 成功偵測 |
-| Crash-free active sessions | 至少 99% |
+| 指標                        | 目標                                                   |
+| --------------------------- | ------------------------------------------------------ |
+| Identity resonance          | 至少 60% 能正確說明主要 traits 為何像自己              |
+| Archetype comprehension     | 陌生評審至少 50% 可分到合理 archetype                  |
+| Opt-in rate                 | 至少 40%                                               |
+| D7 主動開啟                 | 至少 35%                                               |
+| 主動分享卡                  | 參考門檻至少 20%；以明確 share action 或使用者自報計算 |
+| Collector detection success | 已宣告支援的環境至少 90% 成功偵測                      |
+| Crash-free active sessions  | 至少 99%                                               |
 
 ### 13.3 演化 cadence 判斷
 
@@ -706,7 +712,7 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 
 ### AC-MON：AI 字母人
 
-- AC-MON-01：core-four manifest 中每個 `approved` AI-Sister raster 都可在 catalog 正確顯示；`blocked` 資產不進入 artifact，對應 placeholder 可完成全流程。
+- AC-MON-01：候選 npm artifact 只內嵌精確 8 個核准 starter WebP／415,470 bytes 與 168 條雙語文字，不含 audio；image-only v2 manifest 中其餘 `approved` raster 只在 explicit-enable 後由 verified 891-image cache 顯示。Default、no-consent、offline-without-cache、失敗與 revoked 都零 GET 回到四位基本圖文，其他缺圖狀態由 placeholder 完成全流程；`blocked` 資產不得進 artifact。
 - AC-MON-02：UI 不把 raster asset 稱為 Live2D 或 3D。
 - AC-MON-03：同一標準化 footprint 重算 10 次，主 traits 與 identity 結果相同。
 - AC-MON-04：每個主 trait、mood 與 evolution 變化都有可閱讀的原因。
@@ -754,28 +760,28 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 
 ## 15. 待決策項目與建議預設
 
-| 決策 | 建議預設 | 最晚決策點 |
-| --- | --- | --- |
-| 產品形態 | 公開 web + local collector/desktop companion；不要純網頁承擔本機掃描 | Phase 0 |
-| 首發 OS | Electron companion 先完成 macOS；Windows 緊接。各平台未跑 CI、簽署與實機 smoke 前不宣稱 GA | Phase 0 |
-| Collector 支援承諾 | exact-pinned tokentracker-cli 0.80.0 managed child為唯一runtime authority；legacy tokscale／bridge不得新增功能或與其相加。Pin升級須通過compatibility/privacy/cross-platform tests | Phase 0 |
-| Tier-1 tools | MVP 固定驗證 Claude Code、Codex CLI、Gemini CLI 與 Grok Build；任何擴充先加對應 fixture、privacy projection 與 compatibility test | Phase 0 |
-| 使用者帳號 | MVP 無使用者帳號；opt-in 時由 server 建立 enrollment，本機只保存隨機 bearer secret | Phase 0 |
-| 上傳 cadence | contribution queue 保存 UTC daily absolute snapshots；當日改變或 app 正常關閉時可重送較高 revision，離線安全重試 | Phase 1 |
-| Contributor auth | upload／deletion secrets 權限分離，只存本機 OS secret store，server 只存 verifier；request body 不帶 contributor ID、硬體指紋或 deletion secret | Phase 1 |
-| Retention／刪除 | 可識別 contributor buckets 保留 30 天以支援刪除與修正，之後只在匿名門檻達成時壓成無 contributor mapping 的 rollup；舊 rollup 無法個別移除並須事前揭露 | Phase 1 |
-| Breakdowns 匿名門檻 | 每一公開 bucket 至少 20 contributors | Phase 2 |
-| Identity cadence | 28 日 identity、最近完整 UTC 日 mood、每週／本機結構變化 evolution；有 attested hourly 上游後再升級 rolling mood，任何 hourly／類 session 特徵都不進 wire | Phase 1 |
-| 角色 roster | Runtime roster固定11位；10位有schema-v1 integrity inventory，GLM letter-only。任何圖像／語音公開啟用仍須schema-v2 rights與fixed-pack privacy gate | Phase 0 |
-| Raster 呈現 | 圖片切換＋overlay＋CSS/canvas 微動畫；不做假 Live2D | Phase 1 |
-| BYOK provider | OpenAI Responses API 直接由 companion 呼叫並設 `store: false`；其他 provider 後續以 adapter 擴充 | Phase 1 |
-| BYOK 儲存 | Electron async `safeStorage`／OS secret store；Linux `basic_text` 不持久化，純 web 不持久化 | Phase 1 |
-| 語音 | 預錄 playback已存在且default-off，只播放verified cache；50個v1 refs不構成rights approval。Fixed-pack／voice rights gate完成前不公開啟用；online TTS仍是獨立opt-in/data-flow gate | Phase 2 |
-| 抽卡／收藏 | 後續改為純 cosmetic 或 style／seasonal discovery；不與無限 Token 總量掛鉤 | Post-MVP |
-| 公開怪物牆 | 先驗證單張分享卡；只有辨識與分享指標通過才做 | Post-MVP |
-| Product analytics | 最小化、獨立 opt-in；不用第三方 session replay | Phase 1 |
-| Hosting 與區域 | React/Vite static assets 與 Hono API 併入單一 Cloudflare Worker，D1 存 aggregate；建立每日 logical export、rebuild drill 與 rate limit | Phase 0 |
-| 品牌拼法 | UI 統一 TokenMonster；一般文案可寫 Token Monster，不混用 The Token Monster | Phase 0 |
+| 決策                | 建議預設                                                                                                                                                                                                                                                 | 最晚決策點 |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 產品形態            | 公開 web + local collector/desktop companion；不要純網頁承擔本機掃描                                                                                                                                                                                     | Phase 0    |
+| 首發 OS             | Electron companion 先完成 macOS；Windows 緊接。各平台未跑 CI、簽署與實機 smoke 前不宣稱 GA                                                                                                                                                               | Phase 0    |
+| Collector 支援承諾  | exact-pinned tokentracker-cli 0.80.0 managed child為唯一runtime authority；legacy tokscale／bridge不得新增功能或與其相加。Pin升級須通過compatibility/privacy/cross-platform tests                                                                        | Phase 0    |
+| Tier-1 tools        | MVP 固定驗證 Claude Code、Codex CLI、Gemini CLI 與 Grok Build；任何擴充先加對應 fixture、privacy projection 與 compatibility test                                                                                                                        | Phase 0    |
+| 使用者帳號          | MVP 無使用者帳號；opt-in 時由 server 建立 enrollment，本機只保存隨機 bearer secret                                                                                                                                                                       | Phase 0    |
+| 上傳 cadence        | contribution queue 保存 UTC daily absolute snapshots；當日改變或 app 正常關閉時可重送較高 revision，離線安全重試                                                                                                                                         | Phase 1    |
+| Contributor auth    | upload／deletion secrets 權限分離，只存本機 OS secret store，server 只存 verifier；request body 不帶 contributor ID、硬體指紋或 deletion secret                                                                                                          | Phase 1    |
+| Retention／刪除     | 可識別 contributor buckets 保留 30 天以支援刪除與修正，之後只在匿名門檻達成時壓成無 contributor mapping 的 rollup；舊 rollup 無法個別移除並須事前揭露                                                                                                    | Phase 1    |
+| Breakdowns 匿名門檻 | 每一公開 bucket 至少 20 contributors                                                                                                                                                                                                                     | Phase 2    |
+| Identity cadence    | 28 日 identity、最近完整 UTC 日 mood、每週／本機結構變化 evolution；有 attested hourly 上游後再升級 rolling mood，任何 hourly／類 session 特徵都不進 wire                                                                                                | Phase 1    |
+| 角色 roster         | Runtime roster固定11位；候選包內嵌四位 avatar＋`tech` 基本服裝與168條雙語文字；891-image schema-v2 authority與usage-independent fixed pack已核准／發布但仍須explicit enable。Default/no-consent/offline-without-cache/failed/revoked時四位保留基本圖文，其餘缺圖角色letter fallback | Phase 0    |
+| Raster 呈現         | 圖片切換＋overlay＋CSS/canvas 微動畫；不做假 Live2D                                                                                                                                                                                                      | Phase 1    |
+| BYOK provider       | OpenAI Responses API 直接由 companion 呼叫並設 `store: false`；其他 provider 後續以 adapter 擴充                                                                                                                                                         | Phase 1    |
+| BYOK 儲存           | Electron async `safeStorage`／OS secret store；Linux `basic_text` 不持久化，純 web 不持久化                                                                                                                                                              | Phase 1    |
+| 語音                | 預錄 playback capability存在且default-off，但current pack為0 voice。歷史50條cloned WAV的owner approval已私下保存，仍缺clone-consent/provenance、逐clip review及metadata cleanup；須新combined immutable release。Online TTS仍是獨立opt-in/data-flow gate | Phase 2    |
+| 抽卡／收藏          | 後續改為純 cosmetic 或 style／seasonal discovery；不與無限 Token 總量掛鉤                                                                                                                                                                                | Post-MVP   |
+| 公開怪物牆          | 先驗證單張分享卡；只有辨識與分享指標通過才做                                                                                                                                                                                                             | Post-MVP   |
+| Product analytics   | 最小化、獨立 opt-in；不用第三方 session replay                                                                                                                                                                                                           | Phase 1    |
+| Hosting 與區域      | React/Vite static assets 與 Hono API 併入單一 Cloudflare Worker，D1 存 aggregate；建立每日 logical export、rebuild drill 與 rate limit                                                                                                                   | Phase 0    |
+| 品牌拼法            | UI 統一 TokenMonster；一般文案可寫 Token Monster，不混用 The Token Monster                                                                                                                                                                               | Phase 0    |
 
 ## 16. 主要風險與緩解
 
@@ -838,8 +844,8 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 緩解：
 
 - Phase 0 完成 asset inventory、來源、作者、license、attribution 與可修改範圍。
-- core-four 候選 WebP 在 owner public-use grant 與 brand review 完成前一律維持 `blocked`，不進對外 artifact；用 placeholder 完成產品流程。
-- Voice pack 與 Live2D／3D 重製另立授權閘門。
+- Current 891-image release 已具 owner public-use grant、brand/content review、immutable provenance 與 unaffiliated disclosure；候選 npm artifact 只抽取精確 8 個已核准 starter WebP，使用者未啟用完整包或 cache 不可用時由四位基本圖文與其餘 placeholder 完成產品流程。
+- 歷史 cloned voice、後續 voice pack 與 Live2D／3D 重製另立技術證據及授權閘門；owner approval 不能替代 speaker/clone provenance、逐 clip review或 metadata cleanup。
 
 ### 16.7 BYOK secret 洩漏
 
@@ -885,15 +891,15 @@ TokenMonster 可以稱為「已好好上線」，必須同時滿足：
 
 ## 18. 需求追蹤摘要
 
-| 使用者意圖 | MVP 對應 | 驗收群組 |
-| --- | --- | --- |
-| 記錄跨家 Token | Collector + dashboard + support matrix | AC-COL、AC-LOC |
-| 避免重複 | Local absolute aggregate bucket + server revisioned daily snapshot | AC-COL、AC-DEDUP |
-| 自願匿名分享 | Consent + payload preview + contributor upload | AC-PRIV |
-| 公開數字持續成長 | Verified contributors counter | AC-WEB |
-| AI 字母人依使用發展 | Identity／mood／evolution engine | AC-MON |
-| 依 coding style 長特色 | Content-blind traits + reason labels | AC-MON、Alpha metrics |
-| AI-Sister 角色設計重用 | Approved core-four raster／placeholder character catalog | AC-MON |
-| 有 key 可互動、無 key 仍會說話 | BYOK + local fixed phrases | AC-CHAT |
-| 定時提醒與圖表切換 | Local notifications + dashboard toggle | AC-REM、AC-LOC |
-| 皮膚與語音包 | Post-MVP cosmetic roadmap | Phase 4 |
+| 使用者意圖                     | MVP 對應                                                                 | 驗收群組              |
+| ------------------------------ | ------------------------------------------------------------------------ | --------------------- |
+| 記錄跨家 Token                 | Collector + dashboard + support matrix                                   | AC-COL、AC-LOC        |
+| 避免重複                       | Local absolute aggregate bucket + server revisioned daily snapshot       | AC-COL、AC-DEDUP      |
+| 自願匿名分享                   | Consent + payload preview + contributor upload                           | AC-PRIV               |
+| 公開數字持續成長               | Verified contributors counter                                            | AC-WEB                |
+| AI 字母人依使用發展            | Identity／mood／evolution engine                                         | AC-MON                |
+| 依 coding style 長特色         | Content-blind traits + reason labels                                     | AC-MON、Alpha metrics |
+| AI-Sister 角色設計重用         | Approved 11-character image pack／explicit consent／placeholder fallback | AC-MON                |
+| 有 key 可互動、無 key 仍會說話 | BYOK + local fixed phrases                                               | AC-CHAT               |
+| 定時提醒與圖表切換             | Local notifications + dashboard toggle                                   | AC-REM、AC-LOC        |
+| 皮膚與語音包                   | Post-MVP cosmetic roadmap                                                | Phase 4               |

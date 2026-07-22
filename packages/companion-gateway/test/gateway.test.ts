@@ -27,8 +27,10 @@ import {
 import {
   LETTER_WARDROBE_CATALOG,
   WARDROBE_THEME_IDS,
+  getApprovedAssetPackConfiguration,
   listCharacters,
   selectTapLine,
+  type AssetManifest,
   type WardrobeThemeId,
 } from "@tokenmonster/characters";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -43,6 +45,7 @@ import {
 import {
   CompanionGatewayError,
   createCompanionGateway,
+  type CompanionBaseAssets,
   type CompanionCharacterOptions,
   type CompanionCharacterProfileResponse,
   type CompanionCollectorController,
@@ -54,6 +57,10 @@ import {
   type CompanionProgressionLockRepairResponse,
   type CompanionUsageFamiliesResponse,
 } from "../src/index.js";
+import {
+  createCharacterService,
+  normalizeCharacterOptions,
+} from "../src/character-service.js";
 
 const UI_ASSETS = Object.freeze({
   html: '<!doctype html><link rel="stylesheet" href="/assets/companion.css"><script type="module" src="/assets/main.js"></script>',
@@ -126,6 +133,15 @@ function sha256(body: Uint8Array): string {
   return createHash("sha256").update(body).digest("hex");
 }
 
+function webpFixture(label: string): Buffer {
+  return Buffer.concat([
+    Buffer.from("RIFF", "ascii"),
+    Buffer.alloc(4),
+    Buffer.from("WEBP", "ascii"),
+    Buffer.from(label, "utf8"),
+  ]);
+}
+
 function objectRef(body: Uint8Array, extension: "webp" | "png" | "wav") {
   const hash = sha256(body);
   return {
@@ -166,6 +182,60 @@ function characterManifest(
     ],
     voice: [],
   };
+}
+
+const STARTER_CHARACTER_IDS = ["chatgpt", "claude", "gemini", "grok"] as const;
+type StarterCharacterId = (typeof STARTER_CHARACTER_IDS)[number];
+
+function starterCharacterManifest(
+  assets: Readonly<
+    Record<
+      StarterCharacterId,
+      Readonly<{ avatarBody: Uint8Array; outfitBody: Uint8Array }>
+    >
+  >,
+): AssetManifest {
+  return {
+    schemaVersion: "1",
+    generatedAt: "2026-07-16T00:00:00.000Z",
+    characters: STARTER_CHARACTER_IDS.map((characterId) => ({
+      characterId,
+      avatar: objectRef(assets[characterId].avatarBody, "webp"),
+      themes: [
+        {
+          themeId: "tech",
+          outfit: objectRef(assets[characterId].outfitBody, "webp"),
+          poses: {},
+        },
+      ],
+    })),
+    voice: [],
+  };
+}
+
+function embeddedObjects(
+  manifest: AssetManifest,
+  bodies: readonly Uint8Array[],
+): CompanionBaseAssets["objects"] {
+  return Object.freeze(
+    Object.fromEntries(
+      bodies.map((body) => {
+        const object = [...manifest.characters]
+          .flatMap((character) => [
+            character.avatar,
+            ...character.themes.flatMap((theme) => [
+              theme.outfit,
+              ...Object.values(theme.poses).filter(
+                (pose): pose is NonNullable<typeof pose> => pose !== undefined,
+              ),
+            ]),
+          ])
+          .find((candidate) => candidate.sha256 === sha256(body));
+        if (object === undefined) throw new Error("missing fixture object");
+        return [object.path, body] as const;
+      }),
+    ),
+  );
 }
 
 function progressionTotals(openai: number) {
@@ -423,9 +493,7 @@ async function startGateway(
   characterOverrides: Partial<CompanionCharacterOptions> = {},
   clock: () => Date = () => new Date("2026-07-15T12:34:56.789Z"),
   contribution?:
-    | CompanionContributionStatusSource
-    | CompanionContributionController
-    | null,
+    CompanionContributionStatusSource | CompanionContributionController | null,
 ): Promise<
   Readonly<{
     gateway: CompanionGateway;
@@ -580,19 +648,16 @@ async function uiLocaleRequest(
   }> = {},
 ): Promise<Response> {
   const method = input.method ?? "GET";
-  return fetch(
-    `${address.origin}${input.path ?? "/api/preferences/locale"}`,
-    {
-      method,
-      headers: {
-        Accept: "application/json",
-        Cookie: cookie,
-        ...(input.includeOrigin === false ? {} : { Origin: address.origin }),
-        ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(input.body === undefined ? {} : { body: input.body }),
+  return fetch(`${address.origin}${input.path ?? "/api/preferences/locale"}`, {
+    method,
+    headers: {
+      Accept: "application/json",
+      Cookie: cookie,
+      ...(input.includeOrigin === false ? {} : { Origin: address.origin }),
+      ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
     },
-  );
+    ...(input.body === undefined ? {} : { body: input.body }),
+  });
 }
 
 async function collectorStatusRequest(
@@ -670,9 +735,14 @@ describe("companion gateway", () => {
     const shared = await mkdtemp(join(tmpdir(), "tokenmonster-locale-api-"));
     temporaryDirectories.push(shared);
     const progressionStorePath = join(shared, "progression-v1.json");
-    const first = await startGateway(fakeAdapter(), undefined, fakeCollector(), {
-      progressionStorePath,
-    });
+    const first = await startGateway(
+      fakeAdapter(),
+      undefined,
+      fakeCollector(),
+      {
+        progressionStorePath,
+      },
+    );
     expect(
       (await fetch(`${first.address.origin}/api/preferences/locale`)).status,
     ).toBe(404);
@@ -755,9 +825,14 @@ describe("companion gateway", () => {
     expect(query.status).toBe(404);
     await first.gateway.close();
 
-    const second = await startGateway(fakeAdapter(), undefined, fakeCollector(), {
-      progressionStorePath,
-    });
+    const second = await startGateway(
+      fakeAdapter(),
+      undefined,
+      fakeCollector(),
+      {
+        progressionStorePath,
+      },
+    );
     expect(second.address.port).not.toBe(first.address.port);
     const secondCookie = await bootstrap(second.address);
     const persisted = await uiLocaleRequest(second.address, secondCookie);
@@ -928,17 +1003,17 @@ describe("companion gateway", () => {
 
   it("serves exact session- and Origin-gated contribution controls", async () => {
     let state:
-      | "off"
-      | "active"
-      | "stopped"
-      | "deletion-pending"
-      | "deletion-complete" = "off";
+      "off" | "active" | "stopped" | "deletion-pending" | "deletion-complete" =
+      "off";
     const runtimeStatus = () => {
       const deletion =
         state === "deletion-pending" || state === "deletion-complete"
           ? Object.freeze({
               jobId: "del_abcdefghijklmnopqrstuv",
-              status: state === "deletion-pending" ? ("queued" as const) : ("complete" as const),
+              status:
+                state === "deletion-pending"
+                  ? ("queued" as const)
+                  : ("complete" as const),
               requestedAt: "2026-07-19T12:00:00.000Z",
               finishedAt:
                 state === "deletion-complete"
@@ -952,7 +1027,10 @@ describe("companion gateway", () => {
         secureStorage: "os-backed" as const,
         state,
         enabled: state === "active",
-        canEnable: state === "off" || state === "stopped" || state === "deletion-complete",
+        canEnable:
+          state === "off" ||
+          state === "stopped" ||
+          state === "deletion-complete",
         canDelete: state === "active" || state === "stopped",
         canRecover: state === "deletion-pending",
         outboxPending: 0,
@@ -1012,11 +1090,19 @@ describe("companion gateway", () => {
       enable: vi.fn(async (receivedPreviewId: string) => {
         expect(receivedPreviewId).toBe(previewId);
         state = "active";
-        return Object.freeze({ ok: true, code: "enabled" as const, status: runtimeStatus() });
+        return Object.freeze({
+          ok: true,
+          code: "enabled" as const,
+          status: runtimeStatus(),
+        });
       }),
       stop: vi.fn(async () => {
         state = "stopped";
-        return Object.freeze({ ok: true, code: "stopped" as const, status: runtimeStatus() });
+        return Object.freeze({
+          ok: true,
+          code: "stopped" as const,
+          status: runtimeStatus(),
+        });
       }),
       requestDeletion: vi.fn(async () => {
         state = "deletion-pending";
@@ -1056,7 +1142,11 @@ describe("companion gateway", () => {
         body: JSON.stringify(body),
       });
 
-    const initial = await usageRequest(address, cookie, "/api/contribution/status");
+    const initial = await usageRequest(
+      address,
+      cookie,
+      "/api/contribution/status",
+    );
     expect(await initial.json()).toMatchObject({
       state: "off",
       canPreview: true,
@@ -1065,11 +1155,13 @@ describe("companion gateway", () => {
       canRecover: false,
     });
     expect(
-      (await post(
-        "/api/contribution/preview",
-        { confirmation: "preview-contribution-data" },
-        false,
-      )).status,
+      (
+        await post(
+          "/api/contribution/preview",
+          { confirmation: "preview-contribution-data" },
+          false,
+        )
+      ).status,
     ).toBe(403);
     expect(
       (
@@ -1105,7 +1197,10 @@ describe("companion gateway", () => {
       confirmation: "stop-anonymous-contribution",
     });
     expect(stopped.status).toBe(200);
-    expect(await stopped.json()).toMatchObject({ action: "stop", code: "stopped" });
+    expect(await stopped.json()).toMatchObject({
+      action: "stop",
+      code: "stopped",
+    });
     const deletion = await post("/api/contribution/delete", {
       confirmation: "delete-contribution-data",
     });
@@ -1127,7 +1222,7 @@ describe("companion gateway", () => {
         await post("/api/contribution/stop?next=https://attacker.invalid", {
           confirmation: "stop-anonymous-contribution",
         })
-    ).status,
+      ).status,
     ).toBe(404);
   });
 
@@ -1206,26 +1301,23 @@ describe("companion gateway", () => {
         controller,
       );
       const cookie = await bootstrap(address);
-      const response = fetch(
-        `${address.origin}/api/contribution/${action}`,
-        {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            Cookie: cookie,
-            Origin: address.origin,
-          },
-          body: JSON.stringify(
-            action === "enable"
-              ? {
-                  previewId: "10000000-0000-4000-8000-000000000001",
-                  confirmation: "enable-anonymous-contribution",
-                }
-              : { confirmation: "delete-contribution-data" },
-          ),
+      const response = fetch(`${address.origin}/api/contribution/${action}`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Cookie: cookie,
+          Origin: address.origin,
         },
-      ).catch(() => null);
+        body: JSON.stringify(
+          action === "enable"
+            ? {
+                previewId: "10000000-0000-4000-8000-000000000001",
+                confirmation: "enable-anonymous-contribution",
+              }
+            : { confirmation: "delete-contribution-data" },
+        ),
+      }).catch(() => null);
       await started.promise;
       let closeResolved = false;
       const closing = gateway.close().then(() => {
@@ -1301,7 +1393,11 @@ describe("companion gateway", () => {
 
     for (const route of routes) {
       const serialized = JSON.stringify(route.body);
-      const query = await postRaw(`${route.path}?next=attacker`, serialized, cookie);
+      const query = await postRaw(
+        `${route.path}?next=attacker`,
+        serialized,
+        cookie,
+      );
       expect(query.status).toBe(404);
 
       const wrongMethod = await rawRequest(address, {
@@ -1316,7 +1412,11 @@ describe("companion gateway", () => {
       expect(wrongMethod.headers["allow"]).toBe("POST");
 
       expect(
-        (await postRaw(route.path, serialized, cookie, { Origin: "http://attacker.invalid" })).status,
+        (
+          await postRaw(route.path, serialized, cookie, {
+            Origin: "http://attacker.invalid",
+          })
+        ).status,
       ).toBe(403);
       expect(
         (await postRaw(route.path, serialized, cookie, { Origin: [] })).status,
@@ -1344,13 +1444,8 @@ describe("companion gateway", () => {
         confirmation: "x".repeat(600),
       };
       expect(
-        (
-          await postRaw(
-            route.path,
-            JSON.stringify(tooLargeObject),
-            cookie,
-          )
-        ).status,
+        (await postRaw(route.path, JSON.stringify(tooLargeObject), cookie))
+          .status,
       ).toBe(400);
       expect((await postRaw(route.path, "{}", cookie)).status).toBe(400);
       expect(
@@ -2038,8 +2133,13 @@ describe("companion gateway", () => {
     });
   });
 
-  it("session-gates character routes and returns the exact letter-mode roster DTO", async () => {
-    const { address } = await startGateway();
+  it("session-gates character routes and returns the exact letter-mode roster DTO without a manifest", async () => {
+    const { address } = await startGateway(
+      fakeAdapter(),
+      undefined,
+      fakeCollector(),
+      { manifest: null },
+    );
     expect((await fetch(`${address.origin}/api/characters`)).status).toBe(404);
 
     const cookie = await bootstrap(address);
@@ -2167,6 +2267,406 @@ describe("companion gateway", () => {
     expect(JSON.stringify(dto)).not.toContain("providerId");
   });
 
+  it("serves all four clean-install starter avatars without unlocking their wardrobes", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "tokenmonster-starter-avatars-"),
+    );
+    temporaryDirectories.push(directory);
+    const cacheDirectory = join(directory, "asset-cache");
+    const starterAssets = {
+      chatgpt: {
+        avatarBody: Buffer.from("chatgpt-starter-avatar"),
+        outfitBody: Buffer.from("chatgpt-locked-outfit"),
+      },
+      claude: {
+        avatarBody: Buffer.from("claude-starter-avatar"),
+        outfitBody: Buffer.from("claude-locked-outfit"),
+      },
+      gemini: {
+        avatarBody: Buffer.from("gemini-starter-avatar"),
+        outfitBody: Buffer.from("gemini-locked-outfit"),
+      },
+      grok: {
+        avatarBody: Buffer.from("grok-starter-avatar"),
+        outfitBody: Buffer.from("grok-locked-outfit"),
+      },
+    } satisfies Record<
+      StarterCharacterId,
+      Readonly<{ avatarBody: Buffer; outfitBody: Buffer }>
+    >;
+    const manifest = starterCharacterManifest(starterAssets);
+    await mkdir(cacheDirectory, { recursive: true });
+    await Promise.all(
+      Object.values(starterAssets).flatMap(({ avatarBody, outfitBody }) =>
+        [avatarBody, outfitBody].map((body) =>
+          writeFile(join(cacheDirectory, `${sha256(body)}.webp`), body),
+        ),
+      ),
+    );
+    const { address } = await startGateway(
+      fakeAdapter(),
+      undefined,
+      fakeCollector(),
+      { manifest, cacheDirectory },
+    );
+    const cookie = await bootstrap(address);
+
+    const snapshot = parseCharactersSnapshot(
+      await (await characterRequest(address, cookie)).json(),
+    );
+    expect(snapshot.selection).toEqual({ characterId: null, selectedBy: null });
+    const starters = snapshot.characters.filter(
+      (character) => character.isStarter,
+    );
+    expect(starters.map((character) => character.characterId)).toEqual(
+      STARTER_CHARACTER_IDS,
+    );
+
+    const starterAvatarPaths = new Map<StarterCharacterId, string>();
+    for (const starter of starters) {
+      expect(starter).toMatchObject({
+        unlocked: false,
+        activeThemeId: null,
+        visual: { mode: "doll" },
+      });
+      expect(starter.visual.themes.every((theme) => !theme.unlocked)).toBe(
+        true,
+      );
+      expect(starter.visual.mode).toBe("doll");
+      if (starter.visual.mode !== "doll") continue;
+      starterAvatarPaths.set(
+        starter.characterId as StarterCharacterId,
+        starter.visual.avatarPath,
+      );
+      const avatar = await fetch(
+        `${address.origin}${starter.visual.avatarPath}`,
+        { headers: { Cookie: cookie } },
+      );
+      expect(avatar.status).toBe(200);
+      expect(Buffer.from(await avatar.arrayBuffer())).toEqual(
+        starterAssets[starter.characterId as StarterCharacterId].avatarBody,
+      );
+      const outfit = await fetch(
+        `${address.origin}${starter.visual.themes[0]!.outfitPath}`,
+        { headers: { Cookie: cookie } },
+      );
+      expect(outfit.status).toBe(404);
+    }
+
+    const selected = await characterPost(
+      address,
+      cookie,
+      "select",
+      JSON.stringify({ characterId: "chatgpt" }),
+    );
+    expect(selected.status).toBe(200);
+    const afterSelection = parseCharactersSnapshot(
+      await (await characterRequest(address, cookie)).json(),
+    );
+    expect(
+      afterSelection.characters
+        .filter((character) => character.isStarter)
+        .map((character) => [character.characterId, character.visual.mode]),
+    ).toEqual([
+      ["chatgpt", "doll"],
+      ["claude", "letter"],
+      ["gemini", "letter"],
+      ["grok", "letter"],
+    ]);
+    for (const characterId of STARTER_CHARACTER_IDS) {
+      const avatarPath = starterAvatarPaths.get(characterId);
+      expect(avatarPath).toBeDefined();
+      const avatar = await fetch(`${address.origin}${avatarPath}`, {
+        headers: { Cookie: cookie },
+      });
+      expect(avatar.status).toBe(characterId === "chatgpt" ? 200 : 404);
+      if (characterId === "chatgpt") {
+        expect(Buffer.from(await avatar.arrayBuffer())).toEqual(
+          starterAssets.chatgpt.avatarBody,
+        );
+      }
+    }
+  });
+
+  it("serves verified built-in starter bytes without creating an asset cache", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "tokenmonster-built-in-starters-"),
+    );
+    temporaryDirectories.push(directory);
+    const cacheDirectory = join(directory, "asset-cache");
+    const starterAssets = {
+      chatgpt: {
+        avatarBody: webpFixture("chatgpt-base-avatar"),
+        outfitBody: webpFixture("chatgpt-base-outfit"),
+      },
+      claude: {
+        avatarBody: webpFixture("claude-base-avatar"),
+        outfitBody: webpFixture("claude-base-outfit"),
+      },
+      gemini: {
+        avatarBody: webpFixture("gemini-base-avatar"),
+        outfitBody: webpFixture("gemini-base-outfit"),
+      },
+      grok: {
+        avatarBody: webpFixture("grok-base-avatar"),
+        outfitBody: webpFixture("grok-base-outfit"),
+      },
+    } satisfies Record<
+      StarterCharacterId,
+      Readonly<{ avatarBody: Buffer; outfitBody: Buffer }>
+    >;
+    const manifest = starterCharacterManifest(starterAssets);
+    const objects = embeddedObjects(
+      manifest,
+      Object.values(starterAssets).flatMap(({ avatarBody, outfitBody }) => [
+        avatarBody,
+        outfitBody,
+      ]),
+    );
+    const originalChatgptAvatar = Buffer.from(starterAssets.chatgpt.avatarBody);
+    const { address } = await startGateway(
+      fakeAdapter(),
+      undefined,
+      fakeCollector(),
+      {
+        manifest: null,
+        baseAssets: { manifest, objects },
+        cacheDirectory,
+      },
+    );
+    // Gateway construction copies verified bytes instead of retaining a
+    // mutable host-owned view.
+    starterAssets.chatgpt.avatarBody.fill(0);
+    const cookie = await bootstrap(address);
+
+    const snapshot = parseCharactersSnapshot(
+      await (await characterRequest(address, cookie)).json(),
+    );
+    for (const characterId of STARTER_CHARACTER_IDS) {
+      const character = snapshot.characters.find(
+        (candidate) => candidate.characterId === characterId,
+      );
+      expect(character?.visual.mode).toBe("doll");
+      if (character?.visual.mode !== "doll") continue;
+      const avatar = await fetch(
+        `${address.origin}${character.visual.avatarPath}`,
+        { headers: { Cookie: cookie } },
+      );
+      expect(avatar.status).toBe(200);
+      const avatarBody = Buffer.from(await avatar.arrayBuffer());
+      if (characterId === "chatgpt") {
+        expect(avatarBody).toEqual(originalChatgptAvatar);
+      }
+      const lockedOutfit = await fetch(
+        `${address.origin}${character.visual.themes[0]!.outfitPath}`,
+        { headers: { Cookie: cookie } },
+      );
+      expect(lockedOutfit.status).toBe(404);
+    }
+    await expect(access(cacheDirectory)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+
+    expect(
+      (
+        await characterPost(
+          address,
+          cookie,
+          "select",
+          JSON.stringify({ characterId: "chatgpt" }),
+        )
+      ).status,
+    ).toBe(200);
+    const selected = parseCharactersSnapshot(
+      await (await characterRequest(address, cookie)).json(),
+    ).characters.find((character) => character.characterId === "chatgpt");
+    expect(selected).toMatchObject({
+      activeThemeId: "tech",
+      visual: { mode: "doll" },
+    });
+    if (selected?.visual.mode !== "doll") {
+      throw new Error("expected built-in starter doll");
+    }
+    const outfit = await fetch(
+      `${address.origin}${selected.visual.themes[0]!.outfitPath}`,
+      { headers: { Cookie: cookie } },
+    );
+    expect(outfit.status).toBe(200);
+    expect(Buffer.from(await outfit.arrayBuffer())).toEqual(
+      starterAssets.chatgpt.outfitBody,
+    );
+    await expect(access(cacheDirectory)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("keeps only built-in starter avatars available behind a stale progression lock", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "tokenmonster-built-in-starters-stale-lock-"),
+    );
+    temporaryDirectories.push(directory);
+    const progressionStorePath = join(directory, "progression-v1.json");
+    const cacheDirectory = join(directory, "asset-cache");
+    const starterAssets = {
+      chatgpt: {
+        avatarBody: webpFixture("chatgpt-stale-lock-avatar"),
+        outfitBody: webpFixture("chatgpt-stale-lock-outfit"),
+      },
+      claude: {
+        avatarBody: webpFixture("claude-stale-lock-avatar"),
+        outfitBody: webpFixture("claude-stale-lock-outfit"),
+      },
+      gemini: {
+        avatarBody: webpFixture("gemini-stale-lock-avatar"),
+        outfitBody: webpFixture("gemini-stale-lock-outfit"),
+      },
+      grok: {
+        avatarBody: webpFixture("grok-stale-lock-avatar"),
+        outfitBody: webpFixture("grok-stale-lock-outfit"),
+      },
+    } satisfies Record<
+      StarterCharacterId,
+      Readonly<{ avatarBody: Buffer; outfitBody: Buffer }>
+    >;
+    const manifest = starterCharacterManifest(starterAssets);
+    const objects = embeddedObjects(
+      manifest,
+      Object.values(starterAssets).flatMap(({ avatarBody, outfitBody }) => [
+        avatarBody,
+        outfitBody,
+      ]),
+    );
+    const { address } = await startGateway(
+      fakeAdapter(),
+      undefined,
+      fakeCollector(),
+      {
+        manifest: null,
+        baseAssets: { manifest, objects },
+        cacheDirectory,
+        progressionStorePath,
+      },
+    );
+    const lockPath = `${progressionStorePath}.lock`;
+    await writeFile(lockPath, "", { encoding: "utf8", mode: 0o600 });
+    const staleTime = new Date(Date.now() - 60_000);
+    await utimes(lockPath, staleTime, staleTime);
+    const cookie = await bootstrap(address);
+
+    const snapshot = parseCharactersSnapshot(
+      await (await characterRequest(address, cookie)).json(),
+    );
+    expect(snapshot.selection).toEqual({ characterId: null, selectedBy: null });
+    for (const characterId of STARTER_CHARACTER_IDS) {
+      const character = snapshot.characters.find(
+        (candidate) => candidate.characterId === characterId,
+      );
+      expect(character).toMatchObject({
+        unlocked: false,
+        activeThemeId: null,
+        visual: { mode: "doll" },
+      });
+      if (character?.visual.mode !== "doll") continue;
+      const avatar = await fetch(
+        `${address.origin}${character.visual.avatarPath}`,
+        { headers: { Cookie: cookie } },
+      );
+      expect(avatar.status).toBe(200);
+      expect(Buffer.from(await avatar.arrayBuffer())).toEqual(
+        starterAssets[characterId].avatarBody,
+      );
+      const lockedOutfit = await fetch(
+        `${address.origin}${character.visual.themes[0]!.outfitPath}`,
+        { headers: { Cookie: cookie } },
+      );
+      expect(lockedOutfit.status).toBe(404);
+    }
+    expect(
+      snapshot.characters
+        .filter((character) => !character.isStarter)
+        .every((character) => character.visual.mode === "letter"),
+    ).toBe(true);
+    await expect(access(cacheDirectory)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(readFile(lockPath, "utf8")).resolves.toBe("");
+  });
+
+  it("never exposes an active full-pack object through the stale-lock base fallback", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "tokenmonster-full-pack-stale-lock-"),
+    );
+    temporaryDirectories.push(directory);
+    const progressionStorePath = join(directory, "progression-v1.json");
+    const cacheDirectory = join(directory, "asset-cache");
+    const baseAvatar = webpFixture("base-stale-lock-avatar");
+    const baseOutfit = webpFixture("base-stale-lock-outfit");
+    const baseManifest = characterManifest(baseAvatar, [
+      { themeId: "tech", outfitBody: baseOutfit },
+    ]);
+    const fullAvatar = webpFixture("full-stale-lock-avatar");
+    const fullOutfit = webpFixture("full-stale-lock-outfit");
+    const fullManifest = characterManifest(fullAvatar, [
+      { themeId: "tech", outfitBody: fullOutfit },
+    ]);
+    await mkdir(cacheDirectory, { recursive: true });
+    await Promise.all(
+      [fullAvatar, fullOutfit].map((body) =>
+        writeFile(join(cacheDirectory, `${sha256(body)}.webp`), body),
+      ),
+    );
+    const service = createCharacterService({
+      adapter: fakeAdapter(),
+      characters: normalizeCharacterOptions({
+        manifest: null,
+        baseAssets: {
+          manifest: baseManifest,
+          objects: embeddedObjects(baseManifest, [baseAvatar, baseOutfit]),
+        },
+        assetPack: null,
+        cacheDirectory,
+        cdnBaseUrl: null,
+        progressionStorePath,
+      }),
+      clock: () => new Date("2026-07-15T12:34:56.789Z"),
+    });
+    // This is the same manifest transition performed by an installed,
+    // consented full pack before the legacy progression lock is encountered.
+    service.setManifest(fullManifest);
+    const lockPath = `${progressionStorePath}.lock`;
+    await writeFile(lockPath, "", { encoding: "utf8", mode: 0o600 });
+
+    const snapshot = parseCharactersSnapshot(await service.getCharactersDto());
+    const chatgpt = snapshot.characters.find(
+      (character) => character.characterId === "chatgpt",
+    );
+    expect(chatgpt).toMatchObject({
+      unlocked: false,
+      activeThemeId: null,
+      visual: {
+        mode: "doll",
+        avatarPath: `/assets/characters/${objectRef(baseAvatar, "webp").path}`,
+      },
+    });
+    const fileName = (body: Uint8Array): string =>
+      objectRef(body, "webp").path.slice("objects/".length);
+    await expect(service.getAsset(fileName(baseAvatar))).resolves.toMatchObject(
+      {
+        status: 200,
+        body: baseAvatar,
+      },
+    );
+    await expect(service.getAsset(fileName(baseOutfit))).resolves.toEqual({
+      status: 404,
+    });
+    for (const body of [fullAvatar, fullOutfit]) {
+      const result = await service.getAsset(fileName(body));
+      expect(result.status).not.toBe(200);
+      expect(result.body).toBeUndefined();
+    }
+    await expect(readFile(lockPath, "utf8")).resolves.toBe("");
+  });
+
   it("serves an exact fail-closed asset-pack status/control contract", async () => {
     const { address } = await startGateway();
     expect(
@@ -2245,6 +2745,30 @@ describe("companion gateway", () => {
     expect(queryBearing.status).toBe(404);
     expect(JSON.parse(queryBearing.body)).toEqual({
       error: "request-rejected",
+    });
+  });
+
+  it("accepts the embedded approved pack as available and default-off", async () => {
+    const configuration = getApprovedAssetPackConfiguration();
+    expect(configuration).not.toBeNull();
+    const { address } = await startGateway(undefined, undefined, undefined, {
+      manifest: null,
+      assetPack: configuration,
+    });
+    const cookie = await bootstrap(address);
+
+    const response = await fetch(`${address.origin}/api/characters/assets`, {
+      headers: { Cookie: cookie, Origin: address.origin },
+    });
+    expect(response.status).toBe(200);
+    expect(parseCharacterAssetPackStatus(await response.json())).toEqual({
+      status: "ok",
+      phase: "available",
+      consented: false,
+      enabled: false,
+      releaseId: "ai-sister-images-11-2026.07.21",
+      downloadBytes: 65_574_180,
+      lastError: null,
     });
   });
 
@@ -2631,6 +3155,68 @@ describe("companion gateway", () => {
     expect(await lockedTheme.json()).toEqual({
       status: "error",
       error: "locked",
+    });
+  });
+
+  it("falls back to built-in tech art without overwriting a non-tech preference", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "tokenmonster-built-in-theme-fallback-"),
+    );
+    temporaryDirectories.push(directory);
+    const progressionStorePath = join(directory, "progression-v1.json");
+    const adapter = adapterWithExactOpenAiLifetime(5_000);
+    const fullAvatar = webpFixture("full-avatar");
+    const first = await startGateway(adapter, undefined, fakeCollector(), {
+      manifest: characterManifest(fullAvatar, [
+        { themeId: "tech", outfitBody: webpFixture("full-tech") },
+        { themeId: "finance", outfitBody: webpFixture("full-finance") },
+      ]),
+      progressionStorePath,
+    });
+    const firstCookie = await bootstrap(first.address);
+    expect((await apiRequest(first.address, firstCookie)).status).toBe(200);
+    expect(
+      (
+        await characterPost(
+          first.address,
+          firstCookie,
+          "wardrobe",
+          JSON.stringify({ characterId: "chatgpt", themeId: "finance" }),
+        )
+      ).status,
+    ).toBe(200);
+    await first.gateway.close();
+
+    const baseAvatar = webpFixture("base-avatar");
+    const baseOutfit = webpFixture("base-tech");
+    const baseManifest = characterManifest(baseAvatar, [
+      { themeId: "tech", outfitBody: baseOutfit },
+    ]);
+    const second = await startGateway(adapter, undefined, fakeCollector(), {
+      manifest: null,
+      baseAssets: {
+        manifest: baseManifest,
+        objects: embeddedObjects(baseManifest, [baseAvatar, baseOutfit]),
+      },
+      progressionStorePath,
+    });
+    const secondCookie = await bootstrap(second.address);
+    const chatgpt = parseCharactersSnapshot(
+      await (await characterRequest(second.address, secondCookie)).json(),
+    ).characters.find((character) => character.characterId === "chatgpt");
+    expect(chatgpt).toMatchObject({
+      activeThemeId: "tech",
+      visual: { mode: "doll" },
+    });
+    expect(
+      JSON.parse(
+        await readFile(
+          join(directory, "character-preferences-v1.json"),
+          "utf8",
+        ),
+      ),
+    ).toMatchObject({
+      activeThemeByCharacter: { chatgpt: "finance" },
     });
   });
 
@@ -4326,6 +4912,95 @@ describe("companion gateway", () => {
         }),
       ).toThrowError(CompanionGatewayError);
     }
+  });
+
+  it("rejects incomplete, unbound, unsigned, or non-strict built-in assets", () => {
+    const avatar = webpFixture("strict-base-avatar");
+    const outfit = webpFixture("strict-base-outfit");
+    const manifest = characterManifest(avatar, [
+      { themeId: "tech", outfitBody: outfit },
+    ]);
+    const validObjects = embeddedObjects(manifest, [avatar, outfit]);
+    const avatarPath = manifest.characters[0]!.avatar.path;
+    const withoutAvatar = Object.freeze(
+      Object.fromEntries(
+        Object.entries(validObjects).filter(([path]) => path !== avatarPath),
+      ),
+    );
+    const withExtra = Object.freeze({
+      ...validObjects,
+      [`objects/${"f".repeat(64)}.webp`]: webpFixture("extra"),
+    });
+    const wrongBytes = Object.freeze({
+      ...validObjects,
+      [avatarPath]: Buffer.concat([avatar, Buffer.from([0])]),
+    });
+    const wrongHashAvatar = Buffer.from(avatar);
+    const wrongHashIndex = wrongHashAvatar.length - 1;
+    wrongHashAvatar[wrongHashIndex] = wrongHashAvatar[wrongHashIndex]! ^ 0xff;
+    const wrongHash = Object.freeze({
+      ...validObjects,
+      [avatarPath]: wrongHashAvatar,
+    });
+    const accessorObjects = Object.create(null) as Record<string, Uint8Array>;
+    for (const [path, bytes] of Object.entries(validObjects)) {
+      if (path === avatarPath) {
+        Object.defineProperty(accessorObjects, path, {
+          enumerable: true,
+          get: () => bytes,
+        });
+      } else {
+        accessorObjects[path] = bytes;
+      }
+    }
+    const invalidSignatureAvatar = Buffer.concat([
+      Buffer.from("RIFF", "ascii"),
+      Buffer.alloc(4),
+      Buffer.from("NOPE", "ascii"),
+    ]);
+    const invalidSignatureManifest = characterManifest(invalidSignatureAvatar, [
+      { themeId: "tech", outfitBody: outfit },
+    ]);
+    const invalidSignatureObjects = embeddedObjects(invalidSignatureManifest, [
+      invalidSignatureAvatar,
+      outfit,
+    ]);
+
+    const invalidBaseAssets: unknown[] = [
+      { manifest, objects: withoutAvatar },
+      { manifest, objects: withExtra },
+      { manifest, objects: wrongBytes },
+      { manifest, objects: wrongHash },
+      { manifest, objects: accessorObjects },
+      { manifest: invalidSignatureManifest, objects: invalidSignatureObjects },
+      { manifest, objects: validObjects, unexpected: true },
+    ];
+    for (const baseAssets of invalidBaseAssets) {
+      expect(() =>
+        createCompanionGateway({
+          adapter: fakeAdapter(),
+          collector: fakeCollector(),
+          assets: UI_ASSETS,
+          characters: {
+            ...EMPTY_CHARACTER_OPTIONS,
+            manifest: null,
+            baseAssets,
+          } as unknown as CompanionCharacterOptions,
+        }),
+      ).toThrowError(CompanionGatewayError);
+    }
+
+    expect(() =>
+      createCompanionGateway({
+        adapter: fakeAdapter(),
+        collector: fakeCollector(),
+        assets: UI_ASSETS,
+        characters: {
+          ...EMPTY_CHARACTER_OPTIONS,
+          baseAssets: { manifest, objects: validObjects },
+        },
+      }),
+    ).toThrowError(CompanionGatewayError);
   });
 
   it("rejects an adapter that omits the required profile footprint port", () => {
