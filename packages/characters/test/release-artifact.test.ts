@@ -101,7 +101,7 @@ describe("release artifact privacy and rights boundary", () => {
         };
       };
     };
-    const embeddedStarterAuthority = new Set(
+    const embeddedStarterAuthority = new Set<string>(
       EMBEDDED_STARTER_ASSET_SNAPSHOTS.flatMap((snapshot) => [
         snapshot.avatar.path,
         snapshot.avatar.sha256,
