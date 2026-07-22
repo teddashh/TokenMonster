@@ -164,7 +164,12 @@ shape and fails on any other override, and CI requires a completely clean
 full audit JSON retained in `release-evidence/`. Remove the override once a
 `miniflare` release stops pinning a vulnerable `sharp`.
 
-A version-tag run deliberately narrows the installer matrix to Windows and
+The signed Windows installer and native macOS release gates run only when the
+`TOKENMONSTER_PUBLIC_RELEASE_APPROVED` repository variable is `true`; an
+unapproved version tag runs only the unsigned verification, candidate, and
+cross-platform smoke lanes, so an unsigned CLI test prerelease can be cut from
+a tag without tripping the closed signing path. A version-tag run with that
+approval deliberately narrows the installer matrix to Windows and
 requires signed mode. It decodes the bounded PFX secret into the runner's
 temporary directory, verifies every signable PE except the single raw-policy-
 bound zstd binding described below, verifies Squirrel metadata, uploads

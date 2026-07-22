@@ -368,7 +368,7 @@ jobs:
   # environment. Keep these secrets environment-scoped, never repository-wide.
   signed-windows-installer:
     name: Signed Windows installer
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: github.event_name == 'push' && github.ref_type == 'tag' && vars.TOKENMONSTER_PUBLIC_RELEASE_APPROVED == 'true'
     needs:
       - plan
       - zstd-native-prebuilds
@@ -486,7 +486,7 @@ jobs:
   # unsigned evidence stays inside Actions and is never attached to a release.
   macos-internal-release-gate:
     name: Native macOS internal release gate
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: github.event_name == 'push' && github.ref_type == 'tag' && vars.TOKENMONSTER_PUBLIC_RELEASE_APPROVED == 'true'
     needs: zstd-native-prebuilds
     runs-on: macos-15
     timeout-minutes: 30
