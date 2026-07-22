@@ -114,10 +114,11 @@ The retired one-shot `publish_internal_rc15` lane published the already-fixed
 `internal/v0.1.0-rc.15` private unsigned prerelease. Its exact 11-file inventory
 contains the Windows x64 maker set, macOS arm64 DMG and ZIP, Linux x64 ZIP, CLI
 tarball, source receipt, and aggregate checksums. Windows is not
-Authenticode-signed; macOS is ad-hoc signed and not notarized. That immutable
-release remains useful as historical three-platform packaging evidence, but
-its legacy Electron artifacts do not contain the newer embedded starter base
-and must not be relabeled as rc.17. The rc.15 input is no longer active, and
+Authenticode-signed; macOS is ad-hoc signed and not notarized. Its GitHub
+prerelease was removed before the repository went public; the exact assets are
+retained privately as historical three-platform packaging evidence. The legacy
+Electron artifacts do not contain the newer embedded starter base and must not
+be relabeled as rc.17. The rc.15 input is no longer active, and
 rc.15 is never rebuilt or overwritten.
 
 #### Historical CLI-only rc.17 evidence
@@ -145,7 +146,9 @@ namespace never matches the public `v*` trigger, so it cannot enter npm,
 R2/CDN, Worker, signing, or automatic-update promotion.
 
 That publication run completed, so the manual input has been removed from
-`ci.yml`. rc.17 is never rebuilt in place; a fix after rc.17 must use a new
+`ci.yml`, and the GitHub prerelease itself was removed before the repository
+went public with its exact assets retained privately. rc.17 is never rebuilt
+in place; a fix after rc.17 must use a new
 version such as rc.18 through the normal release path.
 
 ##### Dependency-audit status
