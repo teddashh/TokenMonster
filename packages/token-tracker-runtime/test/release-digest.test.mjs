@@ -577,6 +577,9 @@ describe("cross-platform release digest verifier", () => {
         ]),
       ).toThrow(expectedError);
     },
+    // Five sequential subprocess verifications legitimately exceed the
+    // default 5s budget on the slowest CI runners.
+    { timeout: 30_000 },
   );
 
   it("keeps package-name boundaries exact in the tar inventory allowlist", () => {
