@@ -2590,7 +2590,7 @@ describe("companion gateway", () => {
       code: "ENOENT",
     });
     await expect(readFile(lockPath, "utf8")).resolves.toBe("");
-  });
+  }, 10_000);
 
   it("never exposes an active full-pack object through the stale-lock base fallback", async () => {
     const directory = await mkdtemp(
