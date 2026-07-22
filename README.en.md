@@ -19,13 +19,21 @@ TokenMonster tracks your Claude Code, Codex, Gemini CLI, and Grok CLI token usag
 
 ## Quick start
 
+### Windows: desktop installer
+
+1. Download the latest `TokenMonsterSetup.exe` from [Releases](https://github.com/teddashh/TokenMonster/releases) and double-click it.
+2. It is an unsigned public test build for now, so SmartScreen shows a warning — click "More info → Run anyway"; a code-signed build follows once signing credentials exist.
+3. TokenMonster appears in the system tray after install and launches from the Start menu afterwards; uninstall via Settings → Apps → TokenMonster.
+
+### CLI (Windows / macOS / Linux)
+
 Requires Node.js `24.15.0` and npm `11.12.1` (the CLI checks the exact versions to prevent unreviewed runtime drift).
 
 1. Download the latest `tokenmonster-*.tgz` from [Releases](https://github.com/teddashh/TokenMonster/releases) (verify it with the `SHA256SUMS` file next to it).
 2. Install and launch:
 
    ```sh
-   npm install /path/to/tokenmonster-0.1.0-rc.18.tgz
+   npm install /path/to/tokenmonster-0.1.0-rc.19.tgz
    npx tokenmonster
    ```
 
@@ -60,9 +68,9 @@ Every unlock comes from an explainable local milestone (per-family totals, lifet
 
 See the [data inventory](docs/DATA_INVENTORY.md) and [threat model](docs/THREAT_MODEL.md) for the detailed data lifecycle.
 
-## Desktop pet (in development)
+## Desktop pet
 
-The repo also contains an Electron desktop build: a tray pet with drag interactions and BYOK chat (the API key lives in the OS keychain; conversations stay in memory and go straight to the provider). The public installer ships once code signing and the updater-component redistribution review are complete; until then the CLI is the supported public entry point.
+The Electron desktop build: a tray pet with drag interactions and BYOK chat (the API key lives in the OS keychain; conversations stay in memory and go straight to the provider). The Windows installer `TokenMonsterSetup.exe` is downloadable from [Releases](https://github.com/teddashh/TokenMonster/releases) today (unsigned public test build; the embedded updater is reproducibly rebuilt from source and byte-verified in the same CI run); macOS / Linux desktop builds and a code-signed installer are on the roadmap.
 
 ## Development
 
@@ -77,8 +85,9 @@ The full pre-commit gate (lint, typecheck, packaging verification, and more) is 
 ## Status and roadmap
 
 - ✅ Public CLI test build — install from [Releases](https://github.com/teddashh/TokenMonster/releases), CI-smoked on all three platforms
+- ✅ Windows desktop installer — unsigned public test build with a native install/boot/uninstall smoke in CI
+- 🚧 Code signing (removes the SmartScreen warning)
 - 🚧 npm registry publish (then it is just `npx tokenmonster`)
-- 🚧 Desktop installer (code signing + updater-component redistribution review)
 - 🚧 Public opt-in contribution counter (cloud side implemented, not yet deployed)
 
 ## Documentation

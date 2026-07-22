@@ -19,13 +19,21 @@ TokenMonster 在你的電腦本機追蹤 Claude Code、Codex、Gemini CLI、Grok
 
 ## 快速開始
 
+### Windows:桌面版安裝檔
+
+1. 從 [Releases](https://github.com/teddashh/TokenMonster/releases) 下載最新的 `TokenMonsterSetup.exe`,雙擊安裝。
+2. 目前是未簽章的公開測試版,SmartScreen 會出現警告 — 按「其他資訊 → 仍要執行」即可;簽章版會在取得程式碼簽章憑證後推出。
+3. 安裝完成後 TokenMonster 會出現在系統匣,之後從開始選單啟動;移除走 設定 → 應用程式 → TokenMonster。
+
+### CLI(Windows / macOS / Linux)
+
 需求:Node.js `24.15.0` 與 npm `11.12.1`(CLI 精確檢查版本,避免未驗證的 runtime 漂移)。
 
 1. 從 [Releases](https://github.com/teddashh/TokenMonster/releases) 下載最新的 `tokenmonster-*.tgz`(可用旁邊的 `SHA256SUMS` 檔驗證)。
 2. 安裝並啟動:
 
    ```sh
-   npm install /path/to/tokenmonster-0.1.0-rc.18.tgz
+   npm install /path/to/tokenmonster-0.1.0-rc.19.tgz
    npx tokenmonster
    ```
 
@@ -60,9 +68,9 @@ npm exec -- tokenmonster
 
 詳細資料生命週期見 [Data inventory](docs/DATA_INVENTORY.md) 與 [Threat model](docs/THREAT_MODEL.md)。
 
-## 桌面寵物(開發中)
+## 桌面寵物
 
-Repo 內還有一個 Electron 桌面版:系統匣寵物、拖曳互動,以及 BYOK 聊天(API key 存在 OS 金鑰圈,對話只留在記憶體、直連 provider)。公開安裝檔會在程式碼簽章與更新元件的再散布審查完成後推出;在那之前 CLI 版是公開支援的入口。
+Electron 桌面版:系統匣寵物、拖曳互動,以及 BYOK 聊天(API key 存在 OS 金鑰圈,對話只留在記憶體、直連 provider)。Windows 安裝檔 `TokenMonsterSetup.exe` 已可從 [Releases](https://github.com/teddashh/TokenMonster/releases) 下載(未簽章公開測試版,內嵌的更新元件在同一個 CI run 由原始碼可重現重建並逐位元驗證);macOS / Linux 桌面版與簽章版安裝檔在路線圖上。
 
 ## 開發
 
@@ -77,8 +85,9 @@ npm test
 ## 狀態與路線圖
 
 - ✅ CLI 公開測試版 — 從 [Releases](https://github.com/teddashh/TokenMonster/releases) 安裝,三平台 CI 冒煙
+- ✅ Windows 桌面安裝檔 — 未簽章公開測試版,CI 內完成原生安裝/啟動/移除冒煙
+- 🚧 程式碼簽章(移除 SmartScreen 警告)
 - 🚧 上架 npm registry(之後直接 `npx tokenmonster`)
-- 🚧 桌面安裝檔(簽章 + 更新元件再散布審查)
 - 🚧 公開 opt-in 貢獻計數器(cloud 端已實作、尚未部署)
 
 ## 文件
