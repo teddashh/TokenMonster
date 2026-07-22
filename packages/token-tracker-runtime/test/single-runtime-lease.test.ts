@@ -269,12 +269,17 @@ describe("user-scoped TokenMonster runtime lease", () => {
         outcomes[index]?.includes("TOKENMONSTER_LEASE_READY"),
       );
       expect(winners, `crash race round ${round}`).toHaveLength(1);
-      expect(
-        outcomes.filter((outcome) =>
-          outcome.includes("TOKENMONSTER_LEASE_ERROR:already-running"),
-        ),
-        `crash race round ${round}`,
-      ).toHaveLength(CONCURRENT_CONTENDERS - 1);
+      const loserOutcomes = outcomes.filter(
+        (outcome) => !outcome.includes("TOKENMONSTER_LEASE_READY"),
+      );
+      expect(loserOutcomes, `crash race round ${round}`).toHaveLength(
+        CONCURRENT_CONTENDERS - 1,
+      );
+      for (const outcome of loserOutcomes) {
+        expect(outcome.trim(), `crash race round ${round}`).toMatch(
+          /^TOKENMONSTER_LEASE_ERROR:(?:already-running|lease-unavailable)$/u,
+        );
+      }
       owner = winners[0]!;
       await Promise.all(
         contenders

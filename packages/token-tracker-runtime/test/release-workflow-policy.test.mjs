@@ -89,25 +89,27 @@ describe("release workflow publication policy", () => {
       "github.ref_type == 'tag' && 'tokenmonster-public-tag-release'",
     );
     expect(workflow).toContain(
-      "inputs.publish_internal_rc15 && 'tokenmonster-private-internal-release'",
+      "inputs.publish_internal_rc17 && 'tokenmonster-private-internal-release'",
     );
     expect(workflow).toContain(
-      "${{ github.ref_type != 'tag' && !(github.event_name == 'workflow_dispatch' && inputs.publish_internal_rc15) }}",
+      "${{ github.ref_type != 'tag' && !(github.event_name == 'workflow_dispatch' && inputs.publish_internal_rc17) }}",
     );
+    expect(workflow).not.toContain("publish_internal_rc15");
 
     const internal = job("publish-internal-prerelease");
-    expect(internal).toContain("INTERNAL_RELEASE_TAG: internal/v0.1.0-rc.15");
-    expect(internal).not.toContain("INTERNAL_RELEASE_TAG: v0.1.0-rc.15");
+    expect(internal).toContain("INTERNAL_RELEASE_TAG: internal/v0.1.0-rc.17");
+    expect(internal).toContain("INTERNAL_RELEASE_VERSION: 0.1.0-rc.17");
+    expect(internal).not.toContain("INTERNAL_RELEASE_TAG: v0.1.0-rc.17");
   });
 
-  it("gates the one-shot internal identity on private main and the complete locked matrix", () => {
+  it("gates the CLI-only internal identity on private main, all platforms, and no Squirrel rebuild", () => {
     const planning = job("plan");
     const selection = step(planning, "Pick runner platforms");
     expect(planning).toContain(
       "internal-release-version: ${{ steps.pick.outputs.internal-release-version }}",
     );
     expect(selection).toContain(
-      "PUBLISH_INTERNAL_RC15: ${{ inputs.publish_internal_rc15 && 'true' || 'false' }}",
+      "PUBLISH_INTERNAL_RC17: ${{ inputs.publish_internal_rc17 && 'true' || 'false' }}",
     );
     expect(selection).toContain(
       "REPOSITORY_PRIVATE: ${{ github.event.repository.private && 'true' || 'false' }}",
@@ -117,84 +119,57 @@ describe("release workflow publication policy", () => {
       '"$REF_TYPE" != "branch"',
       '"$FULL_REF" != "refs/heads/main"',
       '"$PLATFORMS" != "all"',
-      '"$REBUILD_SQUIRREL_UPDATER" != "true"',
-      '"$SQUIRREL_UPDATER_RECEIPT_MODE" != "locked"',
+      '"$REBUILD_SQUIRREL_UPDATER" != "false"',
       '"$REPOSITORY_PRIVATE" != "true"',
     ]) {
       expect(selection).toContain(requirement);
     }
     expect(selection).toContain(
-      "echo 'internal-release-version=0.1.0-rc.15' >> \"$GITHUB_OUTPUT\"",
+      "echo 'internal-release-version=0.1.0-rc.17' >> \"$GITHUB_OUTPUT\"",
     );
   });
 
-  it("publishes only the exact unsigned private inventory after every release gate", () => {
+  it("publishes only the exact unsigned private CLI inventory after every release gate", () => {
     const internal = job("publish-internal-prerelease");
     const configuration = internal.slice(0, internal.indexOf("    steps:"));
     expect(configuration).toContain(
-      "if: github.event_name == 'workflow_dispatch' && inputs.publish_internal_rc15 && github.ref == 'refs/heads/main'",
+      "if: github.event_name == 'workflow_dispatch' && inputs.publish_internal_rc17 && github.ref == 'refs/heads/main'",
     );
     expect(configuration).toContain(`    needs:
-      - rebuild-reviewed-squirrel-updater
       - plan
-      - companion-installers
       - verify
       - sidecar-compatibility
-      - companion-desktop
       - release-candidate
       - release-smoke`);
     expect(configuration).toContain("    permissions:\n      contents: write");
     expect(configuration).not.toContain("environment:");
-
-    for (const [stepName, artifactName] of [
-      [
-        "Download exact Windows x64 maker output",
-        "tokenmonster-desktop-windows-2025",
-      ],
-      [
-        "Download exact macOS arm64 maker output",
-        "tokenmonster-desktop-macos-15",
-      ],
-      [
-        "Download exact Linux x64 maker output",
-        "tokenmonster-desktop-ubuntu-24.04",
-      ],
-      [
-        "Download cross-platform-smoked CLI candidate",
-        "tokenmonster-release-candidate-${{ github.sha }}",
-      ],
+    for (const forbiddenDependency of [
+      "rebuild-reviewed-squirrel-updater",
+      "companion-installers",
+      "companion-desktop",
     ]) {
-      expect(step(internal, stepName)).toContain(`name: ${artifactName}`);
+      expect(configuration).not.toContain(forbiddenDependency);
     }
+    const download = step(
+      internal,
+      "Download cross-platform-smoked CLI candidate",
+    );
+    expect(download).toContain(
+      "name: tokenmonster-release-candidate-${{ github.sha }}",
+    );
+    expect(occurrences(internal, "actions/download-artifact@")).toBe(1);
 
     const assembly = step(
       internal,
-      "Assemble exact unsigned release inventory",
+      "Assemble exact unsigned CLI release inventory",
     );
-    expect(assembly).toContain('require_inventory "$input_root/windows" 4');
-    expect(assembly).toContain('require_inventory "$input_root/macos" 2');
-    expect(assembly).toContain('require_inventory "$input_root/linux" 1');
     expect(assembly).toContain('require_inventory "$input_root/cli" 2');
     expect(assembly).toContain(`          sources=(
-            "$input_root/windows/squirrel.windows/x64/RELEASES"
-            "$input_root/windows/squirrel.windows/x64/TokenMonsterSetup.exe"
-            "$input_root/windows/squirrel.windows/x64/TokenMonster-0.1.0-rc15-full.nupkg"
-            "$input_root/windows/zip/win32/x64/TokenMonster-win32-x64-0.1.0-rc.15.zip"
-            "$input_root/macos/TokenMonster.dmg"
-            "$input_root/macos/zip/darwin/arm64/TokenMonster-darwin-arm64-0.1.0-rc.15.zip"
-            "$input_root/linux/zip/linux/x64/TokenMonster-linux-x64-0.1.0-rc.15.zip"
-            "$input_root/cli/tokenmonster-0.1.0-rc.15.tgz"
+            "$input_root/cli/tokenmonster-0.1.0-rc.17.tgz"
             "$input_root/cli/SHASUMS256.txt"
           )`);
     expect(assembly).toContain(`          targets=(
-            RELEASES
-            TokenMonsterSetup.exe
-            TokenMonster-0.1.0-rc15-full.nupkg
-            TokenMonster-win32-x64-0.1.0-rc.15.zip
-            TokenMonster.dmg
-            TokenMonster-darwin-arm64-0.1.0-rc.15.zip
-            TokenMonster-linux-x64-0.1.0-rc.15.zip
-            tokenmonster-0.1.0-rc.15.tgz
+            tokenmonster-0.1.0-rc.17.tgz
             TokenMonster-cli-SHA256SUMS.txt
           )`);
     expect(assembly).toContain('find "$directory" ! -type d ! -type f');
@@ -203,10 +178,40 @@ describe("release workflow publication policy", () => {
     );
     expect(assembly).toContain("sha256sum --check --strict SHASUMS256.txt");
     expect(assembly).toContain("TokenMonster-internal-source-v1.json");
-    expect(assembly).toContain('releaseMode: "unsigned-internal"');
+    expect(assembly).toContain('releaseMode: "unsigned-internal-cli"');
     expect(assembly).toContain("publicChannelsPromoted: false");
+    expect(assembly).toContain(
+      'smokedPlatforms: ["windows-x64", "macos-arm64", "linux-x64"]',
+    );
     expect(assembly).toContain("TokenMonster-internal-SHA256SUMS.txt");
-    expect(assembly).toContain('[[ "$upload_count" != "11" ]]');
+    expect(assembly).toContain('[[ "$upload_count" != "4" ]]');
+    for (const deterministicReceiptForbidden of [
+      "GITHUB_RUN_ID",
+      "GITHUB_RUN_ATTEMPT",
+      "github.run_id",
+      "github.run_attempt",
+      "runId",
+      "runAttempt",
+    ]) {
+      expect(assembly).not.toContain(deterministicReceiptForbidden);
+    }
+
+    for (const desktopArtifactForbidden of [
+      "Download exact Windows x64 maker output",
+      "Download exact macOS arm64 maker output",
+      "Download exact Linux x64 maker output",
+      "tokenmonster-desktop-windows-2025",
+      "tokenmonster-desktop-macos-15",
+      "tokenmonster-desktop-ubuntu-24.04",
+      "$input_root/windows",
+      "$input_root/macos",
+      "$input_root/linux",
+      "TokenMonsterSetup.exe",
+      ".nupkg",
+      ".dmg",
+    ]) {
+      expect(internal).not.toContain(desktopArtifactForbidden);
+    }
 
     for (const forbidden of [
       "environment:",
@@ -229,7 +234,7 @@ describe("release workflow publication policy", () => {
   it("stages, byte-compares, and publishes the internal release only as a prerelease", () => {
     const publication = step(
       job("publish-internal-prerelease"),
-      "Stage draft, verify remote bytes, and publish prerelease",
+      "Stage CLI draft, verify remote bytes, and publish prerelease",
     );
     expect(publication).toContain('tag_ref="refs/tags/$INTERNAL_RELEASE_TAG"');
     expect(publication).toContain('-f sha="$GITHUB_SHA"');
@@ -240,6 +245,9 @@ describe("release workflow publication policy", () => {
     expect(publication).toContain("gh release upload");
     expect(publication).toContain("gh release download");
     expect(publication).toContain("cmp --silent");
+    expect(publication).toContain(
+      'if [[ "$expected_count" != "4" || "$remote_count" != "$expected_count" ]]',
+    );
     expect(publication).toContain('gh release edit "$INTERNAL_RELEASE_TAG" \\');
     expect(publication).toContain(
       "gh api \"repos/$GITHUB_REPOSITORY\" --jq '.private'",
@@ -278,7 +286,7 @@ describe("release workflow publication policy", () => {
       expect(configuration, name).toContain(
         "if: github.event_name == 'push' && github.ref_type == 'tag'",
       );
-      expect(configuration, name).not.toContain("publish_internal_rc15");
+      expect(configuration, name).not.toContain("publish_internal_rc17");
     }
   });
 
