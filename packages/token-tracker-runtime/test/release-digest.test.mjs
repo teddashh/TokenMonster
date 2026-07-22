@@ -214,10 +214,9 @@ async function fixture(entryName = "index.js", options = {}) {
   };
   const releaseBundleDependencies =
     options.releaseBundleDependencies ?? bundleDependencies;
-  const shrinkwrapRootDependencies =
-    options.shrinkwrapRootDependencies ?? {
-      "@mongodb-js/zstd": zstdDependency,
-    };
+  const shrinkwrapRootDependencies = options.shrinkwrapRootDependencies ?? {
+    "@mongodb-js/zstd": zstdDependency,
+  };
   const shrinkwrapRootBundleDependencies =
     options.shrinkwrapRootBundleDependencies ?? bundleDependencies;
   const releaseScripts = Object.prototype.hasOwnProperty.call(
@@ -527,6 +526,9 @@ describe("cross-platform release digest verifier", () => {
 
   it.each(FORBIDDEN_RELEASE_DEVELOPMENT_PACKAGES)(
     "rejects development-only package %s by name from every release surface",
+    // Five sequential subprocess verifications legitimately exceed the
+    // default 5s budget on the slowest CI runners.
+    { timeout: 30_000 },
     async (packageName) => {
       const expectedError = new RegExp(
         `forbidden development-only package ${packageName.replace(
@@ -553,10 +555,7 @@ describe("cross-platform release digest verifier", () => {
           },
         }),
         await fixture("index.js", {
-          shrinkwrapRootBundleDependencies: [
-            "@mongodb-js/zstd",
-            packageName,
-          ],
+          shrinkwrapRootBundleDependencies: ["@mongodb-js/zstd", packageName],
         }),
         await fixture("index.js", {
           additionalShrinkwrapPackages: {
@@ -577,9 +576,6 @@ describe("cross-platform release digest verifier", () => {
         ]),
       ).toThrow(expectedError);
     },
-    // Five sequential subprocess verifications legitimately exceed the
-    // default 5s budget on the slowest CI runners.
-    { timeout: 30_000 },
   );
 
   it("keeps package-name boundaries exact in the tar inventory allowlist", () => {
