@@ -19,6 +19,6 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "tokentracker-cli": "0.80.0"
+    "tokentracker-cli": "0.83.6"
   }
 }
