@@ -53,7 +53,7 @@ describe("packaging toolchain policy", () => {
     expect(result.error).toBeUndefined();
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(
-      "internal-only pending redistribution review",
+      "unsigned-only pending audited signing credentials",
     );
   });
 

@@ -10,8 +10,10 @@ caches, then the artifact archive was downloaded and bound byte-for-byte.
 `integration-review.json` binds the Actions run, artifact archive digest, source
 identities, dependency/source-test/merge input receipts, and the final PE digest.
 The reviewed `Squirrel.exe` binary itself is not tracked in this repository;
-restore the privately stored binary matching that receipt to this directory
-before running the internal Windows maker. The maker never edits
+restore a binary matching that receipt to this directory before running the
+internal Windows maker. CI restores it by re-running the locked reproducible
+rebuild workflow and verifying the artifact digest; a local maker run can use
+any byte-identical copy. The maker never edits
 `node_modules/electron-winstaller`; it verifies that package's complete vendor
 inventory, copies it into a temporary overlay, and replaces only `Squirrel.exe`.
 The normalized confirmation provenance and exact dependency/merge receipts are
@@ -20,11 +22,16 @@ bound in `integration-review.json`.
 
 `licenses/` preserves the exact Squirrel.Windows, pinned NuGet submodule, and
 Microsoft.Web.Xdt license/copyright/credits/attribution texts from the
-reproducible-build artifact.
-`provenance/licenses/ILREPACK-LICENSE.txt` covers only the build tool. These are
-not the still-pending complete merged-runtime notice bundle.
+reproducible-build artifact, plus the SharpCompress, Mono.Cecil,
+DeltaCompressionDotNet, WpfAnimatedGif, and electron-winstaller texts verified
+against the pinned upstream package digests.
+`licenses/MERGED-RUNTIME-NOTICES.md` is the complete merged-runtime notice
+bundle; `provenance/licenses/ILREPACK-LICENSE.txt` covers only the build tool.
 
-This is deliberately an internal candidate, not a public-release approval.
-Public redistribution remains blocked until the complete merged third-party
-notice bundle and terms are accepted, and the native signed install/start/
-uninstall matrix passes.
+Public release status: `approved-unsigned-public-test-pending-signing`. The
+complete notice bundle accompanies every public distribution of the Windows
+Squirrel installer artifacts, and the unsigned installer lane runs the native
+clean-install/start/uninstall smoke on every published candidate.
+Authenticode-signed distribution stays closed until audited signing
+credentials exist and the signed install review passes; `releaseMode`
+`"signed"` keeps failing closed until then.

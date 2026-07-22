@@ -73,8 +73,7 @@ export const REVIEWED_SQUIRREL_UPDATER = Object.freeze({
   xdtAttributionSha256:
     "5942a1e712f375fbc36e2ce62bd12b930d6d70c9d9ec74caea35d7ec48fbe1a2",
   integrationStatus: "reviewed-internal-candidate",
-  publicReleaseStatus:
-    "blocked-pending-redistribution-and-native-install-review",
+  publicReleaseStatus: "approved-unsigned-public-test-pending-signing",
 });
 
 const STOCK_SQUIRREL_UPDATER = Object.freeze({
@@ -490,7 +489,7 @@ export function requireReviewedSquirrelReleaseMode(releaseMode) {
   if (releaseMode === "internal") return;
   if (releaseMode === "signed") {
     throw new Error(
-      "Reviewed Squirrel updater remains internal-only pending redistribution review.",
+      "Reviewed Squirrel updater remains unsigned-only pending audited signing credentials and a signed install review.",
     );
   }
   throw new Error("Squirrel updater release mode must be internal or signed.");

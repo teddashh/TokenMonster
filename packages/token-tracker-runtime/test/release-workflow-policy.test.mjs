@@ -102,6 +102,7 @@ describe("release workflow publication policy", () => {
   it("keeps every signed and public promotion job on push tags only", () => {
     for (const name of [
       "signed-windows-installer",
+      "unsigned-windows-installer",
       "macos-internal-release-gate",
       "stage-companion-release",
       "publish-cli-npm",
@@ -205,6 +206,7 @@ describe("release workflow publication policy", () => {
       ["companion-desktop", "Install exact dependencies"],
       ["companion-installers", "Install exact dependencies"],
       ["signed-windows-installer", "Install exact dependencies"],
+      ["unsigned-windows-installer", "Install exact dependencies"],
       ["macos-internal-release-gate", "Install exact dependencies"],
       ["verify", "Install exact dependencies"],
       ["release-candidate", "Install exact dependencies"],

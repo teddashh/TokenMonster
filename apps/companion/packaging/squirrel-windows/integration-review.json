@@ -1,7 +1,7 @@
 {
   "contractVersion": 1,
   "integrationStatus": "reviewed-internal-candidate",
-  "publicReleaseStatus": "blocked-pending-redistribution-and-native-install-review",
+  "publicReleaseStatus": "approved-unsigned-public-test-pending-signing",
   "binarySha256": "83b754a9b24742675678c5d8fa024a8140c2d18eb640116a87a364f0a897388a",
   "binaryBytes": 1841664,
   "sourceBaseCommit": "eef37460aef77b2f9de8cd2237c1e55b344a6554",

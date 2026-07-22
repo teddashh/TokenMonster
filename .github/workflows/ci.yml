@@ -43,10 +43,15 @@ concurrency:
 jobs:
   rebuild-reviewed-squirrel-updater:
     name: Rebuild locked reviewed Squirrel updater candidate
-    if: github.event_name == 'workflow_dispatch' && inputs.rebuild_squirrel_updater
+    # Tag pushes rebuild the reviewed updater reproducibly so the unsigned
+    # Windows installer lane can restore the exact receipt-bound binary from
+    # this run's own artifact instead of any privately stored copy.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.rebuild_squirrel_updater) ||
+      (github.event_name == 'push' && github.ref_type == 'tag' && vars.TOKENMONSTER_UNSIGNED_WINDOWS_TEST_APPROVED == 'true')
     uses: ./.github/workflows/rebuild-squirrel-updater.yml
     with:
-      derive_candidate: ${{ inputs.squirrel_updater_receipt_mode == 'derive' }}
+      derive_candidate: ${{ github.event_name == 'workflow_dispatch' && inputs.squirrel_updater_receipt_mode == 'derive' }}
     permissions:
       contents: read
 
@@ -477,6 +482,99 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tokenmonster-desktop-windows-2025
+          path: apps/companion/out/make/squirrel.windows/x64/
+          if-no-files-found: error
+          retention-days: 7
+
+  # Unsigned public-test lane: packages the internal maker output with the
+  # receipt-bound reviewed updater restored from this run's own locked
+  # reproducible rebuild, then runs the native clean-install/start/uninstall
+  # smoke. It never reads signing secrets and never publishes by itself; the
+  # artifacts ship only through an explicitly labeled unsigned test release
+  # with the merged-runtime notice bundle attached.
+  unsigned-windows-installer:
+    name: Unsigned Windows installer (public test)
+    if: github.event_name == 'push' && github.ref_type == 'tag' && vars.TOKENMONSTER_UNSIGNED_WINDOWS_TEST_APPROVED == 'true'
+    needs:
+      - plan
+      - zstd-native-prebuilds
+      - rebuild-reviewed-squirrel-updater
+    runs-on: windows-2025
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.15.0
+          cache: npm
+
+      - name: Download authenticated zstd prebuilds
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: tokenmonster-zstd-native-prebuilds-${{ github.sha }}
+          path: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
+
+      - name: Install exact dependencies
+        shell: bash
+        env:
+          TOKENMONSTER_ZSTD_PREBUILD_DIR: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
+          npm_config_mongodb_js_zstd_local_prebuilds: ${{ runner.temp }}/tokenmonster-zstd-prebuilds
+        run: npm ci
+
+      - name: Restore reviewed Squirrel updater from the locked rebuild
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.0
+        with:
+          name: squirrel-updater-locked-83b754a9b24742675678c5d8fa024a8140c2d18eb640116a87a364f0a897388a
+          path: ${{ runner.temp }}/squirrel-updater-restore
+
+      - name: Verify and place the restored reviewed updater
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $restored = Join-Path $env:RUNNER_TEMP "squirrel-updater-restore/Squirrel.exe"
+          $expectedSha256 = "83b754a9b24742675678c5d8fa024a8140c2d18eb640116a87a364f0a897388a"
+          $actual = (Get-FileHash -LiteralPath $restored -Algorithm SHA256).Hash.ToLowerInvariant()
+          $size = (Get-Item -LiteralPath $restored).Length
+          if ($actual -ne $expectedSha256 -or $size -ne 1841664) {
+            throw "Restored Squirrel updater does not match the reviewed receipt."
+          }
+          Copy-Item -LiteralPath $restored -Destination "apps/companion/packaging/squirrel-windows/Squirrel.exe"
+
+      - name: Bind one desktop release version
+        shell: bash
+        run: |
+          release_version="$(node scripts/derive-companion-release-version.mjs)"
+          echo "TOKENMONSTER_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+
+      - name: Make and verify unsigned Windows installer
+        shell: bash
+        run: node scripts/package-companion.mjs make internal
+
+      - name: Re-verify Windows Squirrel sidecar payload
+        shell: bash
+        run: node scripts/verify-companion-package.mjs --mode internal --require-maker
+
+      - name: Clean-install, smoke, and uninstall unsigned Windows installer
+        shell: pwsh
+        run: >-
+          ./scripts/release/smoke-windows-squirrel-installer.ps1
+          -SetupPath apps/companion/out/make/squirrel.windows/x64/TokenMonsterSetup.exe
+
+      - name: Re-verify Windows maker bytes after install smoke
+        shell: bash
+        run: node scripts/verify-companion-package.mjs --mode internal --require-maker
+
+      - name: Upload verified unsigned installer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tokenmonster-desktop-windows-unsigned-test
           path: apps/companion/out/make/squirrel.windows/x64/
           if-no-files-found: error
           retention-days: 7

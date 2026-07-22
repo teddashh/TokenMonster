@@ -167,10 +167,10 @@ describe("reviewed Squirrel updater", () => {
     ).rejects.toThrow(/not distributed in this repository/u);
   });
 
-  it("keeps signed/public packaging closed while redistribution review is open", () => {
+  it("keeps signed packaging closed while signing credentials are unaudited", () => {
     expect(() => requireReviewedSquirrelReleaseMode("internal")).not.toThrow();
     expect(() => requireReviewedSquirrelReleaseMode("signed")).toThrow(
-      /internal-only pending redistribution review/u,
+      /unsigned-only pending audited signing credentials/u,
     );
     expect(() => requireReviewedSquirrelReleaseMode("preview")).toThrow(
       /must be internal or signed/u,

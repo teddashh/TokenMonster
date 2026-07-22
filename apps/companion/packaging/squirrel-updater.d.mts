@@ -11,7 +11,7 @@ export const REVIEWED_SQUIRREL_UPDATER: Readonly<
     readonly dependencyInventorySha256: string;
     readonly mergeInputInventorySha256: string;
     readonly integrationStatus: "reviewed-internal-candidate";
-    readonly publicReleaseStatus: "blocked-pending-redistribution-and-native-install-review";
+    readonly publicReleaseStatus: "approved-unsigned-public-test-pending-signing";
   }
 >;
 

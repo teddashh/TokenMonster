@@ -84,24 +84,22 @@ before any public release. It is not a license for TokenMonster itself.
   packaging fails closed unless a privately stored reviewed binary matching
   the `integration-review.json` receipt is restored to that directory.
 - Intended use: replace only the known-buggy `Squirrel.exe` in a disposable,
-  fully inventoried `electron-winstaller@5.4.4` vendor overlay. The reviewed
-  binary is currently permitted only for unsigned internal native testing.
+  fully inventoried `electron-winstaller@5.4.4` vendor overlay.
 - Runtime license inventory: Squirrel.Windows MIT; the pinned NuGet fork
-  Apache-2.0; WpfAnimatedGif 1.4.15 Apache-2.0; Mono.Cecil 0.11.2 MIT;
-  DeltaCompressionDotNet 1.1.0 under the selected MS-PL option; and
-  SharpCompress 0.17.1 with its embedded MIT, Apache-2.0, MS-PL, BSD-3-Clause,
-  Zlib, and UnRAR notices. The complete source-level attribution set has been
-  identified but is not yet packaged as a redistribution notice bundle.
-- Public-release blocker: `Microsoft.Web.Xdt@2.1.1` uses a Microsoft EULA that
-  explicitly discusses redistribution of the original DLL object code but does
-  not clearly authorize ILRepack internalization into `Squirrel.exe`. The
-  current product also lacks reviewed end-user terms capable of carrying that
-  EULA's downstream obligations. A notice file alone does not resolve this.
-- Required action before public release: obtain legal approval for the exact
-  merged form and complete all notices, or build and re-audit a new candidate
-  using the official Apache-2.0 `Microsoft.Web.Xdt@3.1.0`. That upgrade is API
-  compatible but behaviorally different, so it requires new dependency and
-  binary receipts, XDT differential tests, and the full native Windows matrix.
+  Apache-2.0; `Microsoft.Web.Xdt@3.1.0` rebuilt from the Apache-2.0
+  `dotnet/xdt` source (never the EULA-bound 2.1.1 DLL); WpfAnimatedGif 1.4.15
+  Apache-2.0; Mono.Cecil 0.11.2 MIT; DeltaCompressionDotNet 1.1.0 under the
+  selected MS-PL option; and SharpCompress 0.17.1 MIT with its embedded
+  third-party notices.
+- The complete redistribution notice bundle lives at
+  `apps/companion/packaging/squirrel-windows/licenses/MERGED-RUNTIME-NOTICES.md`
+  and must accompany every public distribution of the Windows Squirrel
+  installer artifacts.
+- Status: `approved-unsigned-public-test-pending-signing`. Unsigned public
+  test installers may ship with the notice bundle after the native
+  clean-install/start/uninstall smoke passes; Authenticode-signed
+  distribution stays closed until audited signing credentials exist and the
+  signed install review passes.
 
 ILRepack 2.0.24 is a reproducible-build tool rather than runtime code. Its
 Apache-2.0 license remains in the build artifact provenance; it is not presented

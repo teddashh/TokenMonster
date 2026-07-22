@@ -86,17 +86,20 @@ release identity and hashes.
 
 The Windows maker uses an exact reviewed Squirrel updater candidate whose
 receipts live in `apps/companion/packaging/squirrel-windows/`; the reviewed
-binary itself is not tracked in this repository and must be restored from the
-maintainer's private store before Windows Squirrel packaging. The maker
+binary itself is not tracked in this repository. Tag CI restores it from the
+same run's locked reproducible rebuild after verifying the receipt digest; a
+local maker run needs any byte-identical copy in that directory. The maker
 verifies the complete `electron-winstaller@5.4.4` vendor inventory, creates a
 disposable overlay, and replaces only `Squirrel.exe`; `node_modules` is never
-mutated. The candidate is internal-only while its merged Microsoft.Web.Xdt
-2.1.1 redistribution terms and complete third-party notices are reviewed; the
-tracked `xdt-3.1.0` source patches define the Apache-2.0 rebuild path. Signed packaging fails closed before
-maker execution until that status is explicitly replaced by a reviewed public
-redistribution decision. Do not create or push a public `v*` release tag while
-this gate is closed. The isolated private internal-test namespace documented
-below does not satisfy or bypass that public gate.
+mutated. The merged updater contains only the Apache-2.0 `Microsoft.Web.Xdt`
+3.1.0 rebuilt from `dotnet/xdt` source — never the EULA-bound 2.1.1 DLL — and
+its complete redistribution notice bundle is
+`apps/companion/packaging/squirrel-windows/licenses/MERGED-RUNTIME-NOTICES.md`.
+Public status is `approved-unsigned-public-test-pending-signing`: unsigned
+public test installers ship through the dedicated tag lane below with the
+notice bundle attached, while Authenticode-signed packaging keeps failing
+closed until audited signing credentials exist and the signed install review
+passes.
 
 The `Companion installers [package]` CI job packages the floating pet shell on
 Ubuntu, macOS, and Windows for manual `workflow_dispatch` runs and for pushed
@@ -105,6 +108,22 @@ unsigned internal evidence only. Each matrix runner uploads its complete direct
 maker directory as a seven-day GitHub Actions artifact named
 `tokenmonster-desktop-<os>`; no internal candidate is attached to a public
 GitHub Release.
+
+### Unsigned Windows public test installers
+
+The `Unsigned Windows installer (public test)` job runs on pushed `v*` tags
+only while the repository variable `TOKENMONSTER_UNSIGNED_WINDOWS_TEST_APPROVED`
+is exactly `true`. The lane never reads signing secrets. Its provenance chain
+is self-contained in one workflow run: the locked reproducible rebuild job
+rebuilds the reviewed updater twice from pinned sources, the installer job
+verifies the artifact against the `integration-review.json` digest before
+restoring it, the internal maker packages `TokenMonsterSetup.exe`, `RELEASES`,
+and the full `.nupkg`, the byte-level verifier re-checks the payload, and
+`smoke-windows-squirrel-installer.ps1` performs a native clean install, boot,
+and uninstall before the artifact upload. Published releases must label these
+artifacts as unsigned test builds and attach the merged-runtime notice bundle;
+Windows SmartScreen will warn on unsigned installers, which is expected until
+the signed lane opens.
 
 ### Private internal test prereleases
 

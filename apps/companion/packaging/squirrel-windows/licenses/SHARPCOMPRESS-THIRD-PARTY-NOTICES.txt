@@ -1,0 +1,25 @@
+SharpCompress 0.17.1 embedded third-party notices
+=================================================
+
+SharpCompress itself is MIT licensed (see SHARPCOMPRESS-LICENSE.txt).
+Its source embeds adapted third-party code whose notices the upstream
+0.17.1 README and source headers identify as MIT, Apache-2.0, MS-PL,
+BSD-3-Clause, Zlib, and UnRAR-derived material. The RAR support is a
+decompression-only port (JUnrar lineage); no RAR compression
+functionality exists in SharpCompress, and TokenMonster's updater uses
+the library only to extract its own update archives.
+
+The notices embedded verbatim in the upstream 0.17.1 README:
+
+XZ implementation based on: https://github.com/sambott/XZ.NET by @sambott
+
+7Zip implementation based on: https://code.google.com/p/managed-lzma/
+
+LICENSE
+Copyright (c) 2000 - 2011 The Legion Of The Bouncy Castle (http://www.bouncycastle.org)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
