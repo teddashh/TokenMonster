@@ -73,7 +73,11 @@ shape change.
 
 ## Active work queue
 
-`docs/HANDOFF.md` holds the current pending-work plans, per-task acceptance
-criteria, and the execution constraints (sandbox limits, local gate parity,
-gateway contract checklist) that every implementation task inherits. Read it
-before starting any task in this repository.
+Pending-work plans, per-task acceptance criteria, and execution constraints
+are maintained privately by the maintainer and are not part of this
+repository. Before starting any task, run the local gates
+(`npm run typecheck && npm run lint && npm run format:check && npm test`) and
+honor the gateway contract rule: any new URL path, query parameter, or DTO
+field spanning companion-ui and companion-gateway must update the router
+allowlist, both exact-key parsers, and their rejection tests in the same
+change.

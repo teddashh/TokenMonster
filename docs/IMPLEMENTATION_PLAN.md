@@ -7,8 +7,7 @@
 
 > 狀態：跨 Phase 0–4 的 source vertical slice 已完成；尚未 production deploy
 >
-> 適用範圍：歷史原始計畫；永久 sidecar／adapter／gateway／CLI 路徑以 ADR 0005 與
-> `docs/HANDOFF.md` 為準
+> 適用範圍：歷史原始計畫；永久 sidecar／adapter／gateway／CLI 路徑以 ADR 0005 為準
 >
 > 估算方式：以下都是「工程投入量」，不是日曆承諾；1 工程週以 5 個專注工程日計。
 

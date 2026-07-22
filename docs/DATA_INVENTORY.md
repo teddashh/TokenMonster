@@ -45,7 +45,7 @@ without a reviewed contract and inventory change.
 | Companion renderer memory | Current BYOK prompt/response and rendered state | Never backed up | Conversation clears when conversation/window closes |
 | `~/.tokenmonster/progression-v1.json` and character preferences | Local aggregate progression ledger, monotonic unlock timestamps, selected character, and active wardrobe choices | Local-only; mode `0600` in a mode `0700` directory | Rebuilt/fails closed to letter mode if invalid; never uploaded |
 | `~/.tokenmonster/character-profile-v1.json` | Strict derived identity/mood/evolution state, banded explanations, UTC window, and computation instant; mood uses the latest complete UTC day, while today's partial bucket is excluded from mood; never the footprint or token components | Local-only; mode `0600` in a mode `0700` directory | Replaced after a fresh derivation; only a current/previous-date snapshot at most 48 hours old may serve as stale; never uploaded |
-| `~/.tokenmonster/asset-cache` | Integrity-verified raster/voice objects named by SHA-256; schema-v1 presence is not public rights approval | Disposable, local-only cache; each read revalidates its digest | Current CLI/Electron are unconditionally cache-only and network-disabled; missing content falls back to letter mode or silence |
+| `~/.tokenmonster/asset-cache` | Integrity-verified raster/voice objects named by SHA-256; schema-v1 presence is not public rights approval | Disposable, local-only cache; each read revalidates its digest | Embedded starter art needs no cache; after separate explicit consent, one verified fixed pack fills the cache for offline use, repair, and removal; missing content falls back to letter mode or silence |
 | Cloudflare Worker memory | Validated request and transaction state | Never intentionally persisted | Request-scoped |
 | D1 current tables | Hashed enrollment auth, consent, recent canonical buckets, optional shares | Time Travel plus independent logical export | Revoke/delete within stated window |
 | D1 anonymous rollups | Irreversibly compacted historical coarse totals | Daily logical export; rebuild tested | Not attributable after compaction |
@@ -135,29 +135,36 @@ Diagnostic exports must use an allowlist and a canary test. They may not copy
 the local database wholesale or include environment variables, home paths,
 process command lines, raw collector output, credentials, prompt, or response.
 
-### Character-asset delivery (cache-only implemented; network blocked)
+### Character-asset delivery (embedded basics; consent-gated fixed pack)
 
-The release embeds a strict schema-v1 integrity manifest. The gateway accepts
-only `cdnBaseUrl: null`, rejects transport hooks, and contains no per-object
-downloader; CLI and legacy Electron also ignore the former override. Cache hits
-must match the filename's SHA-256; a miss or invalid entry falls back to the
-code-native letter renderer or silence without affecting local usage features.
-`--no-character-downloads` is retained only as a compatibility safety alias.
+The release embeds a strict schema-v2 authority: eight approved WebP starters
+(one avatar and one `tech` base outfit for ChatGPT, Claude, Gemini, and Grok)
+plus 168 fixed `zh-TW`/`en` text lines ship inside the package and need no
+network. After a separate explicit user action, the companion downloads one
+fixed, versioned pack (`ai-sister-images-11-2026.07.21`: exactly 891 images,
+11 characters, 0 voice lines, 65,574,180 bytes) from `https://cdn.ted-h.com`;
+its network object set and order are independent of any local usage,
+selection, progression, pose, or trigger state. Pack entries pass bounded
+extraction and per-entry bytes/media/SHA-256 checks before atomic cache
+writes, and the verified pack supports offline use, repair, and removal.
+Cache hits must match the filename's SHA-256; a miss or invalid entry falls
+back to the code-native letter renderer or silence without affecting local
+usage features. `--no-character-downloads` is retained only as a
+compatibility safety alias.
 
-Per-object network delivery is prohibited because the public manifest maps
+Per-object network delivery stays prohibited because the public manifest maps
 each hash to a character/theme/pose or voice trigger. Even without query
 parameters or numeric totals, a request selected by starter, unlock, today
 usage, or refresh state would disclose usage-derived information to the CDN.
-Future delivery requires a separate explicit user action and one fixed,
-versioned pack whose network object set and order do not depend on any local
-usage, selection, progression, pose, or trigger. Pack entries still require
-bounded extraction and per-entry bytes/media/SHA-256 checks before atomic cache
-writes.
+The implemented fixed-pack path exists precisely to avoid this: it is the
+only network delivery, it requires the separate explicit user action above,
+and its object set never varies with local state.
 
-The schema-v1 runtime integrity manifest contains 50 prerecorded voice refs
-for the ten art-backed characters and none for GLM; voice defaults off and can
-currently play only verified cache hits. These rows lack schema-v2 public
-rights/content evidence and must not be treated as approval.
+The runtime integrity manifest still contains 50 prerecorded voice refs for
+the ten art-backed characters and none for GLM; the fixed pack deliberately
+contains no voice bytes, voice defaults off, and playback can use only
+verified cache hits. These rows lack public rights/content evidence and must
+not be treated as approval.
 
 ## 5. BYOK interaction data
 

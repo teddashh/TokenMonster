@@ -315,10 +315,13 @@ export async function startPetCompanion(
     show: false,
     title: "TokenMonster",
     webPreferences: {
+      allowRunningInsecureContent: false,
       contextIsolation: true,
       nodeIntegration: false,
+      nodeIntegrationInWorker: false,
       preload: shellPreloadPath(),
-      sandbox: true
+      sandbox: true,
+      webSecurity: true
     }
   })
   shellWindow.setAlwaysOnTop(pinned, "floating")
@@ -385,11 +388,14 @@ export async function startPetCompanion(
       show: false,
       title: "TokenMonster dashboard",
       webPreferences: {
+        allowRunningInsecureContent: false,
         contextIsolation: true,
         nodeIntegration: false,
+        nodeIntegrationInWorker: false,
         partition: PET_SESSION_PARTITION,
         preload: companionPreloadPath(),
-        sandbox: true
+        sandbox: true,
+        webSecurity: true
       }
     })
     dashboard.setMenu(null)
@@ -672,11 +678,14 @@ export async function startPetCompanion(
         if (!adopted) return
         const view = new WebContentsView({
           webPreferences: {
+            allowRunningInsecureContent: false,
             contextIsolation: true,
             nodeIntegration: false,
+            nodeIntegrationInWorker: false,
             partition: PET_SESSION_PARTITION,
             preload: companionPreloadPath(),
-            sandbox: true
+            sandbox: true,
+            webSecurity: true
           }
         })
         gatewayView = view

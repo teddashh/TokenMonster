@@ -410,7 +410,7 @@ AI-Sister／`multi-ai-chat-app` 是設計與 persona 來源，但不是 TokenMon
 
 ## 參與開發
 
-這是 private、pre-release repository。任何資料 shape、collector command、角色 asset、
+這是 pre-release repository。任何資料 shape、collector command、角色 asset、
 network destination、credential lifecycle 或 retention 行為的變更，都必須同步更新
 contracts、privacy regression tests、data inventory、threat model 與 release checklist。
 禁止把 prompt、response、path、filename、raw model label、key 或真實使用者 fixture
@@ -418,6 +418,5 @@ contracts、privacy regression tests、data inventory、threat model 與 release
 
 ## License
 
-Project license 尚未決定，repository 目前沒有提供對外使用或再散布授權。第三方
-component 仍受各自 license 約束，詳見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-在 legal／rights review 與明確 license 檔案完成前，本專案只供內部開發與評估。
+本專案以 [MIT License](LICENSE) 釋出。第三方 component 仍受各自 license 約束，
+詳見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

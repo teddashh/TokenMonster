@@ -2,6 +2,7 @@
   "name": "@tokenmonster/companion",
   "productName": "TokenMonster",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "main": "dist/main/main/main.js",

@@ -1,6 +1,7 @@
 {
   "name": "tokenmonster-workspace",
   "version": "0.0.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "packageManager": "npm@11.12.1",
@@ -12,6 +13,11 @@
     "apps/*",
     "packages/*"
   ],
+  "overrides": {
+    "miniflare": {
+      "sharp": "0.35.3"
+    }
+  },
   "scripts": {
     "audit:zstd-native-prebuild": "node scripts/release/audit-zstd-native-prebuild.mjs --all",
     "build": "node scripts/run-workspaces.mjs build",

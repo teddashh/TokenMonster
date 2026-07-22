@@ -1,26 +1,16 @@
 import { createHash } from "node:crypto";
-import {
-  lstat,
-  mkdtemp,
-  readFile,
-  rm,
-  truncate,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  finalizeReviewedSquirrelVendorOverlay,
   prepareReviewedSquirrelVendorOverlay,
   projectElectronWinstallerVendorInventoryForArchitecture,
   requireReviewedSquirrelReleaseMode,
-  REVIEWED_SQUIRREL_UPDATER,
-  verifyElectronWinstallerVendor,
   verifyReviewedSquirrelUpdater,
-  verifyReviewedSquirrelVendorOverlay,
+  verifyReviewedSquirrelUpdaterPolicy,
 } from "../packaging/squirrel-updater.mjs";
 
 const temporaryDirectories: string[] = [];
@@ -107,15 +97,16 @@ describe("reviewed Squirrel updater", () => {
     );
   });
 
-  it("binds the vendored PE to the locked rebuild confirmation", async () => {
-    const binding = await verifyReviewedSquirrelUpdater();
-    expect(binding).toMatchObject({
-      bytes: 1_841_664,
-      sha256:
-        "83b754a9b24742675678c5d8fa024a8140c2d18eb640116a87a364f0a897388a",
+  it("keeps the locked integration record verifiable without the private binary", async () => {
+    await expect(verifyReviewedSquirrelUpdaterPolicy()).resolves.toEqual({
+      binary: null,
     });
-    expect(binding.bytes).toBe(REVIEWED_SQUIRREL_UPDATER.bytes);
-    expect(binding.sha256).toBe(REVIEWED_SQUIRREL_UPDATER.sha256);
+  });
+
+  it("fails closed when the private reviewed binary is absent", async () => {
+    await expect(verifyReviewedSquirrelUpdater()).rejects.toThrow(
+      /not distributed in this repository/u,
+    );
   });
 
   it("projects only the receipt-bound 7-Zip aliases for an arm64 host", async () => {
@@ -164,95 +155,16 @@ describe("reviewed Squirrel updater", () => {
     ).toThrow(/only x64 or arm64/u);
   });
 
-  it("creates an exact disposable vendor overlay without changing node_modules", async () => {
+  it("refuses to create a vendor overlay without the private reviewed binary", async () => {
     const temporaryRoot = await mkdtemp(
       join(tmpdir(), "tokenmonster-squirrel-overlay-test-"),
     );
     temporaryDirectories.push(temporaryRoot);
     const overlayDirectory = join(temporaryRoot, "vendor");
-    const sourceBefore = await verifyElectronWinstallerVendor();
-
-    const prepared = await prepareReviewedSquirrelVendorOverlay(
-      overlayDirectory,
-      "internal",
-    );
-
-    expect(prepared).toEqual({
-      directory: overlayDirectory,
-      updaterSha256: REVIEWED_SQUIRREL_UPDATER.sha256,
-    });
-    await expect(
-      verifyReviewedSquirrelVendorOverlay(overlayDirectory),
-    ).resolves.toEqual(prepared);
-    const updaterPath = join(overlayDirectory, "Squirrel.exe");
-    const updaterStat = await lstat(updaterPath, { bigint: true });
-    const stockUpdaterStat = await lstat(
-      join(sourceBefore.directory, "Squirrel.exe"),
-      { bigint: true },
-    );
-    const updater = await readFile(updaterPath);
-    expect(updaterStat.isFile()).toBe(true);
-    expect(updaterStat.isSymbolicLink()).toBe(false);
-    expect([updaterStat.dev, updaterStat.ino]).not.toEqual([
-      stockUpdaterStat.dev,
-      stockUpdaterStat.ino,
-    ]);
-    expect(updater.byteLength).toBe(REVIEWED_SQUIRREL_UPDATER.bytes);
-    expect(createHash("sha256").update(updater).digest("hex")).toBe(
-      REVIEWED_SQUIRREL_UPDATER.sha256,
-    );
-    await expect(verifyElectronWinstallerVendor()).resolves.toEqual(
-      sourceBefore,
-    );
-  });
-
-  it("removes only Squirrel's bounded releasify log before final verification", async () => {
-    const temporaryRoot = await mkdtemp(
-      join(tmpdir(), "tokenmonster-squirrel-finalize-test-"),
-    );
-    temporaryDirectories.push(temporaryRoot);
-    const overlayDirectory = join(temporaryRoot, "vendor");
-    await prepareReviewedSquirrelVendorOverlay(overlayDirectory, "internal");
-    const logPath = join(overlayDirectory, "Squirrel-Releasify.log");
-    await writeFile(logPath, "reviewed test diagnostic\n", "utf8");
 
     await expect(
-      finalizeReviewedSquirrelVendorOverlay(overlayDirectory),
-    ).resolves.toEqual({
-      directory: overlayDirectory,
-      updaterSha256: REVIEWED_SQUIRREL_UPDATER.sha256,
-    });
-    await expect(lstat(logPath)).rejects.toMatchObject({ code: "ENOENT" });
-  });
-
-  it("rejects any other maker residue", async () => {
-    const temporaryRoot = await mkdtemp(
-      join(tmpdir(), "tokenmonster-squirrel-residue-test-"),
-    );
-    temporaryDirectories.push(temporaryRoot);
-    const overlayDirectory = join(temporaryRoot, "vendor");
-    await prepareReviewedSquirrelVendorOverlay(overlayDirectory, "internal");
-    await writeFile(join(overlayDirectory, "unexpected.log"), "no\n", "utf8");
-
-    await expect(
-      finalizeReviewedSquirrelVendorOverlay(overlayDirectory),
-    ).rejects.toThrow(/unexpected file inventory/u);
-  });
-
-  it("rejects an oversized Squirrel releasify log", async () => {
-    const temporaryRoot = await mkdtemp(
-      join(tmpdir(), "tokenmonster-squirrel-log-bound-test-"),
-    );
-    temporaryDirectories.push(temporaryRoot);
-    const overlayDirectory = join(temporaryRoot, "vendor");
-    await prepareReviewedSquirrelVendorOverlay(overlayDirectory, "internal");
-    const logPath = join(overlayDirectory, "Squirrel-Releasify.log");
-    await writeFile(logPath, "", "utf8");
-    await truncate(logPath, 4 * 1024 * 1024 + 1);
-
-    await expect(
-      finalizeReviewedSquirrelVendorOverlay(overlayDirectory),
-    ).rejects.toThrow(/not a bounded physical file/u);
+      prepareReviewedSquirrelVendorOverlay(overlayDirectory, "internal"),
+    ).rejects.toThrow(/not distributed in this repository/u);
   });
 
   it("keeps signed/public packaging closed while redistribution review is open", () => {

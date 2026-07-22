@@ -9,7 +9,9 @@ The binary was rebuilt twice in one locked Actions job using isolated dependency
 caches, then the artifact archive was downloaded and bound byte-for-byte.
 `integration-review.json` binds the Actions run, artifact archive digest, source
 identities, dependency/source-test/merge input receipts, and the final PE digest.
-The maker never edits
+The reviewed `Squirrel.exe` binary itself is not tracked in this repository;
+restore the privately stored binary matching that receipt to this directory
+before running the internal Windows maker. The maker never edits
 `node_modules/electron-winstaller`; it verifies that package's complete vendor
 inventory, copies it into a temporary overlay, and replaces only `Squirrel.exe`.
 The normalized confirmation provenance and exact dependency/merge receipts are

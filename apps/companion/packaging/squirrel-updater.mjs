@@ -496,13 +496,37 @@ export function requireReviewedSquirrelReleaseMode(releaseMode) {
   throw new Error("Squirrel updater release mode must be internal or signed.");
 }
 
-export async function verifyReviewedSquirrelUpdater() {
-  const [binary, { contents }] = await Promise.all([
-    hashPhysicalFile(
+async function hashReviewedUpdaterBinaryIfPresent() {
+  try {
+    return await hashPhysicalFile(
       reviewedBinaryPath,
       "reviewed Squirrel updater",
       MAX_VENDOR_FILE_BYTES,
-    ),
+    );
+  } catch (error) {
+    const code = /** @type {NodeJS.ErrnoException | null} */ (error)?.code;
+    if (code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+export async function verifyReviewedSquirrelUpdater() {
+  const { binary } = await verifyReviewedSquirrelUpdaterPolicy();
+  if (binary === null) {
+    throw new Error(
+      "The reviewed Squirrel updater binary is not distributed in this " +
+        "repository; restore the privately stored binary bound by " +
+        "integration-review.json to " +
+        "apps/companion/packaging/squirrel-windows/Squirrel.exe before " +
+        "Windows Squirrel packaging.",
+    );
+  }
+  return Object.freeze({ ...binary, path: reviewedBinaryPath });
+}
+
+export async function verifyReviewedSquirrelUpdaterPolicy() {
+  const [binary, { contents }] = await Promise.all([
+    hashReviewedUpdaterBinaryIfPresent(),
     readPolicyFile(reviewPath, "reviewed Squirrel integration record"),
     verifyNormalizedBuildEvidence(),
   ]);
@@ -528,8 +552,9 @@ export async function verifyReviewedSquirrelUpdater() {
       "xdtLicenseSha256",
     ]) ||
     !confirmations.every(hasExactConfirmationKeys) ||
-    binary.bytes !== REVIEWED_SQUIRREL_UPDATER.bytes ||
-    binary.sha256 !== REVIEWED_SQUIRREL_UPDATER.sha256 ||
+    (binary !== null &&
+      (binary.bytes !== REVIEWED_SQUIRREL_UPDATER.bytes ||
+        binary.sha256 !== REVIEWED_SQUIRREL_UPDATER.sha256)) ||
     review?.contractVersion !== 1 ||
     review?.integrationStatus !== REVIEWED_SQUIRREL_UPDATER.integrationStatus ||
     review?.publicReleaseStatus !==
@@ -562,7 +587,7 @@ export async function verifyReviewedSquirrelUpdater() {
       "Reviewed Squirrel updater or integration record differs from policy.",
     );
   }
-  return Object.freeze({ ...binary, path: reviewedBinaryPath });
+  return Object.freeze({ binary });
 }
 
 export async function verifyElectronWinstallerVendor() {

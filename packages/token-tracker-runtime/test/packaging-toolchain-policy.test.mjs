@@ -13,10 +13,6 @@ const adr = await readFile(
   resolve(rootDirectory, "docs/adr/0004-electron-packaging-and-signing.md"),
   "utf8",
 );
-const handoff = await readFile(
-  resolve(rootDirectory, "docs/HANDOFF.md"),
-  "utf8",
-);
 const workflow = await readFile(
   resolve(rootDirectory, ".github/workflows/ci.yml"),
   "utf8",
@@ -67,11 +63,6 @@ describe("packaging toolchain policy", () => {
     expect(adr).toContain("Forge-free closure");
     expect(adr).toContain("native-range lock produced 25");
     expect(adr).toContain("audit findings (22 high and 3 low)");
-    expect(handoff).toContain(
-      "dependency blocker is now addressed by a reviewed stable",
-    );
-    expect(handoff).toContain("direct Electron packaging replacement");
-    expect(handoff).toContain("Forge-free exact lock");
     expect(workflow).toContain(
       "former Forge override exception has been removed",
     );

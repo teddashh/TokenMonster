@@ -78,10 +78,11 @@ before any public release. It is not a license for TokenMonster itself.
 - Source: <https://github.com/Squirrel/Squirrel.Windows>
 - Pinned source: base commit `eef37460aef77b2f9de8cd2237c1e55b344a6554`
   plus upstream fix commit `c98244936f6876b080366417301268058028a53c`.
-- Reviewed internal binary: 1,840,640 bytes, SHA-256
-  `1673161fd4e64d1123fb828a5e5f1580cbe3c3f6b3f0893f50bb920dada473fd`.
-  Two isolated reproducible-build runs and their exact receipts are bound under
-  `apps/companion/packaging/squirrel-windows/`.
+- The reviewed internal binary is not tracked in this repository. Its
+  reproducible-build receipts, provenance, and integration review remain bound
+  under `apps/companion/packaging/squirrel-windows/`; Windows Squirrel
+  packaging fails closed unless a privately stored reviewed binary matching
+  the `integration-review.json` receipt is restored to that directory.
 - Intended use: replace only the known-buggy `Squirrel.exe` in a disposable,
   fully inventoried `electron-winstaller@5.4.4` vendor overlay. The reviewed
   binary is currently permitted only for unsigned internal native testing.
@@ -150,5 +151,7 @@ as a license for the merged runtime components.
 
 ## Project license
 
-TokenMonster's own source and asset license remains undecided. Do not infer an
-open-source or commercial license from the third-party MIT dependencies.
+TokenMonster's own source code is licensed under the MIT License; see the
+[`LICENSE`](LICENSE) file at the repository root. Third-party components and
+character assets remain subject to their own licenses and grants as documented
+in this file.

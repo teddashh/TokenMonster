@@ -84,12 +84,15 @@ release identity and hashes.
 
 ## Desktop installers
 
-The Windows maker currently uses an exact reviewed Squirrel updater candidate
-from `apps/companion/packaging/squirrel-windows/`. It verifies the complete
-`electron-winstaller@5.4.4` vendor inventory, creates a disposable overlay, and
-replaces only `Squirrel.exe`; `node_modules` is never mutated. The candidate is
-internal-only while its merged Microsoft.Web.Xdt 2.1.1 redistribution terms and
-complete third-party notices are reviewed. Signed packaging fails closed before
+The Windows maker uses an exact reviewed Squirrel updater candidate whose
+receipts live in `apps/companion/packaging/squirrel-windows/`; the reviewed
+binary itself is not tracked in this repository and must be restored from the
+maintainer's private store before Windows Squirrel packaging. The maker
+verifies the complete `electron-winstaller@5.4.4` vendor inventory, creates a
+disposable overlay, and replaces only `Squirrel.exe`; `node_modules` is never
+mutated. The candidate is internal-only while its merged Microsoft.Web.Xdt
+2.1.1 redistribution terms and complete third-party notices are reviewed; the
+tracked `xdt-3.1.0` source patches define the Apache-2.0 rebuild path. Signed packaging fails closed before
 maker execution until that status is explicitly replaced by a reviewed public
 redistribution decision. Do not create or push a public `v*` release tag while
 this gate is closed. The isolated private internal-test namespace documented
@@ -117,34 +120,16 @@ its legacy Electron artifacts do not contain the newer embedded starter base
 and must not be relabeled as rc.17. The rc.15 input is no longer active, and
 rc.15 is never rebuilt or overwritten.
 
-#### Current CLI-only rc.17 prerelease
+#### Historical CLI-only rc.17 evidence
 
-The one-shot `publish_internal_rc17` manual input exists so an owner can test
-the corrected CLI install on several machines without weakening the public
-release gate. It is accepted only from private `main`, with all three runner
-platforms selected, `rebuild_squirrel_updater=false`, and the exact
-`0.1.0-rc.17` identity. A successful run publishes a **private, unsigned,
-CLI-only GitHub prerelease** under the isolated `internal/v0.1.0-rc.17` tag.
-That namespace does not match the public `v*` tag trigger and therefore cannot
-enter npm, R2/CDN, Worker, signing, or automatic-update promotion.
-
-After the exact reviewed commit is on `main`, trigger only this bounded lane:
-
-```sh
-gh workflow run ci.yml --ref main \
-  -f platforms=all \
-  -f rebuild_squirrel_updater=false \
-  -f squirrel_updater_receipt_mode=locked \
-  -f publish_internal_rc17=true
-```
-
-The job creates and binds `internal/v0.1.0-rc.17` itself. Do not push a public
-`v0.1.0-rc.17` tag for this internal test release.
-
-The job deliberately skips `Companion installers [package]`, downloads no
-desktop maker artifact, and waits for repository verification, sidecar
+The retired one-shot `publish_internal_rc17` lane published the corrected CLI
+as a **private, unsigned, CLI-only GitHub prerelease** under the isolated
+`internal/v0.1.0-rc.17` tag so the owner could test installs on several
+machines without weakening the public release gate. The lane accepted only
+private `main` with all three runner platforms, skipped
+`Companion installers [package]`, waited for repository verification, sidecar
 compatibility, the exact CLI candidate, and installed-release smoke on Linux,
-macOS, and Windows. It uploads exactly four files:
+macOS, and Windows, then uploaded exactly four byte-compared files:
 
 - `tokenmonster-0.1.0-rc.17.tgz`
 - `TokenMonster-cli-SHA256SUMS.txt`
@@ -152,59 +137,29 @@ macOS, and Windows. It uploads exactly four files:
 - `TokenMonster-internal-SHA256SUMS.txt`
 
 The source receipt records `releaseMode: "unsigned-internal-cli"`, the exact
-source commit, and all three smoked platforms. The publication job first makes
-a draft, downloads and byte-compares all four assets, and only then exposes it
-as a prerelease with `latest=false`. Reusing the version or tag with different
-bytes fails instead of overwriting it.
+source commit, and all three smoked platforms. The tarball contains ChatGPT,
+Claude, Gemini, and Grok avatars, their `tech` base outfits, and 168
+`zh-TW`/`en` fixed text lines; the complete 891-image pack stays outside the
+tarball and is downloaded only after explicit consent. The internal tag
+namespace never matches the public `v*` trigger, so it cannot enter npm,
+R2/CDN, Worker, signing, or automatic-update promotion.
 
-The CLI tarball contains ChatGPT, Claude, Gemini, and Grok avatars, their
-`tech` base outfits, and 168 `zh-TW`/`en` fixed text lines. No desktop installer
-is attached. The complete 891-image pack remains outside the tarball and is
-downloaded only after explicit consent. Download the tarball from the private
-release and install it manually:
+That publication run completed, so the manual input has been removed from
+`ci.yml`. rc.17 is never rebuilt in place; a fix after rc.17 must use a new
+version such as rc.18 through the normal release path.
 
-```sh
-npm install /path/to/tokenmonster-0.1.0-rc.17.tgz
-npx tokenmonster
-```
+##### Dependency-audit status
 
-Every test machine must be signed into GitHub with access to this private
-repository. This lane does not publish an npm package or update feed, so
-installation and upgrades are manual. A fix after rc.17 must use a new version
-such as rc.18; rc.17 is never rebuilt in place.
-
-##### Current rc.17 dependency-audit boundary
-
-As of 2026-07-21, a complete root `npm audit --json` exits `1` and reports four
-high-severity dependency records. They are one exact development-only advisory
-graph from the two direct `apps/web` development tools. Its lock edges are:
-
-- `@cloudflare/vite-plugin@1.45.0 -> miniflare@4.20260710.0`
-- `@cloudflare/vite-plugin@1.45.0 -> wrangler@4.111.0`
-- `wrangler@4.111.0 -> miniflare@4.20260710.0 -> sharp@0.34.5`
-
-The underlying advisory is `GHSA-f88m-g3jw-g9cj`; npm also reports the two
-direct tools and `miniflare` as affected dependents, producing the four records.
-These packages are not in the CLI tarball's production closure. Root
-`npm audit --omit=dev --audit-level=high` and
-`npm audit --package-lock-only --omit=dev --audit-level=high` from the exact
-extracted rc.17 tarball both report zero vulnerabilities.
-
-This is a bounded development-tool exception, not a general audit waiver. CI
-retains the complete audit JSON, its exit status, and the verifier receipt in
-`release-evidence/`; the exact lock, direct development declarations, advisory
-graph, and status are checked by
-`scripts/release/verify-temporary-dev-audit-exception.mjs`. The verifier uses
-the real clock and the exception expires at `2026-07-29T00:00:00.000Z`. Any
-graph drift, different audit result, or expired clock fails the release gate.
-After building and digest-verifying the candidate, CI separately extracts that
-exact tgz under the runner's temporary directory and runs the production-only
-lock audit there before uploading the candidate bytes.
-
-This exception does not make a public release eligible. The reviewed Squirrel
-updater's Microsoft.Web.Xdt redistribution and notice review, signing, and the
-other public-release gates remain closed; do not create or push a public `v*`
-tag from rc.17.
+The historical rc.17-era development audit exception is retired. The advisory
+`GHSA-f88m-g3jw-g9cj` (libvips CVEs in `sharp` before 0.35.0) reached the tree
+only through `miniflare`'s exact `sharp@0.34.5` pin behind the two direct
+`apps/web` development tools. No fixed `miniflare` exists, so the root manifest
+carries a single reviewed scoped override forcing `miniflare`'s `sharp` to
+`0.35.3`. `scripts/verify-packaging-toolchain.mjs` pins that exact override
+shape and fails on any other override, and CI requires a completely clean
+`npm audit` — every severity, including development dependencies — with the
+full audit JSON retained in `release-evidence/`. Remove the override once a
+`miniflare` release stops pinning a vulnerable `sharp`.
 
 A version-tag run deliberately narrows the installer matrix to Windows and
 requires signed mode. It decodes the bounded PFX secret into the runner's

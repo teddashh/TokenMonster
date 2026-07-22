@@ -82,195 +82,21 @@ describe("release workflow publication policy", () => {
     }
   });
 
-  it("separates public tags and the private internal release into non-cancelling lanes", () => {
+  it("keeps public tag publication in a non-cancelling lane and retires internal prerelease lanes", () => {
     expect(workflow).toContain('tags:\n      - "v*"');
     expect(workflow).not.toContain('tags:\n      - "*"');
     expect(workflow).toContain(
       "github.ref_type == 'tag' && 'tokenmonster-public-tag-release'",
     );
     expect(workflow).toContain(
-      "inputs.publish_internal_rc17 && 'tokenmonster-private-internal-release'",
-    );
-    expect(workflow).toContain(
-      "${{ github.ref_type != 'tag' && !(github.event_name == 'workflow_dispatch' && inputs.publish_internal_rc17) }}",
+      "cancel-in-progress: >-\n    ${{ github.ref_type != 'tag' }}",
     );
     expect(workflow).not.toContain("publish_internal_rc15");
-
-    const internal = job("publish-internal-prerelease");
-    expect(internal).toContain("INTERNAL_RELEASE_TAG: internal/v0.1.0-rc.17");
-    expect(internal).toContain("INTERNAL_RELEASE_VERSION: 0.1.0-rc.17");
-    expect(internal).not.toContain("INTERNAL_RELEASE_TAG: v0.1.0-rc.17");
-  });
-
-  it("gates the CLI-only internal identity on private main, all platforms, and no Squirrel rebuild", () => {
-    const planning = job("plan");
-    const selection = step(planning, "Pick runner platforms");
-    expect(planning).toContain(
-      "internal-release-version: ${{ steps.pick.outputs.internal-release-version }}",
-    );
-    expect(selection).toContain(
-      "PUBLISH_INTERNAL_RC17: ${{ inputs.publish_internal_rc17 && 'true' || 'false' }}",
-    );
-    expect(selection).toContain(
-      "REPOSITORY_PRIVATE: ${{ github.event.repository.private && 'true' || 'false' }}",
-    );
-    for (const requirement of [
-      '"$EVENT_NAME" != "workflow_dispatch"',
-      '"$REF_TYPE" != "branch"',
-      '"$FULL_REF" != "refs/heads/main"',
-      '"$PLATFORMS" != "all"',
-      '"$REBUILD_SQUIRREL_UPDATER" != "false"',
-      '"$REPOSITORY_PRIVATE" != "true"',
-    ]) {
-      expect(selection).toContain(requirement);
-    }
-    expect(selection).toContain(
-      "echo 'internal-release-version=0.1.0-rc.17' >> \"$GITHUB_OUTPUT\"",
-    );
-  });
-
-  it("publishes only the exact unsigned private CLI inventory after every release gate", () => {
-    const internal = job("publish-internal-prerelease");
-    const configuration = internal.slice(0, internal.indexOf("    steps:"));
-    expect(configuration).toContain(
-      "if: github.event_name == 'workflow_dispatch' && inputs.publish_internal_rc17 && github.ref == 'refs/heads/main'",
-    );
-    expect(configuration).toContain(`    needs:
-      - plan
-      - verify
-      - sidecar-compatibility
-      - release-candidate
-      - release-smoke`);
-    expect(configuration).toContain("    permissions:\n      contents: write");
-    expect(configuration).not.toContain("environment:");
-    for (const forbiddenDependency of [
-      "rebuild-reviewed-squirrel-updater",
-      "companion-installers",
-      "companion-desktop",
-    ]) {
-      expect(configuration).not.toContain(forbiddenDependency);
-    }
-    const download = step(
-      internal,
-      "Download cross-platform-smoked CLI candidate",
-    );
-    expect(download).toContain(
-      "name: tokenmonster-release-candidate-${{ github.sha }}",
-    );
-    expect(occurrences(internal, "actions/download-artifact@")).toBe(1);
-
-    const assembly = step(
-      internal,
-      "Assemble exact unsigned CLI release inventory",
-    );
-    expect(assembly).toContain('require_inventory "$input_root/cli" 2');
-    expect(assembly).toContain(`          sources=(
-            "$input_root/cli/tokenmonster-0.1.0-rc.17.tgz"
-            "$input_root/cli/SHASUMS256.txt"
-          )`);
-    expect(assembly).toContain(`          targets=(
-            tokenmonster-0.1.0-rc.17.tgz
-            TokenMonster-cli-SHA256SUMS.txt
-          )`);
-    expect(assembly).toContain('find "$directory" ! -type d ! -type f');
-    expect(assembly).toContain(
-      '[[ ! -f "$source_path" || -L "$source_path" ]]',
-    );
-    expect(assembly).toContain("sha256sum --check --strict SHASUMS256.txt");
-    expect(assembly).toContain("TokenMonster-internal-source-v1.json");
-    expect(assembly).toContain('releaseMode: "unsigned-internal-cli"');
-    expect(assembly).toContain("publicChannelsPromoted: false");
-    expect(assembly).toContain(
-      'smokedPlatforms: ["windows-x64", "macos-arm64", "linux-x64"]',
-    );
-    expect(assembly).toContain("TokenMonster-internal-SHA256SUMS.txt");
-    expect(assembly).toContain('[[ "$upload_count" != "4" ]]');
-    for (const deterministicReceiptForbidden of [
-      "GITHUB_RUN_ID",
-      "GITHUB_RUN_ATTEMPT",
-      "github.run_id",
-      "github.run_attempt",
-      "runId",
-      "runAttempt",
-    ]) {
-      expect(assembly).not.toContain(deterministicReceiptForbidden);
-    }
-
-    for (const desktopArtifactForbidden of [
-      "Download exact Windows x64 maker output",
-      "Download exact macOS arm64 maker output",
-      "Download exact Linux x64 maker output",
-      "tokenmonster-desktop-windows-2025",
-      "tokenmonster-desktop-macos-15",
-      "tokenmonster-desktop-ubuntu-24.04",
-      "$input_root/windows",
-      "$input_root/macos",
-      "$input_root/linux",
-      "TokenMonsterSetup.exe",
-      ".nupkg",
-      ".dmg",
-    ]) {
-      expect(internal).not.toContain(desktopArtifactForbidden);
-    }
-
-    for (const forbidden of [
-      "environment:",
-      "TOKENMONSTER_WINDOWS_CERTIFICATE",
-      "TOKENMONSTER_NPM_TOKEN",
-      "TOKENMONSTER_CLOUDFLARE",
-      "TOKENMONSTER_PUBLIC_RELEASE_APPROVED",
-      "TOKENMONSTER_NPM_PUBLISH_APPROVED",
-      "npm publish",
-      "npm dist-tag",
-      "wrangler ",
-      "TOKENMONSTER_PUBLIC_RELEASE_JSON",
-      "package-companion.mjs make signed",
-      "--clobber",
-    ]) {
-      expect(internal).not.toContain(forbidden);
-    }
-  });
-
-  it("stages, byte-compares, and publishes the internal release only as a prerelease", () => {
-    const publication = step(
-      job("publish-internal-prerelease"),
-      "Stage CLI draft, verify remote bytes, and publish prerelease",
-    );
-    expect(publication).toContain('tag_ref="refs/tags/$INTERNAL_RELEASE_TAG"');
-    expect(publication).toContain('-f sha="$GITHUB_SHA"');
-    expect(publication).toContain("gh release create");
-    expect(occurrences(publication, "--draft")).toBe(2);
-    expect(occurrences(publication, "--prerelease")).toBe(2);
-    expect(occurrences(publication, "--latest=false")).toBe(2);
-    expect(publication).toContain("gh release upload");
-    expect(publication).toContain("gh release download");
-    expect(publication).toContain("cmp --silent");
-    expect(publication).toContain(
-      'if [[ "$expected_count" != "4" || "$remote_count" != "$expected_count" ]]',
-    );
-    expect(publication).toContain('gh release edit "$INTERNAL_RELEASE_TAG" \\');
-    expect(publication).toContain(
-      "gh api \"repos/$GITHUB_REPOSITORY\" --jq '.private'",
-    );
-    expect(publication).not.toContain("--clobber");
-    expect(publication.indexOf("gh release create")).toBeLessThan(
-      publication.indexOf("gh release upload"),
-    );
-    expect(publication.indexOf("gh release upload")).toBeLessThan(
-      publication.indexOf("gh release download"),
-    );
-    expect(publication.indexOf("gh release download")).toBeLessThan(
-      publication.indexOf("cmp --silent"),
-    );
-    expect(publication.indexOf("cmp --silent")).toBeLessThan(
-      publication.indexOf('gh release edit "$INTERNAL_RELEASE_TAG" \\'),
-    );
-    expect(publication).toContain(
-      '.isDraft\' <<< "$published_json")" != "false"',
-    );
-    expect(publication).toContain(
-      '.isPrerelease\' <<< "$published_json")" != "true"',
-    );
+    expect(workflow).not.toContain("publish_internal_rc17");
+    expect(workflow).not.toContain("publish-internal-prerelease");
+    expect(workflow).not.toContain("internal-release-version");
+    expect(workflow).not.toContain("INTERNAL_RELEASE_TAG");
+    expect(workflow).not.toContain("INTERNAL_RELEASE_VERSION");
   });
 
   it("keeps every signed and public promotion job on push tags only", () => {
@@ -297,16 +123,13 @@ describe("release workflow publication policy", () => {
     expect(candidate).not.toContain("derive-companion-release-version.mjs");
   });
 
-  it("blocks on shipped dependencies and narrowly verifies the temporary development audit exception", () => {
+  it("blocks on any audit finding across shipped and development dependencies", () => {
     const verification = job("verify");
     const shippedAudit = step(
       verification,
       "Audit shipped root dependencies",
     );
-    const developmentAudit = step(
-      verification,
-      "Capture and verify temporary development audit exception",
-    );
+    const fullAudit = step(verification, "Audit complete dependency tree");
     const evidence = step(verification, "Generate release evidence");
     const upload = step(verification, "Upload immutable release evidence");
 
@@ -316,42 +139,21 @@ describe("release workflow publication policy", () => {
     expect(shippedAudit).not.toContain("set +e");
     expect(shippedAudit).not.toContain("|| true");
 
-    expect(developmentAudit).toContain(
-      'audit_json="release-evidence/npm-audit-full.json"',
+    expect(fullAudit).toContain("set -o pipefail");
+    expect(fullAudit).toContain(
+      "npm audit --json | tee release-evidence/npm-audit-full.json",
     );
-    expect(developmentAudit).toContain(
-      'audit_status_file="release-evidence/npm-audit-full-exit-status.txt"',
-    );
-    expect(developmentAudit).toContain(
-      'exception_receipt="release-evidence/npm-audit-temporary-exception.json"',
-    );
-    expect(developmentAudit).toContain(
-      'npm audit --json > "$audit_json"',
-    );
-    expect(developmentAudit).toContain("audit_status=$?");
-    expect(developmentAudit).toContain(
-      'printf \'%s\\n\' "$audit_status" > "$audit_status_file"',
-    );
-    expect(developmentAudit).toContain(
-      "node scripts/release/verify-temporary-dev-audit-exception.mjs",
-    );
-    expect(developmentAudit).toContain('--audit "$audit_json"');
-    expect(developmentAudit).toContain("--lock package-lock.json");
-    expect(developmentAudit).toContain(
-      "--web-package apps/web/package.json",
-    );
-    expect(developmentAudit).toContain(
-      '--audit-exit-status "$audit_status"',
-    );
-    expect(developmentAudit).toContain('| tee "$exception_receipt"');
-    expect(occurrences(developmentAudit, "set +e")).toBe(1);
-    expect(occurrences(developmentAudit, "set -e")).toBe(1);
-    expect(developmentAudit).not.toContain("|| true");
+    expect(fullAudit).not.toContain("set +e");
+    expect(fullAudit).not.toContain("|| true");
+    expect(fullAudit).not.toContain("audit-level");
+    expect(workflow).not.toContain("verify-temporary-dev-audit-exception");
+    expect(workflow).not.toContain("npm-audit-temporary-exception");
+
     expect(upload).toContain("release-evidence/");
     expect(verification.indexOf(shippedAudit)).toBeLessThan(
-      verification.indexOf(developmentAudit),
+      verification.indexOf(fullAudit),
     );
-    expect(verification.indexOf(developmentAudit)).toBeLessThan(
+    expect(verification.indexOf(fullAudit)).toBeLessThan(
       verification.indexOf(evidence),
     );
     expect(verification.indexOf(evidence)).toBeLessThan(

@@ -2,10 +2,6 @@
 # tree, so checkouts must be line-ending-stable on every platform.
 * text=auto eol=lf
 
-# This updater is reviewed by its exact PE bytes. Never subject it to text or
-# line-ending normalization, even if a future Git heuristic changes.
-/apps/companion/packaging/squirrel-windows/Squirrel.exe binary
-
 # Source patches deliberately preserve upstream context whitespace and encode
 # CRLF-only submodule blobs through Git's binary-patch transport.
 /.github/patches/squirrel-updater/*.patch -whitespace

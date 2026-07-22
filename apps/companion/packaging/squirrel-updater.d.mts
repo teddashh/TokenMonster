@@ -26,6 +26,10 @@ export function verifyReviewedSquirrelUpdater(): Promise<
   Readonly<SquirrelUpdaterBinding & { path: string }>
 >;
 
+export function verifyReviewedSquirrelUpdaterPolicy(): Promise<
+  Readonly<{ binary: Readonly<SquirrelUpdaterBinding> | null }>
+>;
+
 export function verifyElectronWinstallerVendor(): Promise<
   Readonly<{ directory: string; inventorySha256: string }>
 >;

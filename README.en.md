@@ -81,23 +81,30 @@ See the [data inventory](docs/DATA_INVENTORY.md) and
   the player's behalf. Existing usage can still unlock companions through
   explicit milestones, and selections saved by older releases are preserved.
 - Characters unlock through explicit local milestones based on provider-family
-  totals, lifetime total, active-day streak, or provider breadth. Every
-  art-backed character has 20 wardrobe themes with `supported`, `challenged`,
-  and `victory` pose art; GLM currently uses the built-in letter mode. Unlocks
-  are local-only, monotonic, and never purchasable.
-- Doll art and prerecorded voice files are not bundled in the npm package. The
-  embedded fixed-pack authority, descriptor, and allowlist remain `null`, so
-  CLI and Electron only verify the local cache, fall back to letter mode or
-  silence, and issue zero character-asset requests. The
-  `--no-character-downloads` flag remains a backward-compatible alias. This
-  worktree implements explicit consent, one state-independent immutable pack,
-  complete verification, offline restart, repair, and removal; the control can
-  appear only after a rights-approved schema-v2 authority is embedded.
-  State-selected per-object downloads remain disabled because a public object
-  key could reveal the local character or wardrobe state. The schema-v1
-  runtime integrity manifest already references 50 voice
-  lines and the UI defaults voice off. Those rows are not public approval;
-  every image and voice association still needs the schema-v2 rights gate.
+  totals, lifetime total, active-day streak, or provider breadth. All eleven
+  characters have approved avatars and 20 wardrobe themes with `supported`,
+  `challenged`, and `victory` pose art. Unlocks are local-only, monotonic, and
+  never purchasable.
+- Release staging embeds exactly eight approved WebP images (415,470 bytes)
+  in the npm tarball: one avatar and one `tech` base outfit for each of
+  ChatGPT, Claude, Gemini, and Grok, plus 168 built-in `zh-TW`/`en` fixed
+  text lines (4 sisters × 7 triggers × 3 variants × 2 locales); no WAV or
+  other character voice ships in the tarball. These embedded basics need no
+  runtime download: a clean install, a consent-not-given state, an offline
+  start without a complete cache, and a failed or revoked pack all issue zero
+  character-asset requests. The four founders run on the embedded basics;
+  other missing art falls back to letter mode or silence. After explicit
+  opt-in, the companion downloads once from `https://cdn.ted-h.com` a single
+  65,574,180-byte fixed pack that is independent of local characters,
+  unlocks, wardrobe, poses, triggers, and usage; after complete verification
+  it works offline and can be repaired or removed, and removal returns to the
+  embedded basics. `ai-sister-images-11-2026.07.21` contains exactly 891
+  images, 11 characters, and 0 voice lines; the historical 50 cloned WAV
+  lines stay excluded pending clone-consent/provenance, per-line content
+  review, and metadata-cleanup evidence, and require a new merged
+  image + voice immutable release. State-selected per-object downloads remain
+  disabled because a public object key could reveal the local character or
+  wardrobe state.
 
 With anonymous contribution left at its default off setting, the companion
 does not automatically contact TokenMonster-operated infrastructure. Anonymous
@@ -111,7 +118,7 @@ go directly from the device to the selected provider.
 | Local companion (sidecar path) | Lightweight localhost UI, four-choice onboarding inside the compact pet, real UTC today/7/28 totals, and a daily trend | Superseded rc.12 bytes retain historical clean-Linux installed-smoke and loopback-only-trace evidence; a new post-hardening version must repeat clean install, registry gates, and native Windows/macOS smoke |
 | Collector | Exact-pinned `tokentracker-cli@0.80.0` child, local-only refresh, strict loopback adapter/gateway; the legacy slice still contains `tokscale@4.5.2` | The historical rc.12 install verified the exact 41-package sidecar closure and Linux zstd prebuild; the next unique version must repeat closure, registry, Windows/macOS CI-smoke, and cutover evidence |
 | Legacy Electron companion | Local SQLite, old 7/28-day trends, traits/fixed lines, share card, and export/reset | Migration-only; no longer the supported install or collection path, and removed or reduced to a thin shell after cutover |
-| Characters | Eleven switchable characters; local starter selection and monotonic unlocks, 20 themes plus pose art and 50 prerecorded voice refs for ten characters, and GLM letter mode | Fixed-pack consent/verification/repair/removal and letter fallback are complete; the user reports GLM approval is granted, while formal evidence transcription, a non-null authority, and optional art-pack publication remain pending and do not block the letter-mode application release |
+| Characters | Eleven switchable characters; local starter selection and monotonic unlocks, 20 themes plus pose art for all eleven, embedded four-sister starter art with 168 fixed text lines, and 50 prerecorded voice refs kept cache-only | Fixed-pack consent/verification/repair/removal and letter fallback are complete; the embedded schema-v2 authority ships the starter basics, and the published `ai-sister-images-11-2026.07.21` pack delivers 891 images for offline use after explicit consent; voice bytes stay excluded pending rights evidence |
 | BYOK | Companion main process calls OpenAI Responses directly with `store: false`, `background: false`, and no tools/files/conversation IDs | Implemented; a manual real-key network smoke on a safe release host remains |
 | Anonymous contribution | Off by default, exact payload preview, accountless enrollment, background sync/idempotent retry, stop, delete/status/recovery | Protocol, runtime, gateway/UI controls, and conditional CLI composition are locally tested; the normal pure-Node launch remains unavailable and zero-cloud until it has an audited native OS credential host, and staging/cloud-off packet-capture E2E remain |
 | Web/API | zh-TW-first React/Vite SPA, Hono Worker API, public totals, enrollment/ingest/delete/status | Implemented, built, and fail-closed in dry-run; no remote environment is configured |
@@ -454,7 +461,7 @@ generation tools, prompts, and publisher credentials never enter TokenMonster. S
 
 ## Contributing
 
-This is a private, pre-release repository. Any change to a data shape,
+This is a pre-release repository. Any change to a data shape,
 collector command, character asset, network destination, credential lifecycle,
 or retention behavior must update contracts, privacy regression tests, the data
 inventory, threat model, and release checklist together. Never add prompts,
@@ -463,8 +470,6 @@ tests, logs, analytics, or issue attachments.
 
 ## License
 
-The project license is pending, and this repository currently grants no public
-use or redistribution permission. Third-party components remain subject to
-their respective licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-Until legal/rights review and an explicit license file are complete, this
-project is for internal development and evaluation only.
+This project is released under the [MIT License](LICENSE). Third-party
+components remain subject to their respective licenses; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -7,7 +7,7 @@ import { rootDirectory } from "./repository-files.mjs";
 import {
   requireReviewedSquirrelReleaseMode,
   verifyElectronWinstallerVendor,
-  verifyReviewedSquirrelUpdater,
+  verifyReviewedSquirrelUpdaterPolicy,
 } from "../apps/companion/packaging/squirrel-updater.mjs";
 
 const arguments_ = process.argv.slice(2);
@@ -37,10 +37,16 @@ const bannedPackageNames = Object.freeze([
 ]);
 const permittedOptionalExtraneousProblems = Object.freeze([
   /^extraneous: @emnapi\/runtime@1\.11\.1 .+[\\/]node_modules[\\/]@emnapi[\\/]runtime$/u,
+  /^extraneous: @img\/sharp-wasm32@0\.35\.3 .+[\\/]node_modules[\\/]@img[\\/]sharp-wasm32$/u,
   /^extraneous: tslib@2\.8\.1 .+[\\/]node_modules[\\/]tslib$/u,
+  // npm ls does not model root overrides, so the reviewed miniflare sharp
+  // security override reports the forced sharp version as invalid even though
+  // npm ci resolves and installs it.
+  /^invalid: sharp@0\.35\.3 .+[\\/]node_modules[\\/]sharp$/u,
 ]);
 const expectedOptionalExtraneousLockEntries = Object.freeze({
   "node_modules/@emnapi/runtime": "1.11.1",
+  "node_modules/@img/sharp-wasm32": "0.35.3",
   "node_modules/tslib": "2.8.1",
 });
 
@@ -106,7 +112,9 @@ async function runCleanNpmList() {
     });
     child.once("error", reject);
     child.once("close", (code, signal) => {
-      if (signal !== null || code !== 0) {
+      // npm ls exits 1 when it reports the override-induced invalid sharp
+      // edge; that exact bounded problem set is validated below.
+      if (signal !== null || (code !== 0 && code !== 1)) {
         reject(
           new Error(
             `Packaging dependency tree is not clean: npm ls exited with ${
@@ -119,6 +127,11 @@ async function runCleanNpmList() {
       try {
         const tree = JSON.parse(stdout);
         const problems = Array.isArray(tree.problems) ? tree.problems : [];
+        if (code === 1 && problems.length === 0) {
+          throw new Error(
+            "Packaging dependency tree is not clean: npm ls exited with 1 without a bounded problem set.",
+          );
+        }
         if (
           problems.some(
             (problem) =>
@@ -168,9 +181,16 @@ const companionManifest = await readJson(
 );
 const packageLock = await readJson(join(rootDirectory, "package-lock.json"));
 
-if (Object.hasOwn(rootManifest, "overrides")) {
+const permittedRootOverrides = JSON.stringify({
+  miniflare: { sharp: "0.35.3" },
+});
+if (
+  Object.hasOwn(rootManifest, "overrides") &&
+  JSON.stringify(rootManifest.overrides) !== permittedRootOverrides
+) {
   throw new Error(
-    "The stable direct packaging toolchain must not require root overrides.",
+    "Root overrides must remain exactly the reviewed miniflare sharp " +
+      "security override until miniflare ships a patched sharp.",
   );
 }
 for (const [name, version] of Object.entries(expectedCompanionToolchainPins)) {
@@ -311,7 +331,7 @@ if (
 
 await Promise.all([
   verifyElectronWinstallerVendor(),
-  verifyReviewedSquirrelUpdater(),
+  verifyReviewedSquirrelUpdaterPolicy(),
 ]);
 
 if (arguments_[0] === "--require-upstream-compatible") {
@@ -319,5 +339,5 @@ if (arguments_[0] === "--require-upstream-compatible") {
 }
 
 process.stdout.write(
-  "Verified exact stable direct Electron packaging toolchain, reviewed internal Squirrel updater, successful npm dependency tree, and Forge-free packaging closure. Internal packaging gate passes; signed/GA remains explicitly closed.\n",
+  "Verified exact stable direct Electron packaging toolchain, reviewed Squirrel updater receipts, successful npm dependency tree, and Forge-free packaging closure. Internal packaging gate passes; signed/GA remains explicitly closed.\n",
 );
