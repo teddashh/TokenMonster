@@ -56,6 +56,10 @@ import {
   sidecarDependencyClosure,
   stagedSidecarPackagePaths
 } from "./companion-packaging-policy.mjs";
+import {
+  PUBLIC_EMBEDDED_STARTER_ASSETS,
+  requirePublicEmbeddedStarterAsset
+} from "./release/public-artifact-policy.mjs";
 import { rootDirectory } from "./repository-files.mjs";
 
 const arguments_ = process.argv.slice(2);
@@ -420,6 +424,72 @@ function assertLockEntry(lockPath, lockEntry) {
       `Sidecar package-lock metadata is incomplete: ${lockPath}.`
     );
   }
+}
+
+async function verifyEmbeddedStarterExtraResource(asarPath) {
+  // The runtime resolves this directory name through the characters package
+  // constant EMBEDDED_STARTER_ASSET_DIRECTORY_NAME; the packaging policy test
+  // asserts every copy of the name stays identical.
+  const targetDirectory = resolve(
+    dirname(asarPath),
+    "embedded-starter-assets"
+  );
+  let rootMetadata;
+  try {
+    rootMetadata = await lstat(targetDirectory);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      throw new Error(
+        "Required packaged embedded starter extraResource is missing."
+      );
+    }
+    throw error;
+  }
+  if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink()) {
+    throw new Error(
+      "Embedded starter extraResource root is not a regular directory."
+    );
+  }
+  const rootEntries = await readdir(targetDirectory);
+  if (rootEntries.length !== 1 || rootEntries[0] !== "objects") {
+    throw new Error(
+      "Embedded starter extraResource root must contain exactly objects/."
+    );
+  }
+  const objectsDirectory = join(targetDirectory, "objects");
+  const objectsMetadata = await lstat(objectsDirectory);
+  if (!objectsMetadata.isDirectory() || objectsMetadata.isSymbolicLink()) {
+    throw new Error(
+      "Embedded starter objects directory is not a regular directory."
+    );
+  }
+  const expectedByName = new Map(
+    PUBLIC_EMBEDDED_STARTER_ASSETS.map((asset) => [
+      asset.objectPath.split("/").at(-1),
+      asset
+    ])
+  );
+  const names = (await readdir(objectsDirectory)).sort();
+  if (
+    JSON.stringify(names) !==
+    JSON.stringify([...expectedByName.keys()].sort())
+  ) {
+    throw new Error(
+      "Embedded starter object inventory differs from release policy."
+    );
+  }
+  for (const name of names) {
+    const path = join(objectsDirectory, name);
+    const metadata = await lstat(path);
+    if (metadata.isSymbolicLink() || !metadata.isFile()) {
+      throw new Error(
+        `Embedded starter object is not a regular file: ${name}`
+      );
+    }
+    const asset = expectedByName.get(name);
+    requirePublicEmbeddedStarterAsset(asset.archiveEntry, await readFile(path));
+  }
+  return { objectCount: names.length };
 }
 
 async function verifySidecarExtraResource(asarPath) {
@@ -1974,6 +2044,24 @@ async function verifySquirrelNupkg(
       "Full Squirrel package does not embed the verified application ASAR."
     );
   }
+  const resourcesPrefix = embeddedAsars[0][0].slice(
+    0,
+    embeddedAsars[0][0].length - "app.asar".length
+  );
+  for (const asset of PUBLIC_EMBEDDED_STARTER_ASSETS) {
+    const entry = zip.files.get(
+      `${resourcesPrefix}embedded-starter-assets/${asset.objectPath}`
+    );
+    if (
+      entry === undefined ||
+      entry.bytes !== asset.bytes ||
+      entry.sha256 !== asset.sha256
+    ) {
+      throw new Error(
+        "Full Squirrel package does not embed the reviewed starter objects."
+      );
+    }
+  }
 
   const extractionDirectory =
     mode === "signed" && process.platform === "win32"
@@ -2321,6 +2409,8 @@ const asarPath = appAsars[0];
 const runtimeSnapshots = await verifyPackagePathsAndSnapshots(asarPath);
 const collectorEvidence = await verifyCollectorExtraResource(asarPath);
 const verifiedSidecar = await verifySidecarExtraResource(asarPath);
+const embeddedStarterEvidence =
+  await verifyEmbeddedStarterExtraResource(asarPath);
 const { inventory: sidecarInventory, ...sidecarEvidence } = verifiedSidecar;
 
 const extractionDirectory = await mkdtemp(
@@ -2375,7 +2465,8 @@ const evidence = {
   stagedRawPolicyBound,
   makerArtifacts,
   collector: collectorEvidence,
-  sidecar: sidecarEvidence
+  sidecar: sidecarEvidence,
+  embeddedStarter: embeddedStarterEvidence
 };
 await writeFile(
   join(evidenceDirectory, "companion-package.json"),
@@ -2391,4 +2482,7 @@ process.stdout.write(
 );
 process.stdout.write(
   `Verified sidecar ${sidecarEvidence.sidecarVersion} with ${sidecarEvidence.fileCount} file(s) and ${sidecarEvidence.totalBytes} byte(s).\n`
+);
+process.stdout.write(
+  `Verified ${embeddedStarterEvidence.objectCount} embedded starter object(s) against release policy.\n`
 );

@@ -90,10 +90,11 @@ Release operator 在執行遠端命令前逐項取得證據：
    不能把 v1 檔名或 runtime 可載入性當核准。否則只准 code-native letter
    placeholders。詳見
    [資料清冊](DATA_INVENTORY.md)與[產品規格 10.6](PRODUCT_SPEC.md#106-ai-sister-raster-角色呈現)。
-7. Asset transport 是獨立 STOP：CLI 與 legacy Electron 必須固定 cache-only，不能
-   接受舊 CDN 環境變數；default-mode artifact／packet capture須證明零 AI-Sister GET。
-   未來只能在明確同意後下載 request set/order 與本機用量、角色、解鎖、theme、pose、
-   voice trigger 全無關的 fixed pack。Schema-v2 rights核准本身不會開啟 transport。
+7. Asset transport 是獨立 STOP：CLI 與桌面版預設 cache-only，不能接受舊 CDN
+   環境變數；default-mode artifact／packet capture須證明零 AI-Sister GET。
+   唯一的 transport 是明確同意後下載 request set/order 與本機用量、角色、解鎖、
+   theme、pose、voice trigger 全無關的 fixed pack；兩個進入點共用同一個
+   embedded fail-closed pack authority。Schema-v2 rights核准本身不會開啟 transport。
 8. Production 前已完成 staging restore/rebuild drill、incident drill、容量與安全
    gate；任何缺證據都視為未通過，不能口頭豁免。
 

@@ -1,5 +1,8 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { getApprovedAssetPackConfiguration } from "@tokenmonster/characters";
 import { createMemorySecretSlot } from "@tokenmonster/secret-vault";
 import { TokenTrackerRuntimeError } from "@tokenmonster/token-tracker-runtime";
 import { describe, expect, it } from "vitest";
@@ -8,7 +11,8 @@ import {
   PET_CHARACTER_CDN_BASE_URL,
   PetStartupError,
   createPetCharacterOptions,
-  createPetGatewayOptions
+  createPetGatewayOptions,
+  loadDesktopEmbeddedStarterAssets
 } from "../src/main/pet/services.js";
 
 describe("pet character transport privacy", () => {
@@ -25,11 +29,15 @@ describe("pet character transport privacy", () => {
     expect(new PetStartupError("gateway").sidecarCode).toBeNull();
   });
 
-  it("keeps the retired Electron entry point cache-only", () => {
+  it("composes the reviewed asset policy without per-object CDN delivery", () => {
     expect(PET_CHARACTER_CDN_BASE_URL).toBeNull();
-    expect(createPetCharacterOptions("/home/tester")).toMatchObject({
+    const emptyResources = mkdtempSync(join(tmpdir(), "tm-pet-resources-"));
+    const options = createPetCharacterOptions("/home/tester", emptyResources);
+    expect(options).toMatchObject({
       manifest: null,
-      assetPack: null,
+      // No staged raster directory means the starter set fails closed to the
+      // reviewed letter renderer, exactly like CLI source builds.
+      baseAssets: null,
       cacheDirectory: join("/home/tester", ".tokenmonster", "asset-cache"),
       cdnBaseUrl: null,
       progressionStorePath: join(
@@ -38,6 +46,10 @@ describe("pet character transport privacy", () => {
         "progression-v1.json"
       )
     });
+    // The consent-gated fixed pack uses the same embedded fail-closed
+    // authority as the CLI entry point.
+    expect(options.assetPack).toEqual(getApprovedAssetPackConfiguration());
+    expect(loadDesktopEmbeddedStarterAssets(emptyResources)).toBeNull();
   });
 
   it("passes the caller-owned BYOK authority through without inspecting it", async () => {

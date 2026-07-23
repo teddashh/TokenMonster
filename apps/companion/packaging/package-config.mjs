@@ -31,6 +31,11 @@ import {
   sidecarDependencyClosure,
 } from "../../../scripts/companion-packaging-policy.mjs";
 import {
+  PUBLIC_EMBEDDED_STARTER_ASSETS,
+  requirePublicEmbeddedStarterAsset,
+} from "../../../scripts/release/public-artifact-policy.mjs";
+import { COMPANION_EMBEDDED_STARTER_STAGING_NAME } from "../../../scripts/release/companion-embedded-starter.mjs";
+import {
   packageJsonWithReleaseVersion,
   prepareWindowsSigningEnvironment,
   requireReleaseVersion,
@@ -764,6 +769,63 @@ async function prepareSidecarExtraResource(resourcesAppPath) {
   }
 }
 
+// The runtime loads this directory through the characters package constant
+// EMBEDDED_STARTER_ASSET_DIRECTORY_NAME; the packaging policy test asserts
+// the two names stay identical.
+export const EMBEDDED_STARTER_RESOURCE_DIRECTORY = "embedded-starter-assets";
+const EMBEDDED_STARTER_STAGING_DIRECTORY = fileURLToPath(
+  new URL(
+    `../out/${COMPANION_EMBEDDED_STARTER_STAGING_NAME}`,
+    import.meta.url,
+  ),
+);
+
+/** @param {string} resourcesAppPath */
+async function prepareEmbeddedStarterExtraResource(resourcesAppPath) {
+  const resourcesDirectory = resolve(resourcesAppPath, "..");
+  const targetDirectory = resolve(
+    resourcesDirectory,
+    EMBEDDED_STARTER_RESOURCE_DIRECTORY,
+  );
+  if (!targetDirectory.startsWith(`${resourcesDirectory}${sep}`)) {
+    throw new Error(
+      "Embedded starter extraResource target escaped the app resources.",
+    );
+  }
+  await rm(targetDirectory, { force: true, recursive: true });
+  for (const asset of PUBLIC_EMBEDDED_STARTER_ASSETS) {
+    const source = join(
+      EMBEDDED_STARTER_STAGING_DIRECTORY,
+      ...asset.objectPath.split("/"),
+    );
+    let sourceMetadata;
+    try {
+      sourceMetadata = await lstat(source);
+    } catch {
+      throw new Error(
+        "Embedded starter staging is missing; package through scripts/package-companion.mjs.",
+      );
+    }
+    if (sourceMetadata.isSymbolicLink() || !sourceMetadata.isFile()) {
+      throw new Error("Staged embedded starter object is not a regular file.");
+    }
+    const contents = readFileSync(source);
+    requirePublicEmbeddedStarterAsset(asset.archiveEntry, contents);
+    const destination = join(
+      targetDirectory,
+      ...asset.objectPath.split("/"),
+    );
+    await mkdir(dirname(destination), { mode: 0o755, recursive: true });
+    await writeFile(destination, contents, { flag: "wx", mode: 0o644 });
+    await chmod(destination, 0o644);
+    if (sha256(readFileSync(destination)) !== asset.sha256) {
+      throw new Error(
+        "Copied embedded starter resource failed checksum verification.",
+      );
+    }
+  }
+}
+
 async function prepareRuntimeResources(
   /** @type {string} */
   resourcesAppPath,
@@ -777,6 +839,7 @@ async function prepareRuntimeResources(
   await prepareBrowserProcessSnapshots(resourcesAppPath, electronVersion);
   await prepareVerifiedCollectorExtraResource(resourcesAppPath, platform, arch);
   await prepareSidecarExtraResource(resourcesAppPath);
+  await prepareEmbeddedStarterExtraResource(resourcesAppPath);
 }
 
 /**

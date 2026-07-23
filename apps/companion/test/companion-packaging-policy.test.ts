@@ -1,7 +1,8 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { EMBEDDED_STARTER_ASSET_DIRECTORY_NAME } from "@tokenmonster/characters";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { MAX_PACKAGED_COLLECTOR_RESOURCE_BYTES } from "../packaging/package-bounds.mjs";
@@ -141,5 +142,37 @@ describe("companion packaging policy", () => {
     expect(
       packageNameFromLockPath("node_modules/a/node_modules/example")
     ).toBe("example");
+  });
+
+  it("stages the embedded starter extraResource under the runtime directory name", async () => {
+    // Importing package-config.mjs would execute its release-version gate, so
+    // this pin reads the sources as text like the release workflow policies.
+    expect(EMBEDDED_STARTER_ASSET_DIRECTORY_NAME).toBe(
+      "embedded-starter-assets"
+    );
+    const packageConfig = await readFile(
+      new URL("../packaging/package-config.mjs", import.meta.url),
+      "utf8"
+    );
+    expect(packageConfig).toContain(
+      'export const EMBEDDED_STARTER_RESOURCE_DIRECTORY = "embedded-starter-assets";'
+    );
+    expect(packageConfig).toContain(
+      "await prepareEmbeddedStarterExtraResource(resourcesAppPath);"
+    );
+    const verifier = await readFile(
+      new URL(
+        "../../../scripts/verify-companion-package.mjs",
+        import.meta.url
+      ),
+      "utf8"
+    );
+    expect(verifier).toContain("verifyEmbeddedStarterExtraResource(asarPath)");
+    expect(verifier).toContain('"embedded-starter-assets"');
+    const wrapper = await readFile(
+      new URL("../../../scripts/package-companion.mjs", import.meta.url),
+      "utf8"
+    );
+    expect(wrapper).toContain("stageCompanionEmbeddedStarterAssets({");
   });
 });

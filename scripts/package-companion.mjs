@@ -8,6 +8,10 @@ import {
   requireReleaseVersion,
 } from "../apps/companion/packaging/release-policy.mjs";
 import { requireReviewedSquirrelReleaseMode } from "../apps/companion/packaging/squirrel-updater.mjs";
+import {
+  COMPANION_EMBEDDED_STARTER_STAGING_NAME,
+  stageCompanionEmbeddedStarterAssets,
+} from "./release/companion-embedded-starter.mjs";
 import { rootDirectory } from "./repository-files.mjs";
 
 const [command, mode] = process.argv.slice(2);
@@ -104,6 +108,17 @@ function run(executable, arguments_, options = {}) {
 }
 
 await rm(outDirectory, { force: true, recursive: true });
+// Acquire the pinned embedded starter objects before any build output exists.
+// The afterCopy hook re-verifies these staged bytes and copies them into the
+// app resources; a maintainer without network can point
+// TOKENMONSTER_EMBEDDED_STARTER_PACK at an exact local copy of the pinned ZIP.
+await stageCompanionEmbeddedStarterAssets({
+  stagingDirectory: join(
+    outDirectory,
+    COMPANION_EMBEDDED_STARTER_STAGING_NAME,
+  ),
+  localPackPath: process.env.TOKENMONSTER_EMBEDDED_STARTER_PACK ?? null,
+});
 // Build the complete local dependency closure before Electron Packager stages
 // the app.
 // A package-local build can otherwise consume stale workspace dist/ output

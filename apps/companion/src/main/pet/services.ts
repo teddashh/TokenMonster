@@ -2,6 +2,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import {
+  EMBEDDED_STARTER_ASSET_DIRECTORY_NAME,
+  getApprovedAssetManifest,
+  getApprovedAssetPackConfiguration,
+  loadEmbeddedStarterAssetConfiguration,
+  type EmbeddedStarterAssetConfiguration
+} from "@tokenmonster/characters";
+import {
   createCompanionGateway,
   type CompanionCharacterOptions,
   type CompanionGateway,
@@ -25,8 +32,9 @@ import {
 
 import { resolveSidecarExecutable, utilityProcessSpawn } from "./sidecar.js";
 
-// The retired Electron entry point remains cache-only. Fixed-pack acquisition
-// belongs to the permanent CLI/loopback UI composition, not this legacy shell.
+// The desktop entry point composes the same reviewed asset policy as the CLI:
+// embedded starter art plus the consent-gated fixed pack. Per-object CDN
+// delivery stays prohibited, so the gateway only ever accepts a null base URL.
 export const PET_CHARACTER_CDN_BASE_URL = null;
 
 export const PET_STARTUP_MESSAGES = Object.freeze({
@@ -74,12 +82,35 @@ export interface PetServices {
   readonly bootstrapUrl: string;
 }
 
+/**
+ * Load the packaged starter set from the Electron resources directory. The
+ * packager stages the eight reviewed WebP objects beside the app bundle;
+ * development runs have no raster directory and fail closed to letter mode,
+ * matching CLI source builds.
+ */
+export function loadDesktopEmbeddedStarterAssets(
+  resourcesPath: string
+): EmbeddedStarterAssetConfiguration | null {
+  const approved = getApprovedAssetManifest();
+  if (approved === null) return null;
+  try {
+    return loadEmbeddedStarterAssetConfiguration(
+      approved,
+      join(resourcesPath, EMBEDDED_STARTER_ASSET_DIRECTORY_NAME)
+    );
+  } catch {
+    return null;
+  }
+}
+
 export function createPetCharacterOptions(
-  homeDirectory: string
+  homeDirectory: string,
+  resourcesPath: string = process.resourcesPath
 ): CompanionCharacterOptions {
   return Object.freeze({
     manifest: null,
-    assetPack: null,
+    baseAssets: loadDesktopEmbeddedStarterAssets(resourcesPath),
+    assetPack: getApprovedAssetPackConfiguration(),
     cacheDirectory: join(homeDirectory, ".tokenmonster", "asset-cache"),
     cdnBaseUrl: PET_CHARACTER_CDN_BASE_URL,
     progressionStorePath: join(
