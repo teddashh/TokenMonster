@@ -7,8 +7,10 @@ import {
   committedState,
   createWindowsReadinessConfiguration,
   ReadinessLineGate,
+  WINDOWS_READINESS_FAILURES,
   WINDOWS_READINESS_PHASES,
   WindowsReadinessStreamGate,
+  windowsPrivateFailureMarker,
   windowsPrivateHelloMarker,
   windowsPrivatePhaseMarker,
 } from "../runner.mjs";
@@ -155,6 +157,10 @@ function windowsGate(overrides = {}) {
       return overrides.readyResult ?? true;
     },
     onRejected: () => events.push("rejected"),
+    onStartupFailure: (failure) => {
+      events.push(`failure:${failure}`);
+      return overrides.startupFailureResult ?? true;
+    },
   });
   const phases = WINDOWS_READINESS_PHASES.map(
     (phase) => windowsPrivatePhaseMarker(phase),
@@ -307,6 +313,71 @@ test("Windows readiness callback rejection is fatal", () => {
     ..."state window initialized shell credentials services"
       .split(" ")
       .map((phase) => `phase:${phase}`),
+    "fatal",
+  ]);
+});
+
+test("Windows startup failures are fixed, sanitized, and terminal", () => {
+  assert.equal(
+    windowsPrivateFailureMarker("sidecar-startup-timeout"),
+    "[TOKENMONSTER_AGENT_PRIVATE] FAILURE sidecar-startup-timeout",
+  );
+  assert.throws(
+    () => windowsPrivateFailureMarker("private-detail"),
+    /agent_ready_marker_invalid/u,
+  );
+  assert.equal(WINDOWS_READINESS_FAILURES.length, 12);
+
+  for (const failure of WINDOWS_READINESS_FAILURES) {
+    const harness = windowsGate();
+    harness.gate.push(
+      Buffer.from(
+        `${harness.hello}\n${windowsPrivateFailureMarker(failure)}\n`,
+      ),
+    );
+    assert.deepEqual(harness.events, [
+      "authenticated",
+      `failure:${failure}`,
+    ]);
+    harness.gate.finish();
+    assert.deepEqual(harness.events, [
+      "authenticated",
+      `failure:${failure}`,
+      "fatal",
+    ]);
+  }
+});
+
+test("Windows startup failure rejects unknown, callback failure, and extra bytes", () => {
+  const unknown = windowsGate();
+  unknown.gate.push(
+    Buffer.from(`${unknown.hello}\n[TOKENMONSTER_AGENT_PRIVATE] FAILURE x\n`),
+  );
+  assert.deepEqual(unknown.events, ["authenticated", "fatal"]);
+
+  const callbackFailure = windowsGate({
+    startupFailureResult: false,
+  });
+  callbackFailure.gate.push(
+    Buffer.from(
+      `${callbackFailure.hello}\n${windowsPrivateFailureMarker("gateway")}\n`,
+    ),
+  );
+  assert.deepEqual(callbackFailure.events, [
+    "authenticated",
+    "failure:gateway",
+    "fatal",
+  ]);
+
+  const extra = windowsGate();
+  extra.gate.push(
+    Buffer.from(
+      `${extra.hello}\n${windowsPrivateFailureMarker("gateway")}\nextra`,
+    ),
+  );
+  assert.deepEqual(extra.events, [
+    "authenticated",
+    "failure:gateway",
     "fatal",
   ]);
 });

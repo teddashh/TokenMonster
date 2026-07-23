@@ -40,6 +40,20 @@ export const WINDOWS_READINESS_PHASES = Object.freeze([
   "view",
   "ready-shell",
 ]);
+export const WINDOWS_READINESS_FAILURES = Object.freeze([
+  "gateway",
+  "sidecar-invalid-configuration",
+  "sidecar-runtime-not-found",
+  "sidecar-version-mismatch",
+  "sidecar-spawn-failed",
+  "sidecar-startup-timeout",
+  "sidecar-sidecar-exited",
+  "sidecar-sidecar-unavailable",
+  "sidecar-sidecar-incompatible",
+  "sidecar-refresh-failed",
+  "sidecar-refresh-timeout",
+  "sidecar-unknown",
+]);
 const WINDOWS_READINESS_PHASE_MARKERS = Object.freeze({
   state: "[TOKENMONSTER_AGENT] STATUS companion_state",
   window: "[TOKENMONSTER_AGENT] STATUS companion_window",
@@ -54,6 +68,31 @@ const WINDOWS_READINESS_PHASE_MARKERS = Object.freeze({
   view: "[TOKENMONSTER_AGENT] STATUS companion_view",
   "ready-shell":
     "[TOKENMONSTER_AGENT] STATUS companion_ready_shell",
+});
+const WINDOWS_READINESS_FAILURE_MARKERS = Object.freeze({
+  gateway: "[TOKENMONSTER_AGENT] ERROR companion_gateway",
+  "sidecar-invalid-configuration":
+    "[TOKENMONSTER_AGENT] ERROR companion_sidecar_invalid_configuration",
+  "sidecar-runtime-not-found":
+    "[TOKENMONSTER_AGENT] ERROR companion_sidecar_runtime_not_found",
+  "sidecar-version-mismatch":
+    "[TOKENMONSTER_AGENT] ERROR companion_sidecar_version_mismatch",
+  "sidecar-spawn-failed":
+    "[TOKENMONSTER_AGENT] ERROR companion_sidecar_spawn_failed",
+  "sidecar-startup-timeout":
+    "[TOKENMONSTER_AGENT] ERROR companion_sidecar_startup_timeout",
+  "sidecar-sidecar-exited":
+    "[TOKENMONSTER_AGENT] ERROR companion_sidecar_exited",
+  "sidecar-sidecar-unavailable":
+    "[TOKENMONSTER_AGENT] ERROR companion_sidecar_unavailable",
+  "sidecar-sidecar-incompatible":
+    "[TOKENMONSTER_AGENT] ERROR companion_sidecar_incompatible",
+  "sidecar-refresh-failed":
+    "[TOKENMONSTER_AGENT] ERROR companion_sidecar_refresh_failed",
+  "sidecar-refresh-timeout":
+    "[TOKENMONSTER_AGENT] ERROR companion_sidecar_refresh_timeout",
+  "sidecar-unknown":
+    "[TOKENMONSTER_AGENT] ERROR companion_sidecar_unknown",
 });
 const SAFE_SIGNALS = new Set([
   "SIGABRT",
@@ -179,15 +218,24 @@ export function windowsPrivatePhaseMarker(phase) {
   return `[TOKENMONSTER_AGENT_PRIVATE] PHASE ${phase}`;
 }
 
+export function windowsPrivateFailureMarker(failure) {
+  if (!WINDOWS_READINESS_FAILURES.includes(failure)) {
+    throw new Error("agent_ready_marker_invalid");
+  }
+  return `[TOKENMONSTER_AGENT_PRIVATE] FAILURE ${failure}`;
+}
+
 export class WindowsReadinessStreamGate {
   #authenticated = false;
   #closed = false;
   #expectedHello;
+  #failureReceived = false;
   #onAuthenticated;
   #onFatal;
   #onPhase;
   #onReady;
   #onRejected;
+  #onStartupFailure;
   #pending = Buffer.alloc(0);
   #phaseIndex = 0;
   #readyReceived = false;
@@ -195,7 +243,14 @@ export class WindowsReadinessStreamGate {
 
   constructor(
     expectedHello,
-    { onAuthenticated, onFatal, onPhase, onReady, onRejected },
+    {
+      onAuthenticated,
+      onFatal,
+      onPhase,
+      onReady,
+      onRejected,
+      onStartupFailure,
+    },
   ) {
     this.#expectedHello = Buffer.from(expectedHello, "utf8");
     this.#onAuthenticated = onAuthenticated;
@@ -203,6 +258,7 @@ export class WindowsReadinessStreamGate {
     this.#onPhase = onPhase;
     this.#onReady = onReady;
     this.#onRejected = onRejected;
+    this.#onStartupFailure = onStartupFailure;
   }
 
   #terminate(kind) {
@@ -225,8 +281,21 @@ export class WindowsReadinessStreamGate {
       }
       return;
     }
-    if (this.#readyReceived) {
+    if (this.#readyReceived || this.#failureReceived) {
       this.#terminate("fatal");
+      return;
+    }
+    const failure = WINDOWS_READINESS_FAILURES.find((candidate) =>
+      line.equals(
+        Buffer.from(windowsPrivateFailureMarker(candidate), "utf8"),
+      ),
+    );
+    if (failure !== undefined) {
+      if (this.#onStartupFailure(failure) !== true) {
+        this.#terminate("fatal");
+        return;
+      }
+      this.#failureReceived = true;
       return;
     }
     const phase = WINDOWS_READINESS_PHASES[this.#phaseIndex];
@@ -254,7 +323,7 @@ export class WindowsReadinessStreamGate {
     if (this.#closed) return;
     const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     if (bytes.length === 0) return;
-    if (this.#readyReceived) {
+    if (this.#readyReceived || this.#failureReceived) {
       this.#terminate("fatal");
       return;
     }
@@ -270,7 +339,10 @@ export class WindowsReadinessStreamGate {
       const line = this.#pending.subarray(0, newline);
       this.#pending = this.#pending.subarray(newline + 1);
       this.#accept(line);
-      if (this.#readyReceived && this.#pending.length > 0) {
+      if (
+        (this.#readyReceived || this.#failureReceived) &&
+        this.#pending.length > 0
+      ) {
         this.#terminate("fatal");
       }
     }
@@ -278,6 +350,10 @@ export class WindowsReadinessStreamGate {
 
   finish() {
     if (this.#closed) return;
+    if (this.#failureReceived && this.#pending.length === 0) {
+      this.#terminate("fatal");
+      return;
+    }
     if (
       !this.#authenticated ||
       !this.#readyReceived ||
@@ -302,7 +378,14 @@ function closeWindowsReadinessServer(controller) {
 
 function listenWindowsReadinessServer(
   configuration,
-  { getChild, onConnected, onFailure, onPhase, onReady },
+  {
+    getChild,
+    onConnected,
+    onFailure,
+    onPhase,
+    onReady,
+    onStartupFailure,
+  },
 ) {
   return new Promise((resolvePromise, reject) => {
     const sockets = new Set();
@@ -402,6 +485,7 @@ function listenWindowsReadinessServer(
               return reported;
             },
             onRejected: () => socket.destroy(),
+            onStartupFailure,
           },
         );
         armDeadline(WINDOWS_READINESS_PREAUTH_TIMEOUT_MS);
@@ -509,6 +593,13 @@ async function runElectronChild(runtime, runnerToken) {
       safeAppendOwned(marker, runnerToken)
     );
   };
+  const reportStartupFailure = (failure) => {
+    const marker = WINDOWS_READINESS_FAILURE_MARKERS[failure];
+    return (
+      typeof marker === "string" &&
+      safeAppendOwned(marker, runnerToken)
+    );
+  };
   const reportReady = () => {
     readyReported = safeAppendOwned(readyMarker, runnerToken);
     return readyReported;
@@ -566,6 +657,7 @@ async function runElectronChild(runtime, runnerToken) {
           onFailure: failReadinessChannel,
           onPhase: reportPhase,
           onReady: reportReady,
+          onStartupFailure: reportStartupFailure,
         });
     } catch {
       failReadinessChannel();

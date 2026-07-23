@@ -3,12 +3,14 @@ import { readFile } from "node:fs/promises"
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  AGENT_LAUNCH_FAILURES,
   AGENT_LAUNCH_PHASES,
   AGENT_LAUNCH_READY_CAPABILITY_ENV,
   AGENT_LAUNCH_READY_MARKER,
   AGENT_LAUNCH_READY_PIPE_ID_ENV,
   createAgentLaunchReadyReporter,
   installAgentParentDisconnectGuard,
+  type AgentLaunchFailure,
   type AgentLaunchWindowsChannel
 } from "../src/main/agent-launch.js"
 
@@ -281,6 +283,132 @@ describe("agent source-launch readiness contract", () => {
     await expect(harness.ready.reportPhase("ready-shell")).resolves.toBe(false)
     expect(harness.channelEnd).not.toHaveBeenCalled()
     expect(harness.channelDestroy).toHaveBeenCalledOnce()
+  })
+
+  it("defines the complete fixed source-agent failure vocabulary", () => {
+    expect(AGENT_LAUNCH_FAILURES).toEqual([
+      "gateway",
+      "sidecar-invalid-configuration",
+      "sidecar-runtime-not-found",
+      "sidecar-version-mismatch",
+      "sidecar-spawn-failed",
+      "sidecar-startup-timeout",
+      "sidecar-sidecar-exited",
+      "sidecar-sidecar-unavailable",
+      "sidecar-sidecar-incompatible",
+      "sidecar-refresh-failed",
+      "sidecar-refresh-timeout",
+      "sidecar-unknown"
+    ])
+  })
+
+  it.each(AGENT_LAUNCH_FAILURES)(
+    "ends the authenticated Windows channel with exact sanitized failure %s",
+    async (failure) => {
+      const harness = reporter(
+        windowsEnvironment(),
+        ["--tokenmonster-agent-launch"],
+        { platform: "win32" }
+      )
+
+      await expect(harness.ready.reportConnected()).resolves.toBe(true)
+      await expect(harness.ready.reportFailure(failure)).resolves.toBe(true)
+      expect(harness.channelEnd).toHaveBeenCalledOnce()
+      expect(harness.channelEnd).toHaveBeenCalledWith(
+        `[TOKENMONSTER_AGENT_PRIVATE] FAILURE ${failure}\n`
+      )
+      expect(harness.channelDestroy).not.toHaveBeenCalled()
+      expect(harness.write).not.toHaveBeenCalled()
+    }
+  )
+
+  it("does not report a Windows failure before the authenticated channel is connected", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
+      ["--tokenmonster-agent-launch"],
+      { platform: "win32" }
+    )
+
+    await expect(harness.ready.reportFailure("gateway")).resolves.toBe(false)
+    expect(harness.channelEnd).not.toHaveBeenCalled()
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    await expect(harness.ready.reportFailure("gateway")).resolves.toBe(true)
+    expect(harness.channelEnd).toHaveBeenCalledOnce()
+  })
+
+  it("reports at most one Windows failure and can never report READY afterward", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
+      ["--tokenmonster-agent-launch"],
+      { platform: "win32" }
+    )
+
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    await expect(harness.ready.reportPhase("state")).resolves.toBe(true)
+    await expect(harness.ready.reportFailure("gateway")).resolves.toBe(true)
+    await expect(
+      harness.ready.reportFailure("sidecar-unknown")
+    ).resolves.toBe(false)
+    await expect(harness.ready.reportPhase("window")).resolves.toBe(false)
+    await expect(harness.ready.reportReady()).resolves.toBe(false)
+    expect(harness.channelEnd).toHaveBeenCalledOnce()
+    expect(harness.channelDestroy).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when a Windows failure line cannot be ended", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
+      ["--tokenmonster-agent-launch"],
+      { platform: "win32" }
+    )
+
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    harness.channelEnd.mockResolvedValueOnce(false)
+    await expect(
+      harness.ready.reportFailure("sidecar-startup-timeout")
+    ).resolves.toBe(false)
+    await expect(
+      harness.ready.reportFailure("sidecar-startup-timeout")
+    ).resolves.toBe(false)
+    expect(harness.channelEnd).toHaveBeenCalledOnce()
+    expect(harness.channelDestroy).toHaveBeenCalledOnce()
+  })
+
+  it("rejects an unreviewed failure value without damaging the channel", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
+      ["--tokenmonster-agent-launch"],
+      { platform: "win32" }
+    )
+
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    await expect(
+      harness.ready.reportFailure(
+        "gateway\nraw-error" as AgentLaunchFailure
+      )
+    ).resolves.toBe(false)
+    expect(harness.channelEnd).not.toHaveBeenCalled()
+    expect(harness.channelDestroy).not.toHaveBeenCalled()
+
+    await expect(harness.ready.reportFailure("gateway")).resolves.toBe(true)
+    expect(harness.channelEnd).toHaveBeenCalledOnce()
+  })
+
+  it("keeps POSIX failure reporting silent and prevents later readiness", async () => {
+    const harness = reporter({ TOKENMONSTER_AGENT_LAUNCH: "1" }, [
+      "--tokenmonster-agent-launch"
+    ])
+
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    await expect(harness.ready.reportPhase("state")).resolves.toBe(true)
+    await expect(
+      harness.ready.reportFailure("sidecar-runtime-not-found")
+    ).resolves.toBe(false)
+    await expect(harness.ready.reportPhase("window")).resolves.toBe(false)
+    await expect(harness.ready.reportReady()).resolves.toBe(false)
+    expect(harness.write).not.toHaveBeenCalled()
+    expect(harness.channelWrite).not.toHaveBeenCalled()
+    expect(harness.channelEnd).not.toHaveBeenCalled()
   })
 
   it("opens the Windows pipe at most once under concurrent calls", async () => {
@@ -629,6 +757,73 @@ describe("agent source-launch readiness contract", () => {
     expect(initialShellLoaded).toBeLessThan(initialShellShown)
     expect(initialShellShown).toBeLessThan(shellPhase)
     expect(shellPhase).toBeLessThan(servicesInvoked)
+  })
+
+  it("maps startup errors to fixed failure codes before any raw local logging", async () => {
+    const source = await readFile(
+      new URL("../src/main/pet/pet.ts", import.meta.url),
+      "utf8"
+    )
+    const expectedSidecarMappings = [
+      ["invalid-configuration", "sidecar-invalid-configuration"],
+      ["runtime-not-found", "sidecar-runtime-not-found"],
+      ["version-mismatch", "sidecar-version-mismatch"],
+      ["spawn-failed", "sidecar-spawn-failed"],
+      ["startup-timeout", "sidecar-startup-timeout"],
+      ["sidecar-exited", "sidecar-sidecar-exited"],
+      ["sidecar-unavailable", "sidecar-sidecar-unavailable"],
+      ["sidecar-incompatible", "sidecar-sidecar-incompatible"],
+      ["refresh-failed", "sidecar-refresh-failed"],
+      ["refresh-timeout", "sidecar-refresh-timeout"],
+      ["unknown", "sidecar-unknown"]
+    ] as const
+    for (const [sidecarCode, failure] of expectedSidecarMappings) {
+      expect(source).toContain(`"${sidecarCode}": "${failure}"`)
+    }
+
+    const mapper = source.indexOf(
+      "function agentLaunchStartupFailure(error: unknown): AgentLaunchFailure"
+    )
+    const gatewayFallback = source.indexOf('return "gateway"', mapper)
+    const fixedLookup = source.indexOf(
+      'AGENT_LAUNCH_SIDECAR_FAILURES[error.sidecarCode ?? "unknown"]',
+      gatewayFallback
+    )
+    const startupAttempt = source.indexOf("runPetStartupAttempt(")
+    const errorHandler = source.indexOf(
+      "async (error: unknown) => {",
+      startupAttempt
+    )
+    const failureReport = source.indexOf(
+      "await agentLaunchReady.reportFailure(",
+      errorHandler
+    )
+    const sanitizedInput = source.indexOf(
+      "agentLaunchStartupFailure(error)",
+      failureReport
+    )
+    const localErrorLog = source.indexOf(
+      'console.error("TokenMonster pet startup failed:", error)',
+      sanitizedInput
+    )
+
+    expect([
+      mapper,
+      gatewayFallback,
+      fixedLookup,
+      startupAttempt,
+      errorHandler,
+      failureReport,
+      sanitizedInput,
+      localErrorLog
+    ]).not.toContain(-1)
+    expect(mapper).toBeLessThan(gatewayFallback)
+    expect(gatewayFallback).toBeLessThan(fixedLookup)
+    expect(errorHandler).toBeLessThan(failureReport)
+    expect(failureReport).toBeLessThan(sanitizedInput)
+    expect(sanitizedInput).toBeLessThan(localErrorLog)
+    expect(source).not.toContain("reportFailure(error)")
+    expect(source).not.toContain("reportFailure(error.message)")
   })
 
   it("reports only after services, authenticated pet view, and shell are ready", async () => {

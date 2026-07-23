@@ -35,6 +35,7 @@ import {
   AGENT_LAUNCH_READY_CAPABILITY_ENV,
   AGENT_LAUNCH_READY_PIPE_ID_ENV,
   createAgentLaunchReadyReporter,
+  type AgentLaunchFailure,
   type AgentLaunchWindowsChannel
 } from "../agent-launch.js"
 import { registerAutomaticUpdateIpcHandlers } from "../automatic-update-ipc.js"
@@ -110,6 +111,21 @@ const WINDOWS_SMOKE_EXIT_CODES = Object.freeze({
   sidecar: 88
 })
 type SidecarSmokeCode = NonNullable<PetStartupErrorType["sidecarCode"]>
+const AGENT_LAUNCH_SIDECAR_FAILURES: Readonly<
+  Record<SidecarSmokeCode, AgentLaunchFailure>
+> = Object.freeze({
+  "invalid-configuration": "sidecar-invalid-configuration",
+  "runtime-not-found": "sidecar-runtime-not-found",
+  "version-mismatch": "sidecar-version-mismatch",
+  "spawn-failed": "sidecar-spawn-failed",
+  "startup-timeout": "sidecar-startup-timeout",
+  "sidecar-exited": "sidecar-sidecar-exited",
+  "sidecar-unavailable": "sidecar-sidecar-unavailable",
+  "sidecar-incompatible": "sidecar-sidecar-incompatible",
+  "refresh-failed": "sidecar-refresh-failed",
+  "refresh-timeout": "sidecar-refresh-timeout",
+  "unknown": "sidecar-unknown"
+})
 const WINDOWS_SIDECAR_SMOKE_EXIT_CODES: Readonly<
   Record<SidecarSmokeCode, number>
 > = Object.freeze({
@@ -125,6 +141,13 @@ const WINDOWS_SIDECAR_SMOKE_EXIT_CODES: Readonly<
   "refresh-failed": 97,
   "refresh-timeout": 98
 })
+
+function agentLaunchStartupFailure(error: unknown): AgentLaunchFailure {
+  if (!(error instanceof PetStartupError) || error.kind === "gateway") {
+    return "gateway"
+  }
+  return AGENT_LAUNCH_SIDECAR_FAILURES[error.sidecarCode ?? "unknown"]
+}
 
 function reportSmokeOutcome(
   outcome: "ok" | "gateway" | "sidecar",
@@ -850,6 +873,9 @@ export async function startPetCompanion(
         })
       },
       async (error: unknown) => {
+        await agentLaunchReady.reportFailure(
+          agentLaunchStartupFailure(error)
+        )
         // Local stderr only: the failure page hides every detail by design,
         // which would make packaged-app startup failures undiagnosable.
         console.error("TokenMonster pet startup failed:", error)

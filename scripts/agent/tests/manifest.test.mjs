@@ -113,6 +113,25 @@ test("the Windows readiness connection marker is an exact safe lifecycle value",
     assert.equal(safeLifecycleMarker(value), true);
     assert.equal(safeLifecycleMarker(`${value} extra`), false);
   }
+  const failures = [
+    "companion_gateway",
+    "companion_sidecar_invalid_configuration",
+    "companion_sidecar_runtime_not_found",
+    "companion_sidecar_version_mismatch",
+    "companion_sidecar_spawn_failed",
+    "companion_sidecar_startup_timeout",
+    "companion_sidecar_exited",
+    "companion_sidecar_unavailable",
+    "companion_sidecar_incompatible",
+    "companion_sidecar_refresh_failed",
+    "companion_sidecar_refresh_timeout",
+    "companion_sidecar_unknown",
+  ];
+  for (const failure of failures) {
+    const value = `[TOKENMONSTER_AGENT] ERROR ${failure}`;
+    assert.equal(safeLifecycleMarker(value), true);
+    assert.equal(safeLifecycleMarker(`${value} extra`), false);
+  }
 });
 
 const POLICY_RELAXATIONS = [

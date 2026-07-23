@@ -564,6 +564,18 @@ const SAFE_FIXED_MARKERS = new Set([
   "[TOKENMONSTER_AGENT] ERROR process_start_failed",
   "[TOKENMONSTER_AGENT] ERROR state_write_failed",
   "[TOKENMONSTER_AGENT] ERROR electron_spawn_failed",
+  "[TOKENMONSTER_AGENT] ERROR companion_gateway",
+  "[TOKENMONSTER_AGENT] ERROR companion_sidecar_invalid_configuration",
+  "[TOKENMONSTER_AGENT] ERROR companion_sidecar_runtime_not_found",
+  "[TOKENMONSTER_AGENT] ERROR companion_sidecar_version_mismatch",
+  "[TOKENMONSTER_AGENT] ERROR companion_sidecar_spawn_failed",
+  "[TOKENMONSTER_AGENT] ERROR companion_sidecar_startup_timeout",
+  "[TOKENMONSTER_AGENT] ERROR companion_sidecar_exited",
+  "[TOKENMONSTER_AGENT] ERROR companion_sidecar_unavailable",
+  "[TOKENMONSTER_AGENT] ERROR companion_sidecar_incompatible",
+  "[TOKENMONSTER_AGENT] ERROR companion_sidecar_refresh_failed",
+  "[TOKENMONSTER_AGENT] ERROR companion_sidecar_refresh_timeout",
+  "[TOKENMONSTER_AGENT] ERROR companion_sidecar_unknown",
 ]);
 const SAFE_EXIT_MARKER =
   /^\[TOKENMONSTER_AGENT\] EXIT (?:code=(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])|signal=(?:SIGABRT|SIGBUS|SIGFPE|SIGHUP|SIGILL|SIGINT|SIGKILL|SIGPIPE|SIGQUIT|SIGSEGV|SIGTERM|SIGTRAP))$/u;

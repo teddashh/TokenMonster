@@ -72,12 +72,13 @@ node scripts/agent/audit.mjs --phase after --write --json
    On Windows, the runner listens before spawning Electron on an ephemeral,
    policy-generated local named pipe. The same connection must carry a strict,
    bounded, capability-authenticated `HELLO`, the fixed ordered content-blind
-   startup phases, and then the exact readiness line. Only the fixed phase
-   names enter the bounded safe lifecycle log; the pipe identifier, capability,
-   and raw channel bytes are never logged or persisted. This Node channel does
-   not provide or claim same-user-only access or remote-client rejection; the
-   same OS login remains the existing local trust boundary. On macOS and Linux,
-   only the exact readiness line on stdout is accepted.
+   startup phases, and then either the exact readiness line or one fixed,
+   sanitized terminal startup-failure code. Only the fixed phase/failure names
+   enter the bounded safe lifecycle log; the pipe identifier, capability, and
+   raw channel bytes are never logged or persisted. This Node channel does not
+   provide or claim same-user-only access or remote-client rejection; the same
+   OS login remains the existing local trust boundary. On macOS and Linux, only
+   the exact readiness line on stdout is accepted.
 
 5. The after audit records the resulting state. Do not claim success unless the
    launch and after audit both succeed.

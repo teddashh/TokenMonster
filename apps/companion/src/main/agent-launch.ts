@@ -18,6 +18,22 @@ export const AGENT_LAUNCH_PHASES = Object.freeze([
 ] as const)
 export type AgentLaunchPhase = (typeof AGENT_LAUNCH_PHASES)[number]
 
+export const AGENT_LAUNCH_FAILURES = Object.freeze([
+  "gateway",
+  "sidecar-invalid-configuration",
+  "sidecar-runtime-not-found",
+  "sidecar-version-mismatch",
+  "sidecar-spawn-failed",
+  "sidecar-startup-timeout",
+  "sidecar-sidecar-exited",
+  "sidecar-sidecar-unavailable",
+  "sidecar-sidecar-incompatible",
+  "sidecar-refresh-failed",
+  "sidecar-refresh-timeout",
+  "sidecar-unknown"
+] as const)
+export type AgentLaunchFailure = (typeof AGENT_LAUNCH_FAILURES)[number]
+
 const WINDOWS_READY_PIPE_ID_PATTERN = /^[0-9a-f]{32}$/u
 const WINDOWS_READY_CAPABILITY_PATTERN = /^[0-9a-f]{64}$/u
 const WINDOWS_READY_PIPE_PREFIX = "\\\\.\\pipe\\tokenmonster-agent-ready-"
@@ -31,6 +47,7 @@ export interface AgentLaunchWindowsChannel {
 export interface AgentLaunchReadyReporter {
   reportConnected(): Promise<boolean>
   reportPhase(phase: AgentLaunchPhase): Promise<boolean>
+  reportFailure(failure: AgentLaunchFailure): Promise<boolean>
   reportReady(): Promise<boolean>
 }
 
@@ -95,6 +112,7 @@ export function createAgentLaunchReadyReporter(
   let connected = false
   let nextPhaseIndex = 0
   let phaseInFlight = false
+  let failureAttempted = false
   let readyAttempted = false
 
   const destroyWindowsChannel = (): void => {
@@ -149,6 +167,7 @@ export function createAgentLaunchReadyReporter(
       if (
         !enabled ||
         !connected ||
+        failureAttempted ||
         readyAttempted ||
         phaseInFlight ||
         AGENT_LAUNCH_PHASES[nextPhaseIndex] !== phase
@@ -178,8 +197,40 @@ export function createAgentLaunchReadyReporter(
         phaseInFlight = false
       }
     },
+    async reportFailure(failure: AgentLaunchFailure): Promise<boolean> {
+      if (
+        !enabled ||
+        !connected ||
+        failureAttempted ||
+        readyAttempted ||
+        phaseInFlight ||
+        !AGENT_LAUNCH_FAILURES.includes(failure)
+      ) {
+        return false
+      }
+      if (options.platform !== "win32") {
+        failureAttempted = true
+        return false
+      }
+      if (channel === null) return false
+      failureAttempted = true
+      let sent = false
+      try {
+        sent = await channel.end(
+          `[TOKENMONSTER_AGENT_PRIVATE] FAILURE ${failure}\n`
+        )
+      } catch {
+        sent = false
+      }
+      if (!sent) {
+        destroyWindowsChannel()
+      } else {
+        channel = null
+      }
+      return sent
+    },
     async reportReady(): Promise<boolean> {
-      if (!enabled || readyAttempted) return false
+      if (!enabled || failureAttempted || readyAttempted) return false
       readyAttempted = true
       if (nextPhaseIndex !== AGENT_LAUNCH_PHASES.length) {
         if (options.platform === "win32") destroyWindowsChannel()
