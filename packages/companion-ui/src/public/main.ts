@@ -157,6 +157,12 @@ const AUTOMATIC_UPDATE_ACTIVE_POLL_MS = 1_000;
 const AUTOMATIC_UPDATE_ENABLED_POLL_MS = 5_000;
 const ACTIVE_POLL_MS = 5_000;
 const SETTLED_POLL_MS = 60_000;
+// Ambient chatter cadence: the first line lands soon after the window opens,
+// then repeats every 45–90 seconds while the page stays visible. The floor
+// matches the gateway idle cooldown hint.
+const IDLE_CHATTER_INITIAL_DELAY_MS = 12_000;
+const IDLE_CHATTER_MIN_DELAY_MS = 45_000;
+const IDLE_CHATTER_JITTER_MS = 45_000;
 const numberFormatter = Object.freeze({ format: formatUiNumber });
 const timeFormatter = Object.freeze({
   format: (value: Date | number) =>
@@ -572,6 +578,8 @@ export function startCompanionUi(): void {
   let characterProfileConnectionDegraded = false;
   let characterSpeechTimer: number | undefined;
   let characterTapTimer: number | undefined;
+  let idleChatterTimer: number | undefined;
+  let idleChatterController: AbortController | undefined;
   let requestedStageKey: string | undefined;
   let entrancePending = false;
   let renderedLetterCharacterId: CharacterId | undefined;
@@ -1887,6 +1895,8 @@ export function startCompanionUi(): void {
     characterInteractionController?.abort();
     characterInteractionController = undefined;
     clearCharacterSpeech();
+    // The freshly selected character introduces itself on the short delay.
+    scheduleIdleChatter(IDLE_CHATTER_INITIAL_DELAY_MS);
   }
 
   function showCharacterSpeech(text: string): void {
@@ -1929,6 +1939,9 @@ export function startCompanionUi(): void {
       return;
     }
     playCharacterTapFeedback();
+    // A real tap resets the ambient cadence (and aborts any idle request in
+    // flight) so idle chatter never lands right on top of the tap reply.
+    scheduleIdleChatter();
     if (characterInteractionController !== undefined) return;
     const requestSequence = characterInteractionSequence;
     const controller = new AbortController();
@@ -1966,6 +1979,80 @@ export function startCompanionUi(): void {
     }
   }
 
+  function stopIdleChatter(): void {
+    if (idleChatterTimer !== undefined) {
+      window.clearTimeout(idleChatterTimer);
+      idleChatterTimer = undefined;
+    }
+    idleChatterController?.abort();
+    idleChatterController = undefined;
+  }
+
+  function scheduleIdleChatter(
+    delayMs = IDLE_CHATTER_MIN_DELAY_MS +
+      Math.floor(Math.random() * IDLE_CHATTER_JITTER_MS),
+  ): void {
+    stopIdleChatter();
+    idleChatterTimer = window.setTimeout(() => {
+      idleChatterTimer = undefined;
+      void speakIdleChatterLine();
+    }, delayMs);
+  }
+
+  async function speakIdleChatterLine(): Promise<void> {
+    const character = persistedSelectedCharacter();
+    if (
+      document.visibilityState !== "visible" ||
+      character === undefined ||
+      unlockQueue.current() !== undefined ||
+      characterMutationGate.pending() ||
+      progressionLockRepairState === "checking" ||
+      characterInteractionController !== undefined ||
+      characterSpeechTimer !== undefined
+    ) {
+      scheduleIdleChatter();
+      return;
+    }
+    const requestSequence = characterInteractionSequence;
+    const controller = new AbortController();
+    idleChatterController = controller;
+    const timeout = window.setTimeout(
+      () => controller.abort(),
+      REQUEST_TIMEOUT_MS,
+    );
+    try {
+      const response = await requestCharacterInteraction(
+        character.characterId,
+        getUiLocale(),
+        fetch,
+        controller.signal,
+        "idle",
+      );
+      if (
+        isCurrentCharacterInteraction(
+          requestSequence,
+          characterInteractionSequence,
+          character.characterId,
+          persistedSelectedCharacter()?.characterId,
+          response.characterId,
+        ) &&
+        response.outcome === "line"
+      ) {
+        showCharacterSpeech(response.line.text);
+      }
+    } catch {
+      // Ambient chatter is optional; the next tick simply tries again.
+    } finally {
+      window.clearTimeout(timeout);
+      if (idleChatterController === controller) {
+        idleChatterController = undefined;
+      }
+    }
+    // A tap or character switch may have restarted the cadence mid-request;
+    // keep that fresher timer instead of stomping it.
+    if (idleChatterTimer === undefined) scheduleIdleChatter();
+  }
+
   function setLetterStage(character?: CharacterRosterEntry): void {
     const isLetter = character?.visual.mode === "letter";
     const entering =
@@ -1982,6 +2069,17 @@ export function startCompanionUi(): void {
       style.setProperty("--letter-background", character.visual.background);
       style.setProperty("--letter-foreground", character.visual.foreground);
       style.setProperty("--letter-accent", character.visual.accent);
+      // Deterministic per-character phase so each letter sways on its own
+      // rhythm instead of every character moving in lockstep.
+      let swayHash = 0;
+      for (const unit of character.characterId) {
+        swayHash = (swayHash * 31 + unit.charCodeAt(0)) % 997;
+      }
+      style.setProperty(
+        "--letter-sway-duration",
+        `${5_200 + (swayHash % 5) * 320}ms`,
+      );
+      style.setProperty("--letter-sway-delay", `${-(swayHash % 4_000)}ms`);
       applyLetterThemePreview(
         companionFaceElement,
         character.visual.themes.find(
@@ -1993,6 +2091,8 @@ export function startCompanionUi(): void {
       style.removeProperty("--letter-background");
       style.removeProperty("--letter-foreground");
       style.removeProperty("--letter-accent");
+      style.removeProperty("--letter-sway-duration");
+      style.removeProperty("--letter-sway-delay");
       applyLetterThemePreview(companionFaceElement, undefined);
     }
     stageSwitch.cancel();
@@ -3336,8 +3436,10 @@ export function startCompanionUi(): void {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") {
       clearAutomaticUpdateRefresh();
+      stopIdleChatter();
       return;
     }
+    scheduleIdleChatter();
     renderCharacterProfile();
     updateShareCardAvailability();
     scheduleCharacterProfileClockBoundary();
@@ -3365,6 +3467,7 @@ export function startCompanionUi(): void {
   void pollCharacters();
   void quotaPanel.refresh();
   void pollCollector();
+  scheduleIdleChatter(IDLE_CHATTER_INITIAL_DELAY_MS);
 }
 
 async function startLocalizedCompanionUi(): Promise<void> {

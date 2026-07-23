@@ -1278,6 +1278,45 @@ describe("character POST flows", () => {
     );
   });
 
+  it("posts idle chatter with the idle action and accepts the idle line DTO", async () => {
+    const payload = {
+      status: "ok",
+      action: "idle",
+      characterId: "glm",
+      locale: "zh-TW",
+      outcome: "line",
+      line: {
+        lineId: "tap-line/1.0.0/glm/zh-TW/hello",
+        text: "齒輪輕輕轉了一格，要不要把一個想法拼起來？",
+      },
+      cooldownMs: 45_000,
+    } as const;
+    const fetcher = vi.fn(async () => jsonResponse(payload)) as CharacterFetch;
+
+    const response = await requestCharacterInteraction(
+      "glm",
+      "zh-TW",
+      fetcher,
+      undefined,
+      "idle",
+    );
+
+    expect(response).toEqual(payload);
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/characters/interact",
+      expect.objectContaining({
+        body: JSON.stringify({
+          characterId: "glm",
+          action: "idle",
+          locale: "zh-TW",
+        }),
+      }),
+    );
+    expect(() =>
+      parseCharacterInteractionResponse({ ...payload, action: "poke" }),
+    ).toThrow("Invalid character interaction response");
+  });
+
   it("accepts animation-only cooldowns and rejects interaction DTO drift", () => {
     expect(
       parseCharacterInteractionResponse({

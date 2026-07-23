@@ -337,6 +337,28 @@ html[data-connection="error"] .status-dot {
   will-change: transform;
 }
 
+/* The letter body sways in the wind on the standalone rotate channel so it
+   composes with the shared bob instead of clobbering it. Each character sets
+   its own phase through the custom properties assigned by setLetterStage. */
+.motion-enabled
+  .companion-visual.character-idle
+  > .letter-layer:not([hidden]):not(.character-entering) {
+  animation:
+    character-idle 4.6s ease-in-out infinite,
+    letter-sway var(--letter-sway-duration, 5.8s) ease-in-out
+      var(--letter-sway-delay, 0ms) infinite;
+  will-change: transform, rotate;
+}
+
+.motion-enabled .companion-visual.character-idle .companion-ear {
+  animation: companion-ear-flutter 4.4s ease-in-out
+    var(--letter-sway-delay, 0ms) infinite;
+}
+
+.motion-enabled .companion-visual.character-idle .companion-ear-right {
+  animation-delay: calc(var(--letter-sway-delay, 0ms) - 2200ms);
+}
+
 .motion-enabled .character-entering {
   animation: character-entrance 340ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
@@ -864,6 +886,35 @@ html[data-connection="error"] .status-dot {
 
   50% {
     transform: translate3d(0, -0.42rem, 0) scale(1.015);
+  }
+}
+
+@keyframes letter-sway {
+  0%,
+  100% {
+    rotate: -2.2deg;
+  }
+
+  50% {
+    rotate: 2.2deg;
+  }
+}
+
+/* Mostly still, then a quick double flick — reads as a living twitch rather
+   than a metronome. The mirrored right ear flips the direction for free. */
+@keyframes companion-ear-flutter {
+  0%,
+  78%,
+  100% {
+    rotate: 0deg;
+  }
+
+  86% {
+    rotate: -8deg;
+  }
+
+  93% {
+    rotate: 5deg;
   }
 }
 
@@ -2975,6 +3026,7 @@ html[data-character="grok"]
   .character-effects.is-active .character-sparkle,
   .companion-visual.character-idle > .character-doll,
   .companion-visual.character-idle > .letter-layer,
+  .companion-visual.character-idle .companion-ear,
   .character-entering,
   .character-crossfade-in,
   .character-crossfade-out,
@@ -3088,6 +3140,13 @@ html[data-view="pet"] .stats-disclosure[open] {
 html[data-view="pet"] .stats-disclosure[open] > summary {
   flex: 0 0 auto;
   margin-bottom: 0.5rem;
+}
+
+/* Chromium wraps <details> content in a ::details-content box, which would
+   otherwise sit between the flex container and the stats grid and swallow
+   the height constraint that makes the grid scrollable. */
+html[data-view="pet"] .stats-disclosure[open]::details-content {
+  display: contents;
 }
 
 html[data-view="pet"] .stats-grid {

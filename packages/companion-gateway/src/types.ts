@@ -414,9 +414,16 @@ export interface CompanionCharacterProfileResponse {
 
 export type CompanionCharacterInteractionLocale = "zh-TW" | "en";
 
+/**
+ * "tap" answers a pointer interaction and spends the daily tap allowance;
+ * "idle" is the ambient-chatter variant that stays stateless so background
+ * speech can never exhaust the tap budget.
+ */
+export type CompanionCharacterInteractionAction = "tap" | "idle";
+
 export interface CompanionCharacterInteractionLineResponse {
   readonly status: "ok";
-  readonly action: "tap";
+  readonly action: CompanionCharacterInteractionAction;
   readonly characterId: CompanionCharacterId;
   readonly locale: CompanionCharacterInteractionLocale;
   readonly outcome: "line";
@@ -429,7 +436,7 @@ export interface CompanionCharacterInteractionLineResponse {
 
 export interface CompanionCharacterInteractionCooldownResponse {
   readonly status: "ok";
-  readonly action: "tap";
+  readonly action: CompanionCharacterInteractionAction;
   readonly characterId: CompanionCharacterId;
   readonly locale: CompanionCharacterInteractionLocale;
   readonly outcome: "animation-only";

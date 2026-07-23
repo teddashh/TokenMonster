@@ -4246,6 +4246,135 @@ describe("companion gateway", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("serves stateless idle chatter lines without spending the tap allowance", async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "tokenmonster-character-idle-lines-"),
+    );
+    temporaryDirectories.push(directory);
+    const progressionStorePath = join(directory, "progression-v1.json");
+    const interactionStorePath = join(
+      directory,
+      "character-interactions-v1.json",
+    );
+    let nowMs = Date.parse("2026-07-15T12:34:56.789Z");
+    const adapter = adapterWithOpenAiProgression(5_000);
+    const { address } = await startGateway(
+      adapter,
+      undefined,
+      fakeCollector(),
+      { progressionStorePath },
+      () => new Date(nowMs),
+    );
+    const cookie = await bootstrap(address);
+    expect((await apiRequest(address, cookie)).status).toBe(200);
+    expect(
+      (
+        await characterPost(
+          address,
+          cookie,
+          "select",
+          JSON.stringify({ characterId: "chatgpt" }),
+        )
+      ).status,
+    ).toBe(200);
+
+    const idle = async () =>
+      characterPost(
+        address,
+        cookie,
+        "interact",
+        JSON.stringify({
+          characterId: "chatgpt",
+          action: "idle",
+          locale: "zh-TW",
+        }),
+      );
+
+    const first = await idle();
+    expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as Record<string, unknown>;
+    expect(Object.keys(firstBody)).toEqual([
+      "status",
+      "action",
+      "characterId",
+      "locale",
+      "outcome",
+      "line",
+      "cooldownMs",
+    ]);
+    expect(firstBody).toMatchObject({
+      status: "ok",
+      action: "idle",
+      characterId: "chatgpt",
+      locale: "zh-TW",
+      outcome: "line",
+      cooldownMs: 45_000,
+    });
+    expect(firstBody["line"]).toMatchObject({
+      lineId: expect.stringMatching(/^fixed-line\/1\.0\.0\/chatgpt\/zh-TW\//u),
+      text: expect.stringMatching(/^\S.{0,239}$/u),
+    });
+    expect(parseCharacterInteractionResponse(firstBody).outcome).toBe("line");
+
+    // The same two-minute bucket repeats the same line deterministically.
+    nowMs += 1_000;
+    const repeatBody = (await (await idle()).json()) as {
+      line: { lineId: string };
+    };
+    expect(repeatBody.line.lineId).toBe(
+      (firstBody["line"] as { lineId: string }).lineId,
+    );
+
+    // The next bucket rotates the copy.
+    nowMs += 120_000;
+    const rotatedBody = (await (await idle()).json()) as {
+      line: { lineId: string };
+    };
+    expect(rotatedBody.line.lineId).not.toBe(repeatBody.line.lineId);
+
+    // Idle chatter never touches the persisted interaction store.
+    await expect(readFile(interactionStorePath, "utf8")).rejects.toThrow();
+
+    // A tap inside its cooldown still leaves idle chatter available, and the
+    // idle reply leaves the tap budget untouched.
+    const tap = await characterPost(
+      address,
+      cookie,
+      "interact",
+      JSON.stringify({
+        characterId: "chatgpt",
+        action: "tap",
+        locale: "zh-TW",
+      }),
+    );
+    expect(((await tap.json()) as { outcome: string }).outcome).toBe("line");
+    const idleDuringCooldown = (await (await idle()).json()) as {
+      action: string;
+      outcome: string;
+    };
+    expect(idleDuringCooldown).toMatchObject({
+      action: "idle",
+      outcome: "line",
+    });
+    const store = JSON.parse(
+      await readFile(interactionStorePath, "utf8"),
+    ) as { characters: Record<string, { dailyCount: number }> };
+    expect(store.characters["chatgpt"]!.dailyCount).toBe(1);
+
+    // Idle keeps the tap route's selection guard.
+    const unselected = await characterPost(
+      address,
+      cookie,
+      "interact",
+      JSON.stringify({
+        characterId: "claude",
+        action: "idle",
+        locale: "zh-TW",
+      }),
+    );
+    expect(unselected.status).toBe(409);
+  });
+
   it("personalizes starter taps from the current saved profile and falls back offline", async () => {
     const directory = await mkdtemp(
       join(tmpdir(), "tokenmonster-profile-tap-lines-"),

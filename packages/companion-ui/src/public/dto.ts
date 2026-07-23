@@ -516,10 +516,14 @@ export function parseUiLocalePreferenceResponse(
   });
 }
 
+// "tap" spends the gateway's daily tap allowance; "idle" is the stateless
+// ambient-chatter action, so background speech never consumes that budget.
+export type CharacterInteractionAction = "tap" | "idle";
+
 export type CharacterInteractionResponse =
   | Readonly<{
       status: "ok";
-      action: "tap";
+      action: CharacterInteractionAction;
       characterId: CharacterId;
       locale: CharacterInteractionLocale;
       outcome: "line";
@@ -528,7 +532,7 @@ export type CharacterInteractionResponse =
     }>
   | Readonly<{
       status: "ok";
-      action: "tap";
+      action: CharacterInteractionAction;
       characterId: CharacterId;
       locale: CharacterInteractionLocale;
       outcome: "animation-only";
@@ -1909,13 +1913,14 @@ export function parseCharacterInteractionResponse(
   if (
     !isRecord(value) ||
     value["status"] !== "ok" ||
-    value["action"] !== "tap" ||
+    (value["action"] !== "tap" && value["action"] !== "idle") ||
     !isCharacterId(value["characterId"]) ||
     (value["locale"] !== "zh-TW" && value["locale"] !== "en")
   ) {
     throw new TypeError("Invalid character interaction response");
   }
 
+  const action = value["action"];
   const characterId = value["characterId"];
   const locale = value["locale"];
   if (value["outcome"] === "line") {
@@ -1944,7 +1949,7 @@ export function parseCharacterInteractionResponse(
     }
     return Object.freeze({
       status: "ok",
-      action: "tap",
+      action,
       characterId,
       locale,
       outcome: "line",
@@ -1972,7 +1977,7 @@ export function parseCharacterInteractionResponse(
   }
   return Object.freeze({
     status: "ok",
-    action: "tap",
+    action,
     characterId,
     locale,
     outcome: "animation-only",

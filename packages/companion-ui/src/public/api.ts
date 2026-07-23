@@ -29,6 +29,7 @@ import {
   parseUiLocalePreferenceResponse,
   type CharacterId,
   type CharacterAssetPackStatus,
+  type CharacterInteractionAction,
   type CharacterInteractionLocale,
   type CharacterInteractionResponse,
   type CharacterProfileResponse,
@@ -729,6 +730,7 @@ export async function requestCharacterInteraction(
   locale: CharacterInteractionLocale = "zh-TW",
   fetcher: CharacterFetch = fetch,
   signal?: AbortSignal,
+  action: CharacterInteractionAction = "tap",
 ): Promise<CharacterInteractionResponse> {
   const response = await fetcher(CHARACTER_INTERACT_ENDPOINT, {
     method: "POST",
@@ -739,7 +741,7 @@ export async function requestCharacterInteraction(
       Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ characterId, action: "tap", locale }),
+    body: JSON.stringify({ characterId, action, locale }),
     ...(signal === undefined ? {} : { signal }),
   });
   if (!response.ok) throw new Error("Character interaction failed");

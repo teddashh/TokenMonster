@@ -73,6 +73,12 @@ const CHARACTER_PREFERENCES_FILE = "character-preferences-v1.json";
 export const CHARACTER_INTERACTIONS_FILE = "character-interactions-v1.json";
 export const CHARACTER_TAP_COOLDOWN_MS = 1_600;
 export const CHARACTER_TAP_DAILY_CAP = 48;
+// Ambient idle chatter stays stateless: the line rotates on a shared UTC
+// bucket instead of the persisted tap seed, so background speech can never
+// consume the daily tap allowance. The cooldown hint must stay within the
+// client contract bound of 60 seconds.
+export const CHARACTER_IDLE_LINE_BUCKET_MS = 120_000;
+export const CHARACTER_IDLE_LINE_COOLDOWN_MS = 45_000;
 const MAX_TAP_LINE_ID_LENGTH = 128;
 const MAX_TAP_LINE_TEXT_LENGTH = 240;
 
@@ -1273,7 +1279,7 @@ export function createCharacterService(
     async interact(characterId: unknown, action: unknown, locale: unknown) {
       if (
         !isRosterId(characterId) ||
-        action !== "tap" ||
+        (action !== "tap" && action !== "idle") ||
         !isSupportedTapLocale(locale)
       ) {
         return Object.freeze({
@@ -1304,6 +1310,46 @@ export function createCharacterService(
             status: 409,
             body: { status: "error", error: "not-selected" },
           });
+        }
+
+        if (action === "idle") {
+          const seed = Math.floor(
+            clock().getTime() / CHARACTER_IDLE_LINE_BUCKET_MS,
+          );
+          let idleLineContext: Readonly<{
+            mood: MonsterMood;
+            traits: readonly MonsterTrait[];
+          }> = Object.freeze({ mood: "unknown", traits: Object.freeze([]) });
+          try {
+            idleLineContext =
+              (await options.getTapLineContext?.()) ?? idleLineContext;
+          } catch {
+            // A missing or temporarily unreadable profile must never make the
+            // local idle chatter unavailable.
+          }
+          const idleLine = selectTapLine({
+            characterId,
+            locale,
+            seed,
+            mood: idleLineContext.mood,
+            traits: idleLineContext.traits,
+          });
+          if (!validTapLine(idleLine.lineId, idleLine.text)) {
+            throw new Error("invalid idle line projection");
+          }
+          const body: CompanionCharacterInteractionResponse = {
+            status: "ok",
+            action: "idle",
+            characterId,
+            locale,
+            outcome: "line",
+            line: Object.freeze({
+              lineId: idleLine.lineId,
+              text: idleLine.text,
+            }),
+            cooldownMs: CHARACTER_IDLE_LINE_COOLDOWN_MS,
+          };
+          return Object.freeze({ status: 200, body: Object.freeze(body) });
         }
 
         return await serializeInteractions(async () => {
