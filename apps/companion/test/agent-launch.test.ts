@@ -3,8 +3,10 @@ import { readFile } from "node:fs/promises"
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  AGENT_LAUNCH_READY_MESSAGE,
   AGENT_LAUNCH_READY_MARKER,
   createAgentLaunchReadyReporter,
+  type AgentLaunchReadyMessage,
   installAgentParentDisconnectGuard
 } from "../src/main/agent-launch.js"
 
@@ -14,16 +16,20 @@ function reporter(
   packaged = false
 ): Readonly<{
   reportReady(): boolean
+  send: ReturnType<typeof vi.fn<(message: AgentLaunchReadyMessage) => boolean>>
   write: ReturnType<typeof vi.fn<(marker: string) => void>>
 }> {
+  const send = vi.fn<(message: AgentLaunchReadyMessage) => boolean>(() => true)
   const write = vi.fn<(marker: string) => void>()
   const ready = createAgentLaunchReadyReporter({
     environment,
     argv,
     packaged,
+    platform: "linux",
+    send,
     write
   })
-  return Object.freeze({ reportReady: ready.reportReady, write })
+  return Object.freeze({ reportReady: ready.reportReady, send, write })
 }
 
 describe("agent source-launch readiness contract", () => {
@@ -125,6 +131,54 @@ describe("agent source-launch readiness contract", () => {
     expect(AGENT_LAUNCH_READY_MARKER).toBe(
       "[TOKENMONSTER_AGENT] READY companion\n"
     )
+    expect(ready.send).not.toHaveBeenCalled()
+  })
+
+  it("uses one exact IPC message instead of stdout on Windows", () => {
+    const send = vi.fn<(message: AgentLaunchReadyMessage) => boolean>(
+      () => true
+    )
+    const write = vi.fn<(marker: string) => void>()
+    const ready = createAgentLaunchReadyReporter({
+      environment: { TOKENMONSTER_AGENT_LAUNCH: "1" },
+      argv: ["electron", ".", "--tokenmonster-agent-launch"],
+      packaged: false,
+      platform: "win32",
+      send,
+      write
+    })
+
+    expect(ready.reportReady()).toBe(true)
+    expect(send).toHaveBeenCalledOnce()
+    expect(send).toHaveBeenCalledWith({
+      schemaVersion: 1,
+      type: "tokenmonster_agent_ready"
+    })
+    expect(AGENT_LAUNCH_READY_MESSAGE).toEqual({
+      schemaVersion: 1,
+      type: "tokenmonster_agent_ready"
+    })
+    expect(write).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when the Windows IPC readiness channel is unavailable", () => {
+    const send = vi.fn<(message: AgentLaunchReadyMessage) => boolean>(
+      () => false
+    )
+    const write = vi.fn<(marker: string) => void>()
+    const ready = createAgentLaunchReadyReporter({
+      environment: { TOKENMONSTER_AGENT_LAUNCH: "1" },
+      argv: ["--tokenmonster-agent-launch"],
+      packaged: false,
+      platform: "win32",
+      send,
+      write
+    })
+
+    expect(ready.reportReady()).toBe(false)
+    expect(ready.reportReady()).toBe(false)
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(write).not.toHaveBeenCalled()
   })
 
   it("never reports from a packaged app", () => {
@@ -192,6 +246,8 @@ describe("agent source-launch readiness contract", () => {
     expect(source).toContain("environment: process.env")
     expect(source).toContain("argv: process.argv")
     expect(source).toContain("packaged: app.isPackaged")
+    expect(source).toContain("platform: process.platform")
+    expect(source).toContain("process.send(message)")
 
     const serviceReady = source.indexOf(
       "const started = await startPetServices(petByokSecretSlot)"

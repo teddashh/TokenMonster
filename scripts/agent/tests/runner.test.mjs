@@ -5,7 +5,9 @@ import test from "node:test";
 import { contractVersion, readyMarker } from "../contract.mjs";
 import {
   committedState,
+  isAgentReadyMessage,
   ReadinessLineGate,
+  ReadinessMessageGate,
 } from "../runner.mjs";
 
 test("readiness accepts one exact stdout line only once", () => {
@@ -69,6 +71,66 @@ test("overlong lines recover and closed gates ignore later bytes", () => {
   closed.finish();
   closed.push(Buffer.from(`${readyMarker.slice(8)}\n${readyMarker}\n`));
   assert.equal(reports, 1);
+});
+
+test("Windows readiness accepts one exact IPC message only once", () => {
+  let reports = 0;
+  const gate = new ReadinessMessageGate(() => {
+    reports += 1;
+  });
+  const message = {
+    schemaVersion: 1,
+    type: "tokenmonster_agent_ready",
+  };
+  assert.equal(gate.push(message), true);
+  assert.equal(gate.push(message), false);
+  assert.equal(reports, 1);
+});
+
+test("Windows readiness rejects malformed, extra and closed IPC messages", () => {
+  let reports = 0;
+  const invalid = [
+    null,
+    "tokenmonster_agent_ready",
+    { type: "tokenmonster_agent_ready" },
+    { schemaVersion: 2, type: "tokenmonster_agent_ready" },
+    { schemaVersion: 1, type: "TOKENMONSTER_AGENT_READY" },
+    {
+      schemaVersion: 1,
+      type: "tokenmonster_agent_ready",
+      extra: true,
+    },
+  ];
+  for (const message of invalid) {
+    assert.equal(isAgentReadyMessage(message), false);
+  }
+  const gate = new ReadinessMessageGate(() => {
+    reports += 1;
+  });
+  gate.finish();
+  assert.equal(
+    gate.push({
+      schemaVersion: 1,
+      type: "tokenmonster_agent_ready",
+    }),
+    false,
+  );
+  assert.equal(reports, 0);
+});
+
+test("runner uses exact IPC only on Windows and stdout elsewhere", async () => {
+  const source = await readFile(
+    new URL("../runner.mjs", import.meta.url),
+    "utf8",
+  );
+  expectSource(
+    source,
+    /child\.stdout\.on\("data", \(chunk\) => \{\s+if \(process\.platform !== "win32"\) readyLineGate\.push\(chunk\);\s+\}\)/u,
+  );
+  expectSource(
+    source,
+    /child\.on\("message", \(message\) => \{\s+if \(process\.platform === "win32"\) \{\s+readyMessageGate\.push\(message\);\s+\}\s+\}\)/u,
+  );
 });
 
 test("runner commit identity binds both the exact pid and token", () => {

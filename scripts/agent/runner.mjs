@@ -88,6 +88,41 @@ export class ReadinessLineGate {
   }
 }
 
+export function isAgentReadyMessage(value) {
+  return (
+    exactKeys(value, ["schemaVersion", "type"]) &&
+    value.schemaVersion === 1 &&
+    value.type === "tokenmonster_agent_ready"
+  );
+}
+
+export class ReadinessMessageGate {
+  #closed = false;
+  #reported = false;
+  #report;
+
+  constructor(report) {
+    this.#report = report;
+  }
+
+  push(message) {
+    if (
+      this.#closed ||
+      this.#reported ||
+      !isAgentReadyMessage(message)
+    ) {
+      return false;
+    }
+    this.#reported = true;
+    this.#report();
+    return true;
+  }
+
+  finish() {
+    this.#closed = true;
+  }
+}
+
 function safeExitMarker(code, signal) {
   if (
     Number.isInteger(code) &&
@@ -155,13 +190,16 @@ export async function runElectron(
       let settled = false;
       let spawnFailed = false;
       let child;
-      const readyGate = new ReadinessLineGate(() => {
+      const reportReady = () => {
         safeAppendOwned(readyMarker, runnerToken);
-      });
+      };
+      const readyLineGate = new ReadinessLineGate(reportReady);
+      const readyMessageGate = new ReadinessMessageGate(reportReady);
       const finish = (code, signal) => {
         if (settled) return;
         settled = true;
-        readyGate.finish();
+        readyLineGate.finish();
+        readyMessageGate.finish();
         const marker = spawnFailed
           ? "[TOKENMONSTER_AGENT] EXIT code=1"
           : safeExitMarker(code, signal);
@@ -196,9 +234,16 @@ export async function runElectron(
         });
         return;
       }
-      child.stdout.on("data", (chunk) => readyGate.push(chunk));
+      child.stdout.on("data", (chunk) => {
+        if (process.platform !== "win32") readyLineGate.push(chunk);
+      });
       child.stderr.on("data", () => {
         // Drain and discard. stderr is never a readiness channel.
+      });
+      child.on("message", (message) => {
+        if (process.platform === "win32") {
+          readyMessageGate.push(message);
+        }
       });
       child.once("error", () => {
         spawnFailed = true;

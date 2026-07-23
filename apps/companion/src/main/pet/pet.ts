@@ -276,6 +276,16 @@ export async function startPetCompanion(
     environment: process.env,
     argv: process.argv,
     packaged: app.isPackaged,
+    platform: process.platform,
+    send: (message) => {
+      if (process.connected !== true || process.send === undefined) return false
+      try {
+        process.send(message)
+        return true
+      } catch {
+        return false
+      }
+    },
     write: (marker) => {
       process.stdout.write(marker)
     }
