@@ -141,12 +141,13 @@ The release embeds a strict schema-v2 authority: eight approved WebP starters
 (one avatar and one `tech` base outfit for ChatGPT, Claude, Gemini, and Grok)
 plus 168 fixed `zh-TW`/`en` text lines ship inside the package and need no
 network. After a separate explicit user action, the companion downloads one
-fixed, versioned pack (`ai-sister-images-11-2026.07.21`: exactly 891 images,
-11 characters, 0 voice lines, 65,574,180 bytes) from `https://cdn.ted-h.com`;
-its network object set and order are independent of any local usage,
-selection, progression, pose, or trigger state. Pack entries pass bounded
-extraction and per-entry bytes/media/SHA-256 checks before atomic cache
-writes, and the verified pack supports offline use, repair, and removal.
+fixed, versioned pack (`ai-sister-media-11-voice55-2026.07.23`: exactly 891
+images and 55 WAVs for 11 characters, 946 entries, 73,043,596 extracted bytes)
+from `https://cdn.ted-h.com`; its network object set and order are independent
+of any local usage, selection, progression, pose, or trigger state. Pack
+entries pass bounded extraction and per-entry bytes/media/SHA-256 checks before
+atomic cache writes, and the verified pack supports offline use, repair, and
+removal.
 Cache hits must match the filename's SHA-256; a miss or invalid entry falls
 back to the code-native letter renderer or silence without affecting local
 usage features. `--no-character-downloads` is retained only as a
@@ -160,11 +161,12 @@ The implemented fixed-pack path exists precisely to avoid this: it is the
 only network delivery, it requires the separate explicit user action above,
 and its object set never varies with local state.
 
-The runtime integrity manifest still contains 50 prerecorded voice refs for
-the ten art-backed characters and none for GLM; the fixed pack deliberately
-contains no voice bytes, voice defaults off, and playback can use only
-verified cache hits. These rows lack public rights/content evidence and must
-not be treated as approval.
+The current schema-v2 authority contains 55 prerecorded voice rows: five
+triggers for each of the 11 characters, including GLM. Their canonical WAV
+bytes are delivered only inside the complete pack; voice defaults off and
+playback can use only verified local cache hits. The older schema-v1 inventory
+of 50 refs for ten characters remains historical integrity input and is not
+runtime approval.
 
 ## 5. BYOK interaction data
 

@@ -1,10 +1,11 @@
 # TokenMonster character and wardrobe map
 
-Status: image-only schema-v2 release approved and published. All 11 personas
-have approved raster associations; the pack contains no voice. TokenMonster
-release candidates embed a zero-request starter base of eight WebPs／415,470
-bytes: one avatar and one `tech` outfit for each of ChatGPT, Claude, Gemini, and
-Grok. Those four also have 168 built-in `zh-TW`/`en` text lines. The
+Status: combined schema-v2 release approved and published. All 11 personas have
+approved raster associations and five canonical WAVs each: 891 images plus 55
+voice clips, or 946 entries. TokenMonster release candidates embed a
+zero-request starter base of eight WebPs／415,470 bytes: one avatar and one
+`tech` outfit for each of ChatGPT, Claude, Gemini, and Grok. Those four also
+have 168 built-in `zh-TW`/`en` text lines, with no embedded audio. The
 letter/silent renderer remains the fallback outside that base.
 
 This document defines how TokenMonster may reuse the existing AI-Sister
@@ -58,13 +59,13 @@ personas). The raw bank and layered files remain outside the audited Git tree
 in AI-Sister's voice-lab workspace. That inventory is not public rights
 approval and is not shipped as runtime authority.
 
-The current schema-v2 release `ai-sister-images-11-2026.07.21` supersedes it
-for images with 11 avatars, 220 outfits, and 660 poses: 891 image associations
-for all 11 personas, including GLM, and 0 voice. Its canonical manifest SHA-256
-is `924c95cff70fac69f8622cecb499e7691a23e9d4c51e5a8c53dc9bbe2dd513e1`.
-The historical 50 cloned WAV files remain excluded despite privately stored
-owner approval because their clone-consent/provenance, per-clip content review,
-and metadata-stripping evidence is incomplete.
+The current schema-v2 release `ai-sister-media-11-voice55-2026.07.23`
+supersedes it with 11 avatars, 220 outfits, 660 poses, and 55 canonical WAVs:
+891 image associations and five voice triggers for every one of the 11
+personas, including GLM. Its canonical manifest SHA-256 is
+`21e4675653ce66b50b61e91260f1623e6e3005177f900991e3a8eeadaf9e6474`.
+The older 50-WAV schema-v1 inventory remains historical audit input rather than
+runtime authority.
 
 ## Stable theme map
 
@@ -247,13 +248,14 @@ https://cdn.ted-h.com/tokenmonster/characters/v1/
 The current public object layout is:
 
 ```text
-tokenmonster/characters/v1/packs/ai-sister-images-11-2026.07.21/b1bff7d70342006982f9a3dd5b06ecf9b86291fea01dd3caba8822a012e48bb7.zip
-tokenmonster/characters/v1/releases/ai-sister-images-11-2026.07.21/asset-release-manifest-v2.json
+tokenmonster/characters/v1/packs/ai-sister-media-11-voice55-2026.07.23/7d98e0d18c470f82818e8ada67208847c3cf4ff5c10cb5f99f9215191e981f30.zip
+tokenmonster/characters/v1/releases/ai-sister-media-11-voice55-2026.07.23/asset-release-manifest-v2.json
 ```
 
-The ZIP is 65,574,180 bytes and contains 891 image entries; its SHA-256 is its
+The ZIP is 73,261,088 bytes and contains 891 image entries plus 55 WAV entries,
+946 entries and 73,043,596 extracted bytes in total; its SHA-256 is its
 filename. Both objects were published immutably and read back byte-for-byte
-through the public CDN. Individual image objects are not a runtime lazy-fetch
+through the public CDN. Individual media objects are not a runtime lazy-fetch
 contract.
 
 AI-Sister retains:
@@ -273,10 +275,10 @@ databases, deep-import AI-Sister code, or become a second asset publisher.
 
 The strict schema-v2 manifest is embedded in the TokenMonster release rather
 than trusted from a runtime response and lists only objects that passed the
-public release gate. The current image-only manifest has 891 associations for
-11 characters and 0 voice. Each object records at least its relative
-hash-named path, bytes, SHA-256, media shape, and its character/theme/pose
-association:
+public release gate. The current combined manifest has 891 image associations
+and 55 voice associations for all 11 characters. Each object records at least
+its relative hash-named path, bytes, SHA-256, media shape, and its
+character/theme/pose or voice-trigger association:
 
 ```json
 {
@@ -319,7 +321,7 @@ no query string.
 The `@tokenmonster/characters/asset-pack` subpath implements the current
 explicit-consent verification/cache path. The embedded schema-v2 manifest,
 pack descriptor, and exact origin/path allowlist authorize only the one current
-image pack. The wiring must:
+combined media pack. The wiring must:
 
 1. run only after a separate, sufficiently disclosed user action;
 2. fetch one fixed, versioned pack whose request set and order are independent
@@ -332,15 +334,16 @@ image pack. The wiring must:
 7. retain verified objects for offline use and fall back to the embedded starter
    base on any full-pack error;
 8. allow each starter's avatar and `tech` base outfit from embedded bytes, but
-   perform all other theme and pose selection only after the full pack is local;
-   any future voice selection must use a newly eligible combined pack.
+   perform all other theme, pose, and prerecorded-voice selection only after the
+   full pack is local.
 
 Prerecorded voice playback defaults off. The gateway exposes bounded lines
 only for unlocked characters: `greeting` is gesture-armed and once per
 character/UI session, `unlock` accompanies its toast, `quiet`/`active` reflect
 a healthy zero/nonzero today aggregate with a one-hour trigger throttle, and
-`error` fires only on entry to refresh-failed. The current release has no WAV,
-so these triggers remain silent and never become network keys.
+`error` fires only on entry to refresh-failed. The current release has one WAV
+per character for each of those five triggers. Playback uses only verified
+local cache hits; triggers never become network keys.
 
 ## Rights and brand gate
 
@@ -351,25 +354,28 @@ has recorded both:
 - brand approval for names, logos, marks, costume treatment, and public use.
 
 Approval must identify the exact persona, theme, action set, source revision,
-publisher revision, and output hashes. The current 891 images passed this gate
-with private evidence and required unaffiliated disclosure. A technically
-complete new asset with missing or ambiguous rights remains unpublished. The
-unresolved eighth friend, later wardrobe expansion, and any regenerated
-brand-mark artwork all pass this same gate.
+publisher revision, and output hashes. The current 891 images and 55 WAVs
+passed this gate with private evidence, per-clip voice review, and required
+unaffiliated disclosure. A technically complete new asset with missing or
+ambiguous rights remains unpublished. The unresolved eighth friend, later
+wardrobe expansion, and any regenerated brand-mark artwork all pass this same
+gate.
 
 ## Acceptance criteria for the first asset release
 
 - The release embeds one schema-v2 rights-approved manifest for all 11 roster
-  members, each with an avatar, 20 themes and pose art: 891 images and 0 voice.
+  members, each with an avatar, 20 themes, pose art, and five prerecorded
+  voice triggers: 891 images plus 55 WAVs, 946 entries in total.
 - Candidate staging embeds exactly eight of those approved WebPs, 415,470 bytes:
   four starter avatars plus their `tech` base outfits. It also includes 168
   `zh-TW`/`en` fixed text lines and no audio.
 - Every published file is immutable and integrity-addressed.
-- A clean TokenMonster install uses the four-starter base with zero runtime asset
-  requests; art outside the base remains fully usable through letter/silent
-  fallback. An explicit enable action downloads exactly one 891-image,
-  65,574,180-byte fixed pack, then validates, caches, and renders without access
-  to AI-Sister source or voice-lab paths. Failure or revocation returns to base.
+- A clean TokenMonster install uses the four-starter base with zero runtime
+  asset requests; media outside the base remains fully usable through
+  letter/silent fallback. An explicit enable action downloads exactly one
+  946-entry, 73,261,088-byte fixed pack, then validates and caches its 891
+  images and 55 WAVs without access to AI-Sister source or voice-lab paths.
+  Failure or revocation returns to the starter base and silence.
 - Tie, no-data, and missing-provider-dimension cases show the manual starter
   picker.
 - Reduced motion works for every published bundle.

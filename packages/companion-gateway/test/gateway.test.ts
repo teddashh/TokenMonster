@@ -2774,8 +2774,8 @@ describe("companion gateway", () => {
       phase: "available",
       consented: false,
       enabled: false,
-      releaseId: "ai-sister-images-11-2026.07.21",
-      downloadBytes: 65_574_180,
+      releaseId: "ai-sister-media-11-voice55-2026.07.23",
+      downloadBytes: 73_261_088,
       lastError: null,
     });
   });

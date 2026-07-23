@@ -31,8 +31,8 @@ const SHUTDOWN_TIMEOUT_MS = 15_000;
 const BOOTSTRAP_URL_PATTERN = /http:\/\/127\.0\.0\.1:\d+\/\S+/u;
 const SESSION_COOKIE_PATTERN =
   /(?:^|;\s*)tokenmonster_session=([A-Za-z0-9_-]+)(?:;|$)/u;
-const EXPECTED_ASSET_RELEASE_ID = "ai-sister-images-11-2026.07.21";
-const EXPECTED_ASSET_PACK_BYTES = 65_574_180;
+const EXPECTED_ASSET_RELEASE_ID = "ai-sister-media-11-voice55-2026.07.23";
+const EXPECTED_ASSET_PACK_BYTES = 73_261_088;
 const DEFAULT_UNAVAILABLE_CONTRIBUTION_STATUS = Object.freeze({
   status: "ok",
   availability: "unavailable",

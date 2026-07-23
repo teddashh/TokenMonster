@@ -43,10 +43,11 @@ asset. The characters package also carries exactly three generated authority
 slots: `dist/approved-release-v2.json`,
 `dist/approved-asset-pack-descriptor-v1.json`, and
 `dist/approved-asset-pack-allowlist-v1.json`. All three are non-null and
-strictly cross-bound to image-only release `ai-sister-images-11-2026.07.21`,
-whose schema-v2 manifest contains 891 images for 11 characters and 0 voice.
-Its canonical manifest SHA-256 is
-`924c95cff70fac69f8622cecb499e7691a23e9d4c51e5a8c53dc9bbe2dd513e1`.
+strictly cross-bound to combined release
+`ai-sister-media-11-voice55-2026.07.23`, whose schema-v2 manifest contains 891
+images and 55 WAVs for 11 characters, 946 entries total. Its canonical
+manifest SHA-256 is
+`21e4675653ce66b50b61e91260f1623e6e3005177f900991e3a8eeadaf9e6474`.
 Staging removes the historical schema-v1 JSON, rejects any additional character
 JSON, and accepts only either three null slots or three strictly validated,
 cross-bound authorities. For the non-null current set, the artifact verifier
@@ -60,11 +61,13 @@ fixed-pack lifecycle. Default, no-consent, offline-without-cache, failed, and
 revoked states make zero runtime asset requests and use the embedded four-starter
 base; art outside that base uses letter mode or silence. An explicit enable
 action may make exactly one state-independent GET to
-`https://cdn.ted-h.com` for the 65,574,180-byte ZIP whose SHA-256 is
-`b1bff7d70342006982f9a3dd5b06ecf9b86291fea01dd3caba8822a012e48bb7`.
-That full pack contains 891 images. Failure or revocation returns to the base,
-and the gateway still exposes no per-object downloader. Neither the embedded
-base nor the complete image pack contains voice.
+`https://cdn.ted-h.com` for the 73,261,088-byte ZIP whose SHA-256 is
+`7d98e0d18c470f82818e8ada67208847c3cf4ff5c10cb5f99f9215191e981f30`.
+That full pack contains 891 images and 55 canonical WAVs, 946 entries and
+73,043,596 extracted bytes. Failure or revocation returns to the base, and the
+gateway still exposes no per-object downloader. The embedded base contains no
+audio; complete-pack voice playback defaults off and uses verified local cache
+hits only.
 
 Non-null slots must come byte-for-byte from
 `npm run prepare:asset-release-slots -- ...`, which consumes the approved
@@ -76,11 +79,10 @@ literal, `TOKENMONSTER_CHARACTER_CDN`, or removed downloader signatures,
 including with `--skip-build`, and rejects unsupported or symbolic staging
 entries. Every later image or combined image + voice release requires a new,
 separately reviewed immutable pack whose request set is independent of local
-usage and progression. The historical 50 cloned WAV files are excluded from
-the current pack despite privately stored owner approval: their technical
-clone-consent/provenance, per-clip content-review, and metadata-stripping
-evidence remains incomplete, so they cannot be added without a new combined
-release identity and hashes.
+usage and progression. The current combined release includes 55 canonical WAVs
+with owner-authorized reference-clone evidence and per-clip spoken-content
+review. The older schema-v1 inventory of 50 WAV refs remains historical and is
+not a runtime authority.
 
 ## Desktop installers
 

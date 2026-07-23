@@ -279,6 +279,44 @@ function validInputs({
   return { integrityManifest: integrity, buildProvenance, rightsLedger };
 }
 
+type VoiceEvidenceFixture = {
+  locale: string;
+  sourceType:
+    | "human-original"
+    | "synthetic-non-clone"
+    | "owner-authorized-reference-clone";
+  consentReferenceId: string | null;
+  syntheticProvenanceReferenceId: string | null;
+  spokenContentReviewReferenceId: string;
+};
+
+function setVoiceEvidence(
+  inputs: ReturnType<typeof validInputs>,
+  evidence: VoiceEvidenceFixture,
+): void {
+  const voiceEntry = inputs.rightsLedger.entries.find(
+    ({ association }) => association.kind === "voice",
+  );
+  if (voiceEntry === undefined) {
+    throw new Error("voice fixture entry is missing");
+  }
+  (
+    voiceEntry as unknown as {
+      voiceEvidence: VoiceEvidenceFixture;
+    }
+  ).voiceEvidence = evidence;
+}
+
+function ownerAuthorizedReferenceCloneEvidence(): VoiceEvidenceFixture {
+  return {
+    locale: "zh-TW",
+    sourceType: "owner-authorized-reference-clone",
+    consentReferenceId: "owner-voice-authorization-v1",
+    syntheticProvenanceReferenceId: null,
+    spokenContentReviewReferenceId: "spoken-content-review-v1",
+  };
+}
+
 describe("asset release manifest v2 assembler", () => {
   it("joins exact integrity, provenance, and rights rows into the only shippable schema", () => {
     const release = assembleAssetReleaseManifestV2(validInputs());
@@ -445,6 +483,106 @@ describe("asset release manifest v2 assembler", () => {
       spokenContentReviewReferenceId: "spoken-content-review-v1",
     });
     expect(JSON.stringify(release)).not.toContain("spokenText");
+  });
+
+  it("assembles an owner-authorized reference clone without a non-clone provenance claim", () => {
+    const inputs = validInputs();
+    const evidence = ownerAuthorizedReferenceCloneEvidence();
+    setVoiceEvidence(inputs, evidence);
+
+    expect(AssetRightsLedgerV2Schema.parse(inputs.rightsLedger)).toEqual(
+      inputs.rightsLedger,
+    );
+    const release = assembleAssetReleaseManifestV2(inputs);
+    expect(
+      release.assets.find(
+        ({ association }) => association.kind === "voice",
+      )?.voiceEvidence,
+    ).toEqual(evidence);
+    expect(JSON.stringify(release)).not.toContain("spokenText");
+  });
+
+  it("fails clone evidence closed without authorization, spoken review, or with non-clone provenance", () => {
+    const cases: Array<{
+      name: string;
+      mutate: (evidence: VoiceEvidenceFixture) => void;
+      expected: RegExp;
+    }> = [
+      {
+        name: "authorization",
+        mutate: (evidence) => {
+          evidence.consentReferenceId = null;
+        },
+        expected: /requires a consent or authorization reference/u,
+      },
+      {
+        name: "non-clone provenance",
+        mutate: (evidence) => {
+          evidence.syntheticProvenanceReferenceId = "synthetic-voice-v1";
+        },
+        expected: /cannot claim synthetic-non-clone provenance/u,
+      },
+    ];
+
+    for (const { name, mutate, expected } of cases) {
+      const inputs = validInputs();
+      const evidence = ownerAuthorizedReferenceCloneEvidence();
+      mutate(evidence);
+      setVoiceEvidence(inputs, evidence);
+      expect(
+        () => AssetRightsLedgerV2Schema.parse(inputs.rightsLedger),
+        name,
+      ).toThrow(expected);
+    }
+
+    const missingSpokenReview = validInputs();
+    const incompleteEvidence = ownerAuthorizedReferenceCloneEvidence() as Omit<
+      VoiceEvidenceFixture,
+      "spokenContentReviewReferenceId"
+    > &
+      Partial<
+        Pick<VoiceEvidenceFixture, "spokenContentReviewReferenceId">
+      >;
+    delete incompleteEvidence.spokenContentReviewReferenceId;
+    setVoiceEvidence(
+      missingSpokenReview,
+      incompleteEvidence as VoiceEvidenceFixture,
+    );
+    expect(
+      AssetRightsLedgerV2Schema.safeParse(missingSpokenReview.rightsLedger)
+        .success,
+    ).toBe(false);
+
+    const unknownCloneKey = validInputs();
+    setVoiceEvidence(unknownCloneKey, {
+      ...ownerAuthorizedReferenceCloneEvidence(),
+      privateReceiptPath: "/private/receipt.json",
+    } as VoiceEvidenceFixture);
+    expect(
+      AssetRightsLedgerV2Schema.safeParse(unknownCloneKey.rightsLedger).success,
+    ).toBe(false);
+  });
+
+  it("continues to assemble human-original voice evidence", () => {
+    const inputs = validInputs();
+    setVoiceEvidence(inputs, {
+      locale: "zh-TW",
+      sourceType: "human-original",
+      consentReferenceId: "speaker-consent-v1",
+      syntheticProvenanceReferenceId: null,
+      spokenContentReviewReferenceId: "spoken-content-review-v1",
+    });
+
+    const release = assembleAssetReleaseManifestV2(inputs);
+    expect(
+      release.assets.find(
+        ({ association }) => association.kind === "voice",
+      )?.voiceEvidence,
+    ).toMatchObject({
+      sourceType: "human-original",
+      consentReferenceId: "speaker-consent-v1",
+      syntheticProvenanceReferenceId: null,
+    });
   });
 
   it("rejects absolute, traversing, URL, and Windows source inventory paths", () => {

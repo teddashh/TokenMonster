@@ -45,19 +45,19 @@ rollup。
 這些都只是 source-level evidence，不是 production evidence。Companion background
 sync的packet capture／wake soak、Cloudflare account／D1／domain／secrets、remote rehearsal／staging E2E、
 backup/restore與suppression replay、signed installer、平台實機smoke、專案 license／
-法律文件與 voice 技術證據仍是上線閘門。本文其餘需求描述的是完整 launch
-target；不得因列在本規格中就宣稱已部署或已對外提供。
+法律文件仍是上線閘門。本文其餘需求描述的是完整 launch target；不得因列在本規格中
+就宣稱已部署或已對外提供。
 
 `tokentracker-cli@0.80.0` 是現有唯一 authoritative collector，Tokscale／Electron
 是 migration-only legacy slice。候選 npm artifact 在 release staging 精確加入 8 個
 rights-approved WebP／415,470 bytes：ChatGPT、Claude、Gemini、Grok 各一張 avatar 與
 `tech` 基本服裝，並編入四位的 168 條 `zh-TW`／`en` 固定文字；不嵌入任何語音。
-Release 另內嵌 non-null image-only schema-v2 authority、descriptor 與 exact HTTPS
+Release 另內嵌 non-null combined schema-v2 authority、descriptor 與 exact HTTPS
 allowlist。Default、no-consent、offline-without-cache、完整包失敗或 revoked 時，四位
 基本圖文仍以 zero runtime GET 使用，其他缺圖狀態才 letter/silent fallback；使用者明確
-啟用時才取得一個不隨本機狀態改變的 891-image 固定整包。先前依解鎖狀態按需下載的
-路徑已因 object-key side channel 停用。這是候選 artifact 行為，不代表 application
-release 已發布。
+啟用時才取得一個不隨本機狀態改變的 946-entry 固定整包（891 images + 55 WAVs）。
+先前依解鎖狀態按需下載的路徑已因 object-key side channel 停用。這是候選 artifact
+行為，不代表 application release 已發布。
 
 ## 2. 產品摘要
 
@@ -78,7 +78,7 @@ TokenMonster 的差異化不是另一個成本報表，而是：
 - `tokscale@4.5.2`、`collector-core` 與舊 `tokentracker-bridge` contract 是 migration-only contribution slice，不是支援的 local collector，也不得接收新產品功能或與 sidecar totals 相加。
 - TokenMonster 不 fork、vendor、submodule、deep-import 或複製 TokenTracker parser／hook code，也不直接讀它的 queue files 或 provider databases。
 - AI-Sister / multi-ai-chat-app 現有角色設計是 raster 圖像資產，不是 Live2D 模型，也沒有可直接使用的 3D rig。
-- Image release `ai-sister-images-11-2026.07.21` 已以 schema-v2 核准 11 位角色的 891 張 raster，並發布為一個 immutable fixed pack；候選 npm artifact 只抽取其中四位元祖的 avatar＋`tech` 基本服裝，共 8 個 WebP／415,470 bytes。任何未清權的新素材都維持 `blocked`；未同意、離線缺完整 cache、失敗與撤銷時，四位基本圖文仍完整運作，其他缺圖狀態才使用 placeholder。
+- Combined release `ai-sister-media-11-voice55-2026.07.23` 已以 schema-v2 核准 11 位角色的 891 張 raster 與 55 條 canonical WAV，並發布為一個 immutable fixed pack；候選 npm artifact 只抽取其中四位元祖的 avatar＋`tech` 基本服裝，共 8 個 WebP／415,470 bytes，不含 audio。任何未清權的新素材都維持 `blocked`；未同意、離線缺完整 cache、失敗與撤銷時，四位基本圖文仍完整運作，其他缺圖狀態才使用 placeholder，語音保持靜音。
 
 ### 3.2 資料可取得性的限制
 
@@ -280,7 +280,7 @@ Collector 狀態依序為 `starting` → `syncing` → `ready`；無支援資料
 
 #### C. AI 字母人
 
-- Launch roster 是 11 位角色；release-embedded image-only schema-v2 authority 為每位列出 avatar、20 種衣櫥與三類 pose，共 891 張核准圖片。候選 tarball 先內嵌四位元祖各一張 avatar 與 `tech` 基本服裝；完整 891-image 圖片包仍必須由使用者明確啟用，fallback 支援其餘缺圖狀態。
+- Launch roster 是 11 位角色；release-embedded combined schema-v2 authority 為每位列出 avatar、20 種衣櫥、三類 pose 與五條預錄語音，共 891 張核准圖片與 55 條 canonical WAV。候選 tarball 先內嵌四位元祖各一張 avatar 與 `tech` 基本服裝，不含 audio；完整 946-entry 媒體包仍必須由使用者明確啟用，fallback 支援其餘缺圖與靜音狀態。
 - 使用圖像切換、裁切、色彩效果、配件 overlay、對話框與輕量 CSS/canvas 動畫呈現狀態。
 - 不要求 Live2D、3D rig 或即時嘴型。
 - 側寫成形時顯示 1 至 3 個可解釋主 traits；證據不足時保持「認識中」。
@@ -432,12 +432,12 @@ Upload bearer secret 只存在 Authorization header；獨立 deletion secret 只
 ### 10.6 AI-Sister raster 角色呈現
 
 - Launch roster 有 11 位：ChatGPT、Claude、Gemini、Grok、DeepSeek、Qwen、Mistral、Venice／Llama、Sakana、Perplexity 與 GLM。
-- Release 內嵌 non-null image-only schema-v2 authority、fixed-pack descriptor 與 exact HTTPS allowlist，列出 11 個 avatars、220 個 outfits 與 660 個 `supported`／`challenged`／`victory` poses；manifest canonical SHA-256 為 `924c95cff70fac69f8622cecb499e7691a23e9d4c51e5a8c53dc9bbe2dd513e1`。
+- Release 內嵌 non-null combined schema-v2 authority、fixed-pack descriptor 與 exact HTTPS allowlist，列出 11 個 avatars、220 個 outfits、660 個 `supported`／`challenged`／`victory` poses 與 55 條 WAV；manifest canonical SHA-256 為 `21e4675653ce66b50b61e91260f1623e6e3005177f900991e3a8eeadaf9e6474`。
 - Release staging 只把該 authority 中精確 8 個 WebP 放進候選 npm artifact：四位元祖各一張 avatar 與 `tech` 基本服裝，共 415,470 bytes；另有 168 條 `zh-TW`／`en` 內建文字。Gateway 的逐物件設定只接受 `cdnBaseUrl: null`，沒有 lazy-fetch hook 或逐物件 downloader。Default、no-consent、offline-without-cache、failed或revoked狀態都發出零次素材 GET，並回到四位基本圖文；其他缺圖狀態使用 letter/silent fallback。`--no-character-downloads` 只停用完整包，不移除內建基本素材。
 - 狀態式 lazy GET 不是可發布方案：即使沒有 query，hash-named object key 仍可映回自動角色、已解鎖衣裝、pose 或 voice trigger，從而揭露本機用量衍生狀態。
-- 使用者在充分揭露後明確啟用，才可從 `https://cdn.ted-h.com` 單次取得 release `ai-sister-images-11-2026.07.21` 的 891-image、65,574,180-byte immutable ZIP；其 SHA-256 為 `b1bff7d70342006982f9a3dd5b06ecf9b86291fea01dd3caba8822a012e48bb7`。整次網路物件集合不得依角色選擇、解鎖、token、provider 或 trigger 改變；下載後的顯示與反應選擇只在本機 cache 內完成，失敗或撤銷則回到內嵌基本圖文。
+- 使用者在充分揭露後明確啟用，才可從 `https://cdn.ted-h.com` 單次取得 release `ai-sister-media-11-voice55-2026.07.23` 的 946-entry、73,261,088-byte immutable ZIP；其 891 images + 55 WAVs 共 73,043,596 extracted bytes，ZIP SHA-256 為 `7d98e0d18c470f82818e8ada67208847c3cf4ff5c10cb5f99f9215191e981f30`。整次網路物件集合不得依角色選擇、解鎖、token、provider 或 trigger 改變；下載後的顯示、反應與語音選擇只在本機 cache 內完成，失敗或撤銷則回到內嵌基本圖文與靜音。
 - 角色圖像不是 Live2D 或 3D rig；狀態透過核准的 pre-rendered pose 與輕量 UI 效果呈現。原始 parts、生成工具、prompt 與 publisher credential 不進入 TokenMonster。
-- 候選 tarball 的基本素材與 current 891-image pack 都明確含 0 voice；168 條雙語內容是文字，不是音訊。歷史 schema-v1 inventory 的 50 條 cloned WAV 雖已有私下保存的 owner approval，仍缺 speaker/clone consent provenance、逐 clip spoken-content review與 metadata-stripping evidence，不能視為 current public capability。完成後也必須建立新的 image + voice combined immutable release，不能用 voice-only authority 取代圖片。
+- 候選 tarball 的基本素材仍明確含 0 audio；168 條雙語內容是文字，不是音訊。Current combined pack 另含 55 條 canonical、metadata-stripped WAV，每位角色五個 trigger，具 owner-authorized reference-clone evidence 與逐 clip spoken-content review；它們只在完整包經明確同意、驗證並寫入本機 cache 後可用。歷史 schema-v1 inventory 的 50 條 WAV refs 仍只是 audit input。
 - 每個角色都應共用同一套 trait 意義，避免角色選擇本身改變 usage 分析結果。
 
 ### 10.7 BYOK 與固定台詞
@@ -539,7 +539,7 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 交付：
 
 - exact-pinned TokenTracker 0.80.0 managed-child／adapter／runtime 的 compatibility、privacy、lifecycle與license審查；legacy tokscale／collector-core只作移除前的migration audit。
-- AI-Sister raster asset inventory、checksum、授權與 brand review 狀態；目前核准的 891 張圖片以 immutable fixed pack 固定，其他素材維持 blocked。
+- AI-Sister media inventory、checksum、授權與 brand review 狀態；目前核准的 891 張圖片與 55 條 canonical WAV 以同一個 immutable fixed pack 固定，其他素材維持 blocked。
 - local snapshot 與 cloud `IngestSnapshotV1` schema。
 - threat model、privacy data map 與 contributor wording。
 - 首發平台、單一 Worker hosting 架構與 Tier-1 adapter 決策。
@@ -712,7 +712,7 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 
 ### AC-MON：AI 字母人
 
-- AC-MON-01：候選 npm artifact 只內嵌精確 8 個核准 starter WebP／415,470 bytes 與 168 條雙語文字，不含 audio；image-only v2 manifest 中其餘 `approved` raster 只在 explicit-enable 後由 verified 891-image cache 顯示。Default、no-consent、offline-without-cache、失敗與 revoked 都零 GET 回到四位基本圖文，其他缺圖狀態由 placeholder 完成全流程；`blocked` 資產不得進 artifact。
+- AC-MON-01：候選 npm artifact 只內嵌精確 8 個核准 starter WebP／415,470 bytes 與 168 條雙語文字，不含 audio；combined v2 manifest 中其餘 `approved` raster 與 55 條 WAV 只在 explicit-enable 後由 verified 946-entry cache 使用。Default、no-consent、offline-without-cache、失敗與 revoked 都零 GET 回到四位基本圖文與靜音，其他缺圖狀態由 placeholder 完成全流程；`blocked` 資產不得進 artifact。
 - AC-MON-02：UI 不把 raster asset 稱為 Live2D 或 3D。
 - AC-MON-03：同一標準化 footprint 重算 10 次，主 traits 與 identity 結果相同。
 - AC-MON-04：每個主 trait、mood 與 evolution 變化都有可閱讀的原因。
@@ -772,11 +772,11 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 | Retention／刪除     | 可識別 contributor buckets 保留 30 天以支援刪除與修正，之後只在匿名門檻達成時壓成無 contributor mapping 的 rollup；舊 rollup 無法個別移除並須事前揭露                                                                                                    | Phase 1    |
 | Breakdowns 匿名門檻 | 每一公開 bucket 至少 20 contributors                                                                                                                                                                                                                     | Phase 2    |
 | Identity cadence    | 28 日 identity、最近完整 UTC 日 mood、每週／本機結構變化 evolution；有 attested hourly 上游後再升級 rolling mood，任何 hourly／類 session 特徵都不進 wire                                                                                                | Phase 1    |
-| 角色 roster         | Runtime roster固定11位；候選包內嵌四位 avatar＋`tech` 基本服裝與168條雙語文字；891-image schema-v2 authority與usage-independent fixed pack已核准／發布但仍須explicit enable。Default/no-consent/offline-without-cache/failed/revoked時四位保留基本圖文，其餘缺圖角色letter fallback | Phase 0    |
+| 角色 roster         | Runtime roster固定11位；候選包內嵌四位 avatar＋`tech` 基本服裝與168條雙語文字，不含audio；891-image + 55-WAV combined schema-v2 authority與usage-independent fixed pack已核准／發布但仍須explicit enable。Default/no-consent/offline-without-cache/failed/revoked時四位保留基本圖文，其餘缺圖角色letter fallback，語音保持靜音 | Phase 0    |
 | Raster 呈現         | 圖片切換＋overlay＋CSS/canvas 微動畫；不做假 Live2D                                                                                                                                                                                                      | Phase 1    |
 | BYOK provider       | OpenAI Responses API 直接由 companion 呼叫並設 `store: false`；其他 provider 後續以 adapter 擴充                                                                                                                                                         | Phase 1    |
 | BYOK 儲存           | Electron async `safeStorage`／OS secret store；Linux `basic_text` 不持久化，純 web 不持久化                                                                                                                                                              | Phase 1    |
-| 語音                | 預錄 playback capability存在且default-off，但current pack為0 voice。歷史50條cloned WAV的owner approval已私下保存，仍缺clone-consent/provenance、逐clip review及metadata cleanup；須新combined immutable release。Online TTS仍是獨立opt-in/data-flow gate | Phase 2    |
+| 語音                | 預錄 playback capability存在且default-off；current combined pack有55條canonical WAV，每位角色五個trigger，具owner-authorized reference-clone evidence與逐clip review。只有explicit-enable後的verified local cache可播放；online TTS仍是獨立opt-in/data-flow gate                                                               | Phase 2    |
 | 抽卡／收藏          | 後續改為純 cosmetic 或 style／seasonal discovery；不與無限 Token 總量掛鉤                                                                                                                                                                                | Post-MVP   |
 | 公開怪物牆          | 先驗證單張分享卡；只有辨識與分享指標通過才做                                                                                                                                                                                                             | Post-MVP   |
 | Product analytics   | 最小化、獨立 opt-in；不用第三方 session replay                                                                                                                                                                                                           | Phase 1    |
@@ -844,8 +844,8 @@ MVP 不公開單一 contributor 的時間序列或可重建個人工具習慣的
 緩解：
 
 - Phase 0 完成 asset inventory、來源、作者、license、attribution 與可修改範圍。
-- Current 891-image release 已具 owner public-use grant、brand/content review、immutable provenance 與 unaffiliated disclosure；候選 npm artifact 只抽取精確 8 個已核准 starter WebP，使用者未啟用完整包或 cache 不可用時由四位基本圖文與其餘 placeholder 完成產品流程。
-- 歷史 cloned voice、後續 voice pack 與 Live2D／3D 重製另立技術證據及授權閘門；owner approval 不能替代 speaker/clone provenance、逐 clip review或 metadata cleanup。
+- Current 891-image + 55-WAV combined release 已具 owner public-use grant、brand/content review、immutable provenance、owner-authorized reference-clone evidence、逐 clip review 與 unaffiliated disclosure；候選 npm artifact 只抽取精確 8 個已核准 starter WebP，不含 audio。使用者未啟用完整包或 cache 不可用時由四位基本圖文、其餘 placeholder 與靜音完成產品流程。
+- 後續 voice pack 與 Live2D／3D 重製仍各自需要新的技術證據及授權閘門，不會由 current release 自動涵蓋。
 
 ### 16.7 BYOK secret 洩漏
 

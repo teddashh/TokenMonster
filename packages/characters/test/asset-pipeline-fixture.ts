@@ -97,33 +97,68 @@ export async function writeSourceEvidenceFixture(
   return evidence;
 }
 
+export function createRiffChunk(id: string, payload: Buffer): Buffer {
+  if (!/^[\x20-\x7e]{4}$/u.test(id)) {
+    throw new Error(`Invalid fixture RIFF chunk ID: ${id}`);
+  }
+  const chunk = Buffer.alloc(8 + payload.length + (payload.length % 2));
+  chunk.write(id, 0, "ascii");
+  chunk.writeUInt32LE(payload.length, 4);
+  payload.copy(chunk, 8);
+  return chunk;
+}
+
+export function createWavFromChunks(chunks: readonly Buffer[]): Buffer {
+  const body = Buffer.concat(chunks);
+  const header = Buffer.alloc(12);
+  header.write("RIFF", 0, "ascii");
+  header.writeUInt32LE(header.length + body.length - 8, 4);
+  header.write("WAVE", 8, "ascii");
+  return Buffer.concat([header, body]);
+}
+
 export function createPcm16Wav({
   sampleRate = 22_050,
   channels = 1,
   frameCount = 441,
+  sampleValues,
 }: {
   sampleRate?: number;
   channels?: number;
   frameCount?: number;
+  sampleValues?: readonly number[];
 } = {}): Buffer {
   const bytesPerSample = 2;
   const blockAlign = channels * bytesPerSample;
   const dataBytes = frameCount * blockAlign;
-  const wav = Buffer.alloc(44 + dataBytes);
-  wav.write("RIFF", 0, "ascii");
-  wav.writeUInt32LE(wav.length - 8, 4);
-  wav.write("WAVE", 8, "ascii");
-  wav.write("fmt ", 12, "ascii");
-  wav.writeUInt32LE(16, 16);
-  wav.writeUInt16LE(1, 20);
-  wav.writeUInt16LE(channels, 22);
-  wav.writeUInt32LE(sampleRate, 24);
-  wav.writeUInt32LE(sampleRate * blockAlign, 28);
-  wav.writeUInt16LE(blockAlign, 32);
-  wav.writeUInt16LE(16, 34);
-  wav.write("data", 36, "ascii");
-  wav.writeUInt32LE(dataBytes, 40);
-  return wav;
+  if (
+    sampleValues !== undefined &&
+    sampleValues.length !== frameCount * channels
+  ) {
+    throw new Error("Fixture sample count does not match its PCM dimensions");
+  }
+
+  const format = Buffer.alloc(16);
+  format.writeUInt16LE(1, 0);
+  format.writeUInt16LE(channels, 2);
+  format.writeUInt32LE(sampleRate, 4);
+  format.writeUInt32LE(sampleRate * blockAlign, 8);
+  format.writeUInt16LE(blockAlign, 12);
+  format.writeUInt16LE(16, 14);
+
+  const data = Buffer.alloc(dataBytes);
+  for (let index = 0; index < (sampleValues?.length ?? 0); index += 1) {
+    const sample = sampleValues![index]!;
+    if (!Number.isInteger(sample) || sample < -32_768 || sample > 32_767) {
+      throw new Error(`Invalid fixture PCM16 sample: ${sample}`);
+    }
+    data.writeInt16LE(sample, index * bytesPerSample);
+  }
+
+  return createWavFromChunks([
+    createRiffChunk("fmt ", format),
+    createRiffChunk("data", data),
+  ]);
 }
 
 export async function runPipeline(

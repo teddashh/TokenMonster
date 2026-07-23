@@ -26,6 +26,7 @@ import { pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 import { buildCharactersPackage } from "./build-characters-package.mjs";
+import { canonicalizeVoiceWav } from "./canonicalize-voice-wav.mjs";
 
 const PERSONAS = [
   "chatgpt",
@@ -65,9 +66,13 @@ const THEMES = [
 const POSE_STATES = ["supported", "challenged", "victory"];
 const VOICE_PERSONAS = [
   "openai",
+  "chatgpt",
   "anthropic",
+  "claude",
   "google",
+  "gemini",
   "xai",
+  "grok",
   "deepseek",
   "qwen",
   "mistral",
@@ -78,9 +83,13 @@ const VOICE_PERSONAS = [
 ];
 const VOICE_CHARACTER_IDS = {
   openai: "chatgpt",
+  chatgpt: "chatgpt",
   anthropic: "claude",
+  claude: "claude",
   google: "gemini",
+  gemini: "gemini",
   xai: "grok",
+  grok: "grok",
   deepseek: "deepseek",
   qwen: "qwen",
   mistral: "mistral",
@@ -90,8 +99,6 @@ const VOICE_CHARACTER_IDS = {
   glm: "glm",
 };
 const VOICE_FILENAME_PATTERN = /^([a-z0-9]+)__([a-z0-9]+)\.wav$/u;
-const MAX_VOICE_FILE_BYTES = 400_000;
-const MAX_VOICE_DURATION_MS = 6_000;
 const WEBP_QUALITY = 82;
 const CACHE_VERSION = "1";
 const SCRIPT_ROOT = resolve(import.meta.dirname, "../..");
@@ -288,107 +295,6 @@ function imageMetadata(bytes, sourcePath) {
   }
 
   throw new Error(`Expected PNG or JPEG image bytes: ${sourcePath}`);
-}
-
-function voiceMetadata(bytes, sourcePath) {
-  if (bytes.length > MAX_VOICE_FILE_BYTES) {
-    throw new Error(
-      `Voice clip exceeds ${MAX_VOICE_FILE_BYTES} bytes: ${sourcePath}`,
-    );
-  }
-  if (
-    bytes.length < 12 ||
-    bytes.toString("ascii", 0, 4) !== "RIFF" ||
-    bytes.toString("ascii", 8, 12) !== "WAVE"
-  ) {
-    throw new Error(`Voice clip is not a RIFF/WAVE file: ${sourcePath}`);
-  }
-  if (bytes.readUInt32LE(4) !== bytes.length - 8) {
-    throw new Error(`Voice clip has an invalid RIFF size: ${sourcePath}`);
-  }
-
-  let format = null;
-  let dataBytes = null;
-  let offset = 12;
-  while (offset < bytes.length) {
-    if (offset + 8 > bytes.length) {
-      throw new Error(`Voice clip has a truncated chunk header: ${sourcePath}`);
-    }
-    const chunkId = bytes.toString("ascii", offset, offset + 4);
-    const chunkSize = bytes.readUInt32LE(offset + 4);
-    const chunkStart = offset + 8;
-    const chunkEnd = chunkStart + chunkSize;
-    if (chunkEnd > bytes.length) {
-      throw new Error(
-        `Voice clip has a truncated ${chunkId} chunk: ${sourcePath}`,
-      );
-    }
-
-    if (chunkId === "fmt ") {
-      if (format !== null) {
-        throw new Error(`Voice clip has duplicate fmt chunks: ${sourcePath}`);
-      }
-      if (chunkSize < 16) {
-        throw new Error(`Voice clip has an invalid fmt chunk: ${sourcePath}`);
-      }
-      format = {
-        audioFormat: bytes.readUInt16LE(chunkStart),
-        channels: bytes.readUInt16LE(chunkStart + 2),
-        sampleRate: bytes.readUInt32LE(chunkStart + 4),
-        byteRate: bytes.readUInt32LE(chunkStart + 8),
-        blockAlign: bytes.readUInt16LE(chunkStart + 12),
-        bitsPerSample: bytes.readUInt16LE(chunkStart + 14),
-      };
-    } else if (chunkId === "data") {
-      if (dataBytes !== null) {
-        throw new Error(`Voice clip has duplicate data chunks: ${sourcePath}`);
-      }
-      dataBytes = chunkSize;
-    }
-
-    offset = chunkEnd + (chunkSize % 2);
-    if (offset > bytes.length) {
-      throw new Error(
-        `Voice clip has a missing chunk padding byte: ${sourcePath}`,
-      );
-    }
-  }
-
-  if (format === null || dataBytes === null) {
-    throw new Error(
-      `Voice clip must contain fmt and data chunks: ${sourcePath}`,
-    );
-  }
-  if (format.audioFormat !== 1) {
-    throw new Error(`Voice clip must use PCM format 1: ${sourcePath}`);
-  }
-  if (format.bitsPerSample !== 16) {
-    throw new Error(`Voice clip must be 16-bit: ${sourcePath}`);
-  }
-  if (format.channels !== 1) {
-    throw new Error(`Voice clip must be mono: ${sourcePath}`);
-  }
-  if (format.sampleRate !== 22_050) {
-    throw new Error(
-      `Voice clip must use a 22050 Hz sample rate: ${sourcePath}`,
-    );
-  }
-  if (format.blockAlign !== 2 || format.byteRate !== 44_100) {
-    throw new Error(
-      `Voice clip has inconsistent PCM rate fields: ${sourcePath}`,
-    );
-  }
-  if (dataBytes % format.blockAlign !== 0) {
-    throw new Error(`Voice clip data is not sample-aligned: ${sourcePath}`);
-  }
-
-  const durationMs = Math.round((dataBytes / format.byteRate) * 1_000);
-  if (durationMs < 1 || durationMs > MAX_VOICE_DURATION_MS) {
-    throw new Error(
-      `Voice clip duration must be between 1 and ${MAX_VOICE_DURATION_MS} ms: ${sourcePath}`,
-    );
-  }
-  return { durationMs };
 }
 
 function targetDimensions(dimensions, kind, encoder) {
@@ -633,16 +539,20 @@ async function main() {
       if (!ASSET_VOICE_TRIGGERS.includes(trigger)) {
         throw new Error(`Voice clip has an unknown trigger: ${filename}`);
       }
-      const lineKey = `${persona}/${trigger}`;
+      const characterId = VOICE_CHARACTER_IDS[persona];
+      const lineKey = `${characterId}/${trigger}`;
       if (seenVoiceLines.has(lineKey)) {
         throw new Error(`Duplicate voice clip for ${lineKey}`);
       }
       seenVoiceLines.add(lineKey);
 
-      const bytes = await readFile(resolvedSourcePath);
-      const { durationMs } = voiceMetadata(bytes, resolvedSourcePath);
+      const sourceBytes = await readFile(resolvedSourcePath);
+      const { bytes, durationMs } = canonicalizeVoiceWav(
+        sourceBytes,
+        resolvedSourcePath,
+      );
       voiceClips.push({
-        characterId: VOICE_CHARACTER_IDS[persona],
+        characterId,
         trigger,
         bytes,
         durationMs,

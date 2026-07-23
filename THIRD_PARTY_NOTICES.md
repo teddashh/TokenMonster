@@ -125,17 +125,23 @@ as a license for the merged runtime components.
 
 - Source repository: <https://github.com/teddashh/Multi-Ai-Chatapp>, pinned for
   review to commit `02c65ae57113fc29c64ab0a8835adc2e300b764f`.
-- Candidate MVP assets: the four tracked WebP portraits for ChatGPT, Claude,
-  Gemini, and Grok; a curated, transcoded subset of owner-approved full-body
-  artwork may be added later.
+- Current release assets: 891 approved WebPs and 55 canonical WAVs for 11
+  characters in combined release `ai-sister-media-11-voice55-2026.07.23`.
+  TokenMonster packages only eight starter WebPs and no audio; the complete
+  media pack remains an explicitly consented external download.
 - Current rights status: the source repository has no standalone license and
-  its README says personal use only. The separate full-body asset workspace is
-  not git-backed and has no complete provenance/license record.
-- Required action before public release: owner approval in writing, generation
-  and edit history where available, an
-  explicit commercial/public-use decision, and an unaffiliated/fan-character
-  disclosure. Real-speaker voice references and generated voice clones are not
-  approved for TokenMonster.
+  its README says personal use only, so it is not the release authority. The
+  schema-v2 release instead binds its exact outputs to private written owner
+  grants, provenance, public/commercial/modify/redistribute scope, brand and
+  content review, and the unaffiliated/fan-character disclosure.
+- Voice status: the 55 released WAVs use
+  `owner-authorized-reference-clone` evidence and per-clip spoken-content
+  review. Public records contain only opaque authorization/review references;
+  raw voice references, transcripts, and private receipt contents are not
+  distributed.
+- Required action for any later asset: repeat the complete rights, provenance,
+  review, disclosure, and immutable-release process. The current authorization
+  does not cover unlisted images, WAVs, Live2D/3D material, or online TTS.
 - Provenance gate: candidate source paths, immutable commit, dimensions and
   SHA-256 values are recorded in
   [`packages/characters/asset-manifest.json`](packages/characters/asset-manifest.json).

@@ -101,7 +101,10 @@
           "const": "tokenmonster-letter-avatar-v1"
         },
         "status": {
-          "enum": ["planned-release-blocked", "published-image-fixed-pack"]
+          "enum": [
+            "planned-release-blocked",
+            "published-image-and-voice-fixed-pack"
+          ]
         }
       }
     },
@@ -401,7 +404,7 @@
         "runtimeUse": {
           "enum": [
             "blocked",
-            "approved-explicit-consent-image-fixed-pack"
+            "approved-explicit-consent-image-and-voice-fixed-pack"
           ]
         },
         "copyCandidateBinariesIntoRepository": { "const": false },

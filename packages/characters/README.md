@@ -26,10 +26,10 @@ explicit consent lifecycle. It remains absent from the main import. The
 repository's `packages/characters/ASSET_PACK.md` records its request contract,
 rights/descriptor gates, restart behavior, and revocation rules; that
 subpath and implementation are part of the release package. The current three
-generated slots authorize the image-only release
-`ai-sister-images-11-2026.07.21` at reviewed origin `https://cdn.ted-h.com` and
-the generated exact pack path; they do not authorize any per-object request or
-voice asset.
+generated slots authorize combined release
+`ai-sister-media-11-voice55-2026.07.23` at reviewed origin
+`https://cdn.ted-h.com` and the generated exact pack path; they do not authorize
+any per-object request.
 
 The companion progression roster is broader: 11 visible character IDs,
 including GLM as a friend. The progression-only `reserved` sentinel is not a
@@ -126,18 +126,19 @@ slot, `src/approved-release-v2.json`.
 `getApprovedAssetPackConfiguration()` joins it with the generated
 `src/approved-asset-pack-descriptor-v1.json` and
 `src/approved-asset-pack-allowlist-v1.json` transport slots. All three are
-non-null and strictly cross-bound to image-only release
-`ai-sister-images-11-2026.07.21`: 891 image associations for 11 characters, 0
-voice associations, manifest canonical SHA-256
-`924c95cff70fac69f8622cecb499e7691a23e9d4c51e5a8c53dc9bbe2dd513e1`, and
-one 65,574,180-byte ZIP with SHA-256
-`b1bff7d70342006982f9a3dd5b06ecf9b86291fea01dd3caba8822a012e48bb7`.
-The complete 891-image pack is not copied into the npm tarball. Only the exact
-eight starter WebPs above are release-staged there; no audio binary is embedded.
+non-null and strictly cross-bound to combined release
+`ai-sister-media-11-voice55-2026.07.23`: 891 image associations and 55 voice
+associations for 11 characters, 946 entries total, manifest canonical SHA-256
+`21e4675653ce66b50b61e91260f1623e6e3005177f900991e3a8eeadaf9e6474`, and
+one 73,261,088-byte ZIP with SHA-256
+`7d98e0d18c470f82818e8ada67208847c3cf4ff5c10cb5f99f9215191e981f30`.
+The complete combined pack is not copied into the npm tarball. Only the exact
+eight starter WebPs above are release-staged there; no audio binary is
+embedded.
 
 The four entries pinned in [`asset-manifest.json`](asset-manifest.json) remain
 historical schema-v1 candidate records and do not themselves grant rights.
-Their former `blocked` values are superseded for the current image release only
+Their former `blocked` values are superseded for the current combined release
 by the structured v2 authority and its private approval evidence. Those legacy
 rows do not authorize or select the release-staged starter subset; the release
 policy cross-binds each of the eight exact bytes to the current v2 authority.
@@ -150,15 +151,16 @@ historical name must not be treated as a legal or brand decision.
 
 Every new image or voice association must pass schema v2 (or later) with the
 complete structured provenance, grant/license scope, brand/content review,
-disclosure, and release fields in the technical specification. The 891 current
-image rows passed that gate. Existing schema-v1 rows are not grandfathered;
-source availability and a successful hash build are not approval.
+disclosure, and release fields in the technical specification. The current 891
+image rows and 55 voice rows passed that gate. Existing schema-v1 rows are not
+grandfathered; source availability and a successful hash build are not
+approval.
 
 The broader AI-Sister roster, 20 wardrobe themes, pose vocabulary, layered
 candidate inventory, semantic action map, and planned delivery boundary are
 recorded in [`ai-sister-source-map.json`](ai-sister-source-map.json). That map
 and its schema are also repository-only and never compile into this package.
-The approved pre-rendered image pack and manifest are published on AI-Sister's
+The approved pre-rendered media pack and manifest are published on AI-Sister's
 Cloudflare R2/CDN. The reviewed origin is `https://cdn.ted-h.com`; immutable
 paths remain below `/tokenmonster/characters/v1/` and are authorized only by
 the generated exact-path allowlist.
@@ -176,12 +178,13 @@ are not copied or downloaded.
 Voice playback is local-preference controlled and defaults off. The gateway
 exposes only bounded lines for unlocked characters, and shipping entry points
 play only hash-verified WAV cache hits. Trigger-selected network fetches are
-disabled. The current pack contains no WAV. Owner approval for the historical
-50 cloned WAV files is stored privately, but those artifacts remain excluded
-because the required clone-consent/provenance chain, per-clip spoken-content
-review, and metadata-stripping evidence are incomplete. Voice therefore needs
-a new combined image + voice immutable release rather than a voice-only slot
-that would replace the current image authority.
+disabled. The combined pack contains 55 canonical, metadata-stripped WAVs:
+five triggers for each of the 11 characters. Every row uses
+`owner-authorized-reference-clone` evidence with an opaque
+owner/rights-holder authorization reference and a separate
+spoken-content-review reference; no private receipt contents are copied into
+the public manifest. The audio remains outside the npm tarball and becomes
+available only with the complete explicitly consented pack.
 
 ## Monster-engine integration
 

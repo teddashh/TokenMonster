@@ -82,13 +82,13 @@ Release operator 在執行遠端命令前逐項取得證據：
 5. External Alpha 需要可驗證簽章的 companion；Apple/Windows signing identities、
    notarization/updater 與 Electron hardening 現在未完成。
 6. Legacy `asset-manifest.json` 的四張 raster candidate 仍為 `blocked`；另有
-   runtime schema-v1 integrity manifest 含 810 image 與 50 voice refs，但它缺少
-   normative structured rights evidence。全部既有與新增 image/voice association
-   都只有在 manifest schema v2、可稽核的書面 public/commercial/modify/
-   redistribute grant、voice consent/content evidence，以及 rights/brand review
-   核准後才可公開發布；在可執行的 strict rights verifier 落地前此 gate 是 STOP，
-   不能把 v1 檔名或 runtime 可載入性當核准。否則只准 code-native letter
-   placeholders。詳見
+   schema-v1 integrity manifest 含 810 image 與 50 voice refs，但它只保留為歷史
+   audit input。Current combined schema-v2 release
+   `ai-sister-media-11-voice55-2026.07.23` 已以可稽核的書面
+   public/commercial/modify/redistribute grant、voice authorization/content
+   evidence 與 rights/brand review 核准 891 images + 55 canonical WAVs。任何 pack
+   外或後續 image/voice association 都必須重新通過同一個 strict gate；不能把 v1
+   檔名、runtime 可載入性或 current release authorization 當成新素材的核准。詳見
    [資料清冊](DATA_INVENTORY.md)與[產品規格 10.6](PRODUCT_SPEC.md#106-ai-sister-raster-角色呈現)。
 7. Asset transport 是獨立 STOP：CLI 與桌面版預設 cache-only，不能接受舊 CDN
    環境變數；default-mode artifact／packet capture須證明零 AI-Sister GET。

@@ -46,7 +46,7 @@
 - `apps/companion` 可在沒有帳號、沒有 API key、沒有網路的情況下啟動 exact-pinned tokscale collector，顯示本機用量圖表、角色狀態、變化原因、提醒與腳本式互動；有自備 OpenAI key 的使用者另可在本機直接啟用最低限度的角色對話。
 - `packages/collector-tokscale` 只用固定 argv 讀取經核准的本機聚合資料，將上游格式轉成 TokenMonster 自有 contract；`packages/collector-tokentracker-bridge` 是與它互斥的選配路徑。上游 dashboard、帳號、遙測與 cloud path 不進入產品資料流。
 - `packages/monster-engine` 以可解釋的 workflow traits 產生角色、心情及文字原因。角色是橫向風格差異，不是強度或付費階級。
-- `packages/characters` 首批角色範圍只包含 ChatGPT、Claude、Gemini、Grok；四張 AI-Sister WebP 目前一律標記 `releaseStatus: "blocked"`，只有取得 owner public-use grant 並通過 brand review 後才能進入對外 artifact，否則使用 placeholder。
+- `packages/characters` runtime roster 包含 11 位角色；current combined schema-v2 authority 已核准 891 張圖片與 55 條 canonical WAV。候選 npm artifact 只內嵌 ChatGPT、Claude、Gemini、Grok 的 8 個 starter WebP 與固定文字，不含 audio；未同意完整包或 cache 不可用時使用 starter／placeholder／silent fallback。Legacy schema-v1 的四張 `releaseStatus: "blocked"` 記錄仍只作歷史 audit，不是 current authority。
 - 匿名分享預設關閉。使用者可以先預覽將上傳的欄位，再明確開啟、隨時關閉並刪除已貢獻資料。
 - `apps/api` 接受版本化的 UTC 每日 aggregate buckets；本機 hourly buckets 只供 monster／mood 使用，永不上傳。重送、重播、重掃、修正與亂序傳遞不會讓總量重複增加。
 - `apps/web` 提供安裝與隱私說明、分享卡／分享頁，以及文案固定為「由選擇加入的貢獻者分享的 token」的公開 counter。
@@ -58,7 +58,7 @@
 - 不抓 ChatGPT、Claude、Gemini、Grok 消費者網頁版內容，也不以 browser scraping 估算用量。
 - 不做公開排行榜、完整全球角色牆、好友系統、留言、交易或付費功能。
 - 不做以 token 燃燒量解鎖戰力、稀有度或抽卡次數的機制。
-- 不上線 Live2D、VRM、3D、真實人物聲音 clone 或來源不明的 voice pack。
+- 不上線 Live2D、VRM、3D、讓使用者建立新真實人物聲音 clone 的服務或來源不明的 voice pack；current release 中已核准、metadata-stripped 且只從 verified local cache 播放的 55 條固定 WAV 不在此列。
 - 不把 API key 送到公開網站或公開 API。MVP 需包含本機 OpenAI Responses adapter；金鑰只在 OS secret store，request 由 companion 直接送往 OpenAI 且明確設定 `store: false`。Anthropic、Gemini、xAI 等進階多 provider BYOK 延後。
 - 不一次匯入 AI-Sister 的完整網站、community、billing、auth、hero art 或未建檔的原始素材。
 

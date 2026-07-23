@@ -20,6 +20,8 @@ import {
 } from "../src/index.js";
 import {
   createPcm16Wav,
+  createRiffChunk,
+  createWavFromChunks,
   runBuildProvenance,
   runPipeline,
   runPrepareRightsLedger,
@@ -37,6 +39,51 @@ async function createPipelineFixture() {
   await mkdir(voiceDir);
   await writeFile(join(outfits, "doll_qwen__tech.png"), SOLID_COLOR_PNG);
   return { fixtureRoot, bank, out, voiceDir };
+}
+
+function canonicalWavChunks(wav: Buffer) {
+  return {
+    format: Buffer.from(wav.subarray(12, 36)),
+    data: Buffer.from(wav.subarray(36)),
+  };
+}
+
+function wavChunkIds(wav: Buffer) {
+  const ids: string[] = [];
+  let offset = 12;
+  while (offset < wav.length) {
+    ids.push(wav.toString("ascii", offset, offset + 4));
+    const chunkSize = wav.readUInt32LE(offset + 4);
+    offset += 8 + chunkSize + (chunkSize % 2);
+  }
+  return ids;
+}
+
+function wavWithDuplicateChunk(chunkId: "fmt " | "data") {
+  const canonical = createPcm16Wav();
+  const { format, data } = canonicalWavChunks(canonical);
+  return createWavFromChunks(
+    chunkId === "fmt "
+      ? [format, format, data]
+      : [format, data, Buffer.from(data)],
+  );
+}
+
+function wavWithUnexpectedTrailingBytes() {
+  const wav = Buffer.concat([
+    createPcm16Wav(),
+    Buffer.from([0x00, 0x00, 0x00, 0x00]),
+  ]);
+  wav.writeUInt32LE(wav.length - 8, 4);
+  return wav;
+}
+
+function wavWithNonZeroPadding() {
+  const canonical = createPcm16Wav();
+  const { format, data } = canonicalWavChunks(canonical);
+  const metadata = createRiffChunk("JUNK", Buffer.from([0x01]));
+  metadata[metadata.length - 1] = 0xff;
+  return createWavFromChunks([format, metadata, data]);
 }
 
 describe("asset pipeline", () => {
@@ -398,22 +445,48 @@ describe("asset pipeline", () => {
     }
   }, 180_000);
 
-  it("ingests valid PCM16 mono voice clips", async () => {
+  it("strips WAV metadata while preserving samples and deterministic content addressing", async () => {
     const { fixtureRoot, bank, out, voiceDir } = await createPipelineFixture();
-    const wav = createPcm16Wav({ frameCount: 441 });
+    const repeatedOut = join(fixtureRoot, "out-repeated");
+    const sampleValues = Array.from(
+      { length: 441 },
+      (_, index) => ((index * 1_013) % 65_536) - 32_768,
+    );
+    const canonicalWav = createPcm16Wav({
+      frameCount: sampleValues.length,
+      sampleValues,
+    });
+    const { format, data } = canonicalWavChunks(canonicalWav);
+    const sourceWav = createWavFromChunks([
+      createRiffChunk("JUNK", Buffer.from([0x01, 0x02, 0x03])),
+      format,
+      createRiffChunk("LIST", Buffer.from("INFOISFTfixture-encoder", "ascii")),
+      data,
+      createRiffChunk("JUNK", Buffer.from([0x04, 0x05])),
+      createRiffChunk("bext", Buffer.from("trailing metadata", "ascii")),
+    ]);
 
     try {
-      await writeFile(join(voiceDir, "openai__active.wav"), wav);
-      await writeFile(join(voiceDir, "qwen__error.wav"), wav);
-      await writeFile(join(voiceDir, "openai__greeting.wav"), wav);
+      await writeFile(join(voiceDir, "chatgpt__active.wav"), sourceWav);
+      await writeFile(join(voiceDir, "qwen__error.wav"), sourceWav);
+      await writeFile(join(voiceDir, "openai__greeting.wav"), sourceWav);
       const build = await runPipeline(bank, out, "qwen", { voiceDir });
       expect(build.status, `${build.stdout}\n${build.stderr}`).toBe(0);
+      const repeatedBuild = await runPipeline(bank, repeatedOut, "qwen", {
+        voiceDir,
+      });
+      expect(
+        repeatedBuild.status,
+        `${repeatedBuild.stdout}\n${repeatedBuild.stderr}`,
+      ).toBe(0);
 
       const manifestInput: unknown = JSON.parse(
         await readFile(join(out, "manifest.json"), "utf8"),
       );
       const manifest = parseAssetManifest(manifestInput);
-      const wavSha256 = createHash("sha256").update(wav).digest("hex");
+      const wavSha256 = createHash("sha256")
+        .update(canonicalWav)
+        .digest("hex");
       expect(manifest.voice).toEqual([
         {
           characterId: "chatgpt",
@@ -423,7 +496,7 @@ describe("asset pipeline", () => {
               trigger: "greeting",
               object: {
                 path: `objects/${wavSha256}.wav`,
-                bytes: wav.length,
+                bytes: canonicalWav.length,
                 sha256: wavSha256,
               },
               durationMs: 20,
@@ -433,7 +506,7 @@ describe("asset pipeline", () => {
               trigger: "active",
               object: {
                 path: `objects/${wavSha256}.wav`,
-                bytes: wav.length,
+                bytes: canonicalWav.length,
                 sha256: wavSha256,
               },
               durationMs: 20,
@@ -448,7 +521,7 @@ describe("asset pipeline", () => {
               trigger: "error",
               object: {
                 path: `objects/${wavSha256}.wav`,
-                bytes: wav.length,
+                bytes: canonicalWav.length,
                 sha256: wavSha256,
               },
               durationMs: 20,
@@ -456,9 +529,31 @@ describe("asset pipeline", () => {
           ],
         },
       ]);
-      expect(await readFile(join(out, "objects", `${wavSha256}.wav`))).toEqual(
-        wav,
+      const outputWav = await readFile(
+        join(out, "objects", `${wavSha256}.wav`),
       );
+      expect(outputWav).toEqual(canonicalWav);
+      expect(outputWav.subarray(44)).toEqual(canonicalWav.subarray(44));
+      expect(wavChunkIds(sourceWav)).toEqual([
+        "JUNK",
+        "fmt ",
+        "LIST",
+        "data",
+        "JUNK",
+        "bext",
+      ]);
+      expect(wavChunkIds(outputWav)).toEqual(["fmt ", "data"]);
+      expect(sourceWav.length).toBeGreaterThan(outputWav.length);
+
+      const repeatedManifest = await readFile(
+        join(repeatedOut, "manifest.json"),
+      );
+      expect(repeatedManifest).toEqual(await readFile(join(out, "manifest.json")));
+      expect(
+        await readFile(
+          join(repeatedOut, "objects", `${wavSha256}.wav`),
+        ),
+      ).toEqual(outputWav);
 
       const report = JSON.parse(
         await readFile(join(out, "report.json"), "utf8"),
@@ -466,7 +561,7 @@ describe("asset pipeline", () => {
       expect(report.voice).toEqual({
         characters: 2,
         lines: 3,
-        bytes: wav.length * 3,
+        bytes: canonicalWav.length * 3,
       });
     } finally {
       await rm(fixtureRoot, { recursive: true, force: true });
@@ -505,6 +600,60 @@ describe("asset pipeline", () => {
     }
   }, 180_000);
 
+  it("accepts canonical starter prefixes while retaining legacy aliases", async () => {
+    const { fixtureRoot, bank, out, voiceDir } = await createPipelineFixture();
+    const wav = createPcm16Wav();
+
+    try {
+      await writeFile(join(voiceDir, "chatgpt__greeting.wav"), wav);
+      await writeFile(join(voiceDir, "claude__unlock.wav"), wav);
+      await writeFile(join(voiceDir, "gemini__quiet.wav"), wav);
+      await writeFile(join(voiceDir, "grok__active.wav"), wav);
+      await writeFile(join(voiceDir, "xai__error.wav"), wav);
+      const build = await runPipeline(bank, out, "qwen", { voiceDir });
+      expect(build.status, `${build.stdout}\n${build.stderr}`).toBe(0);
+
+      const manifest = parseAssetManifest(
+        JSON.parse(
+          await readFile(join(out, "manifest.json"), "utf8"),
+        ) as unknown,
+      );
+      expect(
+        manifest.voice.map(({ characterId, lines }) => ({
+          characterId,
+          triggers: lines.map(({ trigger }) => trigger),
+        })),
+      ).toEqual([
+        { characterId: "chatgpt", triggers: ["greeting"] },
+        { characterId: "claude", triggers: ["unlock"] },
+        { characterId: "gemini", triggers: ["quiet"] },
+        { characterId: "grok", triggers: ["active", "error"] },
+      ]);
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  }, 180_000);
+
+  it("rejects alias collisions after mapping to a canonical character", async () => {
+    const { fixtureRoot, bank, out, voiceDir } = await createPipelineFixture();
+    const wav = createPcm16Wav();
+
+    try {
+      await writeFile(join(voiceDir, "chatgpt__greeting.wav"), wav);
+      await writeFile(join(voiceDir, "openai__greeting.wav"), wav);
+      const build = await runPipeline(bank, out, "qwen", { voiceDir });
+      expect(build.status).not.toBe(0);
+      expect(build.stderr).toContain(
+        "Duplicate voice clip for chatgpt/greeting",
+      );
+      await expect(readFile(join(out, "manifest.json"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  }, 180_000);
+
   it.each([
     {
       label: "the wrong sample rate",
@@ -525,6 +674,26 @@ describe("asset pipeline", () => {
       label: "an overlong clip",
       filename: "openai__greeting.wav",
       wav: createPcm16Wav({ frameCount: 132_323 }),
+    },
+    {
+      label: "duplicate fmt chunks",
+      filename: "openai__greeting.wav",
+      wav: wavWithDuplicateChunk("fmt "),
+    },
+    {
+      label: "duplicate data chunks",
+      filename: "openai__greeting.wav",
+      wav: wavWithDuplicateChunk("data"),
+    },
+    {
+      label: "unexpected trailing bytes",
+      filename: "openai__greeting.wav",
+      wav: wavWithUnexpectedTrailingBytes(),
+    },
+    {
+      label: "non-zero RIFF padding",
+      filename: "openai__greeting.wav",
+      wav: wavWithNonZeroPadding(),
     },
     {
       label: "a bad filename",

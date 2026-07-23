@@ -33,14 +33,24 @@ node scripts/asset-pipeline/build-manifest.mjs --personas glm --voice-dir /tmp/g
   selected source mtime is used so unchanged inputs produce an identical
   manifest.
 
-Voice filenames are `<persona>__<trigger>.wav`. The four starter aliases are
-`openai`, `anthropic`, `google`, and `xai`; the remaining personas, including
-`glm`, use their character ID. Allowed triggers are `greeting`, `unlock`,
-`quiet`, `active`, and `error`. Clips must be regular, non-symlink RIFF/WAVE
-PCM-format-1 files: 16-bit, mono, 22,050 Hz, at most 400,000 bytes, and between
-1 and 6,000 ms. The builder does not verify locale, spoken content,
-speaker/clone provenance, consent, rights, brand approval, or loudness; those
-remain separate release gates.
+Voice filenames are `<persona>__<trigger>.wav`. The canonical starter prefixes
+are `chatgpt`, `claude`, `gemini`, and `grok`; the legacy `openai`, `anthropic`,
+`google`, and `xai` aliases remain accepted. Other personas, including `glm`,
+use their character ID. Alias and canonical filenames that map to the same
+character and trigger are rejected as duplicates. Allowed triggers are
+`greeting`, `unlock`, `quiet`, `active`, and `error`.
+
+Clips must be regular, non-symlink RIFF/WAVE PCM-format-1 files: 16-bit, mono,
+22,050 Hz, at most 400,000 input bytes, and between 1 and 6,000 ms. The builder
+parses the complete RIFF container and rejects malformed sizes, chunk IDs,
+padding, trailing bytes, and duplicate `fmt ` or `data` chunks. It then
+preserves the PCM sample bytes while emitting a deterministic WAV containing
+only the canonical 16-byte `fmt ` chunk and one `data` chunk. Well-formed
+`LIST`/`INFO`, encoder, broadcast, and other ancillary chunks are omitted before
+the output byte count, SHA-256, object path, and report are computed. The
+builder does not verify locale, spoken content, speaker/clone provenance,
+consent, rights, brand approval, or loudness; those remain separate release
+gates.
 
 The script first builds `@tokenmonster/characters`, probes `ffmpeg` for
 `libwebp`, and encodes avatars to a maximum 256-pixel dimension and dolls to a
@@ -109,8 +119,37 @@ avatar/outfit/pose mapping and resize dimensions, computes one inventory
 revision from the exact selected source set, and pins the byte hash of
 `build-manifest.mjs`. It accepts only the metadata-stripped WebP path and writes
 no output for a missing asset, stale object, PNG passthrough, incomplete source
-evidence, stale receipt, or voice build. Voice needs a separately reviewed
-metadata-stripping step before it can produce truthful schema-v2 provenance.
+evidence, stale receipt, or voice build. Voice WAV normalization is implemented
+by `canonicalize-voice-wav.mjs`, but this image-only provenance command still
+rejects voice.
+
+For an owner-authorized combined image + voice release, preserve the exact
+previous image authority and provenance while preparing the voice rows:
+
+```sh
+node scripts/asset-pipeline/prepare-authorized-voice-release.mjs \
+  --integrity /tmp/tokenmonster-combined/manifest.json \
+  --previous-release /private/approved-image-release-v2.json \
+  --previous-build-provenance /private/image-build-provenance-v1.json \
+  --voice-dir /private/reviewed-voice-set \
+  --release-id ai-sister-media-11-voice55-2026.07.23 \
+  --authorization-reference <opaque-owner-authorization-id> \
+  --spoken-review-reference <opaque-spoken-review-id> \
+  --approved-at <canonical-UTC-timestamp> \
+  --out /private/combined-release-inputs
+```
+
+The voice directory must be an exact non-symlink set containing
+`voice_script_v1.json`, one canonical-name raw WAV, and one completed
+quality-gated private JSON sidecar for every character/trigger. The command
+re-canonicalizes each WAV and requires its bytes, hash, and duration to match
+the combined integrity manifest. It preserves every prior image row unchanged,
+then emits mode-`0600` `build-provenance-v1.json` and
+`approved-rights-ledger-v2.json` in a fresh mode-`0700` directory. Private
+sidecar content is never copied: public provenance contains only its safe
+relative path and digest. The two authorization/review flags are owner-supplied
+opaque references; the command validates and binds them but does not invent
+consent or review.
 
 `--source-evidence` is controlled-host input, validated by
 `AssetSourceEvidenceBundleV1Schema`. Its `inventoryId` must match the CLI flag
@@ -267,8 +306,9 @@ same exact bytes for controlled or offline builds; it cannot substitute another
 pack. The bootstrap URL is build input only. Installed TokenMonster clients
 already contain the eight WebPs and make zero runtime GETs for them. The four
 starters' 168 `zh-TW`/`en` fixed lines are compiled project text, not files in
-this derived image pack, and neither the starter pack nor the full 891-image,
-65,574,180-byte pack contains voice.
+this derived image pack, and the starter pack contains no voice. The separate
+complete pack contains 891 images plus 55 canonical WAVs (946 entries and
+73,043,596 extracted bytes) and remains outside the npm tarball.
 
 After the archive exists at its immutable path, generate the three runtime
 slots without hand-authoring a hash, pack path, or allowlist path:

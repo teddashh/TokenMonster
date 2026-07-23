@@ -55,7 +55,7 @@ npm exec -- tokenmonster
 
 ## The companions
 
-The install ships with starter art for the four sisters and 168 `zh-TW`/`en` voice lines, working offline out of the box. The full character pack (11 characters, 891 images) downloads once from `cdn.ted-h.com` only after explicit in-app consent, then runs fully offline and can be repaired or removed at any time; removal returns to the built-in starter art.
+The install ships with starter art for the four sisters and 168 fixed `zh-TW`/`en` text lines, with no audio, and works offline out of the box. The complete character-media pack (11 characters, 891 images, and 55 prerecorded WAVs; 946 entries total) downloads once from `cdn.ted-h.com` only after explicit in-app consent, then runs entirely from the verified local cache and can be repaired or removed at any time. Voice playback defaults off; removal returns to the built-in starter art and silence.
 
 Every unlock comes from an explainable local milestone (per-family totals, lifetime total, active-day streak, provider breadth), is kept monotonically, and lives only on your machine. The product never rewards wasteful token use — no gacha, no in-app purchases, no pay-to-win.
 

@@ -1,13 +1,13 @@
 {
   "schemaVersion": "1",
-  "releaseId": "ai-sister-images-11-2026.07.21",
-  "releaseManifestSha256": "924c95cff70fac69f8622cecb499e7691a23e9d4c51e5a8c53dc9bbe2dd513e1",
+  "releaseId": "ai-sister-media-11-voice55-2026.07.23",
+  "releaseManifestSha256": "21e4675653ce66b50b61e91260f1623e6e3005177f900991e3a8eeadaf9e6474",
   "pack": {
-    "path": "/tokenmonster/characters/v1/packs/ai-sister-images-11-2026.07.21/b1bff7d70342006982f9a3dd5b06ecf9b86291fea01dd3caba8822a012e48bb7.zip",
+    "path": "/tokenmonster/characters/v1/packs/ai-sister-media-11-voice55-2026.07.23/7d98e0d18c470f82818e8ada67208847c3cf4ff5c10cb5f99f9215191e981f30.zip",
     "mediaType": "application/zip",
-    "bytes": 65574180,
-    "sha256": "b1bff7d70342006982f9a3dd5b06ecf9b86291fea01dd3caba8822a012e48bb7",
-    "entryCount": 891,
-    "extractedBytes": 65369228
+    "bytes": 73261088,
+    "sha256": "7d98e0d18c470f82818e8ada67208847c3cf4ff5c10cb5f99f9215191e981f30",
+    "entryCount": 946,
+    "extractedBytes": 73043596
   }
 }

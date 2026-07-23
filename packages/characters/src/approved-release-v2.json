@@ -1,13 +1,13 @@
 {
   "schemaVersion": "2",
-  "releaseId": "ai-sister-images-11-2026.07.21",
-  "approvedAt": "2026-07-21T19:51:24.000Z",
+  "releaseId": "ai-sister-media-11-voice55-2026.07.23",
+  "approvedAt": "2026-07-23T07:35:46.000Z",
   "provenance": {
-    "integrityManifestSha256": "c7d3a8ff4044a4adbc75ccd37ae1031cfe2c918a0786980c6bbf88ec4b73942c",
-    "buildProvenanceSha256": "8668d302ddf9dbbe0aedf366155162d727448e4806bca7727bc93cb248dc2e0c",
+    "integrityManifestSha256": "0bb57d5377d4791c5edd4648eeec2a541e989b4f2a39ef823a0e51898f5dc38d",
+    "buildProvenanceSha256": "b43277a82da460f14a6f79b328566019259958fb0769a5057e70d8716fcc97cc",
     "pipeline": {
       "repositoryId": "tokenmonster",
-      "revision": "3cfd07496b0a81cf840a9984826e27f81d4e259bac5d864bf299918455d88de6",
+      "revision": "90a5b54c0eb3cde3fa10804dad82e4d1e791522fee3a17783d094d8880b52cd3",
       "scriptPath": "scripts/asset-pipeline/build-manifest.mjs"
     }
   },
@@ -5661,6 +5661,356 @@
       "releaseStatus": "approved"
     },
     {
+      "assetId": "asset:chatgpt:voice:chatgpt-active:active",
+      "association": {
+        "kind": "voice",
+        "characterId": "chatgpt",
+        "lineId": "chatgpt-active",
+        "trigger": "active"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/chatgpt__active.wav",
+        "sha256": "2279397cdacc48ef48f1533f85e2540a3f7eb52ac84bdbf8440e65723cd4edf9"
+      },
+      "output": {
+        "path": "objects/cb6053110e8c900d078a4cb099cfd905a94b3d45edf326199ee606bbcc272df6.wav",
+        "bytes": 108842,
+        "sha256": "cb6053110e8c900d078a4cb099cfd905a94b3d45edf326199ee606bbcc272df6",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2467
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "ChatGPT 的活躍中文語音提示",
+          "en": "ChatGPT active Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:chatgpt:voice:chatgpt-error:error",
+      "association": {
+        "kind": "voice",
+        "characterId": "chatgpt",
+        "lineId": "chatgpt-error",
+        "trigger": "error"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/chatgpt__error.wav",
+        "sha256": "92a4eb99d24139a37373e3fee7a84d55c012b2b6d1c6e30656608697c33fbcb6"
+      },
+      "output": {
+        "path": "objects/f3df7b0dfee099b3c0ce6403b2b5e83642a0b9e194cd866131b0367237274c4e.wav",
+        "bytes": 97670,
+        "sha256": "f3df7b0dfee099b3c0ce6403b2b5e83642a0b9e194cd866131b0367237274c4e",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2214
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "ChatGPT 的錯誤中文語音提示",
+          "en": "ChatGPT error Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:chatgpt:voice:chatgpt-greeting:greeting",
+      "association": {
+        "kind": "voice",
+        "characterId": "chatgpt",
+        "lineId": "chatgpt-greeting",
+        "trigger": "greeting"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/chatgpt__greeting.wav",
+        "sha256": "c6ea8f03f4668af8452ef61410d43bcc3d67d5054df4d32348f72367c33c6ed1"
+      },
+      "output": {
+        "path": "objects/5090eff257a191d7eebe029844e5ebbe1a24470902226a054929a059880cdc1f.wav",
+        "bytes": 99954,
+        "sha256": "5090eff257a191d7eebe029844e5ebbe1a24470902226a054929a059880cdc1f",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2266
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "ChatGPT 的問候中文語音提示",
+          "en": "ChatGPT greeting Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:chatgpt:voice:chatgpt-quiet:quiet",
+      "association": {
+        "kind": "voice",
+        "characterId": "chatgpt",
+        "lineId": "chatgpt-quiet",
+        "trigger": "quiet"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/chatgpt__quiet.wav",
+        "sha256": "6d89b9739349f24042695e3d42eae06ab01de4b855baf4b02857c5f6636edb91"
+      },
+      "output": {
+        "path": "objects/f09f611a64e97f2d8c0a1f5cf2f67b8c9c41c0220b13ffeb91017f3558531973.wav",
+        "bytes": 99984,
+        "sha256": "f09f611a64e97f2d8c0a1f5cf2f67b8c9c41c0220b13ffeb91017f3558531973",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2266
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "ChatGPT 的安靜中文語音提示",
+          "en": "ChatGPT quiet Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:chatgpt:voice:chatgpt-unlock:unlock",
+      "association": {
+        "kind": "voice",
+        "characterId": "chatgpt",
+        "lineId": "chatgpt-unlock",
+        "trigger": "unlock"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/chatgpt__unlock.wav",
+        "sha256": "f5b7b714d3f613c51ee621f06895e8259419bc0a061ac52855bfbfb65845766e"
+      },
+      "output": {
+        "path": "objects/534bd97f7f691f22d7f6fefff19fd89f5167318f6f0e7d2260795ae3bb1b2932.wav",
+        "bytes": 150148,
+        "sha256": "534bd97f7f691f22d7f6fefff19fd89f5167318f6f0e7d2260795ae3bb1b2932",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3404
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "ChatGPT 的解鎖中文語音提示",
+          "en": "ChatGPT unlock Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
       "assetId": "asset:claude:avatar",
       "association": {
         "kind": "avatar",
@@ -11305,6 +11655,356 @@
         "allowedTransforms": [
           "scale-down"
         ]
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:claude:voice:claude-active:active",
+      "association": {
+        "kind": "voice",
+        "characterId": "claude",
+        "lineId": "claude-active",
+        "trigger": "active"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/claude__active.wav",
+        "sha256": "68ac9c021d551e260175220b52e9dac130392ef32435e3b0eea4aebf042f6fda"
+      },
+      "output": {
+        "path": "objects/6676052da3aed79beff3ac210903a0f445ab662fc5ef25b122834103be66c99a.wav",
+        "bytes": 144430,
+        "sha256": "6676052da3aed79beff3ac210903a0f445ab662fc5ef25b122834103be66c99a",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3274
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Claude 的活躍中文語音提示",
+          "en": "Claude active Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:claude:voice:claude-error:error",
+      "association": {
+        "kind": "voice",
+        "characterId": "claude",
+        "lineId": "claude-error",
+        "trigger": "error"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/claude__error.wav",
+        "sha256": "5ca64e8870c3d860bf90a0048cbef66e9331cdf8f8ec895c0e32944077d42aab"
+      },
+      "output": {
+        "path": "objects/a0c7d3d696ff16ea7929b27b713d0cf3723c694ed226587ab922bc1216992245.wav",
+        "bytes": 113710,
+        "sha256": "a0c7d3d696ff16ea7929b27b713d0cf3723c694ed226587ab922bc1216992245",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2577
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Claude 的錯誤中文語音提示",
+          "en": "Claude error Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:claude:voice:claude-greeting:greeting",
+      "association": {
+        "kind": "voice",
+        "characterId": "claude",
+        "lineId": "claude-greeting",
+        "trigger": "greeting"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/claude__greeting.wav",
+        "sha256": "c3023a0bab2ef318b7861b26197054a8587fbf40f0f2bbabd83b01d27ed8a0c8"
+      },
+      "output": {
+        "path": "objects/d3dd0b061ded630fd26d990a2613574ea20bc6e2a779298b6a662bc69638b3eb.wav",
+        "bytes": 102446,
+        "sha256": "d3dd0b061ded630fd26d990a2613574ea20bc6e2a779298b6a662bc69638b3eb",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2322
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Claude 的問候中文語音提示",
+          "en": "Claude greeting Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:claude:voice:claude-quiet:quiet",
+      "association": {
+        "kind": "voice",
+        "characterId": "claude",
+        "lineId": "claude-quiet",
+        "trigger": "quiet"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/claude__quiet.wav",
+        "sha256": "0b658ba746533d29014f0ab0cc78933cfbf3b96113220b2f877828850dc3e34f"
+      },
+      "output": {
+        "path": "objects/e27b1be5cbd03c15f2068e5d29dd300912df87c7be457fd3d9c531e2fe511e87.wav",
+        "bytes": 138286,
+        "sha256": "e27b1be5cbd03c15f2068e5d29dd300912df87c7be457fd3d9c531e2fe511e87",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3135
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Claude 的安靜中文語音提示",
+          "en": "Claude quiet Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:claude:voice:claude-unlock:unlock",
+      "association": {
+        "kind": "voice",
+        "characterId": "claude",
+        "lineId": "claude-unlock",
+        "trigger": "unlock"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/claude__unlock.wav",
+        "sha256": "080ba3f7db6f54cdb8c25b400227c160f7dcbd9e4be5aa57bd0fe41f4a54785f"
+      },
+      "output": {
+        "path": "objects/6d7cc6abe785222f850af86c928cf5ddcc036d3315a869dc331aa6ab7c1590bb.wav",
+        "bytes": 216110,
+        "sha256": "6d7cc6abe785222f850af86c928cf5ddcc036d3315a869dc331aa6ab7c1590bb",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 4899
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Claude 的解鎖中文語音提示",
+          "en": "Claude unlock Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
       },
       "releaseStatus": "approved"
     },
@@ -16957,6 +17657,356 @@
       "releaseStatus": "approved"
     },
     {
+      "assetId": "asset:deepseek:voice:deepseek-active:active",
+      "association": {
+        "kind": "voice",
+        "characterId": "deepseek",
+        "lineId": "deepseek-active",
+        "trigger": "active"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/deepseek__active.wav",
+        "sha256": "259108a1454d9ff7883a58671e38ce7429a0a01ac64f70c1fe5703ef0dabb85e"
+      },
+      "output": {
+        "path": "objects/9cd7dea10cdbc431ac4a0f8a0ae0f5b78bff60b7bf4989647c5b4f6c93b1836c.wav",
+        "bytes": 185390,
+        "sha256": "9cd7dea10cdbc431ac4a0f8a0ae0f5b78bff60b7bf4989647c5b4f6c93b1836c",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 4203
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "DeepSeek 的活躍中文語音提示",
+          "en": "DeepSeek active Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:deepseek:voice:deepseek-error:error",
+      "association": {
+        "kind": "voice",
+        "characterId": "deepseek",
+        "lineId": "deepseek-error",
+        "trigger": "error"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/deepseek__error.wav",
+        "sha256": "1f0bf2d679da30bc70b1dd8a7039cee699af67295477567b70d0b332a15a0813"
+      },
+      "output": {
+        "path": "objects/dd39d59372ffd20a0965a19cb0a93521e11b7ed302e5fdda7c9eda009ef8e51d.wav",
+        "bytes": 118318,
+        "sha256": "dd39d59372ffd20a0965a19cb0a93521e11b7ed302e5fdda7c9eda009ef8e51d",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2682
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "DeepSeek 的錯誤中文語音提示",
+          "en": "DeepSeek error Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:deepseek:voice:deepseek-greeting:greeting",
+      "association": {
+        "kind": "voice",
+        "characterId": "deepseek",
+        "lineId": "deepseek-greeting",
+        "trigger": "greeting"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/deepseek__greeting.wav",
+        "sha256": "a95506bc9b56f8b66d9f3ec6dc19f924f6c3fbad0eb46dc1cf5d490e25863c55"
+      },
+      "output": {
+        "path": "objects/543f64232d254c2c77e1fcd4c9de493f19e42b4e754f00300e80f6bfa97960d2.wav",
+        "bytes": 173102,
+        "sha256": "543f64232d254c2c77e1fcd4c9de493f19e42b4e754f00300e80f6bfa97960d2",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3924
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "DeepSeek 的問候中文語音提示",
+          "en": "DeepSeek greeting Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:deepseek:voice:deepseek-quiet:quiet",
+      "association": {
+        "kind": "voice",
+        "characterId": "deepseek",
+        "lineId": "deepseek-quiet",
+        "trigger": "quiet"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/deepseek__quiet.wav",
+        "sha256": "6419ca48d41e170fcdcd28debc95132f67fc083d2f1d681376327fae8e9c0398"
+      },
+      "output": {
+        "path": "objects/0658c5500a7afe3d5bee446fcd8112d42e3b66a78dd466d0d4d2cc20cecd2684.wav",
+        "bytes": 160814,
+        "sha256": "0658c5500a7afe3d5bee446fcd8112d42e3b66a78dd466d0d4d2cc20cecd2684",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3646
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "DeepSeek 的安靜中文語音提示",
+          "en": "DeepSeek quiet Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:deepseek:voice:deepseek-unlock:unlock",
+      "association": {
+        "kind": "voice",
+        "characterId": "deepseek",
+        "lineId": "deepseek-unlock",
+        "trigger": "unlock"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/deepseek__unlock.wav",
+        "sha256": "75f36caa6e9c87bab57897d6bca466a1cb6ac89c9f02d0eaa3d5c8a834c7e5d6"
+      },
+      "output": {
+        "path": "objects/e04fa6fe1612d3071c7671fd06ae584886b65857d8742bd9c3898d8586afde08.wav",
+        "bytes": 114734,
+        "sha256": "e04fa6fe1612d3071c7671fd06ae584886b65857d8742bd9c3898d8586afde08",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2601
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "DeepSeek 的解鎖中文語音提示",
+          "en": "DeepSeek unlock Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
       "assetId": "asset:gemini:avatar",
       "association": {
         "kind": "avatar",
@@ -22601,6 +23651,356 @@
         "allowedTransforms": [
           "scale-down"
         ]
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:gemini:voice:gemini-active:active",
+      "association": {
+        "kind": "voice",
+        "characterId": "gemini",
+        "lineId": "gemini-active",
+        "trigger": "active"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/gemini__active.wav",
+        "sha256": "9a19776a0486969ca0f9d0c917de76a4e25d609d7f9c8ff7164efaaef99cc4af"
+      },
+      "output": {
+        "path": "objects/4c2ffe541d9a467fae292656a13fc05ee86e7d9d214c59b9df98a5d7d4fbb2a7.wav",
+        "bytes": 131918,
+        "sha256": "4c2ffe541d9a467fae292656a13fc05ee86e7d9d214c59b9df98a5d7d4fbb2a7",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2990
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Gemini 的活躍中文語音提示",
+          "en": "Gemini active Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:gemini:voice:gemini-error:error",
+      "association": {
+        "kind": "voice",
+        "characterId": "gemini",
+        "lineId": "gemini-error",
+        "trigger": "error"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/gemini__error.wav",
+        "sha256": "28ecad0b3f8bcbc909b3a2a997d1ca6046e157c331eef541f90225167fb953ca"
+      },
+      "output": {
+        "path": "objects/9f9bd3f61fa56f6bf80a0fdf16be158b1f7f0b87638236b665ebf649f92e3de5.wav",
+        "bytes": 111390,
+        "sha256": "9f9bd3f61fa56f6bf80a0fdf16be158b1f7f0b87638236b665ebf649f92e3de5",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2525
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Gemini 的錯誤中文語音提示",
+          "en": "Gemini error Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:gemini:voice:gemini-greeting:greeting",
+      "association": {
+        "kind": "voice",
+        "characterId": "gemini",
+        "lineId": "gemini-greeting",
+        "trigger": "greeting"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/gemini__greeting.wav",
+        "sha256": "a994ae46348f30d9ee6a8c346c8839f6405b81a8fa17f0d1cd2973bed500b36b"
+      },
+      "output": {
+        "path": "objects/ce60c0ab6d141b7b6932a72760eb336fcf9596286ca90bcf7f272496770ed84f.wav",
+        "bytes": 132142,
+        "sha256": "ce60c0ab6d141b7b6932a72760eb336fcf9596286ca90bcf7f272496770ed84f",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2995
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Gemini 的問候中文語音提示",
+          "en": "Gemini greeting Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:gemini:voice:gemini-quiet:quiet",
+      "association": {
+        "kind": "voice",
+        "characterId": "gemini",
+        "lineId": "gemini-quiet",
+        "trigger": "quiet"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/gemini__quiet.wav",
+        "sha256": "c520afa9879939fe51fd644eaba92e9418f2916b68d2fc580ba0529980b8349b"
+      },
+      "output": {
+        "path": "objects/c531b2412fa4819f03179d8bc6e7f5026446a39c5a983578a774f52babfcab06.wav",
+        "bytes": 88924,
+        "sha256": "c531b2412fa4819f03179d8bc6e7f5026446a39c5a983578a774f52babfcab06",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2015
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Gemini 的安靜中文語音提示",
+          "en": "Gemini quiet Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:gemini:voice:gemini-unlock:unlock",
+      "association": {
+        "kind": "voice",
+        "characterId": "gemini",
+        "lineId": "gemini-unlock",
+        "trigger": "unlock"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/gemini__unlock.wav",
+        "sha256": "850810a65401146291ad6e5fa7dc14b7babdaeb1ce21dc57b80105f932695a4c"
+      },
+      "output": {
+        "path": "objects/5cde4207eaa765bac23d4a463e3052f68935bdc375168d5abc341e21660aba9a.wav",
+        "bytes": 84774,
+        "sha256": "5cde4207eaa765bac23d4a463e3052f68935bdc375168d5abc341e21660aba9a",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 1921
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Gemini 的解鎖中文語音提示",
+          "en": "Gemini unlock Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
       },
       "releaseStatus": "approved"
     },
@@ -28253,6 +29653,356 @@
       "releaseStatus": "approved"
     },
     {
+      "assetId": "asset:glm:voice:glm-active:active",
+      "association": {
+        "kind": "voice",
+        "characterId": "glm",
+        "lineId": "glm-active",
+        "trigger": "active"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/glm__active.wav",
+        "sha256": "69ea001a77b26e6130d4c40a3755448f0ef7274966e7bd0b13ce7a9299b8b577"
+      },
+      "output": {
+        "path": "objects/acbd4ab9d98e4873e9d493e7e9677830deb48a4cc04bf0e08aea7378a16c645f.wav",
+        "bytes": 155182,
+        "sha256": "acbd4ab9d98e4873e9d493e7e9677830deb48a4cc04bf0e08aea7378a16c645f",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3518
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "GLM 的活躍中文語音提示",
+          "en": "GLM active Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:glm:voice:glm-error:error",
+      "association": {
+        "kind": "voice",
+        "characterId": "glm",
+        "lineId": "glm-error",
+        "trigger": "error"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/glm__error.wav",
+        "sha256": "4d15b37cb2ee3aa72dbccd0f08aab5faf7c16bfab67f5cdcd99997228b57d27d"
+      },
+      "output": {
+        "path": "objects/5e38a2fe04143d29225da6e5bef737b31129a5c657c71ab2819c57167099d0dc.wav",
+        "bytes": 114412,
+        "sha256": "5e38a2fe04143d29225da6e5bef737b31129a5c657c71ab2819c57167099d0dc",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2593
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "GLM 的錯誤中文語音提示",
+          "en": "GLM error Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:glm:voice:glm-greeting:greeting",
+      "association": {
+        "kind": "voice",
+        "characterId": "glm",
+        "lineId": "glm-greeting",
+        "trigger": "greeting"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/glm__greeting.wav",
+        "sha256": "64f6bfccdc3ecb0e352ef03d1df8c4b38bdfc528c608b3fb219a1b2d489d7ccc"
+      },
+      "output": {
+        "path": "objects/f315068f38d65e3c17ae38c72003964d656420d8f1bf6572e063a893af1567a5.wav",
+        "bytes": 157742,
+        "sha256": "f315068f38d65e3c17ae38c72003964d656420d8f1bf6572e063a893af1567a5",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3576
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "GLM 的問候中文語音提示",
+          "en": "GLM greeting Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:glm:voice:glm-quiet:quiet",
+      "association": {
+        "kind": "voice",
+        "characterId": "glm",
+        "lineId": "glm-quiet",
+        "trigger": "quiet"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/glm__quiet.wav",
+        "sha256": "6368b296a49c4b7139c4050832376bdf0ed26204dabf3f7a32160af542e09d14"
+      },
+      "output": {
+        "path": "objects/d86ab1a782056e0b0761923c9f16f51002d76a5c4dab189417209b2d93818a7d.wav",
+        "bytes": 167872,
+        "sha256": "d86ab1a782056e0b0761923c9f16f51002d76a5c4dab189417209b2d93818a7d",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3806
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "GLM 的安靜中文語音提示",
+          "en": "GLM quiet Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:glm:voice:glm-unlock:unlock",
+      "association": {
+        "kind": "voice",
+        "characterId": "glm",
+        "lineId": "glm-unlock",
+        "trigger": "unlock"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/glm__unlock.wav",
+        "sha256": "fbd240dabaec0adadadf7aff3b71391a7591170f8bebaab96ad9c7730269f825"
+      },
+      "output": {
+        "path": "objects/723e37c3b039cd12c377ef14ebe404a2553d564de7a7b187415d02f60ed6945b.wav",
+        "bytes": 136328,
+        "sha256": "723e37c3b039cd12c377ef14ebe404a2553d564de7a7b187415d02f60ed6945b",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3090
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "GLM 的解鎖中文語音提示",
+          "en": "GLM unlock Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
       "assetId": "asset:grok:avatar",
       "association": {
         "kind": "avatar",
@@ -33897,6 +35647,356 @@
         "allowedTransforms": [
           "scale-down"
         ]
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:grok:voice:grok-active:active",
+      "association": {
+        "kind": "voice",
+        "characterId": "grok",
+        "lineId": "grok-active",
+        "trigger": "active"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/grok__active.wav",
+        "sha256": "9551a43883a29e0f1ec584a26ebb5b3b3d205486839e9255219e0285bf79b39e"
+      },
+      "output": {
+        "path": "objects/edd58757456c6460a776ba79f6733214c3324f4d6de3ed153c0e3e8e590b5fea.wav",
+        "bytes": 122926,
+        "sha256": "edd58757456c6460a776ba79f6733214c3324f4d6de3ed153c0e3e8e590b5fea",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2786
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Grok 的活躍中文語音提示",
+          "en": "Grok active Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:grok:voice:grok-error:error",
+      "association": {
+        "kind": "voice",
+        "characterId": "grok",
+        "lineId": "grok-error",
+        "trigger": "error"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/grok__error.wav",
+        "sha256": "f2ec472c520cc54485bd3fceb6a26e759a24d62f6f83fe20a487818e087b48c2"
+      },
+      "output": {
+        "path": "objects/82de2ce8ef3ad1fc784f377ae109fefdbac5a4f8d38209fbd3e4419f0f24dadb.wav",
+        "bytes": 107094,
+        "sha256": "82de2ce8ef3ad1fc784f377ae109fefdbac5a4f8d38209fbd3e4419f0f24dadb",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2427
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Grok 的錯誤中文語音提示",
+          "en": "Grok error Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:grok:voice:grok-greeting:greeting",
+      "association": {
+        "kind": "voice",
+        "characterId": "grok",
+        "lineId": "grok-greeting",
+        "trigger": "greeting"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/grok__greeting.wav",
+        "sha256": "307c6f6e5e3ddb60bfb508cfd4aaca577fc475cb940da1867acd777eb4d05582"
+      },
+      "output": {
+        "path": "objects/d5ac487e429aa41402abda3da2780942f64dd8e03b9b071f462c780b352101fb.wav",
+        "bytes": 89134,
+        "sha256": "d5ac487e429aa41402abda3da2780942f64dd8e03b9b071f462c780b352101fb",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2020
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Grok 的問候中文語音提示",
+          "en": "Grok greeting Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:grok:voice:grok-quiet:quiet",
+      "association": {
+        "kind": "voice",
+        "characterId": "grok",
+        "lineId": "grok-quiet",
+        "trigger": "quiet"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/grok__quiet.wav",
+        "sha256": "34b70f69f934b49a094645c2545df2c43a0726a962d427e497e81a6c8cddfaa1"
+      },
+      "output": {
+        "path": "objects/243be6c173a40399067775919975c5c0d797bd6f3e3b643f347839aa3e9022d7.wav",
+        "bytes": 101422,
+        "sha256": "243be6c173a40399067775919975c5c0d797bd6f3e3b643f347839aa3e9022d7",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2299
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Grok 的安靜中文語音提示",
+          "en": "Grok quiet Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:grok:voice:grok-unlock:unlock",
+      "association": {
+        "kind": "voice",
+        "characterId": "grok",
+        "lineId": "grok-unlock",
+        "trigger": "unlock"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/grok__unlock.wav",
+        "sha256": "8739625b569bc9c70cce711de79d71234aee495269f86cb08230cd885e4d2437"
+      },
+      "output": {
+        "path": "objects/9f13ce10b6ec1784da671e8479385bb3f394b32e1b4d905945126116a037dbc3.wav",
+        "bytes": 136750,
+        "sha256": "9f13ce10b6ec1784da671e8479385bb3f394b32e1b4d905945126116a037dbc3",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3100
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Grok 的解鎖中文語音提示",
+          "en": "Grok unlock Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
       },
       "releaseStatus": "approved"
     },
@@ -39549,6 +41649,356 @@
       "releaseStatus": "approved"
     },
     {
+      "assetId": "asset:mistral:voice:mistral-active:active",
+      "association": {
+        "kind": "voice",
+        "characterId": "mistral",
+        "lineId": "mistral-active",
+        "trigger": "active"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/mistral__active.wav",
+        "sha256": "970833785f12f04b8febe8fbacb06d409ce41951343abfc33fd7934a5fe5b57b"
+      },
+      "output": {
+        "path": "objects/0771e6f63d3877e59bc432d72564fc34105989a29cec3dd5758dd495fb47b4a4.wav",
+        "bytes": 194094,
+        "sha256": "0771e6f63d3877e59bc432d72564fc34105989a29cec3dd5758dd495fb47b4a4",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 4400
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Mistral 的活躍中文語音提示",
+          "en": "Mistral active Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:mistral:voice:mistral-error:error",
+      "association": {
+        "kind": "voice",
+        "characterId": "mistral",
+        "lineId": "mistral-error",
+        "trigger": "error"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/mistral__error.wav",
+        "sha256": "b45584fa265c986209481fa780995d42bd2e2d33b6405d0ffa07238dfaecaf08"
+      },
+      "output": {
+        "path": "objects/1bb2db31cfe24ce0738db810a3dcc6659cc60cad0316be1aaf6569961d1423e7.wav",
+        "bytes": 121902,
+        "sha256": "1bb2db31cfe24ce0738db810a3dcc6659cc60cad0316be1aaf6569961d1423e7",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2763
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Mistral 的錯誤中文語音提示",
+          "en": "Mistral error Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:mistral:voice:mistral-greeting:greeting",
+      "association": {
+        "kind": "voice",
+        "characterId": "mistral",
+        "lineId": "mistral-greeting",
+        "trigger": "greeting"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/mistral__greeting.wav",
+        "sha256": "c8e138f726671fafe96e74de276dc174a22bdf018cea6a9bc29c12d5bc523242"
+      },
+      "output": {
+        "path": "objects/e00430e7e8a8600de5bfd7f989b839d7597a74c68cba0fc21994fbfc9c51c8f5.wav",
+        "bytes": 128156,
+        "sha256": "e00430e7e8a8600de5bfd7f989b839d7597a74c68cba0fc21994fbfc9c51c8f5",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2905
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Mistral 的問候中文語音提示",
+          "en": "Mistral greeting Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:mistral:voice:mistral-quiet:quiet",
+      "association": {
+        "kind": "voice",
+        "characterId": "mistral",
+        "lineId": "mistral-quiet",
+        "trigger": "quiet"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/mistral__quiet.wav",
+        "sha256": "59a5b34c6b4d063a1568e6abbaff409d1e8c78582ed5b7c763a9ee27f7eeb575"
+      },
+      "output": {
+        "path": "objects/cf0e1f23879924504b482609945dafb7992b7406f853c9d08af9d45473c0a6af.wav",
+        "bytes": 214574,
+        "sha256": "cf0e1f23879924504b482609945dafb7992b7406f853c9d08af9d45473c0a6af",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 4865
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Mistral 的安靜中文語音提示",
+          "en": "Mistral quiet Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:mistral:voice:mistral-unlock:unlock",
+      "association": {
+        "kind": "voice",
+        "characterId": "mistral",
+        "lineId": "mistral-unlock",
+        "trigger": "unlock"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/mistral__unlock.wav",
+        "sha256": "867366eeb7947b1a8ac883ec4e0c1969b8fad24afaa91eaad3b48ddcfbafa348"
+      },
+      "output": {
+        "path": "objects/5b033efb8070eb2d7ed338767ab3cc4fe7b3cca25b11a91612307a3ee4fb0949.wav",
+        "bytes": 104494,
+        "sha256": "5b033efb8070eb2d7ed338767ab3cc4fe7b3cca25b11a91612307a3ee4fb0949",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2368
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Mistral 的解鎖中文語音提示",
+          "en": "Mistral unlock Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
       "assetId": "asset:perplexity:avatar",
       "association": {
         "kind": "avatar",
@@ -45193,6 +47643,356 @@
         "allowedTransforms": [
           "scale-down"
         ]
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:perplexity:voice:perplexity-active:active",
+      "association": {
+        "kind": "voice",
+        "characterId": "perplexity",
+        "lineId": "perplexity-active",
+        "trigger": "active"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/perplexity__active.wav",
+        "sha256": "f9f9aad7fb86746e2ab2bb3161573f82152e83f81193c397253bed5e058e4183"
+      },
+      "output": {
+        "path": "objects/f039644ad9c02a9c051772092499184a75ccc0bf062f8de1d816822a7a9a0718.wav",
+        "bytes": 131118,
+        "sha256": "f039644ad9c02a9c051772092499184a75ccc0bf062f8de1d816822a7a9a0718",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2972
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Perplexity 的活躍中文語音提示",
+          "en": "Perplexity active Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:perplexity:voice:perplexity-error:error",
+      "association": {
+        "kind": "voice",
+        "characterId": "perplexity",
+        "lineId": "perplexity-error",
+        "trigger": "error"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/perplexity__error.wav",
+        "sha256": "c001799fd3a87f4aa74a78c53687366723205c3640262b4ae3c8a961ed5569a6"
+      },
+      "output": {
+        "path": "objects/ead34e7fd72e2650e23736314a78aee93f8fde5e538fe01d05ae72e6284eae9d.wav",
+        "bytes": 81966,
+        "sha256": "ead34e7fd72e2650e23736314a78aee93f8fde5e538fe01d05ae72e6284eae9d",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 1858
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Perplexity 的錯誤中文語音提示",
+          "en": "Perplexity error Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:perplexity:voice:perplexity-greeting:greeting",
+      "association": {
+        "kind": "voice",
+        "characterId": "perplexity",
+        "lineId": "perplexity-greeting",
+        "trigger": "greeting"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/perplexity__greeting.wav",
+        "sha256": "6e030857e5cc793bea5cc628f77286f6af4f3cf8eb394daaf5ec5d43993541a2"
+      },
+      "output": {
+        "path": "objects/6cc191fa69ab50e281e3b0fc7c50dc16b432f9222188bd02a37a8d2d407cbabd.wav",
+        "bytes": 117294,
+        "sha256": "6cc191fa69ab50e281e3b0fc7c50dc16b432f9222188bd02a37a8d2d407cbabd",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2659
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Perplexity 的問候中文語音提示",
+          "en": "Perplexity greeting Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:perplexity:voice:perplexity-quiet:quiet",
+      "association": {
+        "kind": "voice",
+        "characterId": "perplexity",
+        "lineId": "perplexity-quiet",
+        "trigger": "quiet"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/perplexity__quiet.wav",
+        "sha256": "9cbb48165aaf7102ab9ae5ea2dc343352387a4533aa8221b0ba1a66ac9d6604c"
+      },
+      "output": {
+        "path": "objects/335b98f814ad991a241bcd436c2971608c468fe73bc862c6e14ae987d13b8d57.wav",
+        "bytes": 180632,
+        "sha256": "335b98f814ad991a241bcd436c2971608c468fe73bc862c6e14ae987d13b8d57",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 4095
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Perplexity 的安靜中文語音提示",
+          "en": "Perplexity quiet Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:perplexity:voice:perplexity-unlock:unlock",
+      "association": {
+        "kind": "voice",
+        "characterId": "perplexity",
+        "lineId": "perplexity-unlock",
+        "trigger": "unlock"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/perplexity__unlock.wav",
+        "sha256": "50a5994ee7fcf5fcfde52c88ea88480219a43a40bdea3526348675a0d20a6db3"
+      },
+      "output": {
+        "path": "objects/15599c9f05ea55e37faf54cff3136fa5cb9d945cb18f305884fd6f0aab3e2f49.wav",
+        "bytes": 120878,
+        "sha256": "15599c9f05ea55e37faf54cff3136fa5cb9d945cb18f305884fd6f0aab3e2f49",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2740
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Perplexity 的解鎖中文語音提示",
+          "en": "Perplexity unlock Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
       },
       "releaseStatus": "approved"
     },
@@ -50845,6 +53645,356 @@
       "releaseStatus": "approved"
     },
     {
+      "assetId": "asset:qwen:voice:qwen-active:active",
+      "association": {
+        "kind": "voice",
+        "characterId": "qwen",
+        "lineId": "qwen-active",
+        "trigger": "active"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/qwen__active.wav",
+        "sha256": "764b7ca9dd80e2e626d35a4e507fc7fc855a011a5dd40d8226a1dd340825b233"
+      },
+      "output": {
+        "path": "objects/25d347778006dc686187bf544f292a5c021a5256023b8438404987643ad22663.wav",
+        "bytes": 149338,
+        "sha256": "25d347778006dc686187bf544f292a5c021a5256023b8438404987643ad22663",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3385
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Qwen 的活躍中文語音提示",
+          "en": "Qwen active Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:qwen:voice:qwen-error:error",
+      "association": {
+        "kind": "voice",
+        "characterId": "qwen",
+        "lineId": "qwen-error",
+        "trigger": "error"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/qwen__error.wav",
+        "sha256": "f66d1416c1bb365ac5017f9f158eacaceaa955466caf91b2c8f6f58615db51a7"
+      },
+      "output": {
+        "path": "objects/35a91d1081502802aa8b946c5dc02ec8b3f509189e09f0e3e812076389dedb4c.wav",
+        "bytes": 147952,
+        "sha256": "35a91d1081502802aa8b946c5dc02ec8b3f509189e09f0e3e812076389dedb4c",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3354
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Qwen 的錯誤中文語音提示",
+          "en": "Qwen error Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:qwen:voice:qwen-greeting:greeting",
+      "association": {
+        "kind": "voice",
+        "characterId": "qwen",
+        "lineId": "qwen-greeting",
+        "trigger": "greeting"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/qwen__greeting.wav",
+        "sha256": "9da597b3b067d4626c0c75f14bbafc1ea1b33c8dca615e2be2a048316a4cd6b5"
+      },
+      "output": {
+        "path": "objects/0b0e341ae6a6a238a9c64829b50e40d139049a80fae8ef442ff405f35dca7aa0.wav",
+        "bytes": 192384,
+        "sha256": "0b0e341ae6a6a238a9c64829b50e40d139049a80fae8ef442ff405f35dca7aa0",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 4361
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Qwen 的問候中文語音提示",
+          "en": "Qwen greeting Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:qwen:voice:qwen-quiet:quiet",
+      "association": {
+        "kind": "voice",
+        "characterId": "qwen",
+        "lineId": "qwen-quiet",
+        "trigger": "quiet"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/qwen__quiet.wav",
+        "sha256": "2a9dbd69e66b7d65402037b943cbba39a3cee1b65f25e1ba3f8014e6e4daa9e4"
+      },
+      "output": {
+        "path": "objects/355b8a6cba448496cf463b7e71a7d42d2fbea314ce78f612aa44f50b64959214.wav",
+        "bytes": 152060,
+        "sha256": "355b8a6cba448496cf463b7e71a7d42d2fbea314ce78f612aa44f50b64959214",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3447
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Qwen 的安靜中文語音提示",
+          "en": "Qwen quiet Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:qwen:voice:qwen-unlock:unlock",
+      "association": {
+        "kind": "voice",
+        "characterId": "qwen",
+        "lineId": "qwen-unlock",
+        "trigger": "unlock"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/qwen__unlock.wav",
+        "sha256": "4420c581853266e80d901129a1e71aa7b8435534ecce5613f0823b191468f0c9"
+      },
+      "output": {
+        "path": "objects/b0665ae7df53849c4469df5b3ee4337a99e123eaca7045e2903f39dd689f56b1.wav",
+        "bytes": 127152,
+        "sha256": "b0665ae7df53849c4469df5b3ee4337a99e123eaca7045e2903f39dd689f56b1",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2882
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Qwen 的解鎖中文語音提示",
+          "en": "Qwen unlock Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
       "assetId": "asset:sakana:avatar",
       "association": {
         "kind": "avatar",
@@ -56493,6 +59643,356 @@
       "releaseStatus": "approved"
     },
     {
+      "assetId": "asset:sakana:voice:sakana-active:active",
+      "association": {
+        "kind": "voice",
+        "characterId": "sakana",
+        "lineId": "sakana-active",
+        "trigger": "active"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/sakana__active.wav",
+        "sha256": "e9b6e1264f8f73aa99ec51cead1f6e8204de05056d0c413a808bf5ac7413f675"
+      },
+      "output": {
+        "path": "objects/4288a8ac34877ded181274eefc6f26f8a9787373c0c76acbe4fd230c97cabe8c.wav",
+        "bytes": 177198,
+        "sha256": "4288a8ac34877ded181274eefc6f26f8a9787373c0c76acbe4fd230c97cabe8c",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 4017
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Sakana 的活躍中文語音提示",
+          "en": "Sakana active Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:sakana:voice:sakana-error:error",
+      "association": {
+        "kind": "voice",
+        "characterId": "sakana",
+        "lineId": "sakana-error",
+        "trigger": "error"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/sakana__error.wav",
+        "sha256": "cdd082172f2859fc3ffcfc0a30da309ded59a420fae9d46c1e068a8419a5361f"
+      },
+      "output": {
+        "path": "objects/460d1a7eb72a860be4f2cb6119d8c59ae9b6f4baca0cd476027dd22e803c1b45.wav",
+        "bytes": 110126,
+        "sha256": "460d1a7eb72a860be4f2cb6119d8c59ae9b6f4baca0cd476027dd22e803c1b45",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2496
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Sakana 的錯誤中文語音提示",
+          "en": "Sakana error Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:sakana:voice:sakana-greeting:greeting",
+      "association": {
+        "kind": "voice",
+        "characterId": "sakana",
+        "lineId": "sakana-greeting",
+        "trigger": "greeting"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/sakana__greeting.wav",
+        "sha256": "c0ddce852ff8509ac009ecccafa81236b0b0a090d54a19c1ebae0c16a2e31f81"
+      },
+      "output": {
+        "path": "objects/eaeb3316ee4236be903188eec7c8d3c9a9ea0a3b07c0c1841a7e6c3a82190009.wav",
+        "bytes": 222766,
+        "sha256": "eaeb3316ee4236be903188eec7c8d3c9a9ea0a3b07c0c1841a7e6c3a82190009",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 5050
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Sakana 的問候中文語音提示",
+          "en": "Sakana greeting Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:sakana:voice:sakana-quiet:quiet",
+      "association": {
+        "kind": "voice",
+        "characterId": "sakana",
+        "lineId": "sakana-quiet",
+        "trigger": "quiet"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/sakana__quiet.wav",
+        "sha256": "2fc7fdd349d0ba5c214dfb02651b7b8e6e066db701896a0cc7091a8b91b48847"
+      },
+      "output": {
+        "path": "objects/182b55796317c65bcde2a69b1bc2608422570481528dc23d1d65a3d8ea300fc1.wav",
+        "bytes": 229934,
+        "sha256": "182b55796317c65bcde2a69b1bc2608422570481528dc23d1d65a3d8ea300fc1",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 5213
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Sakana 的安靜中文語音提示",
+          "en": "Sakana quiet Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:sakana:voice:sakana-unlock:unlock",
+      "association": {
+        "kind": "voice",
+        "characterId": "sakana",
+        "lineId": "sakana-unlock",
+        "trigger": "unlock"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/sakana__unlock.wav",
+        "sha256": "cc43587e20b35c75e297b9250d60dbb4435d1a20922ee8b821a2d0e7b041689c"
+      },
+      "output": {
+        "path": "objects/2d9ce55d513f73956b080a31bd1af61b564f0f63f65a05fe5f61a30e83a52145.wav",
+        "bytes": 158766,
+        "sha256": "2d9ce55d513f73956b080a31bd1af61b564f0f63f65a05fe5f61a30e83a52145",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 3599
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Sakana 的解鎖中文語音提示",
+          "en": "Sakana unlock Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
       "assetId": "asset:venice:avatar",
       "association": {
         "kind": "avatar",
@@ -62137,6 +65637,356 @@
         "allowedTransforms": [
           "scale-down"
         ]
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:venice:voice:venice-active:active",
+      "association": {
+        "kind": "voice",
+        "characterId": "venice",
+        "lineId": "venice-active",
+        "trigger": "active"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/venice__active.wav",
+        "sha256": "79577796789a6a69b3ece8f8060a5ee7a8b62da8b7e953ab9a43db2e139b72ef"
+      },
+      "output": {
+        "path": "objects/6c47a73402241c401ee92ac989e94ce3748665a8aca203ff829b081b63bbedb6.wav",
+        "bytes": 127730,
+        "sha256": "6c47a73402241c401ee92ac989e94ce3748665a8aca203ff829b081b63bbedb6",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2895
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Venice 的活躍中文語音提示",
+          "en": "Venice active Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:venice:voice:venice-error:error",
+      "association": {
+        "kind": "voice",
+        "characterId": "venice",
+        "lineId": "venice-error",
+        "trigger": "error"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/venice__error.wav",
+        "sha256": "d83faf3ab0fd667d78ef96c245d84280c97e3197876fb5a87c96949edf69d58b"
+      },
+      "output": {
+        "path": "objects/4cd8dcc3a388dbcc33d4efc98379b39d8ed37aa0c2978749cc8ed204c0570e44.wav",
+        "bytes": 120678,
+        "sha256": "4cd8dcc3a388dbcc33d4efc98379b39d8ed37aa0c2978749cc8ed204c0570e44",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2735
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Venice 的錯誤中文語音提示",
+          "en": "Venice error Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:venice:voice:venice-greeting:greeting",
+      "association": {
+        "kind": "voice",
+        "characterId": "venice",
+        "lineId": "venice-greeting",
+        "trigger": "greeting"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/venice__greeting.wav",
+        "sha256": "8c101659ad93ac32c0609e11b5c7480fe57ed63e1a6141beb8388a14278776d5"
+      },
+      "output": {
+        "path": "objects/9a0127b607336900a3bb6e8f6f09565e25a492be2cd5d9b508e2a29428b77f68.wav",
+        "bytes": 184706,
+        "sha256": "9a0127b607336900a3bb6e8f6f09565e25a492be2cd5d9b508e2a29428b77f68",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 4187
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Venice 的問候中文語音提示",
+          "en": "Venice greeting Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:venice:voice:venice-quiet:quiet",
+      "association": {
+        "kind": "voice",
+        "characterId": "venice",
+        "lineId": "venice-quiet",
+        "trigger": "quiet"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/venice__quiet.wav",
+        "sha256": "605afd970783427033e0b78fc17238461563c4ccfff7edc4afc4d68723a63ee9"
+      },
+      "output": {
+        "path": "objects/e426e5e4f84ed1ee9775b75705861caadedc9df65cc1931783019a3256596321.wav",
+        "bytes": 184644,
+        "sha256": "e426e5e4f84ed1ee9775b75705861caadedc9df65cc1931783019a3256596321",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 4186
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Venice 的安靜中文語音提示",
+          "en": "Venice quiet Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
+      },
+      "releaseStatus": "approved"
+    },
+    {
+      "assetId": "asset:venice:voice:venice-unlock:unlock",
+      "association": {
+        "kind": "voice",
+        "characterId": "venice",
+        "lineId": "venice-unlock",
+        "trigger": "unlock"
+      },
+      "source": {
+        "inventoryId": "ai-sister-media-11-voice55-2026.07.23",
+        "inventoryRevision": "2849c0f4819225aa0cae23c9ff416ed7ba1733ccd825fd2b18d362b65eb8ce9d",
+        "path": "voice/venice__unlock.wav",
+        "sha256": "847cdba8ec241ad9903aca9ad845a70a2ebadf8664d5b27b154920b7e5dcbfba"
+      },
+      "output": {
+        "path": "objects/5524c8f8ffa7ff6d2c3f16ba91327fe0c14d6a81108e2559f346475d9116d7ef.wav",
+        "bytes": 131878,
+        "sha256": "5524c8f8ffa7ff6d2c3f16ba91327fe0c14d6a81108e2559f346475d9116d7ef",
+        "media": {
+          "mediaType": "audio/wav",
+          "durationMs": 2989
+        }
+      },
+      "generationHistory": {
+        "tool": {
+          "name": "tokenmonster-wav-canonicalizer",
+          "version": "55479bf88b8c11a21c5e7ac07881e702f4710a5d974160e5385c1eb27720221f"
+        },
+        "sourceMediaType": "audio/wav",
+        "resize": null,
+        "encoding": {
+          "mediaType": "audio/wav",
+          "quality": null
+        },
+        "metadataStripped": true
+      },
+      "rights": {
+        "licenseStatus": "approved",
+        "grantReferenceId": "owner-voice-authorization-2026.07.23",
+        "scopes": {
+          "publicUse": true,
+          "commercialUse": true,
+          "modify": true,
+          "redistribute": true
+        }
+      },
+      "review": {
+        "brandStatus": "approved",
+        "brandReviewReferenceId": "owner-voice-authorization-2026.07.23",
+        "contentStatus": "approved",
+        "contentReviewReferenceId": "owner-voice-publication-approval-2026.07.23",
+        "contentRating": "general",
+        "disclosureId": "tokenmonster-unaffiliated-v1"
+      },
+      "presentation": {
+        "altText": {
+          "zh-TW": "Venice 的解鎖中文語音提示",
+          "en": "Venice unlock Chinese voice prompt"
+        },
+        "allowedTransforms": []
+      },
+      "voiceEvidence": {
+        "locale": "zh-TW",
+        "sourceType": "owner-authorized-reference-clone",
+        "consentReferenceId": "owner-voice-authorization-2026.07.23",
+        "syntheticProvenanceReferenceId": null,
+        "spokenContentReviewReferenceId": "owner-voice-publication-approval-2026.07.23"
       },
       "releaseStatus": "approved"
     }

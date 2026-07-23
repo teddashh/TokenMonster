@@ -90,14 +90,15 @@ The separately consented fixed-pack protocol accepts only a complete schema-v2
 release, descriptor, and exact HTTPS
 origin/path binding. `GET /api/characters/assets` reads only local status, and
 `POST /api/characters/assets/consent` accepts exactly one boolean. Enable
-verifies or downloads the one immutable 891-image, 65,574,180-byte complete pack
-before activating its extended art.
+verifies or downloads the one immutable 946-entry, 73,261,088-byte complete pack
+(891 images plus 55 WAVs) before activating its extended media.
 Restart verifies a consented cache without automatic network retry. Disable
 switches to the embedded starter base immediately, persists revocation, and
 removes only the downloaded release objects without network I/O. A failed
-download likewise retains the base. The current base and complete pack embed no
-voice. Status errors are stable codes and never include an origin, local path,
-response body, or thrown text.
+download likewise retains the base. The starter base embeds no voice; the
+complete pack's WAVs remain local-cache-only and playback defaults off. Status
+errors are stable codes and never include an origin, local path, response body,
+or thrown text.
 
 `POST /api/characters/interact` accepts only the currently selected, unlocked
 character with action `tap` and locale `zh-TW` or `en`. It returns either one

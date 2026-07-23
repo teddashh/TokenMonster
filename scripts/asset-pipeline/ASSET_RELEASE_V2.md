@@ -68,9 +68,11 @@ digests.
 Every release entry requires written-grant, brand-review, content-review, and
 disclosure reference IDs; a general-audience rating; bilingual alt text; and an
 explicit transform allowlist. Voice additionally requires locale,
-`human-original` consent or `synthetic-non-clone` provenance, and a separate
-spoken-content-review reference. There is deliberately no cloned-voice source
-type and no field for a transcript.
+`human-original` consent, `synthetic-non-clone` provenance, or an
+`owner-authorized-reference-clone` consent/authorization reference, plus a
+separate spoken-content-review reference. The reference-clone type must not
+claim `synthetic-non-clone` provenance. All evidence references are opaque safe
+IDs; there is no field for a transcript or private receipt contents.
 
 `build-manifest.mjs` does not invent upstream evidence. On the controlled build
 host, `prepare-source-evidence.mjs` can derive the exact image source set from
@@ -85,10 +87,16 @@ emits `AssetBuildProvenanceV1`.
 Receipt contents stay private and are never parsed or copied into public
 provenance. Do not derive a fake Git revision for the untracked source bank: the
 repository revision identifies the reviewed source workflow, while the
-separate computed inventory revision identifies the exact staged bytes. Also,
-the current optional WAV path copies source bytes verbatim; it cannot truthfully
-set `metadataStripped: true`. Public voice assembly therefore remains blocked
-until a reviewed build step strips metadata and records the resulting hash.
+separate computed inventory revision identifies the exact staged bytes. The
+optional WAV path now preserves PCM samples while deterministically rebuilding
+each accepted clip with only canonical `fmt ` and `data` chunks, then hashes
+those stripped bytes. The general image provenance emitter remains image-only.
+`prepare-authorized-voice-release.mjs` is the reviewed combined-release path:
+it preserves the exact prior image provenance and rights rows, validates the
+complete raw-WAV/private-sidecar set, independently re-canonicalizes every WAV,
+binds the resulting output hashes, and emits the combined provenance and
+approved rights-ledger inputs. The current 891-image + 55-WAV release was built
+through that path.
 
 Publishing the audit sidecar does not grant rights and runtime does not need to
 download it. The approved release manifest pins its canonical SHA-256, so an
@@ -110,6 +118,7 @@ signatures before injecting them into the candidate tarball. Installed clients
 use those bytes with zero runtime GETs; a failed or revoked complete-pack state
 falls back to this base, while other missing art still uses the letter renderer.
 The four starters' 168 `zh-TW`/`en` fixed lines are compiled text rather than
-voice assets. Neither the embedded base nor the current 891-image,
-65,574,180-byte explicitly consented pack contains audio. These pipeline facts
-do not mean an application release has been published.
+voice assets, and the embedded base contains no audio. The complete,
+explicitly consented combined pack contains 891 images and 55 canonical WAVs,
+946 entries and 73,043,596 extracted bytes. These pipeline facts do not mean an
+application release has been published.

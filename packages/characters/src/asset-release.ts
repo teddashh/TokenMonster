@@ -576,43 +576,69 @@ const AllowedTransformSchema = z.enum([
 const VoiceEvidenceSchema = z
   .object({
     locale: LocaleSchema,
-    sourceType: z.enum(["human-original", "synthetic-non-clone"]),
+    sourceType: z.enum([
+      "human-original",
+      "synthetic-non-clone",
+      "owner-authorized-reference-clone",
+    ]),
     consentReferenceId: SafeReferenceIdSchema.nullable(),
     syntheticProvenanceReferenceId: SafeReferenceIdSchema.nullable(),
     spokenContentReviewReferenceId: SafeReferenceIdSchema,
   })
   .strict()
   .superRefine((evidence, context) => {
-    if (evidence.sourceType === "human-original") {
-      if (evidence.consentReferenceId === null) {
-        context.addIssue({
-          code: "custom",
-          path: ["consentReferenceId"],
-          message: "human-original voice requires a consent reference",
-        });
-      }
-      if (evidence.syntheticProvenanceReferenceId !== null) {
-        context.addIssue({
-          code: "custom",
-          path: ["syntheticProvenanceReferenceId"],
-          message: "human-original voice cannot claim synthetic provenance",
-        });
-      }
-    } else {
-      if (evidence.consentReferenceId !== null) {
-        context.addIssue({
-          code: "custom",
-          path: ["consentReferenceId"],
-          message: "synthetic-non-clone voice must use synthetic provenance",
-        });
-      }
-      if (evidence.syntheticProvenanceReferenceId === null) {
-        context.addIssue({
-          code: "custom",
-          path: ["syntheticProvenanceReferenceId"],
-          message: "synthetic-non-clone voice requires a provenance reference",
-        });
-      }
+    switch (evidence.sourceType) {
+      case "human-original":
+        if (evidence.consentReferenceId === null) {
+          context.addIssue({
+            code: "custom",
+            path: ["consentReferenceId"],
+            message: "human-original voice requires a consent reference",
+          });
+        }
+        if (evidence.syntheticProvenanceReferenceId !== null) {
+          context.addIssue({
+            code: "custom",
+            path: ["syntheticProvenanceReferenceId"],
+            message: "human-original voice cannot claim synthetic provenance",
+          });
+        }
+        break;
+      case "synthetic-non-clone":
+        if (evidence.consentReferenceId !== null) {
+          context.addIssue({
+            code: "custom",
+            path: ["consentReferenceId"],
+            message: "synthetic-non-clone voice must use synthetic provenance",
+          });
+        }
+        if (evidence.syntheticProvenanceReferenceId === null) {
+          context.addIssue({
+            code: "custom",
+            path: ["syntheticProvenanceReferenceId"],
+            message:
+              "synthetic-non-clone voice requires a provenance reference",
+          });
+        }
+        break;
+      case "owner-authorized-reference-clone":
+        if (evidence.consentReferenceId === null) {
+          context.addIssue({
+            code: "custom",
+            path: ["consentReferenceId"],
+            message:
+              "owner-authorized-reference-clone voice requires a consent or authorization reference",
+          });
+        }
+        if (evidence.syntheticProvenanceReferenceId !== null) {
+          context.addIssue({
+            code: "custom",
+            path: ["syntheticProvenanceReferenceId"],
+            message:
+              "owner-authorized-reference-clone voice cannot claim synthetic-non-clone provenance",
+          });
+        }
+        break;
     }
   });
 

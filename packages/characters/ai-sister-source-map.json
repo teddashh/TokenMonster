@@ -1,7 +1,7 @@
 {
   "$schema": "./ai-sister-source-map.schema.json",
   "schemaVersion": 1,
-  "auditedAt": "2026-07-21",
+  "auditedAt": "2026-07-23",
   "source": {
     "repository": "https://github.com/teddashh/Multi-Ai-Chatapp.git",
     "commit": "77b317b95b6047f1de330d5d41e4edab38de3b44",
@@ -35,7 +35,7 @@
     ],
     "rawLayerPartsPublished": false,
     "networkFailureFallback": "tokenmonster-letter-avatar-v1",
-    "status": "published-image-fixed-pack"
+    "status": "published-image-and-voice-fixed-pack"
   },
   "rosterAudit": {
     "target": {
@@ -411,12 +411,7 @@
         "perplexity",
         "glm"
       ],
-      "candidateAssetStates": [
-        "outfit",
-        "supported",
-        "challenged",
-        "victory"
-      ],
+      "candidateAssetStates": ["outfit", "supported", "challenged", "victory"],
       "observedCounts": {
         "personas": 11,
         "themesPerPersona": 20,
@@ -544,7 +539,7 @@
     ]
   },
   "releasePolicy": {
-    "runtimeUse": "approved-explicit-consent-image-fixed-pack",
+    "runtimeUse": "approved-explicit-consent-image-and-voice-fixed-pack",
     "copyCandidateBinariesIntoRepository": false,
     "requiredBeforeRuntimeUse": [
       "explicit-redistribution-and-modification-grant",

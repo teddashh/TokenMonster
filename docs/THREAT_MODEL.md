@@ -260,9 +260,9 @@ Required automated suites:
 - Character-asset egress: default-mode CLI/Electron packet capture with zero
   AI-Sister requests, release-artifact marker scan, embedded-manifest,
   SHA-256/size/MIME cache-corruption, strict transport-config rejection,
-  cache-only image/WAV miss, and local-fallback tests.
-  A future fixed pack additionally needs exact-origin/redirect/size/extraction
-  tests and proof that request set/order is usage-independent.
+  cache-only image/WAV miss, local-fallback tests, and current fixed-pack
+  exact-origin/redirect/size/extraction tests with proof that request set/order
+  is usage-independent.
 
 If a forbidden field or secret reaches cloud wire, persistence, logs,
 analytics, diagnostics, crash reports, or a share:
@@ -285,12 +285,13 @@ The following are accepted for MVP only when prominently documented:
   continue;
 - approved provider-inspired characters remain unofficial and must carry an
   unaffiliated disclosure after brand review.
-- no AI-Sister cloud asset GET occurs in the current implementation. If a
-  future explicit fixed-pack flow is enabled, the AI-Sister CDN will observe
-  only the pack version and client IP; it must not observe a character-,
-  theme-, pose-, trigger-, or unlock-specific request set.
+- default, no-consent, offline-without-cache, failed, and revoked states make no
+  AI-Sister cloud asset GET. The current explicit fixed-pack flow lets the
+  AI-Sister CDN observe only the pack version and client IP; it must not observe
+  a character-, theme-, pose-, trigger-, or unlock-specific request set.
 
 Any change that adds raw events, hours/timezones to cloud, provider proxying,
-file/tool execution in BYOK chat, public per-user profiles, voice cloning, or
-token-volume rewards requires a new threat-model review and explicit product
-approval.
+file/tool execution in BYOK chat, public per-user profiles, a new voice-cloning
+capability or reference-clone asset set, or token-volume rewards requires a new
+threat-model review and explicit product approval. The 55 WAVs in the current
+combined release passed that review only for their exact immutable bytes.

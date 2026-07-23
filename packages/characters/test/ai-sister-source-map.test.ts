@@ -8,6 +8,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
+  ASSET_VOICE_TRIGGERS,
   AssetReleaseManifestV2Schema,
   PROGRESSION_CHARACTER_IDS,
 } from "../src/index.js";
@@ -677,7 +678,7 @@ describe("AI-Sister repository-only source map", () => {
     ).toEqual(["wardrobe-unlocked"]);
   });
 
-  it("keeps the published AI-Sister image pack immutable and integrity-bound", () => {
+  it("keeps the published AI-Sister image-and-voice pack immutable and integrity-bound", () => {
     expect(sourceMap.cloudDelivery).toMatchObject({
       owner: "ai-sister",
       storage: "cloudflare-r2",
@@ -693,7 +694,7 @@ describe("AI-Sister repository-only source map", () => {
       integrity: "sha256-per-object",
       rawLayerPartsPublished: false,
       networkFailureFallback: "tokenmonster-letter-avatar-v1",
-      status: "published-image-fixed-pack",
+      status: "published-image-and-voice-fixed-pack",
     });
     expect(sourceMap.cloudDelivery.manifestObjectPattern).toBe(
       `${sourceMap.cloudDelivery.objectPrefix}/releases/{releaseId}/asset-release-manifest-v2.json`,
@@ -711,7 +712,7 @@ describe("AI-Sister repository-only source map", () => {
 
   it("binds approved runtime use to the exact non-null release slots without copying binaries", () => {
     expect(sourceMap.releasePolicy).toMatchObject({
-      runtimeUse: "approved-explicit-consent-image-fixed-pack",
+      runtimeUse: "approved-explicit-consent-image-and-voice-fixed-pack",
       copyCandidateBinariesIntoRepository: false,
       fallbackRenderer: "tokenmonster-letter-avatar-v1",
     });
@@ -737,11 +738,7 @@ describe("AI-Sister repository-only source map", () => {
     const descriptor = AssetPackDescriptorV1Schema.parse(
       JSON.parse(
         readFileSync(
-          join(
-            PACKAGE_ROOT,
-            "src",
-            "approved-asset-pack-descriptor-v1.json",
-          ),
+          join(PACKAGE_ROOT, "src", "approved-asset-pack-descriptor-v1.json"),
           "utf8",
         ),
       ) as unknown,
@@ -749,22 +746,28 @@ describe("AI-Sister repository-only source map", () => {
     const allowlist = AssetPackAllowlistV1Schema.parse(
       JSON.parse(
         readFileSync(
-          join(
-            PACKAGE_ROOT,
-            "src",
-            "approved-asset-pack-allowlist-v1.json",
-          ),
+          join(PACKAGE_ROOT, "src", "approved-asset-pack-allowlist-v1.json"),
           "utf8",
         ),
       ) as unknown,
     );
     const plan = planFixedAssetPack({ releaseManifest, descriptor, allowlist });
-    expect(releaseManifest.assets).toHaveLength(891);
-    expect(
-      releaseManifest.assets.filter(
-        ({ association }) => association.kind === "voice",
-      ),
-    ).toEqual([]);
+    expect(releaseManifest.assets).toHaveLength(946);
+    const voiceAssets = releaseManifest.assets.filter(
+      ({ association }) => association.kind === "voice",
+    );
+    expect(voiceAssets).toHaveLength(55);
+    for (const character of sourceMap.characters) {
+      const triggers = voiceAssets.flatMap(({ association }) =>
+        association.kind === "voice" &&
+        association.characterId === character.sourceId
+          ? [association.trigger]
+          : [],
+      );
+      expect(sorted(triggers), character.sourceId).toEqual(
+        sorted(ASSET_VOICE_TRIGGERS),
+      );
+    }
     expect(allowlist.origin).toBe(sourceMap.cloudDelivery.publicOrigin);
     expect(descriptor.pack.path).toBe(allowlist.path);
     expect(plan.url).toBe(`${allowlist.origin}${allowlist.path}`);
@@ -785,6 +788,7 @@ describe("AI-Sister repository-only source map", () => {
       ".skel",
       ".webm",
       ".webp",
+      ".wav",
     ]);
     const copiedCandidates = listFiles(PACKAGE_ROOT).filter((path) =>
       forbiddenCandidateExtensions.has(extname(path).toLowerCase()),

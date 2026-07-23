@@ -9,9 +9,9 @@
 > companion contribution source slice、cloud mutation/deletion、`day-all-v1` k=20
 > compaction、ordered scheduled maintenance與Companion background sync均已有本機測試，
 > 但background packet capture／wake soak、signing/native smoke、Cloudflare account/D1/domain/secrets與remote rehearsal/staging
-> E2E、backup/restore/suppression replay、project license／其餘法律決策及 voice
-> technical evidence 仍未完成。AI-Sister image-only v2 authority／descriptor／allowlist
-> 已非空，891-image fixed pack 也已公開；這項素材進展不會越過上述 installer、cloud、
+> E2E、backup/restore/suppression replay、project license／其餘法律決策仍未完成。
+> AI-Sister combined v2 authority／descriptor／allowlist 已非空，891-image + 55-WAV
+> fixed pack 也已公開；這項素材進展不會越過上述 installer、cloud、
 > operations 與法律 gates。只可進行本機測試或經核准的 fail-closed staging Web 預覽；
 > 不可 production deploy，也不可開始 30 人 External Alpha。
 
@@ -69,10 +69,11 @@
       capability signature或symbolic link。
 - [ ] Public asset runtime只能以release內嵌schema-v2 rights-approved manifest為唯一
       rights authority，並與固定 descriptor／HTTPS allowlist 共同授權 transport。目前
-      三個 generated JSON slots 已非空且 cross-bind 到 image-only release
-      `ai-sister-images-11-2026.07.21`：891 images／11 characters／0 voice、origin
-      `https://cdn.ted-h.com`、65,574,180-byte ZIP SHA-256
-      `b1bff7d70342006982f9a3dd5b06ecf9b86291fea01dd3caba8822a012e48bb7`。明確同意的
+      三個 generated JSON slots 已非空且 cross-bind 到 combined release
+      `ai-sister-media-11-voice55-2026.07.23`：891 images + 55 WAVs／11
+      characters／946 entries、origin `https://cdn.ted-h.com`、73,261,088-byte ZIP
+      SHA-256
+      `7d98e0d18c470f82818e8ada67208847c3cf4ff5c10cb5f99f9215191e981f30`。明確同意的
       fixed-pack runtime 已涵蓋
       SHA-256／bytes／MIME、content-addressed cache corruption、offline restart、repair 與
       removal，且 request set/order 不隨 character、unlock、theme、pose、trigger 或 usage
@@ -129,14 +130,13 @@
       服務條款、資料保留／刪除／匿名歷史不可抽出 disclosure 與 breach notification。
 - [ ] Release owner 核准支援 OS/tool matrix、Apple/Windows signing identities、
       notarization、updater key custody 與 rollback channel。
-- [x] AI-Sister image release `ai-sister-images-11-2026.07.21`：manifest schema v2、
-      immutable provenance/hash、written public/commercial/modify/redistribute grant、
-      rights/brand/content review與 unofficial/unaffiliated disclosure均已核准；私有證據
-      references 為 `owner-chat-image-grant-2026.07.21`、
-      `owner-chat-brand-review-2026.07.21` 與
-      `owner-chat-content-review-2026.07.21`，disclosure ID 為
-      `tokenmonster-unaffiliated-v1`，允許的 transform 僅為 scale-down。此核准不包含
-      目前 pack 之外的素材。
+- [x] AI-Sister combined release
+      `ai-sister-media-11-voice55-2026.07.23`：manifest schema v2、immutable
+      provenance/hash、written public/commercial/modify/redistribute grant、
+      rights/brand/content review、owner-authorized reference-clone evidence、
+      逐條 spoken-content review 與 unofficial/unaffiliated disclosure均已核准。
+      Release 僅涵蓋 manifest 綁定的 891 張圖片與 55 條 canonical WAV，不包含 pack
+      之外的素材。
 - [ ] AI-Sister CDN delivery：release owner與privacy owner核准唯一 exact origin、
       immutable fixed-pack version、release-embedded manifest、使用者明確
       同意、cache/eviction/fallback policy與edge-log retention；packet capture證明完整
@@ -184,10 +184,11 @@ PUBLIC_TOTALS_UNAVAILABLE`、沒有 totals/ETag；瀏覽器顯示 unavailable，
 - [ ] Upload/delete credential scope分離；pause、resume、stop/delete、retry與離線
       spool E2E通過。
 - [ ] Collector detection與修復訊息可支援 cohort；support與incident on-call已排班。
-- [ ] Alpha candidate build只嵌入已核准的 891-image authority／descriptor／allowlist、
-      從中 cross-bind 的精確 8 個 starter WebP／415,470 bytes，以及 168 條雙語文字；
-      不含任何語音 binary。歷史 50 條 cloned WAV 仍排除，且不得以 owner approval 取代
-      欠缺的 clone-consent/provenance、逐條 content review 與 metadata-stripping evidence。
+- [ ] Alpha candidate build只嵌入已核准的 946-entry combined
+      authority／descriptor／allowlist、從中 cross-bind 的精確 8 個 starter
+      WebP／415,470 bytes，以及 168 條雙語文字；npm tarball 不含任何語音 binary。
+      55 條 canonical WAV 僅存在於使用者明確同意後取得的完整 fixed pack，且只由
+      hash-verified 本機 cache 播放。
 - [ ] Cloud-off／asset packet capture證明 default、no-consent、offline-without-cache及
       revoked 狀態沒有AI-Sister asset GET；明確啟用時只能看見一個固定 pack/version及
       client IP，不得含或由 object set推得

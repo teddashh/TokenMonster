@@ -19,14 +19,14 @@ export const PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRIES = Object.freeze([
   PUBLIC_ASSET_AUTHORITY_ARCHIVE_ENTRY,
 ]);
 export const APPROVED_PUBLIC_ASSET_RELEASE = Object.freeze({
-  releaseId: "ai-sister-images-11-2026.07.21",
+  releaseId: "ai-sister-media-11-voice55-2026.07.23",
   slotSha256: Object.freeze({
     releaseManifest:
-      "bd83619ca9b3179b7b0e6a1a9c8048c2c44491d7faa40909b213a1dae9b8775f",
+      "67bbd62e82654d04c85caaec3c50171a1931e341fb83af3d86f6acd6c79cdf7e",
     descriptor:
-      "73f9cd26a5a8dafb8d3dfcb52f8743f2ea6bbc41d8d8f95bf7d0acd9c21a547e",
+      "7af3ba0a18bb12b8ef7652671954ec1e10778dbf542d74feece9b386c3d9b401",
     allowlist:
-      "153a9f1ebeeadd59e7f2f4481a4231136b69d2278b6810d34e900501b25e52b2",
+      "98732b1e975d7821c37d9ab5b96221a77df8494bb59d5ec6e9c9f39b51c580a8",
   }),
 });
 export const PUBLIC_EMBEDDED_STARTER_SOURCE_PACK = Object.freeze({
