@@ -13,6 +13,7 @@ import { projectSafeEnvironment } from "./environment.mjs";
 const TOKEN_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const COMMAND_LINE_CAP = 16 * 1024;
+export const WINDOWS_PROCESS_QUERY_TIMEOUT_MS = 15_000;
 
 export function validProcessId(value) {
   return Number.isSafeInteger(value) && value > 0 && value <= 2_147_483_647;
@@ -93,7 +94,7 @@ function windowsProcessDetails(pid) {
       encoding: "utf8",
       env: projectSafeEnvironment(process.env, { gui: false }),
       stdio: ["ignore", "pipe", "ignore"],
-      timeout: 5_000,
+      timeout: WINDOWS_PROCESS_QUERY_TIMEOUT_MS,
       windowsHide: true,
       maxBuffer: COMMAND_LINE_CAP,
     },

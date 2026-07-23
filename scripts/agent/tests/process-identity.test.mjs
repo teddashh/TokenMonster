@@ -5,8 +5,13 @@ import {
   parseWindowsCommandLine,
   processMatchesExactWindowsInvocation,
   validRunnerToken,
+  WINDOWS_PROCESS_QUERY_TIMEOUT_MS,
   windowsProcessDetailsMatch,
 } from "../process-identity.mjs";
+
+test("Windows exact-identity query tolerates cold CIM startup", () => {
+  assert.equal(WINDOWS_PROCESS_QUERY_TIMEOUT_MS, 15_000);
+});
 
 test("Windows command-line parsing preserves reviewed argv boundaries", () => {
   assert.deepEqual(
