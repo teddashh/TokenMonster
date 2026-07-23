@@ -7,7 +7,7 @@
 
 > Status: Phase 0 baseline
 >
-> Updated: 2026-07-15
+> Updated: 2026-07-23
 >
 > Review cadence: before Private Alpha, each collector/source upgrade, and each
 > new cloud/BYOK capability
@@ -15,10 +15,10 @@
 ## 1. Scope and security objectives
 
 This model covers the permanent TokenTracker sidecar adapter/gateway, legacy
-tokscale/Electron migration slice, local storage and loopback UI, OpenAI BYOK
-path, Cloudflare Worker/D1 ingestion, public aggregate/share surfaces, release
-artifacts, and both current placeholders and the unimplemented future
-AI-Sister CDN character-asset path.
+tokscale/Electron migration slice, local storage and loopback UI, the explicit
+Codex/Claude source-development launcher, OpenAI BYOK path, Cloudflare
+Worker/D1 ingestion, public aggregate/share surfaces, release artifacts, and
+the character-asset path.
 
 Security objectives, in priority order:
 
@@ -83,6 +83,11 @@ Trust-boundary rules:
 - Collector files and stdout are hostile input even when produced by a pinned
   dependency.
 - The Electron renderer is untrusted relative to secrets and native access.
+- Repository agent skills are explicit-only orchestration. Their shared
+  launcher receives no arbitrary executable/argv, projects only a fixed safe
+  environment allowlist into owned children, discards raw child output, and
+  may stop only an exact token-bound process tree it created. Invalid private
+  state is preserved and never used to guess process ownership.
 - The contribution API trusts neither body fields nor client-computed IDs or
   hashes; bearer authentication establishes enrollment context.
 - D1 canonical rows/anonymous rollups are truth. Public cache and animated UI
@@ -162,6 +167,7 @@ The product removes incentives to inflate and discloses these limits.
 | OPS-02 | Logs/backups retain secrets or forbidden bodies | Body/header logging disabled, structured redaction, access control, retention policy | Canary scan and access review | Blocker |
 | OPS-03 | Restoring an older backup resurrects deleted current rows, upload/deletion or deletion-job credentials, abandoned mutation-guard credential shadows, consent, or shares | Replay the independent active-suppression ledger before a bounded purge; clear all offline guard shadows; run residue audit before projection rebuild; evidence contains counts/checksums only | Real SQLite restored fixture with queued/running job and mutation-guard credentials, ledger-drift/bound/residue/rollback failure injection, owner-run isolated remote drill | Local runner implemented; remote owner drill remains a blocker |
 | SUP-01 | npm/GitHub Action/update supply-chain compromise | Exact pins/lockfile, action commit SHAs, audit/SBOM, reviewed update PR, signed/checksummed desktop artifacts | CI/release attestation | Blocker for GA |
+| SRC-01 | Source-launch skill leaks agent/provider credentials or raw build output, follows hostile runtime state, substitutes the Electron native runtime, or terminates another process | Explicit-only Codex/Claude skills; exact locked dependency proof; byte-verified Electron 43.1.1 installer/checksum authority; fixed argv with `shell: false`; sensitive-environment deny-by-allowlist; bounded marker-only log; `0700`/`0600` no-follow state; token-bound runner identity and owned process-tree termination; malformed state fails closed; Linux sandbox prerequisite never falls back to `--no-sandbox` | Cross-platform contract/race/symlink/oversize/identity tests plus a credential-canary build/READY/status/stop integration on a supported desktop runner | Blocker on regression |
 | AST-01 | Unlicensed or provider-branded art ships | Release-embedded allowlist, immutable source hash, rights/brand review, build inventory | Release artifact inventory | Blocker for every asset update |
 | AST-02 | Asset runtime accepts a substituted object or displays tampered content | Release-embedded strict manifest; immutable hash-named cache entries; SHA-256/size/media verification; letter fallback. The consent-gated fixed-pack transport pins its exact origin and bytes, rejects redirects, and bounds transfer and extraction | Cache-corruption/offline tests plus pack integrity/origin tests | Implemented for the CLI and desktop entry points |
 | AST-03 | Asset request reveals usage-derived character, unlock, pose, or voice state through a public hash key | Gateway accepts only a null per-object origin and has no per-object downloader; CLI and desktop ignore legacy overrides. The only transport is the explicit-consent fixed pack whose request set/order is independent of all local state | Strict configuration rejection, cache-only image/WAV regressions, artifact marker/symlink scan, and packet capture | Mitigated; both entry points share the same embedded fail-closed pack authority |

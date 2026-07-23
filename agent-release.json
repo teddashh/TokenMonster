@@ -1,0 +1,204 @@
+{
+  "$schema": "./agent-release.schema.json",
+  "schemaVersion": 1,
+  "contractVersion": "1.0.0",
+  "kind": "agent-ready-source-release",
+  "product": {
+    "name": "Token Monster (AI-Sister)",
+    "package": "@tokenmonster/companion",
+    "repository": "https://github.com/teddashh/TokenMonster",
+    "runtime": "native Electron source application",
+    "distributionLane": "source-development",
+    "platforms": [
+      "windows",
+      "macos",
+      "linux"
+    ],
+    "not": [
+      "installer",
+      "release-bundle",
+      "container",
+      "remote-gui"
+    ]
+  },
+  "trust": {
+    "invocation": "explicit-only",
+    "source": "the checked-out repository and its exact package-lock.json dependencies",
+    "warning": "Source launch executes reviewed repository code and locked dependency lifecycle scripts. It is a local development lane, not an installer."
+  },
+  "entrypoints": {
+    "doctor": {
+      "argv": [
+        "node",
+        "scripts/agent/doctor.mjs"
+      ],
+      "flags": [
+        "--json"
+      ],
+      "sideEffect": "none"
+    },
+    "audit": {
+      "argv": [
+        "node",
+        "scripts/agent/audit.mjs"
+      ],
+      "flags": [
+        "--json",
+        "--phase",
+        "--write"
+      ],
+      "sideEffect": "writes a content-blind audit record only when --write is explicitly supplied"
+    },
+    "launch": {
+      "argv": [
+        "node",
+        "scripts/agent/launch.mjs"
+      ],
+      "flags": [
+        "--json",
+        "--dry-run",
+        "--wait",
+        "--timeout-ms"
+      ],
+      "sideEffect": "reinstalls exact locked dependencies when either dependency proof is missing or drifted, installs the checksum-verified Electron 43.1.1 native artifact when missing, builds the companion workspace, and starts the native Electron source application"
+    },
+    "status": {
+      "argv": [
+        "node",
+        "scripts/agent/status.mjs"
+      ],
+      "flags": [
+        "--json",
+        "--lines"
+      ],
+      "sideEffect": "none"
+    },
+    "stop": {
+      "argv": [
+        "node",
+        "scripts/agent/stop.mjs"
+      ],
+      "flags": [
+        "--json"
+      ],
+      "sideEffect": "stops only the identity-verified repository launcher process tree"
+    }
+  },
+  "requirements": {
+    "common": [
+      "Node.js 24.15.0",
+      "npm 11.12.1",
+      "a local graphical desktop session"
+    ],
+    "windows": [
+      "Windows 10 or newer with the Electron-supported desktop runtime"
+    ],
+    "macos": [
+      "a local macOS graphical login session"
+    ],
+    "linux": [
+      "a local X11 or Wayland graphical session",
+      "a usable Chromium user-namespace sandbox or a correctly configured root-owned 4755 Electron chrome-sandbox helper"
+    ]
+  },
+  "permissions": {
+    "allowedByScripts": [
+      "read repository manifests and fixed build artifacts",
+      "check exact Node.js and npm prerequisites",
+      "install exact package-lock.json dependencies into this repository when dependency proof is missing or drifted",
+      "download and extract the official Electron 43.1.1 native artifact only after the locked installer package and checksums are byte-verified",
+      "build @tokenmonster/companion and its local workspace dependencies",
+      "start the repository's native Electron source application",
+      "write content-blind lifecycle state under .agent-runtime",
+      "stop only the identity-verified repository launcher process tree"
+    ],
+    "requiresSeparateExplicitApproval": [
+      "install or uninstall host toolchains",
+      "install user-global or system-global packages",
+      "modify PATH, shell profiles or operating-system security settings",
+      "run an elevated command or host package manager"
+    ],
+    "deniedBySkill": [
+      "implicit execution when the repository is opened",
+      "invoking or installing Codex, Claude Code or any other coding agent",
+      "packaging, installer generation, signing, release creation or publishing",
+      "reading provider credentials, cookies, secret stores or environment values",
+      "uploading lifecycle state, logs or audits",
+      "persisting child output, source filenames, project paths or environment values",
+      "terminating an unverified process"
+    ]
+  },
+  "sideEffects": {
+    "repositoryLocal": [
+      {
+        "path": "node_modules",
+        "when": "either locked dependency proof is missing or drifted, or the checksum-verified Electron native artifact is missing",
+        "removal": "manual after all repository processes stop"
+      },
+      {
+        "path": "apps/companion/dist",
+        "when": "the companion source application is built",
+        "removal": "generated and recreated by the next build"
+      },
+      {
+        "path": "packages/*/dist",
+        "when": "required local workspace dependencies are built",
+        "removal": "generated and recreated by the next build"
+      },
+      {
+        "path": ".agent-runtime",
+        "when": "agent lifecycle commands write local state",
+        "removal": "manual after the identity-verified source application stops"
+      }
+    ],
+    "userCaches": [
+      "npm may populate its existing content-addressed cache",
+      "the locked Electron installer may cache the official checksum-verified Electron 43.1.1 archive"
+    ],
+    "applicationData": [
+      "the running source application uses TokenMonster's normal local application data and secret-store boundaries"
+    ],
+    "hostConfigurationByScripts": "none",
+    "automaticRollback": "none"
+  },
+  "runtime": {
+    "directory": ".agent-runtime",
+    "stateFile": ".agent-runtime/tokenmonster-desktop.json",
+    "launchLock": ".agent-runtime/launch.lock",
+    "logFile": ".agent-runtime/tokenmonster-desktop.log",
+    "launchReceipt": ".agent-runtime/last-launch.json",
+    "auditBefore": ".agent-runtime/audit-before.json",
+    "auditAfter": ".agent-runtime/audit-after.json",
+    "readyMarker": "[TOKENMONSTER_AGENT] READY companion",
+    "states": [
+      "not_started",
+      "building",
+      "ready",
+      "failed",
+      "exited",
+      "invalid_state",
+      "foreign_process"
+    ]
+  },
+  "exitCodes": {
+    "0": "requested operation succeeded",
+    "1": "prerequisite, build, runtime or operational failure",
+    "2": "invalid command usage or contract data",
+    "3": "readiness wait timed out"
+  },
+  "skills": {
+    "version": "1.0.0",
+    "codex": ".agents/skills/launch-tokenmonster/SKILL.md",
+    "codexMetadata": ".agents/skills/launch-tokenmonster/agents/openai.yaml",
+    "claude": ".claude/skills/launch-tokenmonster/SKILL.md",
+    "implicitInvocation": false
+  },
+  "privacy": {
+    "localOnly": true,
+    "childOutput": "discarded except for the exact readiness marker and bounded lifecycle markers",
+    "persistentState": "content-blind; no absolute paths, environment values, source filenames or raw child output",
+    "logUpload": "never",
+    "auditUpload": "never",
+    "credentials": "never read by agent lifecycle scripts"
+  }
+}

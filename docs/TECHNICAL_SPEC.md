@@ -128,6 +128,16 @@ packages/
 - TokenMonster never forks, vendors, submodules, deep-imports, or copies TokenTracker parser/hook code and never reads its queue files or provider databases. Legacy tokscale workspaces are migration-only and receive no new product features.
 - `token-monitor` 與 `ai-avatar-bot` 僅供架構參考，不搬入 runtime source。
 - AI-Sister source 與 raw parts 不 vendoring 或 submodule 進 TokenMonster。TokenMonster release 只內嵌通過 schema-v2 gate 的 immutable output manifest、固定 pack descriptor、exact allowlist 與必要 persona facts；目前 combined image + voice fixed pack 由 AI-Sister 管理的 `https://cdn.ted-h.com` 提供，只有使用者明確啟用才發出一個固定 GET。
+- Repo 同時提供 explicit-only 的 Codex 與 Claude Code source-development
+  skill，兩者只呼叫同一組 `scripts/agent` lifecycle。該 lifecycle 依
+  root/installed lock digest proof 決定是否執行 repo-local `npm ci`，每次只
+  先逐檔驗證 locked Electron 43.1.1 `package.json`／`install.js`／
+  `checksums.json`，缺 native executable 時才從官方來源取得 checksum-verified
+  artifact，接著 build `@tokenmonster/companion` dependency closure，再啟動
+  native Electron；
+  不安裝/修改 AI CLI、credentials、global/host tools，也不把 source workflow
+  描述成 installer。完整 contract 見
+  [`AGENT_READY_SOURCE_RELEASE.md`](AGENT_READY_SOURCE_RELEASE.md)。
 
 ## 4. Trust boundaries 與資料流
 

@@ -115,8 +115,12 @@ describe("fatal Electron quit boundary", () => {
       /catch \{\s+if \(closeRequested\) return window\s+if \(!legacyStartup\.shutdownRequested\(\)\) \{\s+fatalQuit\.markLegacyFatalIntent\(\)\s+\}\s+if \(!window\.isDestroyed\(\)\) window\.destroy\(\)/u
     )
     expect(mainSource).toContain("fatalQuit.exitPetFatalAfterDrain()")
-    expect(mainSource).not.toContain("process.exitCode")
-    expect(mainSource).not.toMatch(/app\.exit\(1\)/u)
+    const fatalStartupBoundary = mainSource.slice(
+      mainSource.indexOf("async function createWindow"),
+      mainSource.indexOf('app.on("before-quit"')
+    )
+    expect(fatalStartupBoundary).not.toContain("process.exitCode")
+    expect(fatalStartupBoundary).not.toMatch(/app\.exit\(1\)/u)
     expect(mainSource).toMatch(
       /byokService = service\s+await service\.initialize\(\)\s+legacyStartup\.assertRunning\(\)/u
     )

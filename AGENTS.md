@@ -71,11 +71,27 @@ Use TypeScript strict mode for new code. Keep domain logic in packages, not in
 framework handlers. Add contract and privacy regression tests with every data
 shape change.
 
+## Agent source launch contract
+
+Source launch is an operational task, not a code-change or release task. Only
+start or restart after an explicit user request, then follow
+[`docs/AGENT_READY_SOURCE_RELEASE.md`](docs/AGENT_READY_SOURCE_RELEASE.md):
+before audit → doctor → reviewed launch → after audit. Use only its status and
+stop commands, and stop only a child owned by this repository. This explicit
+workflow is the sole narrow exception to the pre-task gates below.
+
+Do not inspect or report Codex/Claude credentials, configuration, executables,
+environment values, secrets, or host/global tools. Only the reviewed launcher
+may project its fixed safe environment allowlist into owned child processes. If
+an installed TokenMonster may be running, ask the user to close it first. Never
+package, make, sign, publish, release, commit, or push as part of source launch.
+
 ## Active work queue
 
 Pending-work plans, per-task acceptance criteria, and execution constraints
 are maintained privately by the maintainer and are not part of this
-repository. Before starting any task, run the local gates
+repository. Before starting any task other than the explicit agent source-launch
+workflow above, run the local gates
 (`npm run typecheck && npm run lint && npm run format:check && npm test`) and
 honor the gateway contract rule: any new URL path, query parameter, or DTO
 field spanning companion-ui and companion-gateway must update the router

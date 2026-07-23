@@ -84,6 +84,24 @@ with owner-authorized reference-clone evidence and per-clip spoken-content
 review. The older schema-v1 inventory of 50 WAV refs remains historical and is
 not a runtime authority.
 
+## Agent-ready source development
+
+`agent-release.json`, the shared `scripts/agent` lifecycle, and the two
+explicit repository skills let an already installed Codex or Claude Code
+session build and run the native Electron application from a checkout. This is
+a source-development contract, not a packaging or publication lane. It creates
+no extra distributable executable, installer, GitHub Release asset, npm publication, update
+channel, shortcut, or OS registration. The files travel with the repository
+source archive and are excluded from the CLI tarball and desktop package.
+When Electron's native executable is absent, the shared lifecycle separately
+verifies the exact locked Electron 43.1.1 installer package files and checksum
+authority before obtaining the official native archive; it never delegates
+that step to an agent-generated command or unreviewed mirror.
+
+The complete invocation, privacy, process-ownership, and product-parity
+boundary is documented in
+[`AGENT_READY_SOURCE_RELEASE.md`](AGENT_READY_SOURCE_RELEASE.md).
+
 ## Desktop installers
 
 The Windows maker uses an exact reviewed Squirrel updater candidate whose

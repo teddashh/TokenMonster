@@ -53,6 +53,23 @@ npm run build
 npm exec -- tokenmonster
 ```
 
+### 用 Codex / Claude Code 從 repo 啟動桌面版
+
+如果你已安裝並登入 Codex 或 Claude Code,先關閉可能正在執行的已安裝版
+TokenMonster,再把這個 repo 開在 agent 裡並明確呼叫:
+
+- Codex:`$launch-tokenmonster start`
+- Claude Code:`/launch-tokenmonster start`
+
+兩個入口都會走同一條受審核的 doctor、啟動與前後 audit 流程,不會安裝或修改
+agent CLI、credentials、全域套件或 host tools；若 Electron native executable
+尚未存在，只會以鎖定的 installer/checksums 取得官方、checksum-verified 的
+Electron 43.1.1 artifact。這會啟動與產品相同
+app/runtime、一般本機資料與語音 authority 的 source-development Electron,但不是
+安裝檔:沒有捷徑、「新增/移除程式」或 installed auto-update parity。Status 與
+stop 也由同一個 skill 的 `status` / `stop` 操作提供。完整邊界與指令見
+[Agent-ready source-development launch](docs/AGENT_READY_SOURCE_RELEASE.md)。
+
 ## 陪伴角色
 
 安裝包內建四位姊妹的啟動立繪與 168 條 `zh-TW`/`en` 固定文字台詞,不含音訊,開箱離線可用。完整角色媒體包(11 位角色、891 張圖與 55 條預錄語音,共 946 個項目)只會在程式內明確同意後從 `cdn.ted-h.com` 下載一次,之後完全從本機驗證過的快取運作,隨時可以修復或移除;語音播放預設關閉,移除後回到內建立繪與靜音。
@@ -95,6 +112,7 @@ npm test
 - [Product specification](docs/PRODUCT_SPEC.md) · [Technical specification](docs/TECHNICAL_SPEC.md)
 - [Data inventory](docs/DATA_INVENTORY.md) · [Threat model](docs/THREAT_MODEL.md)
 - [Release notes 與流程](docs/RELEASE.md) · [Deployment runbook](docs/DEPLOYMENT_RUNBOOK.md)
+- [Agent-ready source-development launch](docs/AGENT_READY_SOURCE_RELEASE.md)
 - [Character wardrobe map](docs/CHARACTER_WARDROBE_MAP.md) · [ADRs](docs/adr/)
 
 ## License

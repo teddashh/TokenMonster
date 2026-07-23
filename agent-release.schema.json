@@ -1,0 +1,407 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/teddashh/TokenMonster/blob/main/agent-release.schema.json",
+  "title": "TokenMonster Agent-Ready Source Release",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "contractVersion",
+    "kind",
+    "product",
+    "trust",
+    "entrypoints",
+    "requirements",
+    "permissions",
+    "sideEffects",
+    "runtime",
+    "exitCodes",
+    "skills",
+    "privacy"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./agent-release.schema.json"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "contractVersion": {
+      "const": "1.0.0"
+    },
+    "kind": {
+      "const": "agent-ready-source-release"
+    },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "package",
+        "repository",
+        "runtime",
+        "distributionLane",
+        "platforms",
+        "not"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "package": {
+          "const": "@tokenmonster/companion"
+        },
+        "repository": {
+          "const": "https://github.com/teddashh/TokenMonster"
+        },
+        "runtime": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "distributionLane": {
+          "const": "source-development"
+        },
+        "platforms": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "not": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        }
+      }
+    },
+    "trust": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "invocation",
+        "source",
+        "warning"
+      ],
+      "properties": {
+        "invocation": {
+          "const": "explicit-only"
+        },
+        "source": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "warning": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "entrypoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doctor",
+        "audit",
+        "launch",
+        "status",
+        "stop"
+      ],
+      "properties": {
+        "doctor": {
+          "$ref": "#/$defs/entrypoint"
+        },
+        "audit": {
+          "$ref": "#/$defs/entrypoint"
+        },
+        "launch": {
+          "$ref": "#/$defs/entrypoint"
+        },
+        "status": {
+          "$ref": "#/$defs/entrypoint"
+        },
+        "stop": {
+          "$ref": "#/$defs/entrypoint"
+        }
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "common",
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "properties": {
+        "common": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "windows": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "macos": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "linux": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowedByScripts",
+        "requiresSeparateExplicitApproval",
+        "deniedBySkill"
+      ],
+      "properties": {
+        "allowedByScripts": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "requiresSeparateExplicitApproval": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "deniedBySkill": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        }
+      }
+    },
+    "sideEffects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryLocal",
+        "userCaches",
+        "applicationData",
+        "hostConfigurationByScripts",
+        "automaticRollback"
+      ],
+      "properties": {
+        "repositoryLocal": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/repositorySideEffect"
+          }
+        },
+        "userCaches": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "applicationData": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "hostConfigurationByScripts": {
+          "const": "none"
+        },
+        "automaticRollback": {
+          "const": "none"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "directory",
+        "stateFile",
+        "launchLock",
+        "logFile",
+        "launchReceipt",
+        "auditBefore",
+        "auditAfter",
+        "readyMarker",
+        "states"
+      ],
+      "properties": {
+        "directory": {
+          "const": ".agent-runtime"
+        },
+        "stateFile": {
+          "const": ".agent-runtime/tokenmonster-desktop.json"
+        },
+        "launchLock": {
+          "const": ".agent-runtime/launch.lock"
+        },
+        "logFile": {
+          "const": ".agent-runtime/tokenmonster-desktop.log"
+        },
+        "launchReceipt": {
+          "const": ".agent-runtime/last-launch.json"
+        },
+        "auditBefore": {
+          "const": ".agent-runtime/audit-before.json"
+        },
+        "auditAfter": {
+          "const": ".agent-runtime/audit-after.json"
+        },
+        "readyMarker": {
+          "const": "[TOKENMONSTER_AGENT] READY companion"
+        },
+        "states": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "not_started"
+            },
+            {
+              "const": "building"
+            },
+            {
+              "const": "ready"
+            },
+            {
+              "const": "failed"
+            },
+            {
+              "const": "exited"
+            },
+            {
+              "const": "invalid_state"
+            },
+            {
+              "const": "foreign_process"
+            }
+          ],
+          "items": false,
+          "minItems": 7,
+          "maxItems": 7
+        }
+      }
+    },
+    "exitCodes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "properties": {
+        "0": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "1": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "2": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "3": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "codex",
+        "codexMetadata",
+        "claude",
+        "implicitInvocation"
+      ],
+      "properties": {
+        "version": {
+          "const": "1.0.0"
+        },
+        "codex": {
+          "const": ".agents/skills/launch-tokenmonster/SKILL.md"
+        },
+        "codexMetadata": {
+          "const": ".agents/skills/launch-tokenmonster/agents/openai.yaml"
+        },
+        "claude": {
+          "const": ".claude/skills/launch-tokenmonster/SKILL.md"
+        },
+        "implicitInvocation": {
+          "const": false
+        }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "localOnly",
+        "childOutput",
+        "persistentState",
+        "logUpload",
+        "auditUpload",
+        "credentials"
+      ],
+      "properties": {
+        "localOnly": {
+          "const": true
+        },
+        "childOutput": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "persistentState": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "logUpload": {
+          "const": "never"
+        },
+        "auditUpload": {
+          "const": "never"
+        },
+        "credentials": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nonEmptyStrings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/nonEmptyString"
+      }
+    },
+    "entrypoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "argv",
+        "flags",
+        "sideEffect"
+      ],
+      "properties": {
+        "argv": {
+          "$ref": "#/$defs/nonEmptyStrings"
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "sideEffect": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "repositorySideEffect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "when",
+        "removal"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "when": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "removal": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    }
+  }
+}

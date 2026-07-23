@@ -30,6 +30,9 @@ import {
   type WindowsSquirrelUpdaterListener,
   type WindowsSquirrelUpdaterPort
 } from "../automatic-update-controller.js"
+import {
+  createAgentLaunchReadyReporter
+} from "../agent-launch.js"
 import { registerAutomaticUpdateIpcHandlers } from "../automatic-update-ipc.js"
 import {
   createAutomaticUpdateService,
@@ -269,6 +272,14 @@ function closeView(
 export async function startPetCompanion(
   runtimeLease: TokenMonsterRuntimeLease
 ): Promise<void> {
+  const agentLaunchReady = createAgentLaunchReadyReporter({
+    environment: process.env,
+    argv: process.argv,
+    packaged: app.isPackaged,
+    write: (marker) => {
+      process.stdout.write(marker)
+    }
+  })
   installSessionGuards(session.fromPartition(PET_SESSION_PARTITION))
   const userDataDirectory = app.getPath("userData")
   const statePath = join(userDataDirectory, PET_STATE_FILE)
@@ -713,6 +724,7 @@ export async function startPetCompanion(
         shellStatus = Object.freeze({ kind: "ready" })
         await loadShell()
         if (startupLifecycle.shutdownRequested() || services !== started) return
+        agentLaunchReady.reportReady()
         reportSmokeOutcome("ok", stopOwnedRuntime)
 
         void started.runtime.closed.then((exit) => {

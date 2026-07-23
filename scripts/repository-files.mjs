@@ -7,6 +7,7 @@ export const rootDirectory = resolve(
 );
 
 const excludedDirectories = new Set([
+  ".agent-runtime",
   ".git",
   ".wrangler",
   "coverage",
@@ -28,6 +29,7 @@ const textExtensions = new Set([
   ".md",
   ".mjs",
   ".mts",
+  ".ps1",
   ".sh",
   ".sql",
   ".toml",

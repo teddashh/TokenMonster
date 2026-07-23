@@ -53,6 +53,26 @@ npm run build
 npm exec -- tokenmonster
 ```
 
+### Launch the desktop app from a repo with Codex or Claude Code
+
+If Codex or Claude Code is already installed and authenticated, first close any
+installed TokenMonster that may be running. Open this repository in the agent
+and invoke the source launch explicitly:
+
+- Codex: `$launch-tokenmonster start`
+- Claude Code: `/launch-tokenmonster start`
+
+Both entries use the same reviewed doctor, launch, and before/after audit
+workflow. They do not install or modify either agent CLI, credentials, global
+packages, or host tools. If the Electron native executable is absent, the
+locked installer/checksums obtain only the official checksum-verified Electron
+43.1.1 artifact. The result is the source-development Electron app with
+the same application/runtime, normal local data, and voice authority as the
+product, but it is not an installer: there is no shortcut, Add/Remove Programs
+entry, or installed auto-update parity. The same skill provides `status` and
+`stop` operations. See the complete
+[agent-ready source-development launch contract](docs/AGENT_READY_SOURCE_RELEASE.md).
+
 ## The companions
 
 The install ships with starter art for the four sisters and 168 fixed `zh-TW`/`en` text lines, with no audio, and works offline out of the box. The complete character-media pack (11 characters, 891 images, and 55 prerecorded WAVs; 946 entries total) downloads once from `cdn.ted-h.com` only after explicit in-app consent, then runs entirely from the verified local cache and can be repaired or removed at any time. Voice playback defaults off; removal returns to the built-in starter art and silence.
@@ -95,6 +115,7 @@ The full pre-commit gate (lint, typecheck, packaging verification, and more) is 
 - [Product specification](docs/PRODUCT_SPEC.md) · [Technical specification](docs/TECHNICAL_SPEC.md)
 - [Data inventory](docs/DATA_INVENTORY.md) · [Threat model](docs/THREAT_MODEL.md)
 - [Release notes and process](docs/RELEASE.md) · [Deployment runbook](docs/DEPLOYMENT_RUNBOOK.md)
+- [Agent-ready source-development launch](docs/AGENT_READY_SOURCE_RELEASE.md)
 - [Character wardrobe map](docs/CHARACTER_WARDROBE_MAP.md) · [ADRs](docs/adr/)
 
 ## License

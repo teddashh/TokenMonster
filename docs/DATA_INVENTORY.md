@@ -8,7 +8,7 @@
 
 > Status: Phase 0 privacy baseline
 >
-> Updated: 2026-07-16
+> Updated: 2026-07-23
 >
 > Owner: product/privacy owner (to assign before Private Alpha)
 
@@ -46,6 +46,7 @@ without a reviewed contract and inventory change.
 | `~/.tokenmonster/progression-v1.json` and character preferences | Local aggregate progression ledger, monotonic unlock timestamps, selected character, and active wardrobe choices | Local-only; mode `0600` in a mode `0700` directory | Rebuilt/fails closed to letter mode if invalid; never uploaded |
 | `~/.tokenmonster/character-profile-v1.json` | Strict derived identity/mood/evolution state, banded explanations, UTC window, and computation instant; mood uses the latest complete UTC day, while today's partial bucket is excluded from mood; never the footprint or token components | Local-only; mode `0600` in a mode `0700` directory | Replaced after a fresh derivation; only a current/previous-date snapshot at most 48 hours old may serve as stale; never uploaded |
 | `~/.tokenmonster/asset-cache` | Integrity-verified raster/voice objects named by SHA-256; schema-v1 presence is not public rights approval | Disposable, local-only cache; each read revalidates its digest | Embedded starter art needs no cache; after separate explicit consent, one verified fixed pack fills the cache for offline use, repair, and removal; missing content falls back to letter mode or silence |
+| Repository `.agent-runtime/` (explicit source-development workflow only) | Schema/contract versions; owned runner PID and random identity token; fixed timestamps/outcome enums; root/installed lock SHA-256 proofs backed by exact reviewed Electron package-file verification; fixed prerequisite/artifact booleans; exact allowlisted lifecycle markers | Git-ignored, local-only, never uploaded or included in diagnostics; directory `0700`, files `0600`, bounded no-follow reads | Identity-verified stop removes active process state; other records may be manually removed only after owned processes stop; malformed, linked, oversized, or non-private state is preserved and fails closed |
 | Cloudflare Worker memory | Validated request and transaction state | Never intentionally persisted | Request-scoped |
 | D1 current tables | Hashed enrollment auth, consent, recent canonical buckets, optional shares | Time Travel plus independent logical export | Revoke/delete within stated window |
 | D1 anonymous rollups | Irreversibly compacted historical coarse totals | Daily logical export; rebuild tested | Not attributable after compaction |
@@ -134,6 +135,13 @@ loaded aggregate metrics.
 Diagnostic exports must use an allowlist and a canary test. They may not copy
 the local database wholesale or include environment variables, home paths,
 process command lines, raw collector output, credentials, prompt, or response.
+
+The source-development agent lifecycle records may not contain an absolute
+repository/application-data path, environment value, source filename, raw
+build/Electron output, prompt, response, or credential. The safe log accepts
+only fixed status/error/exit markers and the exact readiness line. These
+records are operational evidence, not application diagnostics or release
+assets.
 
 ### Character-asset delivery (embedded basics; consent-gated fixed pack)
 

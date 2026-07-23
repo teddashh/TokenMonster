@@ -220,7 +220,7 @@ jobs:
       - plan
       - zstd-native-prebuilds
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -256,6 +256,33 @@ jobs:
       - name: Test desktop app
         shell: bash
         run: npm test --workspace @tokenmonster/companion
+
+      - name: Verify agent-ready source lifecycle contract
+        shell: bash
+        run: npm run agent:verify
+
+      - name: Smoke-test explicit agent source launch
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          OPENAI_API_KEY: TOKENMONSTER_AGENT_CANARY
+          ANTHROPIC_API_KEY: TOKENMONSTER_AGENT_CANARY
+          CODEX_HOME: TOKENMONSTER_AGENT_CANARY
+          CLAUDE_CONFIG_DIR: TOKENMONSTER_AGENT_CANARY
+          HTTPS_PROXY: TOKENMONSTER_AGENT_CANARY
+          ELECTRON_MIRROR: https://mirror.invalid/
+          npm_config_electron_mirror: https://mirror.invalid/
+          npm_config_platform: linux
+          npm_config_arch: arm64
+        run: |
+          set -euo pipefail
+          trap 'node scripts/agent/stop.mjs --json' EXIT
+          node scripts/agent/audit.mjs --phase before --write --json
+          node scripts/agent/doctor.mjs --json
+          node scripts/agent/launch.mjs --wait --timeout-ms 600000 --json
+          node scripts/agent/audit.mjs --phase after --write --json
+          node scripts/agent/stop.mjs --json
+          trap - EXIT
 
   # Unsigned internal installer builds never receive signing credentials.
   companion-installers:

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Launch TokenMonster"
+  short_description: "Build and run TokenMonster safely from source"
+  default_prompt: "Use $launch-tokenmonster to start TokenMonster from this repository."
+
+policy:
+  allow_implicit_invocation: false

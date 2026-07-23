@@ -19,6 +19,12 @@
     }
   },
   "scripts": {
+    "agent:audit": "node scripts/agent/audit.mjs",
+    "agent:doctor": "node scripts/agent/doctor.mjs",
+    "agent:launch": "node scripts/agent/launch.mjs",
+    "agent:status": "node scripts/agent/status.mjs",
+    "agent:stop": "node scripts/agent/stop.mjs",
+    "agent:verify": "node --test --test-concurrency=1 scripts/agent/tests/*.test.mjs",
     "audit:zstd-native-prebuild": "node scripts/release/audit-zstd-native-prebuild.mjs --all",
     "build": "node scripts/run-workspaces.mjs build",
     "format:check": "node scripts/verify-format.mjs",
@@ -27,7 +33,7 @@
     "make:companion:signed": "npm run make:signed --workspace @tokenmonster/companion",
     "package:companion:internal": "npm run package:internal --workspace @tokenmonster/companion",
     "prepare:asset-release-slots": "node scripts/asset-pipeline/prepare-release-slots.mjs",
-    "test": "node scripts/run-workspaces.mjs test",
+    "test": "npm run agent:verify && node scripts/run-workspaces.mjs test",
     "typecheck": "node scripts/run-workspaces.mjs typecheck && tsc -p tsconfig.release-scripts.json",
     "verify:artifacts": "node scripts/verify-release-artifacts.mjs",
     "verify:companion-package": "node scripts/verify-companion-package.mjs --mode internal",

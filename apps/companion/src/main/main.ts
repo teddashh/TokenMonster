@@ -34,6 +34,7 @@ import {
   getCompanionBootstrap,
   selectCompanionCharacter
 } from "./bridge-domain.js"
+import { installAgentParentDisconnectGuard } from "./agent-launch.js"
 import { createByokChatService, type ByokChatService } from "./byok-chat.js"
 import {
   createTokscaleCollectorService,
@@ -101,6 +102,23 @@ import type {
 import { handleDefaultSquirrelStartup } from "./squirrel-startup.js"
 
 function run(): void {
+  const sourceAgentGuardEnabled = installAgentParentDisconnectGuard({
+    environment: process.env,
+    argv: process.argv,
+    packaged: app.isPackaged,
+    connected: process.connected === true,
+    onDisconnect: (listener) => {
+      process.once("disconnect", listener)
+    },
+    exit: (code) => {
+      process.exitCode = code
+      const hardExit = setTimeout(() => app.exit(code), 15_000)
+      hardExit.unref()
+      app.quit()
+    }
+  })
+  if (sourceAgentGuardEnabled && process.connected !== true) return
+
   if (handleDefaultSquirrelStartup(() => app.quit())) {
     return
   }
