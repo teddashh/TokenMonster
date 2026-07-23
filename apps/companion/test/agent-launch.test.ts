@@ -3,40 +3,69 @@ import { readFile } from "node:fs/promises"
 import { describe, expect, it, vi } from "vitest"
 
 import {
-  AGENT_LAUNCH_READY_FD,
+  AGENT_LAUNCH_READY_CAPABILITY_ENV,
   AGENT_LAUNCH_READY_MARKER,
+  AGENT_LAUNCH_READY_PIPE_ID_ENV,
   createAgentLaunchReadyReporter,
-  installAgentParentDisconnectGuard
+  installAgentParentDisconnectGuard,
+  type AgentLaunchWindowsChannel
 } from "../src/main/agent-launch.js"
+
+const WINDOWS_PIPE_ID = "a".repeat(32)
+const WINDOWS_CAPABILITY = "b".repeat(64)
+const WINDOWS_PIPE_PATH =
+  "\\\\.\\pipe\\tokenmonster-agent-ready-" + WINDOWS_PIPE_ID
+const WINDOWS_PROCESS_ID = 4_242
 
 function reporter(
   environment: Readonly<Record<string, string | undefined>>,
   argv: readonly string[],
-  packaged = false
-): Readonly<{
-  reportReady(): boolean
-  writeWindowsPipe: ReturnType<
-    typeof vi.fn<(fd: number, marker: string) => boolean>
-  >
-  write: ReturnType<typeof vi.fn<(marker: string) => void>>
-}> {
-  const writeWindowsPipe = vi.fn<(fd: number, marker: string) => boolean>(
-    () => true
+  options: Readonly<{
+    packaged?: boolean
+    platform?: NodeJS.Platform
+    processId?: number
+  }> = {}
+) {
+  const channelWrite = vi.fn(async (_marker: string): Promise<boolean> => true)
+  const channelEnd = vi.fn(async (_marker: string): Promise<boolean> => true)
+  const channelDestroy = vi.fn<() => void>()
+  const channel: AgentLaunchWindowsChannel = Object.freeze({
+    write: channelWrite,
+    end: channelEnd,
+    destroy: channelDestroy
+  })
+  const openWindowsPipe = vi.fn(
+    async (_path: string): Promise<AgentLaunchWindowsChannel | null> => channel
   )
   const write = vi.fn<(marker: string) => void>()
   const ready = createAgentLaunchReadyReporter({
     environment,
     argv,
-    packaged,
-    platform: "linux",
-    writeWindowsPipe,
+    packaged: options.packaged ?? false,
+    platform: options.platform ?? "linux",
+    processId: options.processId ?? WINDOWS_PROCESS_ID,
+    openWindowsPipe,
     write
   })
   return Object.freeze({
-    reportReady: ready.reportReady,
-    writeWindowsPipe,
+    ready,
+    channelWrite,
+    channelEnd,
+    channelDestroy,
+    openWindowsPipe,
     write
   })
+}
+
+function windowsEnvironment(
+  overrides: Readonly<Record<string, string | undefined>> = {}
+): Readonly<Record<string, string | undefined>> {
+  return {
+    TOKENMONSTER_AGENT_LAUNCH: "1",
+    [AGENT_LAUNCH_READY_PIPE_ID_ENV]: WINDOWS_PIPE_ID,
+    [AGENT_LAUNCH_READY_CAPABILITY_ENV]: WINDOWS_CAPABILITY,
+    ...overrides
+  }
 }
 
 describe("agent source-launch readiness contract", () => {
@@ -117,99 +146,206 @@ describe("agent source-launch readiness contract", () => {
       environment: {},
       argv: ["--tokenmonster-agent-launch"] as readonly string[]
     }
-  ])("does not report for $name activation", ({ environment, argv }) => {
-    const ready = reporter(environment, argv)
+  ])(
+    "does not connect or report for $name activation",
+    async ({ environment, argv }) => {
+      const harness = reporter(environment, argv)
 
-    expect(ready.reportReady()).toBe(false)
-    expect(ready.write).not.toHaveBeenCalled()
-  })
+      await expect(harness.ready.reportConnected()).resolves.toBe(false)
+      await expect(harness.ready.reportReady()).resolves.toBe(false)
+      expect(harness.openWindowsPipe).not.toHaveBeenCalled()
+      expect(harness.write).not.toHaveBeenCalled()
+    }
+  )
 
-  it("reports the exact fixed marker when both source gates are active", () => {
-    const ready = reporter(
-      { TOKENMONSTER_AGENT_LAUNCH: "1" },
-      ["electron", ".", "--tokenmonster-agent-launch"]
-    )
+  it("reports the exact fixed marker on POSIX after source connection", async () => {
+    const harness = reporter({ TOKENMONSTER_AGENT_LAUNCH: "1" }, [
+      "electron",
+      ".",
+      "--tokenmonster-agent-launch"
+    ])
 
-    expect(ready.reportReady()).toBe(true)
-    expect(ready.write).toHaveBeenCalledOnce()
-    expect(ready.write).toHaveBeenCalledWith(
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    await expect(harness.ready.reportReady()).resolves.toBe(true)
+    expect(harness.write).toHaveBeenCalledOnce()
+    expect(harness.write).toHaveBeenCalledWith(
       "[TOKENMONSTER_AGENT] READY companion\n"
     )
     expect(AGENT_LAUNCH_READY_MARKER).toBe(
       "[TOKENMONSTER_AGENT] READY companion\n"
     )
-    expect(ready.writeWindowsPipe).not.toHaveBeenCalled()
+    expect(harness.openWindowsPipe).not.toHaveBeenCalled()
   })
 
-  it("uses one exact inherited pipe write instead of stdout on Windows", () => {
-    const writeWindowsPipe = vi.fn<
-      (fd: number, marker: string) => boolean
-    >(
-      () => true
-    )
-    const write = vi.fn<(marker: string) => void>()
-    const ready = createAgentLaunchReadyReporter({
-      environment: { TOKENMONSTER_AGENT_LAUNCH: "1" },
-      argv: ["electron", ".", "--tokenmonster-agent-launch"],
-      packaged: false,
-      platform: "win32",
-      writeWindowsPipe,
-      write
-    })
+  it("fails closed when POSIX readiness is attempted before connection", async () => {
+    const harness = reporter({ TOKENMONSTER_AGENT_LAUNCH: "1" }, [
+      "--tokenmonster-agent-launch"
+    ])
 
-    expect(ready.reportReady()).toBe(true)
-    expect(writeWindowsPipe).toHaveBeenCalledOnce()
-    expect(writeWindowsPipe).toHaveBeenCalledWith(
-      4,
+    await expect(harness.ready.reportReady()).resolves.toBe(false)
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    await expect(harness.ready.reportReady()).resolves.toBe(false)
+    expect(harness.write).not.toHaveBeenCalled()
+  })
+
+  it("uses one authenticated Windows pipe for HELLO then READY", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
+      ["electron", ".", "--tokenmonster-agent-launch"],
+      { platform: "win32" }
+    )
+
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    expect(harness.openWindowsPipe).toHaveBeenCalledOnce()
+    expect(harness.openWindowsPipe).toHaveBeenCalledWith(WINDOWS_PIPE_PATH)
+    expect(harness.channelWrite).toHaveBeenCalledOnce()
+    expect(harness.channelWrite).toHaveBeenCalledWith(
+      `[TOKENMONSTER_AGENT_PRIVATE] HELLO companion ` +
+        `pid=${WINDOWS_PROCESS_ID} cap=${WINDOWS_CAPABILITY}\n`
+    )
+
+    await expect(harness.ready.reportReady()).resolves.toBe(true)
+    expect(harness.channelEnd).toHaveBeenCalledOnce()
+    expect(harness.channelEnd).toHaveBeenCalledWith(
       "[TOKENMONSTER_AGENT] READY companion\n"
     )
-    expect(AGENT_LAUNCH_READY_FD).toBe(4)
-    expect(write).not.toHaveBeenCalled()
+    expect(harness.channelDestroy).not.toHaveBeenCalled()
+    expect(harness.write).not.toHaveBeenCalled()
   })
 
-  it("fails closed when the Windows readiness pipe is unavailable", () => {
-    const writeWindowsPipe = vi.fn<
-      (fd: number, marker: string) => boolean
-    >(
-      () => false
-    )
-    const write = vi.fn<(marker: string) => void>()
-    const ready = createAgentLaunchReadyReporter({
-      environment: { TOKENMONSTER_AGENT_LAUNCH: "1" },
-      argv: ["--tokenmonster-agent-launch"],
-      packaged: false,
-      platform: "win32",
-      writeWindowsPipe,
-      write
-    })
-
-    expect(ready.reportReady()).toBe(false)
-    expect(ready.reportReady()).toBe(false)
-    expect(writeWindowsPipe).toHaveBeenCalledTimes(2)
-    expect(write).not.toHaveBeenCalled()
-  })
-
-  it("never reports from a packaged app", () => {
-    const ready = reporter(
-      { TOKENMONSTER_AGENT_LAUNCH: "1" },
+  it("opens the Windows pipe at most once under concurrent calls", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
       ["--tokenmonster-agent-launch"],
-      true
+      { platform: "win32" }
     )
 
-    expect(ready.reportReady()).toBe(false)
-    expect(ready.write).not.toHaveBeenCalled()
+    await expect(
+      Promise.all([
+        harness.ready.reportConnected(),
+        harness.ready.reportConnected(),
+        harness.ready.reportConnected()
+      ])
+    ).resolves.toEqual([true, false, false])
+    expect(harness.openWindowsPipe).toHaveBeenCalledOnce()
+    expect(harness.channelWrite).toHaveBeenCalledOnce()
   })
 
-  it("reports at most once in the same run", () => {
-    const ready = reporter(
-      { TOKENMONSTER_AGENT_LAUNCH: "1" },
-      ["--tokenmonster-agent-launch"]
+  it("fails closed when the Windows readiness pipe is unavailable", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
+      ["--tokenmonster-agent-launch"],
+      { platform: "win32" }
+    )
+    harness.openWindowsPipe.mockResolvedValue(null)
+
+    await expect(harness.ready.reportConnected()).resolves.toBe(false)
+    await expect(harness.ready.reportConnected()).resolves.toBe(false)
+    await expect(harness.ready.reportReady()).resolves.toBe(false)
+    expect(harness.openWindowsPipe).toHaveBeenCalledOnce()
+    expect(harness.channelWrite).not.toHaveBeenCalled()
+    expect(harness.channelEnd).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      name: "missing pipe id",
+      environment: windowsEnvironment({
+        [AGENT_LAUNCH_READY_PIPE_ID_ENV]: undefined
+      }),
+      processId: WINDOWS_PROCESS_ID
+    },
+    {
+      name: "uppercase pipe id",
+      environment: windowsEnvironment({
+        [AGENT_LAUNCH_READY_PIPE_ID_ENV]: "A".repeat(32)
+      }),
+      processId: WINDOWS_PROCESS_ID
+    },
+    {
+      name: "short capability",
+      environment: windowsEnvironment({
+        [AGENT_LAUNCH_READY_CAPABILITY_ENV]: "b".repeat(63)
+      }),
+      processId: WINDOWS_PROCESS_ID
+    },
+    {
+      name: "zero process id",
+      environment: windowsEnvironment(),
+      processId: 0
+    },
+    {
+      name: "oversized process id",
+      environment: windowsEnvironment(),
+      processId: 2_147_483_648
+    }
+  ])(
+    "rejects an invalid Windows channel contract: $name",
+    async ({ environment, processId }) => {
+      const harness = reporter(environment, ["--tokenmonster-agent-launch"], {
+        platform: "win32",
+        processId
+      })
+
+      await expect(harness.ready.reportConnected()).resolves.toBe(false)
+      await expect(harness.ready.reportReady()).resolves.toBe(false)
+      expect(harness.openWindowsPipe).not.toHaveBeenCalled()
+      expect(harness.channelWrite).not.toHaveBeenCalled()
+      expect(harness.channelEnd).not.toHaveBeenCalled()
+    }
+  )
+
+  it("destroys a Windows channel when HELLO cannot be written", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
+      ["--tokenmonster-agent-launch"],
+      { platform: "win32" }
+    )
+    harness.channelWrite.mockResolvedValue(false)
+
+    await expect(harness.ready.reportConnected()).resolves.toBe(false)
+    await expect(harness.ready.reportReady()).resolves.toBe(false)
+    expect(harness.channelDestroy).toHaveBeenCalledOnce()
+    expect(harness.channelEnd).not.toHaveBeenCalled()
+  })
+
+  it("destroys a Windows channel when READY cannot be ended", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
+      ["--tokenmonster-agent-launch"],
+      { platform: "win32" }
+    )
+    harness.channelEnd.mockResolvedValue(false)
+
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    await expect(harness.ready.reportReady()).resolves.toBe(false)
+    expect(harness.channelDestroy).toHaveBeenCalledOnce()
+  })
+
+  it("does not open a readiness channel from a packaged app", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
+      ["--tokenmonster-agent-launch"],
+      { packaged: true, platform: "win32" }
     )
 
-    expect(ready.reportReady()).toBe(true)
-    expect(ready.reportReady()).toBe(false)
-    expect(ready.reportReady()).toBe(false)
-    expect(ready.write).toHaveBeenCalledOnce()
+    await expect(harness.ready.reportConnected()).resolves.toBe(false)
+    await expect(harness.ready.reportReady()).resolves.toBe(false)
+    expect(harness.openWindowsPipe).not.toHaveBeenCalled()
+    expect(harness.channelWrite).not.toHaveBeenCalled()
+    expect(harness.channelEnd).not.toHaveBeenCalled()
+  })
+
+  it("reports readiness at most once in the same POSIX run", async () => {
+    const harness = reporter({ TOKENMONSTER_AGENT_LAUNCH: "1" }, [
+      "--tokenmonster-agent-launch"
+    ])
+
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    await expect(harness.ready.reportConnected()).resolves.toBe(false)
+    await expect(harness.ready.reportReady()).resolves.toBe(true)
+    await expect(harness.ready.reportReady()).resolves.toBe(false)
+    expect(harness.write).toHaveBeenCalledOnce()
   })
 
   it("installs the parent guard before Electron startup work", async () => {
@@ -222,10 +358,7 @@ describe("agent source-launch readiness contract", () => {
       "installAgentParentDisconnectGuard({",
       runStart
     )
-    const squirrel = source.indexOf(
-      "handleDefaultSquirrelStartup",
-      guard
-    )
+    const squirrel = source.indexOf("handleDefaultSquirrelStartup", guard)
     const ready = source.indexOf("app.whenReady()", guard)
 
     expect([runStart, guard, squirrel, ready]).not.toContain(-1)
@@ -246,6 +379,51 @@ describe("agent source-launch readiness contract", () => {
     )
   })
 
+  it("connects before startup and removes private channel values from the app environment", async () => {
+    const source = await readFile(
+      new URL("../src/main/pet/pet.ts", import.meta.url),
+      "utf8"
+    )
+    const reporterCreated = source.indexOf(
+      "const agentLaunchReady = createAgentLaunchReadyReporter({"
+    )
+    const pipeIdDeleted = source.indexOf(
+      "delete process.env[AGENT_LAUNCH_READY_PIPE_ID_ENV]",
+      reporterCreated
+    )
+    const capabilityDeleted = source.indexOf(
+      "delete process.env[AGENT_LAUNCH_READY_CAPABILITY_ENV]",
+      pipeIdDeleted
+    )
+    const connected = source.indexOf(
+      "await agentLaunchReady.reportConnected()",
+      capabilityDeleted
+    )
+    const sessionGuards = source.indexOf("installSessionGuards(", connected)
+    const serviceStartup = source.indexOf(
+      "await startPetServices(petByokSecretSlot)",
+      sessionGuards
+    )
+
+    expect([
+      reporterCreated,
+      pipeIdDeleted,
+      capabilityDeleted,
+      connected,
+      sessionGuards,
+      serviceStartup
+    ]).not.toContain(-1)
+    expect(reporterCreated).toBeLessThan(pipeIdDeleted)
+    expect(pipeIdDeleted).toBeLessThan(capabilityDeleted)
+    expect(capabilityDeleted).toBeLessThan(connected)
+    expect(connected).toBeLessThan(sessionGuards)
+    expect(sessionGuards).toBeLessThan(serviceStartup)
+    expect(
+      source.match(/agentLaunchReady\.reportConnected\(\)/gu)
+    ).toHaveLength(1)
+    expect(source).not.toContain("agentLaunchReady.reportPhase(")
+  })
+
   it("reports only after services, authenticated pet view, and shell are ready", async () => {
     const source = await readFile(
       new URL("../src/main/pet/pet.ts", import.meta.url),
@@ -255,7 +433,10 @@ describe("agent source-launch readiness contract", () => {
     expect(source).toContain("argv: process.argv")
     expect(source).toContain("packaged: app.isPackaged")
     expect(source).toContain("platform: process.platform")
-    expect(source).toContain("writeSync(fd, marker")
+    expect(source).toContain("processId: process.pid")
+    expect(source).toContain("openWindowsPipe: openAgentLaunchPipe")
+    expect(source).toContain('socket.write(marker, "utf8"')
+    expect(source).toContain('socket.end(marker, "utf8"')
 
     const serviceReady = source.indexOf(
       "const started = await startPetServices(petByokSecretSlot)"
@@ -278,7 +459,7 @@ describe("agent source-launch readiness contract", () => {
       shellLoaded
     )
     const readinessReported = source.indexOf(
-      "agentLaunchReady.reportReady()",
+      "await agentLaunchReady.reportReady()",
       finalStartupFence
     )
 

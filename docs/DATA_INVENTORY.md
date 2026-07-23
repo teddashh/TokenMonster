@@ -141,7 +141,8 @@ repository/application-data path, environment value, source filename, raw
 build/Electron output, prompt, response, or credential. The safe log accepts
 only fixed status/error/exit markers and the exact readiness line. These
 records are operational evidence, not application diagnostics or release
-assets.
+assets. On Windows, the ephemeral readiness-pipe identifier, capability, and
+raw `HELLO`/readiness bytes are never logged or persisted.
 
 ### Character-asset delivery (embedded basics; consent-gated fixed pack)
 

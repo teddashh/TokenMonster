@@ -54,6 +54,8 @@ const SAFE_GUI_ENVIRONMENT_NAMES = [
   "XDG_SESSION_DESKTOP",
   "XDG_SESSION_TYPE",
 ];
+const AGENT_READY_PIPE_ID_PATTERN = /^[0-9a-f]{32}$/u;
+const AGENT_READY_CAPABILITY_PATTERN = /^[0-9a-f]{64}$/u;
 
 function environmentValue(source, requestedName) {
   const matches = Object.keys(source).filter(
@@ -65,7 +67,13 @@ function environmentValue(source, requestedName) {
 
 export function projectSafeEnvironment(
   source = process.env,
-  { agentLaunch = false, gui = true, npm = false } = {},
+  {
+    agentLaunch = false,
+    agentReadyCapability,
+    agentReadyPipeId,
+    gui = true,
+    npm = false,
+  } = {},
 ) {
   const projected = {};
   const names = [
@@ -86,6 +94,24 @@ export function projectSafeEnvironment(
       process.platform === "win32" ? "NUL" : "/dev/null";
   }
   if (agentLaunch) projected.TOKENMONSTER_AGENT_LAUNCH = "1";
+  const hasAgentReadyPipeId = agentReadyPipeId !== undefined;
+  const hasAgentReadyCapability = agentReadyCapability !== undefined;
+  if (hasAgentReadyPipeId !== hasAgentReadyCapability) {
+    throw new Error("agent_ready_channel_invalid");
+  }
+  if (hasAgentReadyPipeId) {
+    if (
+      !agentLaunch ||
+      typeof agentReadyPipeId !== "string" ||
+      !AGENT_READY_PIPE_ID_PATTERN.test(agentReadyPipeId) ||
+      typeof agentReadyCapability !== "string" ||
+      !AGENT_READY_CAPABILITY_PATTERN.test(agentReadyCapability)
+    ) {
+      throw new Error("agent_ready_channel_invalid");
+    }
+    projected.TOKENMONSTER_AGENT_READY_PIPE_ID = agentReadyPipeId;
+    projected.TOKENMONSTER_AGENT_READY_CAPABILITY = agentReadyCapability;
+  }
   return projected;
 }
 

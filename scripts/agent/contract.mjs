@@ -547,6 +547,7 @@ const SAFE_FIXED_MARKERS = new Set([
   "[TOKENMONSTER_AGENT] STATUS build",
   "[TOKENMONSTER_AGENT] STATUS electron_start",
   "[TOKENMONSTER_AGENT] STATUS accepted",
+  "[TOKENMONSTER_AGENT] STATUS electron_connected",
   "[TOKENMONSTER_AGENT] ERROR dependency_install_failed",
   "[TOKENMONSTER_AGENT] ERROR electron_install_failed",
   "[TOKENMONSTER_AGENT] ERROR build_failed",

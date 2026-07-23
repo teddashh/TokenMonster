@@ -5,7 +5,10 @@ import test from "node:test";
 import { contractVersion, readyMarker } from "../contract.mjs";
 import {
   committedState,
+  createWindowsReadinessConfiguration,
   ReadinessLineGate,
+  WindowsReadinessStreamGate,
+  windowsPrivateHelloMarker,
 } from "../runner.mjs";
 
 test("readiness accepts one exact stdout line only once", () => {
@@ -71,14 +74,183 @@ test("overlong lines recover and closed gates ignore later bytes", () => {
   assert.equal(reports, 1);
 });
 
-test("runner uses an inherited pipe on Windows and stdout elsewhere", async () => {
+test("Windows readiness configuration uses exact random byte counts", () => {
+  const requested = [];
+  const configuration = createWindowsReadinessConfiguration((size) => {
+    requested.push(size);
+    return Buffer.alloc(size, size === 16 ? 0xab : 0xcd);
+  });
+  assert.deepEqual(requested, [16, 32]);
+  assert.equal(configuration.pipeId, "ab".repeat(16));
+  assert.equal(
+    configuration.pipePath,
+    `\\\\.\\pipe\\tokenmonster-agent-ready-${"ab".repeat(16)}`,
+  );
+  assert.equal(configuration.capability, "cd".repeat(32));
+  assert.throws(
+    () => createWindowsReadinessConfiguration(() => Buffer.alloc(15)),
+    /agent_ready_channel_invalid/u,
+  );
+});
+
+test("Windows private hello binds an exact pid and capability", () => {
+  const capability = "a1".repeat(32);
+  assert.equal(
+    windowsPrivateHelloMarker(4242, capability),
+    `[TOKENMONSTER_AGENT_PRIVATE] HELLO companion pid=4242 cap=${capability}`,
+  );
+  for (const [pid, value] of [
+    [0, capability],
+    [2_147_483_648, capability],
+    [4242, capability.toUpperCase()],
+    [4242, capability.slice(2)],
+  ]) {
+    assert.throws(
+      () => windowsPrivateHelloMarker(pid, value),
+      /agent_ready_marker_invalid/u,
+    );
+  }
+});
+
+function windowsGate(overrides = {}) {
+  const events = [];
+  const capability = "01".repeat(32);
+  const hello = windowsPrivateHelloMarker(4242, capability);
+  const gate = new WindowsReadinessStreamGate(hello, {
+    onAuthenticated: () => {
+      events.push("authenticated");
+      return overrides.authenticatedResult ?? true;
+    },
+    onFatal: () => events.push("fatal"),
+    onReady: () => {
+      events.push("ready");
+      return overrides.readyResult ?? true;
+    },
+    onRejected: () => events.push("rejected"),
+  });
+  return { capability, events, gate, hello };
+}
+
+test("Windows readiness accepts fragmented HELLO and READY only at EOF", () => {
+  const { events, gate, hello } = windowsGate();
+  const stream = `${hello}\n${readyMarker}\n`;
+  for (const fragment of [
+    stream.slice(0, 7),
+    stream.slice(7, 91),
+    stream.slice(91),
+  ]) {
+    gate.push(Buffer.from(fragment));
+  }
+  assert.deepEqual(events, ["authenticated"]);
+  gate.finish();
+  assert.deepEqual(events, ["authenticated", "ready"]);
+  gate.finish();
+  assert.deepEqual(events, ["authenticated", "ready"]);
+});
+
+test("Windows readiness accepts coalesced exact protocol on one stream", () => {
+  const { events, gate, hello } = windowsGate();
+  gate.push(Buffer.from(`${hello}\n${readyMarker}\n`));
+  gate.finish();
+  assert.deepEqual(events, ["authenticated", "ready"]);
+});
+
+test("Windows readiness rejects malformed or incomplete pre-auth streams", () => {
+  const cases = [
+    (hello) => `${hello.replace("pid=4242", "pid=4243")}\n`,
+    (hello) => `${hello.slice(0, -1)}2\n`,
+    (hello) => `${hello}\r\n`,
+    (hello) => ` ${hello}\n`,
+    (hello) => hello,
+    () => "x".repeat(257),
+  ];
+  for (const invalid of cases) {
+    const { events, gate, hello } = windowsGate();
+    gate.push(Buffer.from(invalid(hello)));
+    gate.finish();
+    assert.deepEqual(events, ["rejected"]);
+  }
+});
+
+test("Windows readiness fails authenticated protocol violations closed", () => {
+  for (const suffix of [
+    "",
+    "wrong\n",
+    `${readyMarker}\r\n`,
+    `${readyMarker}\nextra`,
+    `${readyMarker}\nextra\n`,
+  ]) {
+    const { events, gate, hello } = windowsGate();
+    gate.push(Buffer.from(`${hello}\n${suffix}`));
+    gate.finish();
+    assert.deepEqual(events, ["authenticated", "fatal"]);
+  }
+
+  const failedSocket = windowsGate();
+  failedSocket.gate.push(
+    Buffer.from(`${failedSocket.hello}\n${readyMarker}\n`),
+  );
+  failedSocket.gate.fail();
+  assert.deepEqual(failedSocket.events, [
+    "authenticated",
+    "fatal",
+  ]);
+});
+
+test("separate Windows clients cannot combine protocol fragments", () => {
+  const first = windowsGate();
+  const second = windowsGate();
+  const midpoint = Math.floor(first.hello.length / 2);
+  first.gate.push(Buffer.from(first.hello.slice(0, midpoint)));
+  first.gate.finish();
+  second.gate.push(
+    Buffer.from(`${first.hello.slice(midpoint)}\n${readyMarker}\n`),
+  );
+  second.gate.finish();
+  assert.deepEqual(first.events, ["rejected"]);
+  assert.deepEqual(second.events, ["rejected"]);
+});
+
+test("Windows readiness callback rejection is fatal", () => {
+  const authenticationFailure = windowsGate({
+    authenticatedResult: false,
+  });
+  authenticationFailure.gate.push(
+    Buffer.from(`${authenticationFailure.hello}\n`),
+  );
+  assert.deepEqual(authenticationFailure.events, [
+    "authenticated",
+    "fatal",
+  ]);
+
+  const readyFailure = windowsGate({ readyResult: false });
+  readyFailure.gate.push(
+    Buffer.from(`${readyFailure.hello}\n${readyMarker}\n`),
+  );
+  readyFailure.gate.finish();
+  assert.deepEqual(readyFailure.events, [
+    "authenticated",
+    "ready",
+    "fatal",
+  ]);
+});
+
+test("runner listens before spawn, keeps fd3 IPC, and uses stdout only off Windows", async () => {
   const source = await readFile(
     new URL("../runner.mjs", import.meta.url),
     "utf8",
   );
+  assert.ok(
+    source.indexOf("await listenWindowsReadinessServer") <
+      source.indexOf("child = spawn"),
+  );
   expectSource(
     source,
-    /process\.platform === "win32"\s+\? \["ignore", "pipe", "pipe", "ipc", "pipe"\]\s+: \["ignore", "pipe", "pipe", "ipc"\]/u,
+    /agentReadyCapability: windowsReadiness\?\.capability,\s+agentReadyPipeId: windowsReadiness\?\.pipeId/u,
+  );
+  expectSource(
+    source,
+    /stdio: \["ignore", "pipe", "pipe", "ipc"\]/u,
   );
   expectSource(
     source,
@@ -86,12 +258,9 @@ test("runner uses an inherited pipe on Windows and stdout elsewhere", async () =
   );
   expectSource(
     source,
-    /if \(process\.platform === "win32"\) \{\s+const windowsReadyPipe = child\.stdio\[4\];\s+if \(\s+windowsReadyPipe === null \|\|\s+windowsReadyPipe === undefined\s+\) \{\s+failReadinessChannel\(\);\s+\} else \{\s+windowsReadyPipe\.on\("data", \(chunk\) => \{\s+readyGate\.push\(chunk\);\s+\}\);\s+windowsReadyPipe\.once\("error", failReadinessChannel\);\s+windowsReadyPipe\.once\("end", failReadinessChannel\);\s+\}\s+\}/u,
-  );
-  expectSource(
-    source,
     /void terminateProcessTree\(\s+childPid,\s+\(\) =>\s+child\.pid === childPid &&\s+child\.exitCode === null &&\s+child\.signalCode === null,\s+\)/u,
   );
+  assert.equal(source.includes("child.stdio[4]"), false);
 });
 
 test("runner commit identity binds both the exact pid and token", () => {

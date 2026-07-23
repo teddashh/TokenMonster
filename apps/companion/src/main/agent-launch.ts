@@ -1,10 +1,23 @@
 export const AGENT_LAUNCH_READY_MARKER =
   "[TOKENMONSTER_AGENT] READY companion\n"
 
-export const AGENT_LAUNCH_READY_FD = 4
+export const AGENT_LAUNCH_READY_PIPE_ID_ENV = "TOKENMONSTER_AGENT_READY_PIPE_ID"
+export const AGENT_LAUNCH_READY_CAPABILITY_ENV =
+  "TOKENMONSTER_AGENT_READY_CAPABILITY"
+
+const WINDOWS_READY_PIPE_ID_PATTERN = /^[0-9a-f]{32}$/u
+const WINDOWS_READY_CAPABILITY_PATTERN = /^[0-9a-f]{64}$/u
+const WINDOWS_READY_PIPE_PREFIX = "\\\\.\\pipe\\tokenmonster-agent-ready-"
+
+export interface AgentLaunchWindowsChannel {
+  write(marker: string): Promise<boolean>
+  end(marker: string): Promise<boolean>
+  destroy(): void
+}
 
 export interface AgentLaunchReadyReporter {
-  reportReady(): boolean
+  reportConnected(): Promise<boolean>
+  reportReady(): Promise<boolean>
 }
 
 export interface AgentLaunchReadyReporterOptions {
@@ -12,7 +25,10 @@ export interface AgentLaunchReadyReporterOptions {
   readonly argv: readonly string[]
   readonly packaged: boolean
   readonly platform: NodeJS.Platform
-  readonly writeWindowsPipe: (fd: number, marker: string) => boolean
+  readonly processId: number
+  readonly openWindowsPipe: (
+    path: string
+  ) => Promise<AgentLaunchWindowsChannel | null>
   readonly write: (marker: string) => void
 }
 
@@ -49,25 +65,94 @@ export function createAgentLaunchReadyReporter(
     options.argv,
     options.packaged
   )
-  let reported = false
+  const windowsPipeId = options.environment[AGENT_LAUNCH_READY_PIPE_ID_ENV]
+  const windowsCapability =
+    options.environment[AGENT_LAUNCH_READY_CAPABILITY_ENV]
+  const windowsChannelValid =
+    typeof windowsPipeId === "string" &&
+    WINDOWS_READY_PIPE_ID_PATTERN.test(windowsPipeId) &&
+    typeof windowsCapability === "string" &&
+    WINDOWS_READY_CAPABILITY_PATTERN.test(windowsCapability) &&
+    Number.isSafeInteger(options.processId) &&
+    options.processId > 0 &&
+    options.processId <= 2_147_483_647
+  let channel: AgentLaunchWindowsChannel | null = null
+  let connectAttempted = false
+  let connected = false
+  let readyAttempted = false
 
   return Object.freeze({
-    reportReady(): boolean {
-      if (!enabled || reported) return false
+    async reportConnected(): Promise<boolean> {
+      if (!enabled || connected || connectAttempted) return false
+      connectAttempted = true
+      if (options.platform !== "win32") {
+        connected = true
+        return true
+      }
       if (
-        options.platform === "win32" &&
-        !options.writeWindowsPipe(
-          AGENT_LAUNCH_READY_FD,
-          AGENT_LAUNCH_READY_MARKER
-        )
+        !windowsChannelValid ||
+        windowsPipeId === undefined ||
+        windowsCapability === undefined
       ) {
         return false
       }
-      reported = true
-      if (options.platform !== "win32") {
-        options.write(AGENT_LAUNCH_READY_MARKER)
+      try {
+        channel = await options.openWindowsPipe(
+          `${WINDOWS_READY_PIPE_PREFIX}${windowsPipeId}`
+        )
+      } catch {
+        return false
       }
-      return true
+      if (channel === null) return false
+      const hello =
+        `[TOKENMONSTER_AGENT_PRIVATE] HELLO companion ` +
+        `pid=${options.processId} cap=${windowsCapability}\n`
+      try {
+        if (await channel.write(hello)) {
+          connected = true
+          return true
+        }
+      } catch {
+        // The private readiness channel is diagnostic only. Fail closed
+        // without taking down the local companion.
+      }
+      try {
+        channel.destroy()
+      } catch {
+        // A broken transport is already a failed readiness report.
+      } finally {
+        channel = null
+      }
+      return false
+    },
+    async reportReady(): Promise<boolean> {
+      if (!enabled || readyAttempted) return false
+      readyAttempted = true
+      if (options.platform !== "win32") {
+        if (!connected) return false
+        try {
+          options.write(AGENT_LAUNCH_READY_MARKER)
+          return true
+        } catch {
+          return false
+        }
+      }
+      if (!connected || channel === null) return false
+      let sent = false
+      try {
+        sent = await channel.end(AGENT_LAUNCH_READY_MARKER)
+      } catch {
+        sent = false
+      }
+      if (!sent) {
+        try {
+          channel.destroy()
+        } catch {
+          // A broken transport is already a failed readiness report.
+        }
+      }
+      channel = null
+      return sent
     }
   })
 }

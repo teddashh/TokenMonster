@@ -195,7 +195,7 @@
   },
   "privacy": {
     "localOnly": true,
-    "childOutput": "discarded; on Windows only a fixed marker from the dedicated inherited readiness pipe is accepted, while other platforms accept only that exact marker on stdout",
+    "childOutput": "discarded; on Windows readiness uses an ephemeral policy-generated local named pipe with a strict bounded capability-authenticated HELLO-to-READY exchange; the pipe identifier, capability and raw bytes are never logged or persisted; this does not claim same-user-only access or remote-client rejection, and the existing local trust boundary is the same OS login; other platforms accept only the exact readiness marker on stdout",
     "persistentState": "content-blind; no absolute paths, environment values, source filenames or raw child output",
     "logUpload": "never",
     "auditUpload": "never",

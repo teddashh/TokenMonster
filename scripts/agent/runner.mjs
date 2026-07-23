@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -18,6 +20,15 @@ import { terminateProcessTree } from "./process-control.mjs";
 import { validRunnerToken } from "./process-identity.mjs";
 
 const MAX_PENDING_BYTES = 4 * 1024;
+const WINDOWS_READINESS_STREAM_CAP = 256;
+const WINDOWS_READINESS_PREAUTH_TIMEOUT_MS = 5_000;
+const WINDOWS_READINESS_AUTHENTICATED_TIMEOUT_MS = 120_000;
+const WINDOWS_READINESS_PIPE_PREFIX =
+  "\\\\.\\pipe\\tokenmonster-agent-ready-";
+const WINDOWS_READINESS_PIPE_ID_PATTERN = /^[0-9a-f]{32}$/u;
+const WINDOWS_READINESS_CAPABILITY_PATTERN = /^[0-9a-f]{64}$/u;
+const WINDOWS_ELECTRON_CONNECTED_MARKER =
+  "[TOKENMONSTER_AGENT] STATUS electron_connected";
 const SAFE_SIGNALS = new Set([
   "SIGABRT",
   "SIGBUS",
@@ -39,16 +50,15 @@ export class ReadinessLineGate {
   #pending = Buffer.alloc(0);
   #reported = false;
   #report;
+  #expected;
 
-  constructor(report) {
+  constructor(report, expected = readyMarker) {
     this.#report = report;
+    this.#expected = Buffer.from(expected, "utf8");
   }
 
   #accept(line) {
-    if (
-      !this.#reported &&
-      line.equals(Buffer.from(readyMarker, "utf8"))
-    ) {
+    if (!this.#reported && line.equals(this.#expected)) {
       this.#reported = true;
       this.#report();
     }
@@ -87,6 +97,295 @@ export class ReadinessLineGate {
     this.#closed = true;
     this.#pending = Buffer.alloc(0);
   }
+}
+
+export function createWindowsReadinessConfiguration(
+  random = randomBytes,
+) {
+  const pipeId = random(16);
+  const capability = random(32);
+  if (
+    !Buffer.isBuffer(pipeId) ||
+    pipeId.length !== 16 ||
+    !Buffer.isBuffer(capability) ||
+    capability.length !== 32
+  ) {
+    throw new Error("agent_ready_channel_invalid");
+  }
+  const identifier = pipeId.toString("hex");
+  const encodedCapability = capability.toString("hex");
+  if (
+    !WINDOWS_READINESS_PIPE_ID_PATTERN.test(identifier) ||
+    !WINDOWS_READINESS_CAPABILITY_PATTERN.test(encodedCapability)
+  ) {
+    throw new Error("agent_ready_channel_invalid");
+  }
+  return Object.freeze({
+    pipeId: identifier,
+    pipePath: `${WINDOWS_READINESS_PIPE_PREFIX}${identifier}`,
+    capability: encodedCapability,
+  });
+}
+
+export function windowsPrivateHelloMarker(
+  processId,
+  capability,
+) {
+  if (
+    !Number.isSafeInteger(processId) ||
+    processId <= 0 ||
+    processId > 2_147_483_647 ||
+    typeof capability !== "string" ||
+    !WINDOWS_READINESS_CAPABILITY_PATTERN.test(capability)
+  ) {
+    throw new Error("agent_ready_marker_invalid");
+  }
+  return (
+    `[TOKENMONSTER_AGENT_PRIVATE] HELLO companion ` +
+    `pid=${processId} cap=${capability}`
+  );
+}
+
+export class WindowsReadinessStreamGate {
+  #authenticated = false;
+  #closed = false;
+  #expectedHello;
+  #onAuthenticated;
+  #onFatal;
+  #onReady;
+  #onRejected;
+  #pending = Buffer.alloc(0);
+  #readyReceived = false;
+  #totalBytes = 0;
+
+  constructor(
+    expectedHello,
+    { onAuthenticated, onFatal, onReady, onRejected },
+  ) {
+    this.#expectedHello = Buffer.from(expectedHello, "utf8");
+    this.#onAuthenticated = onAuthenticated;
+    this.#onFatal = onFatal;
+    this.#onReady = onReady;
+    this.#onRejected = onRejected;
+  }
+
+  #terminate(kind) {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.#pending = Buffer.alloc(0);
+    if (kind === "fatal") this.#onFatal();
+    else this.#onRejected();
+  }
+
+  #accept(line) {
+    if (!this.#authenticated) {
+      if (!line.equals(this.#expectedHello)) {
+        this.#terminate("rejected");
+        return;
+      }
+      this.#authenticated = true;
+      if (this.#onAuthenticated() !== true) {
+        this.#terminate("fatal");
+      }
+      return;
+    }
+    if (
+      this.#readyReceived ||
+      !line.equals(Buffer.from(readyMarker, "utf8"))
+    ) {
+      this.#terminate("fatal");
+      return;
+    }
+    this.#readyReceived = true;
+  }
+
+  push(chunk) {
+    if (this.#closed) return;
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    if (bytes.length === 0) return;
+    if (this.#readyReceived) {
+      this.#terminate("fatal");
+      return;
+    }
+    this.#totalBytes += bytes.length;
+    if (this.#totalBytes > WINDOWS_READINESS_STREAM_CAP) {
+      this.#terminate(this.#authenticated ? "fatal" : "rejected");
+      return;
+    }
+    this.#pending = Buffer.concat([this.#pending, bytes]);
+    while (!this.#closed) {
+      const newline = this.#pending.indexOf(0x0a);
+      if (newline === -1) return;
+      const line = this.#pending.subarray(0, newline);
+      this.#pending = this.#pending.subarray(newline + 1);
+      this.#accept(line);
+      if (this.#readyReceived && this.#pending.length > 0) {
+        this.#terminate("fatal");
+      }
+    }
+  }
+
+  finish() {
+    if (this.#closed) return;
+    if (
+      !this.#authenticated ||
+      !this.#readyReceived ||
+      this.#pending.length !== 0
+    ) {
+      this.#terminate(this.#authenticated ? "fatal" : "rejected");
+      return;
+    }
+    this.#closed = true;
+    if (this.#onReady() !== true) this.#onFatal();
+  }
+
+  fail() {
+    if (this.#closed) return;
+    this.#terminate(this.#authenticated ? "fatal" : "rejected");
+  }
+}
+
+function closeWindowsReadinessServer(controller) {
+  controller?.close();
+}
+
+function listenWindowsReadinessServer(
+  configuration,
+  { getChild, onConnected, onFailure, onReady },
+) {
+  return new Promise((resolvePromise, reject) => {
+    const sockets = new Set();
+    let authenticatedSocket;
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      for (const socket of sockets) socket.destroy();
+      sockets.clear();
+      try {
+        server.close();
+      } catch {
+        // A startup error or prior close may already own server shutdown.
+      }
+    };
+    const fail = () => {
+      if (closed) return;
+      close();
+      onFailure();
+    };
+    const server = createServer(
+      { allowHalfOpen: true, pauseOnConnect: false },
+      (socket) => {
+        const child = getChild();
+        if (
+          closed ||
+          authenticatedSocket !== undefined ||
+          child === undefined ||
+          child.exitCode !== null ||
+          child.signalCode !== null ||
+          !Number.isSafeInteger(child.pid)
+        ) {
+          socket.destroy();
+          return;
+        }
+        sockets.add(socket);
+        let deadline;
+        let ended = false;
+        let gate;
+        const armDeadline = (milliseconds) => {
+          if (deadline !== undefined) clearTimeout(deadline);
+          deadline = setTimeout(() => {
+            gate.fail();
+            socket.destroy();
+          }, milliseconds);
+          deadline.unref();
+        };
+        gate = new WindowsReadinessStreamGate(
+          windowsPrivateHelloMarker(
+            child.pid,
+            configuration.capability,
+          ),
+          {
+            onAuthenticated: () => {
+              const currentChild = getChild();
+              if (
+                closed ||
+                authenticatedSocket !== undefined ||
+                currentChild !== child ||
+                currentChild.pid !== child.pid ||
+                child.exitCode !== null ||
+                child.signalCode !== null
+              ) {
+                return false;
+              }
+              authenticatedSocket = socket;
+              for (const candidate of sockets) {
+                if (candidate !== socket) candidate.destroy();
+              }
+              try {
+                server.close();
+              } catch {
+                return false;
+              }
+              armDeadline(
+                WINDOWS_READINESS_AUTHENTICATED_TIMEOUT_MS,
+              );
+              return onConnected() === true;
+            },
+            onFatal: fail,
+            onReady: () => {
+              const currentChild = getChild();
+              if (
+                closed ||
+                authenticatedSocket !== socket ||
+                currentChild !== child ||
+                currentChild.pid !== child.pid ||
+                child.exitCode !== null ||
+                child.signalCode !== null
+              ) {
+                return false;
+              }
+              const reported = onReady() === true;
+              if (reported) close();
+              return reported;
+            },
+            onRejected: () => socket.destroy(),
+          },
+        );
+        armDeadline(WINDOWS_READINESS_PREAUTH_TIMEOUT_MS);
+        socket.on("data", (chunk) => gate.push(chunk));
+        socket.once("end", () => {
+          ended = true;
+          gate.finish();
+        });
+        socket.once("error", () => gate.fail());
+        socket.once("close", () => {
+          if (deadline !== undefined) clearTimeout(deadline);
+          sockets.delete(socket);
+          if (!ended) gate.fail();
+        });
+      },
+    );
+    const controller = Object.freeze({ close });
+    const startupFailure = (error) => {
+      close();
+      reject(error);
+    };
+    server.once("error", startupFailure);
+    server.listen(
+      {
+        path: configuration.pipePath,
+        exclusive: true,
+        readableAll: false,
+        writableAll: false,
+      },
+      () => {
+        server.off("error", startupFailure);
+        server.on("error", fail);
+        resolvePromise(controller);
+      },
+    );
+  });
 }
 
 function safeExitMarker(code, signal) {
@@ -134,6 +433,117 @@ export function committedState(
   );
 }
 
+async function runElectronChild(runtime, runnerToken) {
+  let settled = false;
+  let spawnFailed = false;
+  let readyReported = false;
+  let readinessCleanupStarted = false;
+  let child;
+  let windowsReadinessServer;
+  const windowsReadiness =
+    process.platform === "win32"
+      ? createWindowsReadinessConfiguration()
+      : undefined;
+  let resolveOutcome;
+  const outcome = new Promise((resolvePromise) => {
+    resolveOutcome = resolvePromise;
+  });
+  const reportConnected = () =>
+    safeAppendOwned(WINDOWS_ELECTRON_CONNECTED_MARKER, runnerToken);
+  const reportReady = () => {
+    readyReported = safeAppendOwned(readyMarker, runnerToken);
+    return readyReported;
+  };
+  const readyGate = new ReadinessLineGate(reportReady);
+  const markSpawnFailed = () => {
+    if (spawnFailed) return;
+    spawnFailed = true;
+    safeAppendOwned(
+      "[TOKENMONSTER_AGENT] ERROR electron_spawn_failed",
+      runnerToken,
+    );
+  };
+  const finish = (code, signal) => {
+    if (settled) return;
+    settled = true;
+    readyGate.finish();
+    closeWindowsReadinessServer(windowsReadinessServer);
+    const marker = spawnFailed
+      ? "[TOKENMONSTER_AGENT] EXIT code=1"
+      : safeExitMarker(code, signal);
+    resolveOutcome({
+      exitCode:
+        !spawnFailed && Number.isInteger(code) && code === 0 ? 0 : 1,
+      terminalMarker: marker,
+    });
+  };
+  const failReadinessChannel = () => {
+    if (readyReported || readinessCleanupStarted) return;
+    readinessCleanupStarted = true;
+    markSpawnFailed();
+    if (child === undefined) {
+      finish(1, null);
+      return;
+    }
+    const childPid = child.pid;
+    void terminateProcessTree(
+      childPid,
+      () =>
+        child.pid === childPid &&
+        child.exitCode === null &&
+        child.signalCode === null,
+    )
+      .then((stopped) => {
+        if (stopped) finish(1, null);
+      })
+      .catch(() => undefined);
+  };
+  if (windowsReadiness !== undefined) {
+    try {
+      windowsReadinessServer =
+        await listenWindowsReadinessServer(windowsReadiness, {
+          getChild: () => child,
+          onConnected: reportConnected,
+          onFailure: failReadinessChannel,
+          onReady: reportReady,
+        });
+    } catch {
+      failReadinessChannel();
+      return await outcome;
+    }
+  }
+  try {
+    child = spawn(
+      runtime.executable,
+      [".", "--tokenmonster-agent-launch"],
+      {
+        cwd: runtime.companionDirectory,
+        env: projectSafeEnvironment(process.env, {
+          agentLaunch: true,
+          agentReadyCapability: windowsReadiness?.capability,
+          agentReadyPipeId: windowsReadiness?.pipeId,
+        }),
+        shell: false,
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
+        windowsHide: false,
+      },
+    );
+  } catch {
+    markSpawnFailed();
+    finish(1, null);
+    return await outcome;
+  }
+  child.once("error", markSpawnFailed);
+  child.once("close", finish);
+  child.stdout.on("data", (chunk) => {
+    if (process.platform !== "win32") readyGate.push(chunk);
+  });
+  child.stderr.on("data", () => {
+    // Drain and discard. stderr is never a readiness channel.
+  });
+  return await outcome;
+}
+
 export async function runElectron(
   runnerToken = process.argv[2],
 ) {
@@ -152,112 +562,7 @@ export async function runElectron(
       );
       return 1;
     }
-    const outcome = await new Promise((resolvePromise) => {
-      let settled = false;
-      let spawnFailed = false;
-      let readyReported = false;
-      let readinessCleanupStarted = false;
-      let child;
-      const reportReady = () => {
-        readyReported = safeAppendOwned(readyMarker, runnerToken);
-      };
-      const readyGate = new ReadinessLineGate(reportReady);
-      const markSpawnFailed = () => {
-        if (spawnFailed) return;
-        spawnFailed = true;
-        safeAppendOwned(
-          "[TOKENMONSTER_AGENT] ERROR electron_spawn_failed",
-          runnerToken,
-        );
-      };
-      const finish = (code, signal) => {
-        if (settled) return;
-        settled = true;
-        readyGate.finish();
-        const marker = spawnFailed
-          ? "[TOKENMONSTER_AGENT] EXIT code=1"
-          : safeExitMarker(code, signal);
-        resolvePromise({
-          exitCode:
-            !spawnFailed && Number.isInteger(code) && code === 0 ? 0 : 1,
-          terminalMarker: marker,
-        });
-      };
-      const failReadinessChannel = () => {
-        if (
-          readyReported ||
-          readinessCleanupStarted ||
-          child === undefined
-        ) {
-          return;
-        }
-        readinessCleanupStarted = true;
-        markSpawnFailed();
-        const childPid = child.pid;
-        void terminateProcessTree(
-          childPid,
-          () =>
-            child.pid === childPid &&
-            child.exitCode === null &&
-            child.signalCode === null,
-        )
-          .then((stopped) => {
-            if (stopped) finish(1, null);
-          })
-          .catch(() => undefined);
-      };
-      try {
-        child = spawn(
-          runtime.executable,
-          [".", "--tokenmonster-agent-launch"],
-          {
-            cwd: runtime.companionDirectory,
-            env: projectSafeEnvironment(process.env, {
-              agentLaunch: true,
-            }),
-            shell: false,
-            stdio:
-              process.platform === "win32"
-                ? ["ignore", "pipe", "pipe", "ipc", "pipe"]
-                : ["ignore", "pipe", "pipe", "ipc"],
-            windowsHide: false,
-          },
-        );
-      } catch {
-        safeAppendOwned(
-          "[TOKENMONSTER_AGENT] ERROR electron_spawn_failed",
-          runnerToken,
-        );
-        resolvePromise({
-          exitCode: 1,
-          terminalMarker: "[TOKENMONSTER_AGENT] EXIT code=1",
-        });
-        return;
-      }
-      child.once("error", markSpawnFailed);
-      child.once("close", finish);
-      child.stdout.on("data", (chunk) => {
-        if (process.platform !== "win32") readyGate.push(chunk);
-      });
-      child.stderr.on("data", () => {
-        // Drain and discard. stderr is never a readiness channel.
-      });
-      if (process.platform === "win32") {
-        const windowsReadyPipe = child.stdio[4];
-        if (
-          windowsReadyPipe === null ||
-          windowsReadyPipe === undefined
-        ) {
-          failReadinessChannel();
-        } else {
-          windowsReadyPipe.on("data", (chunk) => {
-            readyGate.push(chunk);
-          });
-          windowsReadyPipe.once("error", failReadinessChannel);
-          windowsReadyPipe.once("end", failReadinessChannel);
-        }
-      }
-    });
+    const outcome = await runElectronChild(runtime, runnerToken);
     terminalMarker = outcome.terminalMarker;
     return outcome.exitCode;
   } catch {

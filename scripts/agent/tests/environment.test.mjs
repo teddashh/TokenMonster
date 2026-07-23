@@ -40,6 +40,9 @@ const SENSITIVE_ENVIRONMENT = {
   NO_PROXY: "secret.internal",
   DEBUG: "*",
   TOKENMONSTER_AGENT_LAUNCH: "host-controlled",
+  TOKENMONSTER_AGENT_READY_PIPE_ID: "0123456789abcdef0123456789abcdef",
+  TOKENMONSTER_AGENT_READY_CAPABILITY:
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 };
 
 test("safe environment keeps only canonical reviewed names", () => {
@@ -96,6 +99,73 @@ test("agent marker is policy-generated rather than inherited", () => {
   });
   assert.equal(projected.TOKENMONSTER_AGENT_LAUNCH, "1");
   assert.equal(Object.hasOwn(projected, "OPENAI_API_KEY"), false);
+  assert.equal(
+    Object.hasOwn(projected, "TOKENMONSTER_AGENT_READY_PIPE_ID"),
+    false,
+  );
+  assert.equal(
+    Object.hasOwn(projected, "TOKENMONSTER_AGENT_READY_CAPABILITY"),
+    false,
+  );
+});
+
+test("Windows readiness channel is projected only from a complete generated pair", () => {
+  const agentReadyPipeId = "0123456789abcdef0123456789abcdef";
+  const agentReadyCapability =
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  const projected = projectSafeEnvironment(SENSITIVE_ENVIRONMENT, {
+    agentLaunch: true,
+    agentReadyPipeId,
+    agentReadyCapability,
+  });
+  assert.equal(projected.TOKENMONSTER_AGENT_LAUNCH, "1");
+  assert.equal(projected.TOKENMONSTER_AGENT_READY_PIPE_ID, agentReadyPipeId);
+  assert.equal(
+    projected.TOKENMONSTER_AGENT_READY_CAPABILITY,
+    agentReadyCapability,
+  );
+});
+
+test("Windows readiness channel fails closed for absent launch, incomplete, or invalid values", () => {
+  const agentReadyPipeId = "0123456789abcdef0123456789abcdef";
+  const agentReadyCapability =
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  const invalidOptions = [
+    { agentReadyPipeId, agentReadyCapability },
+    { agentLaunch: true, agentReadyPipeId },
+    { agentLaunch: true, agentReadyCapability },
+    {
+      agentLaunch: true,
+      agentReadyPipeId: agentReadyPipeId.toUpperCase(),
+      agentReadyCapability,
+    },
+    {
+      agentLaunch: true,
+      agentReadyPipeId: `\\\\.\\pipe\\tokenmonster-agent-ready-${agentReadyPipeId}`,
+      agentReadyCapability,
+    },
+    {
+      agentLaunch: true,
+      agentReadyPipeId,
+      agentReadyCapability: agentReadyCapability.toUpperCase(),
+    },
+    {
+      agentLaunch: true,
+      agentReadyPipeId: agentReadyPipeId.slice(1),
+      agentReadyCapability,
+    },
+    {
+      agentLaunch: true,
+      agentReadyPipeId,
+      agentReadyCapability: agentReadyCapability.slice(1),
+    },
+  ];
+  for (const options of invalidOptions) {
+    assert.throws(
+      () => projectSafeEnvironment({}, options),
+      /agent_ready_channel_invalid/u,
+    );
+  }
 });
 
 test("graphical session and prerequisite results are content-blind", () => {

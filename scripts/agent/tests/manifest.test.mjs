@@ -7,6 +7,7 @@ import {
   manifest,
   readyMarker,
   rootDirectory,
+  safeLifecycleMarker,
   validateManifest,
 } from "../contract.mjs";
 import {
@@ -92,6 +93,21 @@ test("the contract fixes the source lane and private lifecycle paths", () => {
       "foreign_process",
     ],
   });
+});
+
+test("the Windows readiness connection marker is an exact safe lifecycle value", () => {
+  assert.equal(
+    safeLifecycleMarker(
+      "[TOKENMONSTER_AGENT] STATUS electron_connected",
+    ),
+    true,
+  );
+  assert.equal(
+    safeLifecycleMarker(
+      "[TOKENMONSTER_AGENT] STATUS electron_connected extra",
+    ),
+    false,
+  );
 });
 
 const POLICY_RELAXATIONS = [

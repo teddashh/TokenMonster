@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer"
-import { closeSync, writeSync } from "node:fs"
+import { createConnection, type Socket } from "node:net"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -32,7 +32,10 @@ import {
   type WindowsSquirrelUpdaterPort
 } from "../automatic-update-controller.js"
 import {
-  createAgentLaunchReadyReporter
+  AGENT_LAUNCH_READY_CAPABILITY_ENV,
+  AGENT_LAUNCH_READY_PIPE_ID_ENV,
+  createAgentLaunchReadyReporter,
+  type AgentLaunchWindowsChannel
 } from "../agent-launch.js"
 import { registerAutomaticUpdateIpcHandlers } from "../automatic-update-ipc.js"
 import {
@@ -92,6 +95,7 @@ const PET_STATE_FILE = "pet-window-state.json"
 const REMINDER_STATE_FILE = "reminders-v1.json"
 const AUTOMATIC_UPDATE_STATE_FILE = "automatic-updates-v1.json"
 const NATIVE_NOTIFICATION_TIMEOUT_MS = 5_000
+const AGENT_READY_PIPE_WRITE_TIMEOUT_MS = 5_000
 // CI smoke mode: report the boot outcome through a platform-bound process
 // contract, so the packaged app proves the sidecar and gateway actually start.
 // Dual-gated (env var AND argv flag) so an inherited environment variable
@@ -270,6 +274,100 @@ function closeView(
   if (!gatewayView.webContents.isDestroyed()) gatewayView.webContents.close()
 }
 
+function openAgentLaunchPipe(
+  path: string
+): Promise<AgentLaunchWindowsChannel | null> {
+  return new Promise((resolvePromise) => {
+    let socket: Socket
+    let connectTimeout: ReturnType<typeof setTimeout> | undefined
+    let settled = false
+    let available = true
+    let ended = false
+    let operation: ((sent: boolean) => void) | null = null
+
+    const failChannel = (): void => {
+      available = false
+      operation?.(false)
+    }
+    const send = (marker: string, finishStream: boolean): Promise<boolean> =>
+      new Promise((resolveSend) => {
+        if (!available || ended || operation !== null) {
+          resolveSend(false)
+          return
+        }
+        if (finishStream) ended = true
+        let operationTimeout: ReturnType<typeof setTimeout> | undefined
+        let operationSettled = false
+        const finishOperation = (sent: boolean): void => {
+          if (operationSettled) return
+          operationSettled = true
+          if (operationTimeout !== undefined) clearTimeout(operationTimeout)
+          operation = null
+          if (!sent) {
+            available = false
+            socket.destroy()
+          }
+          resolveSend(sent)
+        }
+        operation = finishOperation
+        operationTimeout = setTimeout(
+          () => finishOperation(false),
+          AGENT_READY_PIPE_WRITE_TIMEOUT_MS
+        )
+        operationTimeout.unref()
+        const flushed = (error?: Error | null): void => {
+          finishOperation(error == null)
+        }
+        try {
+          if (finishStream) {
+            socket.end(marker, "utf8", flushed)
+          } else {
+            socket.write(marker, "utf8", flushed)
+          }
+        } catch {
+          finishOperation(false)
+        }
+      })
+    const channel: AgentLaunchWindowsChannel = Object.freeze({
+      write: (marker: string) => send(marker, false),
+      end: (marker: string) => send(marker, true),
+      destroy: () => {
+        available = false
+        operation?.(false)
+        socket.destroy()
+      }
+    })
+    const finishOpen = (opened: AgentLaunchWindowsChannel | null): void => {
+      if (settled) return
+      settled = true
+      if (connectTimeout !== undefined) clearTimeout(connectTimeout)
+      if (opened === null) socket.destroy()
+      resolvePromise(opened)
+    }
+    try {
+      socket = createConnection(path)
+    } catch {
+      resolvePromise(null)
+      return
+    }
+    connectTimeout = setTimeout(
+      () => finishOpen(null),
+      AGENT_READY_PIPE_WRITE_TIMEOUT_MS
+    )
+    connectTimeout.unref()
+    socket.once("connect", () => finishOpen(channel))
+    socket.on("error", () => {
+      failChannel()
+      finishOpen(null)
+    })
+    socket.on("end", failChannel)
+    socket.on("close", () => {
+      failChannel()
+      finishOpen(null)
+    })
+  })
+}
+
 export async function startPetCompanion(
   runtimeLease: TokenMonsterRuntimeLease
 ): Promise<void> {
@@ -278,25 +376,15 @@ export async function startPetCompanion(
     argv: process.argv,
     packaged: app.isPackaged,
     platform: process.platform,
-    writeWindowsPipe: (fd, marker) => {
-      try {
-        return (
-          writeSync(fd, marker, null, "utf8") === Buffer.byteLength(marker)
-        )
-      } catch {
-        return false
-      } finally {
-        try {
-          closeSync(fd)
-        } catch {
-          // A failed or partial readiness write remains fail-closed.
-        }
-      }
-    },
+    processId: process.pid,
+    openWindowsPipe: openAgentLaunchPipe,
     write: (marker) => {
       process.stdout.write(marker)
     }
   })
+  delete process.env[AGENT_LAUNCH_READY_PIPE_ID_ENV]
+  delete process.env[AGENT_LAUNCH_READY_CAPABILITY_ENV]
+  await agentLaunchReady.reportConnected()
   installSessionGuards(session.fromPartition(PET_SESSION_PARTITION))
   const userDataDirectory = app.getPath("userData")
   const statePath = join(userDataDirectory, PET_STATE_FILE)
@@ -741,7 +829,7 @@ export async function startPetCompanion(
         shellStatus = Object.freeze({ kind: "ready" })
         await loadShell()
         if (startupLifecycle.shutdownRequested() || services !== started) return
-        agentLaunchReady.reportReady()
+        await agentLaunchReady.reportReady()
         reportSmokeOutcome("ok", stopOwnedRuntime)
 
         void started.runtime.closed.then((exit) => {
