@@ -300,6 +300,46 @@ jobs:
         shell: bash
         run: node scripts/run-workspaces.mjs build @tokenmonster/companion
 
+      - name: Provision ffmpeg for icon composition (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        shell: bash
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+
+      - name: Provision ffmpeg for icon composition (macOS)
+        if: startsWith(matrix.os, 'macos')
+        shell: bash
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            brew install ffmpeg
+          fi
+
+      - name: Provision pinned ffmpeg for icon composition (Windows)
+        if: startsWith(matrix.os, 'windows')
+        shell: pwsh
+        env:
+          FFMPEG_ZIP_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-22-13-36/ffmpeg-n8.1.2-30-g45f1910444-win64-gpl-8.1.zip
+          FFMPEG_ZIP_SHA256: f3c4d7c272390d18f57e5ee1e52466d28cbf728b923e188367e934456c061d51
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $zip = Join-Path $env:RUNNER_TEMP "ffmpeg-pinned.zip"
+          Invoke-WebRequest -Uri $env:FFMPEG_ZIP_URL -OutFile $zip
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -cne $env:FFMPEG_ZIP_SHA256) {
+            throw "The pinned ffmpeg archive does not match its reviewed checksum."
+          }
+          $destination = Join-Path $env:RUNNER_TEMP "ffmpeg-pinned"
+          Expand-Archive -LiteralPath $zip -DestinationPath $destination -Force
+          $bin = Join-Path $destination "ffmpeg-n8.1.2-30-g45f1910444-win64-gpl-8.1/bin"
+          if (-not (Test-Path -LiteralPath (Join-Path $bin "ffmpeg.exe") -PathType Leaf)) {
+            throw "The pinned ffmpeg archive did not contain the expected bin directory."
+          }
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $bin
+
       - name: Bind one desktop release version
         shell: bash
         run: |
@@ -409,6 +449,28 @@ jobs:
       - name: Build desktop dependency closure
         shell: bash
         run: node scripts/run-workspaces.mjs build @tokenmonster/companion
+
+      - name: Provision pinned ffmpeg for icon composition
+        shell: pwsh
+        env:
+          FFMPEG_ZIP_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-22-13-36/ffmpeg-n8.1.2-30-g45f1910444-win64-gpl-8.1.zip
+          FFMPEG_ZIP_SHA256: f3c4d7c272390d18f57e5ee1e52466d28cbf728b923e188367e934456c061d51
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $zip = Join-Path $env:RUNNER_TEMP "ffmpeg-pinned.zip"
+          Invoke-WebRequest -Uri $env:FFMPEG_ZIP_URL -OutFile $zip
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -cne $env:FFMPEG_ZIP_SHA256) {
+            throw "The pinned ffmpeg archive does not match its reviewed checksum."
+          }
+          $destination = Join-Path $env:RUNNER_TEMP "ffmpeg-pinned"
+          Expand-Archive -LiteralPath $zip -DestinationPath $destination -Force
+          $bin = Join-Path $destination "ffmpeg-n8.1.2-30-g45f1910444-win64-gpl-8.1/bin"
+          if (-not (Test-Path -LiteralPath (Join-Path $bin "ffmpeg.exe") -PathType Leaf)) {
+            throw "The pinned ffmpeg archive did not contain the expected bin directory."
+          }
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $bin
 
       - name: Bind one desktop release version
         shell: bash
@@ -547,6 +609,28 @@ jobs:
           }
           Copy-Item -LiteralPath $restored -Destination "apps/companion/packaging/squirrel-windows/Squirrel.exe"
 
+      - name: Provision pinned ffmpeg for icon composition
+        shell: pwsh
+        env:
+          FFMPEG_ZIP_URL: https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-22-13-36/ffmpeg-n8.1.2-30-g45f1910444-win64-gpl-8.1.zip
+          FFMPEG_ZIP_SHA256: f3c4d7c272390d18f57e5ee1e52466d28cbf728b923e188367e934456c061d51
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          $zip = Join-Path $env:RUNNER_TEMP "ffmpeg-pinned.zip"
+          Invoke-WebRequest -Uri $env:FFMPEG_ZIP_URL -OutFile $zip
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -cne $env:FFMPEG_ZIP_SHA256) {
+            throw "The pinned ffmpeg archive does not match its reviewed checksum."
+          }
+          $destination = Join-Path $env:RUNNER_TEMP "ffmpeg-pinned"
+          Expand-Archive -LiteralPath $zip -DestinationPath $destination -Force
+          $bin = Join-Path $destination "ffmpeg-n8.1.2-30-g45f1910444-win64-gpl-8.1/bin"
+          if (-not (Test-Path -LiteralPath (Join-Path $bin "ffmpeg.exe") -PathType Leaf)) {
+            throw "The pinned ffmpeg archive did not contain the expected bin directory."
+          }
+          Add-Content -LiteralPath $env:GITHUB_PATH -Value $bin
+
       - name: Bind one desktop release version
         shell: bash
         run: |
@@ -620,6 +704,12 @@ jobs:
         run: |
           release_version="$(node scripts/derive-companion-release-version.mjs)"
           echo "TOKENMONSTER_RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+
+      - name: Provision ffmpeg for icon composition
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            brew install ffmpeg
+          fi
 
       - name: Make and verify internal macOS companion
         run: node scripts/package-companion.mjs make internal
@@ -711,6 +801,14 @@ jobs:
           npm ls --depth=0
           npm run verify:packaging-toolchain
           npm run verify:artifacts
+
+      - name: Provision ffmpeg for icon composition
+        shell: bash
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
 
       - name: Bind verification desktop release version
         shell: bash
