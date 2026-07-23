@@ -215,6 +215,11 @@ export async function runCompanionPackaging(
   const parsedCommand = requireCommand(command);
   if (platform === "win32") {
     requireReviewedSquirrelReleaseMode(configuration.releaseMode);
+    if (configuration.packagerConfig.icon === undefined) {
+      throw new Error(
+        "The four-sisters app icon staging is missing; package through scripts/package-companion.mjs.",
+      );
+    }
   }
   const packagePaths = await packager(
     /** @type {PackagerOptions} */ ({

@@ -313,7 +313,7 @@ export async function startPetCompanion(
     resizable: false,
     skipTaskbar: true,
     show: false,
-    title: "TokenMonster",
+    title: "Token Monster (AI-Sister)",
     webPreferences: {
       allowRunningInsecureContent: false,
       contextIsolation: true,
@@ -386,7 +386,7 @@ export async function startPetCompanion(
       minWidth: 840,
       minHeight: 620,
       show: false,
-      title: "TokenMonster dashboard",
+      title: "Token Monster (AI-Sister) dashboard",
       webPreferences: {
         allowRunningInsecureContent: false,
         contextIsolation: true,
@@ -871,7 +871,7 @@ export async function startPetCompanion(
     trayIcon = nativeImage.createEmpty()
   }
   tray = new Tray(trayIcon)
-  tray.setToolTip("TokenMonster")
+  tray.setToolTip("Token Monster (AI-Sister)")
   tray.on("click", () => {
     if (shellWindow.isDestroyed()) return
     if (shellWindow.isVisible()) hideWindow()

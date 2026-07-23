@@ -14,6 +14,7 @@ import {
   type CharacterLetterAccentId,
   type CharacterLetterTheme,
   type CharacterProfileResponse,
+  type CharacterProgress,
   type CharacterRosterEntry,
   type CharactersSnapshot,
   type CharacterThemeId,
@@ -159,8 +160,12 @@ const ACTIVE_POLL_MS = 5_000;
 const SETTLED_POLL_MS = 60_000;
 // Ambient chatter cadence: the first line lands soon after the window opens,
 // then repeats every 45–90 seconds while the page stays visible. The floor
-// matches the gateway idle cooldown hint.
-const IDLE_CHATTER_INITIAL_DELAY_MS = 12_000;
+// matches the gateway idle cooldown hint. Until the character has spoken once
+// per selection, blocked attempts retry on the short delay so startup gating
+// (repair check, switching, celebration) delays the first line by seconds,
+// not a full ambient interval.
+const IDLE_CHATTER_INITIAL_DELAY_MS = 5_000;
+const IDLE_CHATTER_RETRY_DELAY_MS = 3_000;
 const IDLE_CHATTER_MIN_DELAY_MS = 45_000;
 const IDLE_CHATTER_JITTER_MS = 45_000;
 const numberFormatter = Object.freeze({ format: formatUiNumber });
@@ -340,6 +345,7 @@ export function startCompanionUi(): void {
     "[data-letter-layer]",
   );
   const companionFaceElement = requiredElement<HTMLElement>(".companion-face");
+  const brandCastElement = requiredElement<HTMLElement>("[data-brand-cast]");
   const dollImageElement = requiredElement<HTMLImageElement>(
     "[data-character-doll]",
   );
@@ -364,9 +370,8 @@ export function startCompanionUi(): void {
   const characterReasonElement = requiredElement<HTMLElement>(
     "[data-character-reason]",
   );
-  const characterHeadingElement = requiredElement<HTMLElement>(
-    ".character-heading",
-  );
+  const characterHeadingElement =
+    requiredElement<HTMLElement>(".character-heading");
   const progressionLockRepairButton = requiredElement<HTMLButtonElement>(
     "[data-progression-lock-repair]",
   );
@@ -376,6 +381,9 @@ export function startCompanionUi(): void {
   );
   const wardrobeDrawer = requiredElement<HTMLElement>("[data-wardrobe-drawer]");
   const wardrobeList = requiredElement<HTMLElement>("[data-wardrobe-list]");
+  const wardrobeNextHint = requiredElement<HTMLElement>(
+    "[data-wardrobe-next-hint]",
+  );
   const characterProfileElement = requiredElement<HTMLElement>(
     "[data-character-profile]",
   );
@@ -399,9 +407,8 @@ export function startCompanionUi(): void {
   );
   const shareCardButton =
     requiredElement<HTMLButtonElement>("[data-share-card]");
-  const shareCardActionElement = requiredElement<HTMLElement>(
-    ".share-card-action",
-  );
+  const shareCardActionElement =
+    requiredElement<HTMLElement>(".share-card-action");
   const shareCardStatus = requiredElement<HTMLElement>(
     "[data-share-card-status]",
   );
@@ -550,6 +557,11 @@ export function startCompanionUi(): void {
   let byokConversationCharacterId: CharacterId | undefined;
   let byokRequestSequence = 0;
   let starterChoiceSheetActive = false;
+  // First-sister gacha: the clean-install choice presents one face-down card;
+  // drawing it picks a starter at random and births her through the normal
+  // selection flow. 想自己挑 keeps the classic four-card sheet reachable.
+  let gachaManualChoice = false;
+  let gachaDrawInFlight = false;
   let reminderStatus: ReminderStatus | undefined;
   let reminderFormRevision: string | undefined;
   let reminderBusy = false;
@@ -580,6 +592,7 @@ export function startCompanionUi(): void {
   let characterTapTimer: number | undefined;
   let idleChatterTimer: number | undefined;
   let idleChatterController: AbortController | undefined;
+  let characterHasSpokenSinceSelection = false;
   let requestedStageKey: string | undefined;
   let entrancePending = false;
   let renderedLetterCharacterId: CharacterId | undefined;
@@ -689,10 +702,10 @@ export function startCompanionUi(): void {
         : result.error === "conflict"
           ? "提醒設定已在另一個視窗更新；已重新載入最新設定，請確認後再儲存。"
           : result.error === "storage-unavailable"
-          ? "本機提醒設定暫時無法儲存。"
-          : result.error === "disposed"
-            ? "提醒服務正在結束，這次沒有儲存。"
-            : "設定格式不正確，這次沒有儲存。";
+            ? "本機提醒設定暫時無法儲存。"
+            : result.error === "disposed"
+              ? "提醒服務正在結束，這次沒有儲存。"
+              : "設定格式不正確，這次沒有儲存。";
     } catch {
       reminderNotice = "提醒設定沒有儲存；請稍後再試。";
     } finally {
@@ -784,7 +797,8 @@ export function startCompanionUi(): void {
     const status = automaticUpdateStatus;
     const phase = status?.update.status;
     const unsupported = phase === "unsupported";
-    const active = status === undefined ? false : automaticUpdateIsActive(status);
+    const active =
+      status === undefined ? false : automaticUpdateIsActive(status);
     automaticUpdateEnabledInput.disabled =
       automaticUpdateBusy ||
       status?.preferenceStorage !== "ready" ||
@@ -812,7 +826,9 @@ export function startCompanionUi(): void {
         : automaticUpdateStatusText(status, automaticUpdateNotice);
   }
 
-  async function loadAutomaticUpdateControl(syncPreference = true): Promise<void> {
+  async function loadAutomaticUpdateControl(
+    syncPreference = true,
+  ): Promise<void> {
     if (localAutomaticUpdateBridge === null || automaticUpdateBusy) return;
     automaticUpdateBusy = true;
     automaticUpdateNotice = undefined;
@@ -928,8 +944,7 @@ export function startCompanionUi(): void {
             ? "新版尚未準備完成，這次不會重新啟動。"
             : "無法開始安裝；TokenMonster 會繼續保持開啟。";
     } catch {
-      automaticUpdateNotice =
-        "無法開始安裝；TokenMonster 會繼續保持開啟。";
+      automaticUpdateNotice = "無法開始安裝；TokenMonster 會繼續保持開啟。";
     } finally {
       if (!installStarted) automaticUpdateBusy = false;
       renderAutomaticUpdateControl();
@@ -990,10 +1005,9 @@ export function startCompanionUi(): void {
       return;
     }
     if (pack.phase === "installed") {
-      assetPackStatusElement.textContent =
-        assetPackRemovalConfirmationPending
-          ? "移除只會刪除下載的完整素材；內建四位元祖角色的基本服裝圖像與文字會保留。若確定，請再按一次。"
-          : "完整素材已驗證並保存在本機；角色圖現在可以離線顯示。";
+      assetPackStatusElement.textContent = assetPackRemovalConfirmationPending
+        ? "移除只會刪除下載的完整素材；內建四位元祖角色的基本服裝圖像與文字會保留。若確定，請再按一次。"
+        : "完整素材已驗證並保存在本機；角色圖現在可以離線顯示。";
       return;
     }
     assetPackButton.textContent = (() => {
@@ -1011,10 +1025,9 @@ export function startCompanionUi(): void {
       }
     })();
     if (pack.phase === "repair-needed") {
-      assetPackStatusElement.textContent =
-        assetPackRemovalConfirmationPending
-          ? "取消啟用只會清除已下載的完整素材；內建四位元祖角色的基本服裝圖像與文字會保留。若確定，請再按一次。"
-          : pack.lastError === "local-state-unavailable"
+      assetPackStatusElement.textContent = assetPackRemovalConfirmationPending
+        ? "取消啟用只會清除已下載的完整素材；內建四位元祖角色的基本服裝圖像與文字會保留。若確定，請再按一次。"
+        : pack.lastError === "local-state-unavailable"
           ? "下載的完整素材已停用，內建四位元祖角色的基本服裝圖像與文字仍可使用，但本機停用設定沒有保存；請在重啟前再試一次。"
           : pack.consented
             ? "你曾同意啟用，但本機完整素材不完整；不會自動重試。你可以重新取得完整包，或取消啟用並清除下載素材；內建四位元祖角色的基本服裝圖像與文字仍可使用。"
@@ -1144,6 +1157,31 @@ export function startCompanionUi(): void {
     );
   }
 
+  // The tap hint must never invite a tap while the stage button is disabled;
+  // Ted's field report showed taps silently swallowed during startup gating
+  // while the hint still said 打招呼. Keep the hint a pure function of the
+  // same gates renderCharacterStage uses for `disabled`.
+  function syncCharacterTapHint(): void {
+    if (unlockQueue.current() !== undefined) {
+      characterTapHintElement.textContent = "正在歡迎新夥伴，稍後再打招呼";
+      return;
+    }
+    if (characterMutationGate.pending()) {
+      characterTapHintElement.textContent = "正在換夥伴，完成後再打招呼";
+      return;
+    }
+    const character = stageCharacter();
+    if (character === undefined) {
+      characterTapHintElement.textContent = "先從名單選一位夥伴";
+      return;
+    }
+    if (progressionLockRepairState === "checking") {
+      characterTapHintElement.textContent = "夥伴正在準備中，馬上就好";
+      return;
+    }
+    characterTapHintElement.textContent = `點一下和 ${character.displayName} 打招呼`;
+  }
+
   function commitStageMetadata(character: CharacterRosterEntry): void {
     document.documentElement.dataset["character"] = character.characterId;
     companionTitleElement.textContent = `嗨，我是 ${character.displayName}。`;
@@ -1151,7 +1189,7 @@ export function startCompanionUi(): void {
       "aria-label",
       `點一下和 ${character.displayName} 夥伴打招呼`,
     );
-    characterTapHintElement.textContent = `點一下和 ${character.displayName} 打招呼`;
+    syncCharacterTapHint();
   }
 
   function playSparkles(): void {
@@ -1287,8 +1325,7 @@ export function startCompanionUi(): void {
     const character = persistedSelectedCharacter();
     const celebrating = unlockQueue.current() !== undefined;
     const characterMutationPending = characterMutationGate.pending();
-    const progressionRepairPending =
-      progressionLockRepairState === "checking";
+    const progressionRepairPending = progressionLockRepairState === "checking";
     const hasUsage =
       charactersSnapshot !== undefined && lastGoodSnapshot !== undefined;
     const profileRequestState = effectiveCharacterProfileRequestState();
@@ -1441,7 +1478,10 @@ export function startCompanionUi(): void {
     const controller = new AbortController();
     byokController?.abort();
     byokController = controller;
-    const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeout = window.setTimeout(
+      () => controller.abort(),
+      REQUEST_TIMEOUT_MS,
+    );
     try {
       const status = await requestByokStatus(fetch, controller.signal);
       if (sequence !== byokRequestSequence) return;
@@ -1467,7 +1507,10 @@ export function startCompanionUi(): void {
     byokBusy = true;
     byokNotice = "正在本機設定 OpenAI key…";
     renderByokPanel();
-    const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeout = window.setTimeout(
+      () => controller.abort(),
+      REQUEST_TIMEOUT_MS,
+    );
     try {
       const status = await configureByok(
         apiKey,
@@ -1503,7 +1546,10 @@ export function startCompanionUi(): void {
     byokBusy = true;
     byokNotice = "正在刪除本機 OpenAI key…";
     renderByokPanel();
-    const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const timeout = window.setTimeout(
+      () => controller.abort(),
+      REQUEST_TIMEOUT_MS,
+    );
     try {
       const status = await clearByok(fetch, controller.signal);
       if (sequence !== byokRequestSequence) return;
@@ -1896,10 +1942,12 @@ export function startCompanionUi(): void {
     characterInteractionController = undefined;
     clearCharacterSpeech();
     // The freshly selected character introduces itself on the short delay.
+    characterHasSpokenSinceSelection = false;
     scheduleIdleChatter(IDLE_CHATTER_INITIAL_DELAY_MS);
   }
 
   function showCharacterSpeech(text: string): void {
+    characterHasSpokenSinceSelection = true;
     clearCharacterSpeech();
     characterSpeechElement.textContent = text;
     characterSpeechElement.hidden = false;
@@ -2010,7 +2058,11 @@ export function startCompanionUi(): void {
       characterInteractionController !== undefined ||
       characterSpeechTimer !== undefined
     ) {
-      scheduleIdleChatter();
+      scheduleIdleChatter(
+        characterHasSpokenSinceSelection
+          ? undefined
+          : IDLE_CHATTER_RETRY_DELAY_MS,
+      );
       return;
     }
     const requestSequence = characterInteractionSequence;
@@ -2050,7 +2102,44 @@ export function startCompanionUi(): void {
     }
     // A tap or character switch may have restarted the cadence mid-request;
     // keep that fresher timer instead of stomping it.
-    if (idleChatterTimer === undefined) scheduleIdleChatter();
+    if (idleChatterTimer === undefined) {
+      scheduleIdleChatter(
+        characterHasSpokenSinceSelection
+          ? undefined
+          : IDLE_CHATTER_RETRY_DELAY_MS,
+      );
+    }
+  }
+
+  // The brand stage shows the four starter sisters under the AI-Sister
+  // wordmark whenever real art is unavailable. Rebuild only when the set
+  // changes; this runs on every poll for art-less characters.
+  function renderBrandCast(): void {
+    const starters = (charactersSnapshot?.characters ?? []).filter(
+      (candidate) => candidate.isStarter && candidate.visual.mode === "doll",
+    );
+    const signature = starters
+      .map(
+        (candidate) =>
+          `${candidate.characterId}:${candidate.visual.mode === "doll" ? candidate.visual.avatarPath : ""}`,
+      )
+      .join("|");
+    if (brandCastElement.dataset["castSignature"] === signature) return;
+    brandCastElement.dataset["castSignature"] = signature;
+    brandCastElement.replaceChildren(
+      ...starters.map((candidate) => {
+        const image = document.createElement("img");
+        image.alt = "";
+        image.decoding = "async";
+        if (candidate.visual.mode === "doll") {
+          image.src = candidate.visual.avatarPath;
+        }
+        image.addEventListener("error", () => {
+          image.hidden = true;
+        });
+        return image;
+      }),
+    );
   }
 
   function setLetterStage(character?: CharacterRosterEntry): void {
@@ -2064,6 +2153,7 @@ export function startCompanionUi(): void {
     companionGlyphElement.textContent = isLetter
       ? character.visual.glyph
       : view.glyph;
+    renderBrandCast();
     const style = companionVisualElement.style;
     if (isLetter) {
       style.setProperty("--letter-background", character.visual.background);
@@ -2163,6 +2253,7 @@ export function startCompanionUi(): void {
       unlockQueue.current() !== undefined ||
       characterMutationGate.pending() ||
       progressionLockRepairState === "checking";
+    syncCharacterTapHint();
     if (character === undefined) {
       setLetterStage();
       return;
@@ -2341,13 +2432,151 @@ export function startCompanionUi(): void {
     }
   }
 
+  function gachaCardPortrait(
+    character: CharacterRosterEntry,
+    displayName: string,
+  ): HTMLSpanElement {
+    const portrait = document.createElement("span");
+    portrait.className = "gacha-portrait";
+    const glyph = document.createElement("span");
+    glyph.className = "gacha-portrait-glyph";
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = [...displayName][0] ?? "";
+    portrait.append(glyph);
+    if (character.visual.mode === "doll") {
+      const avatar = document.createElement("img");
+      avatar.alt = "";
+      avatar.src = character.visual.avatarPath;
+      avatar.addEventListener("load", () => {
+        glyph.hidden = true;
+      });
+      avatar.addEventListener("error", () => {
+        avatar.hidden = true;
+        glyph.hidden = false;
+      });
+      portrait.append(avatar);
+    }
+    return portrait;
+  }
+
+  async function drawFirstSister(
+    starters: readonly CharacterRosterEntry[],
+    card: HTMLButtonElement,
+    front: HTMLElement,
+    controls: readonly HTMLButtonElement[],
+    drawButton: HTMLButtonElement,
+  ): Promise<void> {
+    if (gachaDrawInFlight || starters.length === 0) return;
+    gachaDrawInFlight = true;
+    for (const control of controls) control.disabled = true;
+    const random = new Uint32Array(1);
+    crypto.getRandomValues(random);
+    const drawn = starters[(random[0] ?? 0) % starters.length];
+    if (drawn === undefined) {
+      gachaDrawInFlight = false;
+      renderRoster();
+      return;
+    }
+    const identity = characterRosterCardIdentity(drawn, true);
+    front.replaceChildren(gachaCardPortrait(drawn, identity.name));
+    const name = document.createElement("span");
+    name.className = "gacha-front-name";
+    name.textContent = identity.name;
+    front.append(name);
+    if (identity.taglineZhTw !== null) {
+      const tagline = document.createElement("span");
+      tagline.className = "gacha-front-tagline";
+      tagline.textContent = identity.taglineZhTw;
+      front.append(tagline);
+    }
+    card.classList.add("is-revealed");
+    card.setAttribute("aria-label", `抽到了 ${identity.name}`);
+    drawButton.textContent = `${identity.name} 降生中…`;
+    playSparkles();
+    // Let the flip land before the selection mutation starts swapping the
+    // stage; the render guard keeps this card on screen until it settles.
+    await new Promise((resolveDelay) =>
+      window.setTimeout(resolveDelay, reducedMotion ? 400 : 1_600),
+    );
+    try {
+      await chooseCharacter(drawn.characterId);
+    } finally {
+      gachaDrawInFlight = false;
+      renderRoster();
+    }
+  }
+
+  function renderGachaStage(
+    starters: readonly CharacterRosterEntry[],
+    blocked: boolean,
+    blockedTitle: string | undefined,
+  ): void {
+    const stage = document.createElement("div");
+    stage.className = "gacha-stage";
+    const title = document.createElement("p");
+    title.className = "gacha-title";
+    title.textContent = "第一位姊妹要降生了";
+    const subtitle = document.createElement("p");
+    subtitle.className = "gacha-subtitle";
+    subtitle.textContent = "抽一張卡，看看是誰來到你身邊";
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "gacha-card";
+    card.setAttribute("aria-label", "抽出你的第一位姊妹");
+    const inner = document.createElement("span");
+    inner.className = "gacha-card-inner";
+    const back = document.createElement("span");
+    back.className = "gacha-card-back";
+    back.setAttribute("aria-hidden", "true");
+    const backMark = document.createElement("span");
+    backMark.className = "gacha-back-mark";
+    backMark.textContent = "？";
+    const backBrand = document.createElement("span");
+    backBrand.className = "gacha-back-brand";
+    backBrand.textContent = "AI-Sister";
+    back.append(backMark, backBrand);
+    const front = document.createElement("span");
+    front.className = "gacha-card-front";
+    inner.append(back, front);
+    card.append(inner);
+    const drawButton = document.createElement("button");
+    drawButton.type = "button";
+    drawButton.className = "gacha-draw";
+    drawButton.textContent = "抽卡";
+    const manualButton = document.createElement("button");
+    manualButton.type = "button";
+    manualButton.className = "gacha-manual";
+    manualButton.textContent = "想自己挑也可以";
+    const controls = [card, drawButton, manualButton] as const;
+    if (blocked) {
+      for (const control of controls) {
+        control.disabled = true;
+        if (blockedTitle !== undefined) control.title = blockedTitle;
+      }
+    } else {
+      const startDraw = () => {
+        void drawFirstSister(starters, card, front, controls, drawButton);
+      };
+      card.addEventListener("click", startDraw);
+      drawButton.addEventListener("click", startDraw);
+      manualButton.addEventListener("click", () => {
+        gachaManualChoice = true;
+        renderRoster();
+      });
+    }
+    stage.append(title, subtitle, card, drawButton, manualButton);
+    rosterElement.replaceChildren(stage);
+  }
+
   function renderRoster(): void {
+    // A draw in flight owns the roster DOM: poll-driven re-renders would tear
+    // down the flip mid-animation. drawFirstSister re-renders when it settles.
+    if (gachaDrawInFlight) return;
     const fragment = document.createDocumentFragment();
     const allCharacters = charactersSnapshot?.characters ?? [];
     const celebrating = unlockQueue.current() !== undefined;
     const mutationPending = characterMutationGate.pending();
-    const progressionRepairPending =
-      progressionLockRepairState === "checking";
+    const progressionRepairPending = progressionLockRepairState === "checking";
     const blocked = celebrating || mutationPending || progressionRepairPending;
     const roster =
       charactersSnapshot === undefined
@@ -2361,6 +2590,24 @@ export function startCompanionUi(): void {
     starterChoiceSheetActive = initialChoiceMode && companionView === "pet";
     syncOverlayInertState();
     rosterElement.classList.toggle("is-initial-choice", initialChoiceMode);
+    if (!initialChoiceMode) gachaManualChoice = false;
+    const gachaStarters = roster.selectable.filter(
+      (character) => character.isStarter,
+    );
+    if (initialChoiceMode && !gachaManualChoice && gachaStarters.length > 0) {
+      renderGachaStage(
+        gachaStarters,
+        blocked,
+        blocked
+          ? celebrating
+            ? "正在歡迎新夥伴；慶祝結束後就能抽卡。"
+            : progressionRepairPending
+              ? "安全檢查完成後就能抽卡。"
+              : "正在套用角色或服裝；完成後就能抽卡。"
+          : undefined,
+      );
+      return;
+    }
     for (const character of roster.selectable) {
       const initialStarterChoice = character.isStarter && initialChoiceMode;
       const recommendedStarter =
@@ -2456,6 +2703,18 @@ export function startCompanionUi(): void {
       }
       fragment.append(button);
     }
+    if (initialChoiceMode && gachaManualChoice) {
+      const backToGacha = document.createElement("button");
+      backToGacha.type = "button";
+      backToGacha.className = "gacha-manual";
+      backToGacha.textContent = "回到抽卡";
+      backToGacha.disabled = blocked;
+      backToGacha.addEventListener("click", () => {
+        gachaManualChoice = false;
+        renderRoster();
+      });
+      fragment.append(backToGacha);
+    }
     if (roster.lockedCount > 0) {
       const collection = characterCollectionView(allCharacters);
       const lockedSummary = document.createElement("div");
@@ -2550,12 +2809,44 @@ export function startCompanionUi(): void {
     }
   }
 
+  function wardrobeProgressBar(value: number): HTMLSpanElement {
+    const percent = Math.round(value * 100);
+    const bar = document.createElement("span");
+    bar.className = "wardrobe-progress";
+    bar.setAttribute("role", "progressbar");
+    bar.setAttribute("aria-label", "解鎖進度");
+    bar.setAttribute("aria-valuemin", "0");
+    bar.setAttribute("aria-valuemax", "100");
+    bar.setAttribute("aria-valuenow", String(percent));
+    const fill = document.createElement("span");
+    fill.style.width = `${percent}%`;
+    bar.append(fill);
+    return bar;
+  }
+
+  function renderWardrobeNextHint(
+    themes: readonly Readonly<{
+      unlocked: boolean;
+      progress: CharacterProgress | null;
+    }>[],
+  ): void {
+    let next: CharacterProgress | null = null;
+    for (const theme of themes) {
+      if (theme.unlocked || theme.progress === null) continue;
+      if (next === null || theme.progress.value > next.value) {
+        next = theme.progress;
+      }
+    }
+    wardrobeNextHint.hidden = next === null;
+    wardrobeNextHint.textContent =
+      next === null ? "" : `下一套服裝：${next.explain}`;
+  }
+
   function renderWardrobe(): void {
     const character = persistedSelectedCharacter();
     const celebrating = unlockQueue.current() !== undefined;
     const mutationPending = characterMutationGate.pending();
-    const progressionRepairPending =
-      progressionLockRepairState === "checking";
+    const progressionRepairPending = progressionLockRepairState === "checking";
     const blocked = celebrating || mutationPending || progressionRepairPending;
     wardrobeToggle.setAttribute(
       "aria-expanded",
@@ -2568,16 +2859,16 @@ export function startCompanionUi(): void {
         ? "正在套用角色或服裝"
         : progressionRepairPending
           ? "正在檢查角色進度"
-        : wardrobeOpen
-          ? "收起衣櫥"
-          : "打開衣櫥";
+          : wardrobeOpen
+            ? "收起衣櫥"
+            : "打開衣櫥";
     wardrobeToggle.title = celebrating
       ? "慶祝結束後就能繼續換衣服。"
       : mutationPending
         ? "角色選擇完成後就能繼續換衣服。"
         : progressionRepairPending
           ? "安全檢查完成後就能繼續換衣服。"
-        : "";
+          : "";
     wardrobeDrawer.hidden = !wardrobeOpen || blocked;
     const fragment = document.createDocumentFragment();
     if (character?.visual.mode === "letter") {
@@ -2616,12 +2907,17 @@ export function startCompanionUi(): void {
         } else {
           button.classList.add("is-locked");
           button.disabled = true;
-          button.title = "隨本機使用里程自然解鎖，不需要額外消耗 token。";
+          button.title =
+            theme.progress?.explain ??
+            "隨本機使用里程自然解鎖，不需要額外消耗 token。";
           button.setAttribute("aria-disabled", "true");
           button.setAttribute(
             "aria-label",
-            characterThemeLockedLabel(theme.themeId),
+            characterThemeLockedLabel(theme.themeId, theme.progress?.explain),
           );
+          if (theme.progress !== null) {
+            button.append(wardrobeProgressBar(theme.progress.value));
+          }
         }
         fragment.append(button);
       }
@@ -2666,7 +2962,8 @@ export function startCompanionUi(): void {
             characterThemeUnavailableLabel(theme.themeId),
           );
         } else {
-          const explain = characterUnlockExplanation(character);
+          const explain =
+            theme.progress?.explain ?? characterUnlockExplanation(character);
           const placeholder = document.createElement("span");
           placeholder.className = "wardrobe-placeholder";
           placeholder.setAttribute("aria-hidden", "true");
@@ -2680,10 +2977,14 @@ export function startCompanionUi(): void {
             "aria-label",
             characterThemeLockedLabel(theme.themeId, explain),
           );
+          if (theme.progress !== null) {
+            button.append(wardrobeProgressBar(theme.progress.value));
+          }
         }
         fragment.append(button);
       }
     }
+    renderWardrobeNextHint(character?.visual.themes ?? []);
     const hasThemes = fragment.childNodes.length > 0;
     wardrobeList.replaceChildren(fragment);
     wardrobeToggle.hidden = !hasThemes;
@@ -2726,15 +3027,16 @@ export function startCompanionUi(): void {
         "先從名單選一位 TokenMonster 夥伴",
       );
       characterTapHintElement.textContent = "先從名單選一位夥伴";
-      const recommendation = charactersSnapshot.characters.find(
-        (candidate) =>
-          candidate.characterId === starterRecommendationId &&
-          candidate.starterPersona !== null,
-      )?.starterPersona ?? undefined;
+      const recommendation =
+        charactersSnapshot.characters.find(
+          (candidate) =>
+            candidate.characterId === starterRecommendationId &&
+            candidate.starterPersona !== null,
+        )?.starterPersona ?? undefined;
       characterReasonElement.textContent =
         recommendation === undefined
-          ? "四位都有不同個性，第一位由你親自選；之後也能隨時換。"
-          : `依近 28 天本機用量，你可能和 ${recommendation.alias} 比較熟；這只是推薦，第一位夥伴仍由你親自選。`;
+          ? "四位都有不同個性，抽一張卡讓緣分決定；想自己挑或之後換人都可以。"
+          : `依近 28 天本機用量，你可能和 ${recommendation.alias} 比較熟；抽卡或自己挑都可以，之後也能隨時換。`;
     } else if (character !== undefined) {
       characterReasonElement.textContent =
         charactersSnapshot?.selection.selectedBy === "manual"
@@ -2851,7 +3153,8 @@ export function startCompanionUi(): void {
       "aria-label",
       `TokenMonster ${view.name} 字母角色`,
     );
-    characterTapHintElement.textContent = `點一下和 ${view.name} 打招呼`;
+    // Pre-snapshot the stage button is still disabled; do not invite a tap yet.
+    characterTapHintElement.textContent = "夥伴正在準備中，馬上就好";
     characterReasonElement.textContent = reason;
   }
 

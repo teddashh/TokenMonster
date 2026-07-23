@@ -47,17 +47,9 @@
             disabled
           >
             <span class="letter-layer" data-letter-layer>
-              <span
-                class="companion-ear companion-ear-left"
-                aria-hidden="true"
-              ></span>
-              <span
-                class="companion-ear companion-ear-right"
-                aria-hidden="true"
-              ></span>
               <span class="companion-face" aria-hidden="true">
-                <span class="companion-eye companion-eye-left"></span>
-                <span class="companion-eye companion-eye-right"></span>
+                <span class="brand-wordmark">AI-Sister</span>
+                <span class="brand-cast" data-brand-cast></span>
                 <span class="companion-glyph" data-companion-glyph>T</span>
               </span>
             </span>
@@ -91,7 +83,7 @@
             <span class="companion-shadow" aria-hidden="true"></span>
           </button>
           <span class="character-tap-hint" data-character-tap-hint
-            >點一下和夥伴打招呼</span
+            >夥伴正在準備中，馬上就好</span
           >
           <div class="companion-copy">
             <p class="eyebrow">你的本機 AI 用量夥伴</p>
@@ -195,6 +187,7 @@
               role="group"
               aria-label="角色衣櫥"
             ></div>
+            <p class="wardrobe-next-hint" data-wardrobe-next-hint hidden></p>
           </div>
           <div class="share-card-action">
             <div>
@@ -563,7 +556,10 @@
               <p>
                 刪除會移除可識別的目前貢獻資料；已併入門檻統計的匿名歷史總量仍會保留。
               </p>
-              <pre data-contribution-preview-payload aria-label="實際分享的 JSON 資料"></pre>
+              <pre
+                data-contribution-preview-payload
+                aria-label="實際分享的 JSON 資料"
+              ></pre>
               <label class="contribution-confirmation">
                 <input type="checkbox" data-contribution-confirm-enable />
                 我已檢查上方實際資料，並同意啟用匿名貢獻
@@ -592,9 +588,7 @@
               通知只含固定文字，不含提示、回覆、檔名或專案路徑；設定與排程都留在這台裝置。
             </p>
             <div class="reminder-test-row">
-              <button type="button" data-reminder-test>
-                先測試系統通知
-              </button>
+              <button type="button" data-reminder-test>先測試系統通知</button>
               <span>測試不會開啟每日排程；提醒預設保持關閉。</span>
             </div>
             <form class="reminder-settings" data-reminder-settings>

@@ -9,6 +9,10 @@ import {
 } from "../apps/companion/packaging/release-policy.mjs";
 import { requireReviewedSquirrelReleaseMode } from "../apps/companion/packaging/squirrel-updater.mjs";
 import {
+  COMPANION_APP_ICON_STAGING_NAME,
+  buildCompanionAppIcon,
+} from "./release/build-app-icon.mjs";
+import {
   COMPANION_EMBEDDED_STARTER_STAGING_NAME,
   stageCompanionEmbeddedStarterAssets,
 } from "./release/companion-embedded-starter.mjs";
@@ -113,11 +117,19 @@ await rm(outDirectory, { force: true, recursive: true });
 // app resources; a maintainer without network can point
 // TOKENMONSTER_EMBEDDED_STARTER_PACK at an exact local copy of the pinned ZIP.
 await stageCompanionEmbeddedStarterAssets({
-  stagingDirectory: join(
+  stagingDirectory: join(outDirectory, COMPANION_EMBEDDED_STARTER_STAGING_NAME),
+  localPackPath: process.env.TOKENMONSTER_EMBEDDED_STARTER_PACK ?? null,
+});
+// The application icon derives from the staged four-sisters avatars, so the
+// window, taskbar, tray, shortcut, and Setup.exe all present the same
+// reviewed art the installer already embeds.
+await buildCompanionAppIcon({
+  objectsDirectory: join(
     outDirectory,
     COMPANION_EMBEDDED_STARTER_STAGING_NAME,
+    "objects",
   ),
-  localPackPath: process.env.TOKENMONSTER_EMBEDDED_STARTER_PACK ?? null,
+  outDirectory: join(outDirectory, COMPANION_APP_ICON_STAGING_NAME),
 });
 // Build the complete local dependency closure before Electron Packager stages
 // the app.

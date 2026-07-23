@@ -39,9 +39,7 @@ export interface CompanionUiLocalePreferenceResponse {
 }
 
 export type CompanionUiLocalePreferenceErrorCode =
-  | "invalid-request"
-  | "revision-conflict"
-  | "storage-unavailable";
+  "invalid-request" | "revision-conflict" | "storage-unavailable";
 
 export interface CompanionUiLocalePreferenceErrorResponse {
   readonly status: "error";
@@ -54,9 +52,7 @@ export type CompanionByokPersistence = "os-backed" | "memory-only";
 export type CompanionContributionAvailability = "available" | "unavailable";
 
 export type CompanionContributionUnavailableReason =
-  | "secure-storage-unavailable"
-  | "runtime-unavailable"
-  | "recovery-required";
+  "secure-storage-unavailable" | "runtime-unavailable" | "recovery-required";
 
 /**
  * The gateway accepts only this read-only facade. Mutation methods and cloud
@@ -70,8 +66,7 @@ export interface CompanionContributionStatusSource {
  * Exact, content-blind browser facade. The host must wrap the runtime instead
  * of exposing sync, disposal, credential slots, or cloud configuration.
  */
-export interface CompanionContributionController
-  extends CompanionContributionStatusSource {
+export interface CompanionContributionController extends CompanionContributionStatusSource {
   preparePreview(): Promise<ContributionPreview>;
   enable(previewId: string): Promise<ContributionActionResult>;
   stop(): Promise<ContributionActionResult>;
@@ -122,16 +117,10 @@ export interface CompanionContributionPreviewResponse {
 }
 
 export type CompanionContributionAction =
-  | "preview"
-  | "enable"
-  | "stop"
-  | "delete"
-  | "recover";
+  "preview" | "enable" | "stop" | "delete" | "recover";
 
 export type CompanionContributionControlCode =
-  | ContributionActionCode
-  | "invalid-request"
-  | "runtime-unavailable";
+  ContributionActionCode | "invalid-request" | "runtime-unavailable";
 
 export interface CompanionContributionControlResponse {
   readonly status: "ok" | "error";
@@ -141,8 +130,7 @@ export interface CompanionContributionControlResponse {
 }
 
 export type CompanionContributionPreviewRouteResponse =
-  | CompanionContributionPreviewResponse
-  | CompanionContributionControlResponse;
+  CompanionContributionPreviewResponse | CompanionContributionControlResponse;
 
 export interface CompanionByokStatusResponse {
   readonly status: "ok";
@@ -294,6 +282,7 @@ export interface CompanionCharacterLetterTheme {
   readonly displayName: string;
   readonly accessibleLabel: string;
   readonly unlocked: boolean;
+  readonly progress: CompanionCharacterProgress | null;
   readonly palette: LetterWardrobeTheme["palette"];
   readonly pattern: LetterWardrobeTheme["pattern"];
   readonly accent: LetterWardrobeTheme["accent"];
@@ -302,6 +291,7 @@ export interface CompanionCharacterLetterTheme {
 export interface CompanionCharacterThemeVisual {
   readonly themeId: string;
   readonly unlocked: boolean;
+  readonly progress: CompanionCharacterProgress | null;
   readonly outfitPath: string;
   readonly posePaths: Readonly<{
     supported: string | null;
@@ -461,9 +451,7 @@ interface CompanionGatewayBaseOptions {
    * omission and null expose the same canonical unavailable/default-off DTO.
    */
   readonly contribution?:
-    | CompanionContributionStatusSource
-    | CompanionContributionController
-    | null;
+    CompanionContributionStatusSource | CompanionContributionController | null;
   readonly clock?: CompanionGatewayClock;
   readonly apiTimeoutMs?: number;
 }

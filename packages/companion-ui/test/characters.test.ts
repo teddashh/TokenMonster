@@ -59,6 +59,10 @@ const LETTER_THEME = {
   displayName: "科技",
   accessibleLabel: "科技主題字母造型",
   unlocked: false,
+  progress: {
+    value: 0.25,
+    explain: "再累積一點本機用量即可解鎖科技主題。",
+  },
   palette: {
     background: "#0B1F33",
     foreground: "#F8FAFC",
@@ -81,6 +85,7 @@ const FINANCE_LETTER_THEME = {
   displayName: "理財",
   accessibleLabel: "理財主題字母造型",
   unlocked: true,
+  progress: null,
   palette: {
     background: "#102A1F",
     foreground: "#F8FAFC",
@@ -124,6 +129,7 @@ const CHARACTER_RESPONSE = {
           {
             themeId: "tech",
             unlocked: true,
+            progress: null,
             outfitPath: IMAGE_PATH,
             posePaths: {
               supported: POSE_PATH,
@@ -179,6 +185,10 @@ const CHARACTER_RESPONSE = {
           {
             themeId: "festival",
             unlocked: false,
+            progress: {
+              value: 0.4,
+              explain: "再累積一點本機用量即可解鎖 festival 主題。",
+            },
             outfitPath: IMAGE_PATH,
             posePaths: {
               supported: null,

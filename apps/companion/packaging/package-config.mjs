@@ -34,6 +34,7 @@ import {
   PUBLIC_EMBEDDED_STARTER_ASSETS,
   requirePublicEmbeddedStarterAsset,
 } from "../../../scripts/release/public-artifact-policy.mjs";
+import { COMPANION_APP_ICON_STAGING_NAME } from "../../../scripts/release/build-app-icon.mjs";
 import { COMPANION_EMBEDDED_STARTER_STAGING_NAME } from "../../../scripts/release/companion-embedded-starter.mjs";
 import {
   packageJsonWithReleaseVersion,
@@ -769,15 +770,30 @@ async function prepareSidecarExtraResource(resourcesAppPath) {
   }
 }
 
+// The four-sisters icon is composed from the staged starter avatars by
+// scripts/release/build-app-icon.mjs before the packager runs. The path is
+// only wired in when the staging exists so importing this module (tests,
+// tooling) never depends on prior staging.
+const APP_ICON_STAGING_DIRECTORY = fileURLToPath(
+  new URL(`../out/${COMPANION_APP_ICON_STAGING_NAME}`, import.meta.url),
+);
+const APP_ICON_ICO_PATH = join(APP_ICON_STAGING_DIRECTORY, "icon.ico");
+function stagedAppIconBase() {
+  try {
+    accessSync(APP_ICON_ICO_PATH, constants.R_OK);
+  } catch {
+    return undefined;
+  }
+  return join(APP_ICON_STAGING_DIRECTORY, "icon");
+}
+const stagedAppIcon = stagedAppIconBase();
+
 // The runtime loads this directory through the characters package constant
 // EMBEDDED_STARTER_ASSET_DIRECTORY_NAME; the packaging policy test asserts
 // the two names stay identical.
 export const EMBEDDED_STARTER_RESOURCE_DIRECTORY = "embedded-starter-assets";
 const EMBEDDED_STARTER_STAGING_DIRECTORY = fileURLToPath(
-  new URL(
-    `../out/${COMPANION_EMBEDDED_STARTER_STAGING_NAME}`,
-    import.meta.url,
-  ),
+  new URL(`../out/${COMPANION_EMBEDDED_STARTER_STAGING_NAME}`, import.meta.url),
 );
 
 /** @param {string} resourcesAppPath */
@@ -811,10 +827,7 @@ async function prepareEmbeddedStarterExtraResource(resourcesAppPath) {
     }
     const contents = readFileSync(source);
     requirePublicEmbeddedStarterAsset(asset.archiveEntry, contents);
-    const destination = join(
-      targetDirectory,
-      ...asset.objectPath.split("/"),
-    );
+    const destination = join(targetDirectory, ...asset.objectPath.split("/"));
     await mkdir(dirname(destination), { mode: 0o755, recursive: true });
     await writeFile(destination, contents, { flag: "wx", mode: 0o644 });
     await chmod(destination, 0o644);
@@ -1101,11 +1114,19 @@ export const packagerConfig = Object.freeze({
   asar: true,
   executableName: "TokenMonster",
   ignore: ignoreOutsideRuntime,
+  // The Squirrel package id derives from this name; the user-facing
+  // "Token Monster (AI-Sister)" branding lives in ProductName and window
+  // titles so upgrades from older installs keep working.
   name: "TokenMonster",
   overwrite: true,
   prune: false,
-  win32metadata: Object.freeze({ CompanyName: APP_AUTHOR }),
+  win32metadata: Object.freeze({
+    CompanyName: APP_AUTHOR,
+    ProductName: "Token Monster (AI-Sister)",
+    FileDescription: "Token Monster (AI-Sister)",
+  }),
   afterCopy: [packageAfterCopyHook],
+  ...(stagedAppIcon === undefined ? {} : { icon: stagedAppIcon }),
   ...signedConfiguration.packager,
 });
 
@@ -1125,12 +1146,15 @@ export const packagingConfiguration = Object.freeze({
     name: packagerConfig.name.replaceAll(" ", ""),
     exe: `${packagerConfig.executableName}.exe`,
     setupExe: `${packagerConfig.name}Setup.exe`,
-    title: packagerConfig.name,
+    // Display title only; the package id above stays TokenMonster so
+    // rc.19/rc.20 installs upgrade in place.
+    title: "Token Monster (AI-Sister)",
     authors: APP_AUTHOR,
     description: APP_DESCRIPTION,
     noDelta: true,
     noMsi: true,
     version: RELEASE_VERSION,
+    ...(stagedAppIcon === undefined ? {} : { setupIcon: APP_ICON_ICO_PATH }),
     ...(signedConfiguration.makerWindowsSign === undefined
       ? {}
       : { windowsSign: signedConfiguration.makerWindowsSign }),

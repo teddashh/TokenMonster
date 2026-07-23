@@ -327,6 +327,7 @@ export interface CharacterPosePaths {
 export interface CharacterTheme {
   readonly themeId: CharacterThemeId;
   readonly unlocked: boolean;
+  readonly progress: CharacterProgress | null;
   readonly outfitPath: string;
   readonly posePaths: CharacterPosePaths;
 }
@@ -336,6 +337,7 @@ export interface CharacterLetterTheme {
   readonly displayName: string;
   readonly accessibleLabel: string;
   readonly unlocked: boolean;
+  readonly progress: CharacterProgress | null;
   readonly palette: Readonly<{
     background: string;
     foreground: string;
@@ -846,12 +848,10 @@ export function parseCharacterAssetPackStatus(
     !Number.isSafeInteger(value["downloadBytes"]) ||
     value["downloadBytes"] < 22 ||
     value["downloadBytes"] > 256 * 1_024 * 1_024 ||
-    (phase === "installed" &&
-      (!consented || !enabled || lastError !== null)) ||
+    (phase === "installed" && (!consented || !enabled || lastError !== null)) ||
     (phase === "available" && (consented || enabled)) ||
     (phase === "repair-needed" &&
-      (enabled ||
-        (!consented && lastError !== "cache-unavailable"))) ||
+      (enabled || (!consented && lastError !== "cache-unavailable"))) ||
     (phase === "installing" && (enabled || lastError !== null))
   ) {
     throw new TypeError("Invalid character asset pack response");
@@ -2015,25 +2015,34 @@ function parsePosePaths(value: unknown): CharacterPosePaths | undefined {
 function parseCharacterTheme(value: unknown): CharacterTheme | undefined {
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, ["themeId", "unlocked", "outfitPath", "posePaths"])
+    !hasExactKeys(value, [
+      "themeId",
+      "unlocked",
+      "progress",
+      "outfitPath",
+      "posePaths",
+    ])
   ) {
     return undefined;
   }
   const themeId = value["themeId"];
   const outfitPath = value["outfitPath"];
   const posePaths = parsePosePaths(value["posePaths"]);
+  const progress = parseCharacterProgress(value["progress"]);
   if (
     !isCharacterThemeId(themeId) ||
     typeof value["unlocked"] !== "boolean" ||
     typeof outfitPath !== "string" ||
     !CHARACTER_ASSET_IMAGE_PATTERN.test(outfitPath) ||
-    posePaths === undefined
+    posePaths === undefined ||
+    progress === undefined
   ) {
     return undefined;
   }
   return Object.freeze({
     themeId,
     unlocked: value["unlocked"],
+    progress,
     outfitPath,
     posePaths,
   });
@@ -2049,6 +2058,7 @@ function parseCharacterLetterTheme(
       "displayName",
       "accessibleLabel",
       "unlocked",
+      "progress",
       "palette",
       "pattern",
       "accent",
@@ -2083,11 +2093,14 @@ function parseCharacterLetterTheme(
   ) {
     return undefined;
   }
+  const progress = parseCharacterProgress(value["progress"]);
+  if (progress === undefined) return undefined;
   return Object.freeze({
     themeId: value["themeId"],
     displayName: value["displayName"],
     accessibleLabel: value["accessibleLabel"],
     unlocked: value["unlocked"],
+    progress,
     palette: Object.freeze({
       background: value["palette"]["background"],
       foreground: value["palette"]["foreground"],
@@ -2273,9 +2286,7 @@ function parseRosterEntry(value: unknown): CharacterRosterEntry | undefined {
   const characterId = value["characterId"];
   const unlockedAt = value["unlockedAt"];
   const activeThemeId = value["activeThemeId"];
-  const starterPersona = parseCharacterStarterPersona(
-    value["starterPersona"],
-  );
+  const starterPersona = parseCharacterStarterPersona(value["starterPersona"]);
   const visual = parseCharacterVisual(value["visual"]);
   const progress = parseCharacterProgress(value["progress"]);
   if (
@@ -2287,7 +2298,7 @@ function parseRosterEntry(value: unknown): CharacterRosterEntry | undefined {
     typeof value["isStarter"] !== "boolean" ||
     value["isStarter"] !== (value["kind"] === "sister") ||
     starterPersona === undefined ||
-    (value["isStarter"] !== (starterPersona !== null)) ||
+    value["isStarter"] !== (starterPersona !== null) ||
     (activeThemeId !== null && !isCharacterThemeId(activeThemeId)) ||
     visual === undefined ||
     progress === undefined ||

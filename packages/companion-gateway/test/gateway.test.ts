@@ -2241,6 +2241,7 @@ describe("companion gateway", () => {
       "displayName",
       "accessibleLabel",
       "unlocked",
+      "progress",
       "palette",
       "pattern",
       "accent",
@@ -2261,7 +2262,14 @@ describe("companion gateway", () => {
       "placement",
     ]);
     expect(letterThemes).toEqual(
-      LETTER_WARDROBE_CATALOG.map((theme) => ({ ...theme, unlocked: false })),
+      LETTER_WARDROBE_CATALOG.map((theme) => ({
+        ...theme,
+        unlocked: false,
+        progress: {
+          value: 0,
+          explain: expect.stringContaining("才能解鎖服裝主題"),
+        },
+      })),
     );
     expect(parseCharactersSnapshot(dto).characters).toHaveLength(11);
     expect(JSON.stringify(dto)).not.toContain("providerId");

@@ -14,22 +14,19 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
-export function petShellPage(
-  status: PetShellStatus,
-  pinned: boolean
-): string {
+export function petShellPage(status: PetShellStatus, pinned: boolean): string {
   const content =
     status.kind === "error"
       ? `<main class="notice" role="alert">
-          <div class="monster" aria-hidden="true">●ᴥ●</div>
-          <h1>TokenMonster 暫時睡著了</h1>
+          <div class="wordmark" aria-hidden="true">AI-Sister</div>
+          <h1>夥伴暫時睡著了</h1>
           <p>${escapeHtml(status.message)}</p>
           <button class="retry" id="retry" type="button">再試一次</button>
         </main>`
       : status.kind === "loading"
         ? `<main class="notice" aria-live="polite">
-            <div class="monster pulse" aria-hidden="true">●ᴥ●</div>
-            <h1>正在叫醒 TokenMonster…</h1>
+            <div class="wordmark pulse" aria-hidden="true">AI-Sister</div>
+            <h1>你的第一個 AI 伴侶快要出生了…</h1>
           </main>`
         : "";
 
@@ -41,7 +38,7 @@ export function petShellPage(
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; img-src 'none'; object-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'">
-    <title>TokenMonster</title>
+    <title>Token Monster（AI-Sister）</title>
     <style nonce="${nonce}">
       :root { color-scheme: light; font-family: Inter, ui-rounded, system-ui, sans-serif; }
       * { box-sizing: border-box; }
@@ -64,7 +61,11 @@ export function petShellPage(
         border-radius: 0 0 20px 20px; display: flex; flex-direction: column; height: calc(100% - 32px);
         justify-content: center; padding: 32px; text-align: center;
       }
-      .monster { color: #715287; font-size: 48px; letter-spacing: -8px; margin: 0 8px 18px 0; }
+      .wordmark {
+        background: linear-gradient(120deg, #6f4e85, #b06a9c 55%, #d78f6f);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+        font-size: 44px; font-weight: 850; letter-spacing: 1px; margin: 0 0 18px;
+      }
       .pulse { animation: pulse 1.25s ease-in-out infinite alternate; }
       h1 { font-size: 19px; margin: 0 0 12px; }
       p { color: #655a6c; font-size: 13px; line-height: 1.6; margin: 0 0 20px; }
@@ -74,7 +75,7 @@ export function petShellPage(
   </head>
   <body>
     <header class="dragbar">
-      <span class="brand">TokenMonster</span>
+      <span class="brand">Token Monster（AI-Sister）</span>
       <button class="control" id="pin" type="button" title="${pinned ? "取消置頂" : "保持置頂"}" aria-label="${pinned ? "取消置頂" : "保持置頂"}">${pinned ? "●" : "○"}</button>
       <button class="control" id="dashboard" type="button" title="開啟完整 dashboard" aria-label="開啟完整 dashboard">↗</button>
       <button class="control" id="hide" type="button" title="隱藏到系統匣" aria-label="隱藏到系統匣">−</button>
@@ -98,9 +99,9 @@ export function petShellPage(
 
 export function petShellDataUrl(
   status: PetShellStatus,
-  pinned: boolean
+  pinned: boolean,
 ): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(
-    petShellPage(status, pinned)
+    petShellPage(status, pinned),
   )}`;
 }

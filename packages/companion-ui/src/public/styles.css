@@ -350,15 +350,6 @@ html[data-connection="error"] .status-dot {
   will-change: transform, rotate;
 }
 
-.motion-enabled .companion-visual.character-idle .companion-ear {
-  animation: companion-ear-flutter 4.4s ease-in-out
-    var(--letter-sway-delay, 0ms) infinite;
-}
-
-.motion-enabled .companion-visual.character-idle .companion-ear-right {
-  animation-delay: calc(var(--letter-sway-delay, 0ms) - 2200ms);
-}
-
 .motion-enabled .character-entering {
   animation: character-entrance 340ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
@@ -507,20 +498,28 @@ html[data-connection="error"] .status-dot {
   animation-delay: 130ms !important;
 }
 
+/* The stand-in stage is AI-Sister branding — never the old letter-bear face.
+   Letter theme variables keep tinting the card so wardrobe themes still
+   change its look. */
 .companion-face {
   position: absolute;
   z-index: 2;
   inset: 1.2rem 1.1rem 1.6rem;
-  display: grid;
-  place-items: center;
-  border: 0.35rem solid #173f35;
-  border-radius: 44% 44% 48% 48% / 40% 40% 56% 56%;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 2.4rem 0.6rem 0.9rem;
+  border: 0.28rem solid #173f35;
+  border-radius: 1.7rem;
   color: var(--letter-foreground, #173f35);
-  background: var(--letter-background, #bdebd8);
+  background: var(--letter-background, #fff4e0);
   box-shadow:
-    inset 0 -1rem 0 rgb(70 158 130 / 13%),
-    0 0.7rem 0 #173f35,
-    0 1.3rem 2.2rem rgb(29 84 72 / 18%);
+    inset 0 -0.9rem 0 rgb(70 108 130 / 10%),
+    0 0.6rem 0 #173f35,
+    0 1.3rem 2.2rem rgb(29 60 84 / 16%);
 }
 
 .letter-theme-preview {
@@ -819,52 +818,60 @@ html[data-connection="error"] .status-dot {
   --letter-pattern-size: 1.5rem 1.8rem;
 }
 
-.companion-glyph {
-  position: relative;
+.brand-wordmark {
   z-index: 2;
-  font-size: 5.2rem;
-  font-weight: 950;
-  letter-spacing: -0.13em;
-  line-height: 1;
-  transform: translateX(-0.13em);
+  max-width: 100%;
+  overflow: hidden;
+  font-size: clamp(1.3rem, 5.2vw, 2.05rem);
+
+  /* Size against the letter card itself so the narrow dashboard stage never
+     clips the wordmark; the vw clamp above is the no-container fallback. */
+  font-size: clamp(0.85rem, 10.5cqi, 2.05rem);
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+  white-space: nowrap;
+  color: var(--letter-foreground, #173f35);
 }
 
-.companion-eye {
-  position: absolute;
-  top: 3.2rem;
-  width: 0.55rem;
-  height: 0.72rem;
+.brand-cast {
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brand-cast img {
+  width: 2.6rem;
+  height: 2.6rem;
+  border: 0.14rem solid #fff8e9;
   border-radius: 50%;
-  background: var(--letter-foreground, #173f35);
+  object-fit: cover;
+  background: #fff8e9;
+  box-shadow: 0 0.2rem 0.5rem rgb(29 60 84 / 20%);
 }
 
-.companion-eye-left {
-  left: 3rem;
+.brand-cast img + img {
+  margin-left: -0.55rem;
 }
 
-.companion-eye-right {
-  right: 3rem;
-}
-
-.companion-ear {
+.companion-glyph {
   position: absolute;
-  z-index: 1;
-  top: 0.4rem;
-  width: 4rem;
-  height: 4.4rem;
-  border: 0.32rem solid #173f35;
-  border-radius: 50% 50% 22% 55%;
-  background: var(--letter-accent, #f2bc68);
-}
-
-.companion-ear-left {
-  left: 1.15rem;
-  transform: rotate(-28deg);
-}
-
-.companion-ear-right {
-  right: 1.15rem;
-  transform: scaleX(-1) rotate(-28deg);
+  top: 50%;
+  right: 0.55rem;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--letter-background, #fff4e0);
+  background: var(--letter-foreground, #173f35);
+  transform: translateY(-50%);
 }
 
 .companion-shadow {
@@ -897,24 +904,6 @@ html[data-connection="error"] .status-dot {
 
   50% {
     rotate: 2.2deg;
-  }
-}
-
-/* Mostly still, then a quick double flick — reads as a living twitch rather
-   than a metronome. The mirrored right ear flips the direction for free. */
-@keyframes companion-ear-flutter {
-  0%,
-  78%,
-  100% {
-    rotate: 0deg;
-  }
-
-  86% {
-    rotate: -8deg;
-  }
-
-  93% {
-    rotate: 5deg;
   }
 }
 
@@ -1412,6 +1401,184 @@ h2 {
   line-height: 1.3;
 }
 
+.gacha-stage {
+  display: flex;
+  flex-direction: column;
+  grid-column: 1 / -1;
+  align-items: center;
+  padding: 0.4rem 0.4rem 0.9rem;
+  gap: 0.55rem;
+  text-align: center;
+}
+
+.gacha-title {
+  margin: 0;
+  color: #30342f;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.gacha-subtitle {
+  margin: 0;
+  color: #64675f;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.gacha-card {
+  width: 9.4rem;
+  height: 12.6rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  perspective: 60rem;
+  cursor: pointer;
+}
+
+.gacha-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.gacha-card-inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+
+.motion-enabled .gacha-card-inner {
+  transition: transform 0.7s cubic-bezier(0.3, 1.2, 0.4, 1);
+}
+
+.gacha-card.is-revealed .gacha-card-inner {
+  transform: rotateY(180deg);
+}
+
+.gacha-card-back,
+.gacha-card-front {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  inset: 0;
+  padding: 0.7rem;
+  gap: 0.45rem;
+  border-radius: 1.1rem;
+  backface-visibility: hidden;
+}
+
+.gacha-card-back {
+  border: 0.22rem solid rgb(255 255 255 / 65%);
+  background: linear-gradient(160deg, #6f4e85, #b06a9c 55%, #d78f6f);
+  box-shadow: 0 0.5rem 1.4rem rgb(111 78 133 / 35%);
+}
+
+.gacha-card:hover:not(:disabled) .gacha-card-back {
+  box-shadow: 0 0.7rem 1.8rem rgb(111 78 133 / 48%);
+}
+
+.gacha-back-mark {
+  color: rgb(255 255 255 / 92%);
+  font-size: 3.1rem;
+  font-weight: 950;
+}
+
+.gacha-back-brand {
+  color: rgb(255 255 255 / 85%);
+  font-size: 0.86rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.gacha-card-front {
+  border: 0.22rem solid #1d5448;
+  background: #e1f4eb;
+  box-shadow: 0 0.5rem 1.4rem rgb(29 84 72 / 28%);
+  transform: rotateY(180deg);
+}
+
+.gacha-portrait {
+  position: relative;
+  display: grid;
+  width: 4.6rem;
+  height: 4.6rem;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #d8d9d3;
+}
+
+.gacha-portrait img {
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gacha-portrait-glyph {
+  color: #686b64;
+  font-size: 1.7rem;
+  font-weight: 950;
+}
+
+.gacha-front-name {
+  color: #173f35;
+  font-size: 1.02rem;
+  font-weight: 900;
+}
+
+.gacha-front-tagline {
+  color: #37554a;
+  font-size: 0.7rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.gacha-draw {
+  min-width: 9.4rem;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid #1d5448;
+  border-radius: 999px;
+  color: #f4fbf7;
+  background: #1d5448;
+  font-size: 0.86rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.gacha-draw:hover:not(:disabled) {
+  background: #173f35;
+}
+
+.gacha-draw:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.gacha-manual {
+  padding: 0.3rem 0.6rem;
+  border: 0;
+  border-radius: 999px;
+  color: #64675f;
+  background: transparent;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.gacha-manual:hover:not(:disabled) {
+  color: #173f35;
+}
+
+.gacha-manual:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .roster-locked-summary {
   display: grid;
   align-self: center;
@@ -1873,6 +2040,31 @@ h2 {
   opacity: 0.48;
 }
 
+.wardrobe-progress {
+  display: block;
+  width: 100%;
+  height: 0.3rem;
+  margin-top: 0.3rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(29 84 72 / 14%);
+}
+
+.wardrobe-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #3d8d74;
+}
+
+.wardrobe-next-hint {
+  margin: 0.65rem 0 0;
+  color: #4e6157;
+  font-size: 0.74rem;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
 @media (forced-colors: active) {
   .letter-theme-preview::before {
     display: none;
@@ -1980,7 +2172,6 @@ html[data-character="claude"] .companion-face {
     0 1.3rem 2.2rem rgb(117 72 37 / 18%);
 }
 
-html[data-character="claude"] .companion-eye,
 html[data-character="claude"]
   .character-options
   button[aria-pressed="true"]
@@ -2002,7 +2193,6 @@ html[data-character="gemini"] .companion-face {
     0 1.3rem 2.2rem rgb(49 90 145 / 18%);
 }
 
-html[data-character="gemini"] .companion-eye,
 html[data-character="gemini"]
   .character-options
   button[aria-pressed="true"]
@@ -2024,7 +2214,6 @@ html[data-character="grok"] .companion-face {
     0 1.3rem 2.2rem rgb(102 46 53 / 18%);
 }
 
-html[data-character="grok"] .companion-eye,
 html[data-character="grok"]
   .character-options
   button[aria-pressed="true"]
@@ -2910,20 +3099,9 @@ html[data-character="grok"]
     max-width: min(12rem, 76vw);
   }
 
-  .companion-eye {
-    top: 2.4rem;
-  }
-
-  .companion-eye-left {
-    left: 2.25rem;
-  }
-
-  .companion-eye-right {
-    right: 2.25rem;
-  }
-
-  .companion-glyph {
-    font-size: 4.15rem;
+  .brand-cast img {
+    width: 2.1rem;
+    height: 2.1rem;
   }
 
   .metric-grid {
@@ -3026,7 +3204,6 @@ html[data-character="grok"]
   .character-effects.is-active .character-sparkle,
   .companion-visual.character-idle > .character-doll,
   .companion-visual.character-idle > .letter-layer,
-  .companion-visual.character-idle .companion-ear,
   .character-entering,
   .character-crossfade-in,
   .character-crossfade-out,
@@ -3248,9 +3425,7 @@ html[data-view="pet"][data-starter-choice="settled"] .byok-chat-panel {
   pointer-events: auto;
 }
 
-html[data-view="pet"][data-starter-choice="settled"]
-  .byok-chat-heading
-  span {
+html[data-view="pet"][data-starter-choice="settled"] .byok-chat-heading span {
   display: none;
 }
 

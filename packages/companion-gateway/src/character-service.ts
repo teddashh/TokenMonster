@@ -694,6 +694,19 @@ function starterPersonaDto(
   };
 }
 
+function themeUnlockProgress(
+  themeStatus:
+    ProgressionState["characters"][number]["themes"][number] | undefined,
+): CompanionCharacter["progress"] {
+  // Unlocked outfits need no condition; locked ones surface the progression
+  // engine's own explanation so the wardrobe shows real local milestones.
+  if (themeStatus === undefined || themeStatus.unlocked) return null;
+  return {
+    value: themeStatus.progress.value,
+    explain: themeStatus.progress.explanation,
+  };
+}
+
 function characterDto(
   characterId: RosterId,
   progression: ProgressionState,
@@ -765,17 +778,21 @@ function characterDto(
       background: activeLetterTheme?.palette.background ?? defaultBackground,
       foreground: activeLetterTheme?.palette.foreground ?? defaultForeground,
       accent: activeLetterTheme?.palette.accent ?? defaultAccent,
-      themes: LETTER_WARDROBE_CATALOG.map((theme) => ({
-        themeId: theme.themeId,
-        displayName: theme.displayName,
-        accessibleLabel: theme.accessibleLabel,
-        unlocked:
-          status.themes.find((candidate) => candidate.themeId === theme.themeId)
-            ?.unlocked ?? false,
-        palette: theme.palette,
-        pattern: theme.pattern,
-        accent: theme.accent,
-      })),
+      themes: LETTER_WARDROBE_CATALOG.map((theme) => {
+        const themeStatus = status.themes.find(
+          (candidate) => candidate.themeId === theme.themeId,
+        );
+        return {
+          themeId: theme.themeId,
+          displayName: theme.displayName,
+          accessibleLabel: theme.accessibleLabel,
+          unlocked: themeStatus?.unlocked ?? false,
+          progress: themeUnlockProgress(themeStatus),
+          palette: theme.palette,
+          pattern: theme.pattern,
+          accent: theme.accent,
+        };
+      }),
     };
   } else {
     visual = {
@@ -788,6 +805,7 @@ function characterDto(
         return {
           themeId: theme.themeId,
           unlocked: themeStatus?.unlocked ?? false,
+          progress: themeUnlockProgress(themeStatus),
           outfitPath: manifestPath(theme.outfit.path),
           posePaths: {
             supported:

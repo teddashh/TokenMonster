@@ -552,7 +552,7 @@ function run(): void {
       minHeight: 620,
       show: false,
       backgroundColor: "#f4f0e8",
-      title: "TokenMonster",
+      title: "Token Monster (AI-Sister)",
       webPreferences: secureWebPreferences(preloadPath, !app.isPackaged)
     })
     legacyWindow = window
@@ -739,7 +739,7 @@ function run(): void {
     try {
       await dialog.showMessageBox({
         type: kind === "already-running" ? "info" : "error",
-        title: "TokenMonster",
+        title: "Token Monster (AI-Sister)",
         message:
           kind === "already-running"
             ? "TokenMonster 已在執行中"

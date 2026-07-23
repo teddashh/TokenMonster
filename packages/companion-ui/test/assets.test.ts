@@ -238,11 +238,30 @@ describe("companion static assets", () => {
     );
     expect(js).toContain("更新於本機時間");
     expect(js).toContain(
-      "四位都有不同個性，第一位由你親自選；之後也能隨時換。",
+      "四位都有不同個性，抽一張卡讓緣分決定；想自己挑或之後換人都可以。",
     );
-    expect(js).toContain("這只是推薦，第一位夥伴仍由你親自選。");
+    expect(js).toContain("抽卡或自己挑都可以，之後也能隨時換。");
     expect(js).toContain("依本機用量推薦，但仍由你決定");
     expect(js).toContain("不需要多用 token");
+  });
+
+  it("presents the first-run gacha draw with a manual escape hatch", async () => {
+    const [css, js] = await Promise.all([
+      readAsset("styles.css"),
+      readJavaScriptGraph(),
+    ]);
+
+    expect(js).toContain("第一位姊妹要降生了");
+    expect(js).toContain("抽一張卡，看看是誰來到你身邊");
+    expect(js).toContain('drawButton.textContent = "抽卡"');
+    expect(js).toContain("想自己挑也可以");
+    expect(js).toContain("回到抽卡");
+    expect(js).toContain("crypto.getRandomValues(random)");
+    expect(js).toMatch(/if \(gachaDrawInFlight\)\s+return;/u);
+    expect(css).toContain(".gacha-card.is-revealed .gacha-card-inner");
+    expect(css).toMatch(
+      /\.motion-enabled \.gacha-card-inner \{\s*transition: transform/u,
+    );
   });
 
   it("keeps old-version progression repair explicit, compact, and non-destructive", async () => {

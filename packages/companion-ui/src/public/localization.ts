@@ -14,7 +14,7 @@ export const ENGLISH_UI_COPY = Object.freeze({
     "Saving the language preference on this device.",
   "語言偏好暫時無法儲存；這次視窗會使用你的選擇。":
     "The language preference cannot be saved right now. This window will use your selection.",
-  "跳到主要內容": "Skip to main content",
+  跳到主要內容: "Skip to main content",
   "TokenMonster 首頁": "TokenMonster home",
   正在啟動: "Starting",
   "點一下和 TokenMonster 字母 T 夥伴打招呼":
@@ -51,8 +51,7 @@ export const ENGLISH_UI_COPY = Object.freeze({
   "本機用量整理完成後，就能把這次相遇存成圖片。":
     "When local usage is ready, you can save this meeting as an image.",
   分享時隱藏28日Token總量: "Hide the 28-day token total when sharing",
-  "分享時隱藏 28 日 Token 總量":
-    "Hide the 28-day token total when sharing",
+  "分享時隱藏 28 日 Token 總量": "Hide the 28-day token total when sharing",
   儲存PNG: "Save PNG",
   "儲存 PNG": "Save PNG",
   和她聊聊: "Chat with her",
@@ -73,8 +72,7 @@ export const ENGLISH_UI_COPY = Object.freeze({
   "OpenAI 的資料保留政策。": "OpenAI data-retention policies.",
   關閉並清除對話: "Close and clear chat",
   用作業系統安全儲存記住key: "Remember the key in secure OS storage",
-  "用作業系統安全儲存記住 key":
-    "Remember the key in secure OS storage",
+  "用作業系統安全儲存記住 key": "Remember the key in secure OS storage",
   在本機設定: "Configure locally",
   目前這次對話: "Current conversation",
   "想對她說什麼？": "What would you like to say?",
@@ -198,8 +196,7 @@ export const ENGLISH_UI_COPY = Object.freeze({
   本機應用程式: "Local application",
   TokenMonster更新: "TokenMonster updates",
   "TokenMonster 更新": "TokenMonster updates",
-  "正在讀取這台裝置的更新設定。":
-    "Reading update settings from this device.",
+  "正在讀取這台裝置的更新設定。": "Reading update settings from this device.",
   "自動檢查預設關閉。只有開啟它或按下手動檢查時，TokenMonster 才會連到程式內固定的官方 Windows 更新來源；畫面不能指定網址。":
     "Automatic checks are off by default. TokenMonster connects to its fixed official Windows update source only when you enable them or check manually. The UI cannot choose a URL.",
   "自動檢查預設關閉。只有開啟它或按下手動檢查時，TokenMonster":
@@ -410,7 +407,8 @@ export const ENGLISH_UI_COPY = Object.freeze({
     "The OpenAI reply cannot be shown. Local fixed lines remain available.",
 
   今日默契暫時未更新: "Today's connection is temporarily out of date",
-  本機服務恢復後自動更新: "Updates automatically when the local service recovers",
+  本機服務恢復後自動更新:
+    "Updates automatically when the local service recovers",
   正在更新: "Updating",
   一分鐘後自動再試: "Retries automatically in one minute",
   "角色、收藏與本機用量仍可正常使用；側寫恢復後才會開放夥伴卡。":
@@ -446,21 +444,32 @@ export const ENGLISH_UI_COPY = Object.freeze({
   歡迎新夥伴中: "Welcoming a new companion",
   正在套用角色或服裝: "Applying character or outfit",
   正在檢查角色進度: "Checking character progress",
-  "慶祝結束後就能繼續換衣服。":
-    "You can change outfits after the celebration.",
+  "慶祝結束後就能繼續換衣服。": "You can change outfits after the celebration.",
   "角色選擇完成後就能繼續換衣服。":
     "You can change outfits after the character choice finishes.",
   "安全檢查完成後就能繼續換衣服。":
     "You can change outfits after the safety check.",
   "隨本機使用里程自然解鎖，不需要額外消耗 token。":
     "Unlocks naturally through local usage milestones; no extra token use is needed.",
+  解鎖進度: "Unlock progress",
   "正在歡迎新夥伴；慶祝結束後就能繼續打招呼、換衣與儲存夥伴卡。":
     "Welcoming a new companion. Chat, outfits, and companion cards return after the celebration.",
   "先從名單選一位 TokenMonster 夥伴":
     "Choose a TokenMonster companion from the roster",
   先從名單選一位夥伴: "Choose a companion from the roster",
-  "四位都有不同個性，第一位由你親自選；之後也能隨時換。":
-    "Each has a different personality. You choose the first companion and can switch anytime.",
+  "四位都有不同個性，抽一張卡讓緣分決定；想自己挑或之後換人都可以。":
+    "Each has a different personality. Draw a card and let fate decide; picking yourself or switching later is fine too.",
+  第一位姊妹要降生了: "Your first sister is about to arrive",
+  "抽一張卡，看看是誰來到你身邊": "Draw a card and see who comes to you",
+  抽卡: "Draw",
+  想自己挑也可以: "Prefer to pick yourself? That works too",
+  回到抽卡: "Back to the card draw",
+  抽出你的第一位姊妹: "Draw your first sister",
+  "正在歡迎新夥伴；慶祝結束後就能抽卡。":
+    "Welcoming a new companion. You can draw after the celebration.",
+  "安全檢查完成後就能抽卡。": "You can draw after the safety check completes.",
+  "正在套用角色或服裝；完成後就能抽卡。":
+    "Applying a character or outfit. You can draw when it finishes.",
   "這是你選的夥伴；想換人或換衣服都可以慢慢來。":
     "This is your chosen companion. Switch companions or outfits whenever you like.",
   "先由她陪你；你隨時可以換，不需要多用 token。":
@@ -468,6 +477,7 @@ export const ENGLISH_UI_COPY = Object.freeze({
   正在歡迎新夥伴稍後再打招呼: "Welcoming a new companion; say hello shortly",
   "正在歡迎新夥伴，稍後再打招呼":
     "Welcoming a new companion; say hello shortly",
+  "夥伴正在準備中，馬上就好": "Your companion is getting ready",
   正在歡迎新解鎖的TokenMonster夥伴:
     "Welcoming a newly unlocked TokenMonster companion",
   "正在歡迎新解鎖的 TokenMonster 夥伴":
@@ -517,8 +527,7 @@ export const ENGLISH_UI_COPY = Object.freeze({
   "今天（UTC）的用量已經整理好了。": "Today's (UTC) usage is ready.",
   "啟動完成後會顯示 UTC 每日趨勢。":
     "The daily UTC trend appears after startup.",
-  "目前還沒有 UTC 每日用量紀錄。":
-    "There are no daily UTC usage records yet.",
+  "目前還沒有 UTC 每日用量紀錄。": "There are no daily UTC usage records yet.",
 
   未設定: "Not set",
   正在儲存: "Saving",
@@ -550,16 +559,31 @@ export const ENGLISH_UI_COPY = Object.freeze({
     "The repair check did not finish and character progress did not change. Keep this window open, quit other TokenMonster versions from their tray or menu, then try again.",
   "她會照自己的步調準備好，不需要為了解鎖多用 token。":
     "She will get ready at her own pace. No extra token use is needed to unlock her.",
-  科技: "Technology", 金融: "Finance", 政治: "Politics", 教育: "Education",
-  健康: "Health", 環境: "Environment", 法律: "Law", 關係: "Relationships",
-  家庭: "Family", 職場: "Workplace", 科學: "Science", 文化: "Culture",
-  運動: "Sports", 美食: "Food", 旅行: "Travel", 心理: "Psychology",
-  哲學: "Philosophy", 國際: "International", 媒體: "Media", 節慶: "Festivals",
+  科技: "Technology",
+  金融: "Finance",
+  政治: "Politics",
+  教育: "Education",
+  健康: "Health",
+  環境: "Environment",
+  法律: "Law",
+  關係: "Relationships",
+  家庭: "Family",
+  職場: "Workplace",
+  科學: "Science",
+  文化: "Culture",
+  運動: "Sports",
+  美食: "Food",
+  旅行: "Travel",
+  心理: "Psychology",
+  哲學: "Philosophy",
+  國際: "International",
+  媒體: "Media",
+  節慶: "Festivals",
   CLI專注型: "CLI focused",
   "CLI 專注型": "CLI focused",
   "她發現你常在命令列裡，把想法一步步變成行動。":
     "She notices that you often turn ideas into action at the command line.",
-  "工具專注型": "Tool focused",
+  工具專注型: "Tool focused",
   "你近期常回到熟悉的工具，使用節奏很一致。":
     "You often return to familiar tools with a consistent rhythm.",
   多工具切換型: "Multi-tool",
@@ -593,7 +617,10 @@ export const ENGLISH_UI_COPY = Object.freeze({
   活力同行: "Lively company",
   "最近一個完整 UTC 日比你自己的近期使用節奏活躍一些。":
     "The last complete UTC day was more active than your recent rhythm.",
-  安靜: "Quiet", 柔和: "Gentle", 穩定: "Steady", 活躍: "Active",
+  安靜: "Quiet",
+  柔和: "Gentle",
+  穩定: "Steady",
+  活躍: "Active",
   還在認識你: "Still learning",
   "資料會隨平常使用自然補齊，不需要刻意增加用量。":
     "Data fills in through normal use; there is no need to increase usage deliberately.",
@@ -675,7 +702,8 @@ export const ENGLISH_UI_COPY = Object.freeze({
     "This usage rhythm is based on available local data from 28 UTC days. It is not a score of efficiency or ability.",
   最新本機側寫: "Latest local profile",
   最近一次可用側寫: "Most recent available profile",
-  "依目前可用的本機日資料整理。": "Based on currently available local daily data.",
+  "依目前可用的本機日資料整理。":
+    "Based on currently available local daily data.",
   "本機資料暫時無法更新；恢復後會自動重算。":
     "Local data cannot update right now and will recalculate after recovery.",
   "依最近 28 個 UTC 日的可用本機資料整理。":
@@ -768,53 +796,207 @@ type DynamicRule = Readonly<{
 }>;
 
 const DYNAMIC_ENGLISH_RULES: readonly DynamicRule[] = Object.freeze([
-  { pattern: /^啟用時會一次下載約 (.+) 的完整固定素材包（(.+) bytes）。這個請求只取素材，不會傳送你的用量、目前角色、解鎖狀態或服裝選擇；之後可隨時移除下載的完整素材，內建四位元祖角色的基本服裝圖像與文字不受影響。$/u, replace: (size, bytes) => `Enabling downloads the complete fixed asset pack once (about ${size}; ${bytes} bytes). The request fetches assets only and sends no usage, selected character, unlock state, or outfit choice. You can remove the downloaded full assets at any time; the built-in basic-outfit art and text for the four original starter characters are unaffected.` },
-  { pattern: /^安靜時段 (.+)–(.+)$/u, replace: (start, end) => `Quiet hours ${start}–${end}` },
-  { pattern: /^每天 (.+) 檢查本機摘要；(.+)。$/u, replace: (time, quiet) => `Check the local summary daily at ${time}; ${quiet}.` },
-  { pattern: /^TokenMonster (.+) 已準備好安裝。$/u, replace: (version) => `TokenMonster ${version} is ready to install.` },
-  { pattern: /^約剩 (\d+)%・視窗 (\d+) 小時$/u, replace: (remaining, hours) => `About ${remaining}% left · ${hours}-hour window` },
-  { pattern: /^(.+) 剩餘估算$/u, replace: (family) => `${family} estimated remaining` },
-  { pattern: /^近 (\d+) 天沒有 token 用量可分析。$/u, replace: (days) => `No token usage to analyze over ${days} days.` },
-  { pattern: /^正在整理近 (\d+) 天的各家分析。$/u, replace: (days) => `Preparing provider analysis for the last ${days} days.` },
-  { pattern: /^近 (\d+) 天的各家分析暫時無法載入。$/u, replace: (days) => `Provider analysis for the last ${days} days is temporarily unavailable.` },
-  { pattern: /^近 (\d+) 天共 (.+) tokens，來自 (\d+) 個供應商家族。$/u, replace: (days, total, families) => `${total} tokens over ${days} days across ${families} provider families.` },
+  {
+    pattern:
+      /^啟用時會一次下載約 (.+) 的完整固定素材包（(.+) bytes）。這個請求只取素材，不會傳送你的用量、目前角色、解鎖狀態或服裝選擇；之後可隨時移除下載的完整素材，內建四位元祖角色的基本服裝圖像與文字不受影響。$/u,
+    replace: (size, bytes) =>
+      `Enabling downloads the complete fixed asset pack once (about ${size}; ${bytes} bytes). The request fetches assets only and sends no usage, selected character, unlock state, or outfit choice. You can remove the downloaded full assets at any time; the built-in basic-outfit art and text for the four original starter characters are unaffected.`,
+  },
+  {
+    pattern: /^安靜時段 (.+)–(.+)$/u,
+    replace: (start, end) => `Quiet hours ${start}–${end}`,
+  },
+  {
+    pattern: /^每天 (.+) 檢查本機摘要；(.+)。$/u,
+    replace: (time, quiet) =>
+      `Check the local summary daily at ${time}; ${quiet}.`,
+  },
+  {
+    pattern: /^TokenMonster (.+) 已準備好安裝。$/u,
+    replace: (version) => `TokenMonster ${version} is ready to install.`,
+  },
+  {
+    pattern: /^約剩 (\d+)%・視窗 (\d+) 小時$/u,
+    replace: (remaining, hours) =>
+      `About ${remaining}% left · ${hours}-hour window`,
+  },
+  {
+    pattern: /^(.+) 剩餘估算$/u,
+    replace: (family) => `${family} estimated remaining`,
+  },
+  {
+    pattern: /^近 (\d+) 天沒有 token 用量可分析。$/u,
+    replace: (days) => `No token usage to analyze over ${days} days.`,
+  },
+  {
+    pattern: /^正在整理近 (\d+) 天的各家分析。$/u,
+    replace: (days) => `Preparing provider analysis for the last ${days} days.`,
+  },
+  {
+    pattern: /^近 (\d+) 天的各家分析暫時無法載入。$/u,
+    replace: (days) =>
+      `Provider analysis for the last ${days} days is temporarily unavailable.`,
+  },
+  {
+    pattern: /^近 (\d+) 天共 (.+) tokens，來自 (\d+) 個供應商家族。$/u,
+    replace: (days, total, families) =>
+      `${total} tokens over ${days} days across ${families} provider families.`,
+  },
   { pattern: /^輸入 (.+)$/u, replace: (value) => `Input ${value}` },
   { pattern: /^輸出 (.+)$/u, replace: (value) => `Output ${value}` },
-  { pattern: /^(.+)：(.+) tokens$/u, replace: (label, value) => `${label}: ${value} tokens` },
-  { pattern: /^UTC (.+)：(.+) tokens$/u, replace: (date, value) => `UTC ${date}: ${value} tokens` },
-  { pattern: /^最近 28 個 UTC 日的每日 token 趨勢，共 (.+) tokens。$/u, replace: (total) => `Daily token trend over the last 28 UTC days, ${total} tokens total.` },
+  {
+    pattern: /^(.+)：(.+) tokens$/u,
+    replace: (label, value) => `${label}: ${value} tokens`,
+  },
+  {
+    pattern: /^UTC (.+)：(.+) tokens$/u,
+    replace: (date, value) => `UTC ${date}: ${value} tokens`,
+  },
+  {
+    pattern: /^最近 28 個 UTC 日的每日 token 趨勢，共 (.+) tokens。$/u,
+    replace: (total) =>
+      `Daily token trend over the last 28 UTC days, ${total} tokens total.`,
+  },
   { pattern: /^嗨，我是 (.+) 姊姊。$/u, replace: (name) => `Hi, I'm ${name}.` },
   { pattern: /^嗨，我是 (.+)。$/u, replace: (name) => `Hi, I'm ${name}.` },
-  { pattern: /^點一下和 (.+) 夥伴打招呼$/u, replace: (name) => `Tap to say hello to ${name}` },
-  { pattern: /^點一下和 (.+) 打招呼$/u, replace: (name) => `Tap to say hello to ${name}` },
-  { pattern: /^TokenMonster (.+) 字母角色$/u, replace: (name) => `TokenMonster ${name} letter character` },
-  { pattern: /^上次更新於本機時間 (.+)$/u, replace: (time) => `Last updated at ${time} local time` },
-  { pattern: /^保留本機時間 (.+) 的資料$/u, replace: (time) => `Keeping data from ${time} local time` },
-  { pattern: /^上次成功於本機時間 (.+)$/u, replace: (time) => `Last successful update at ${time} local time` },
-  { pattern: /^更新於本機時間 (.+)$/u, replace: (time) => `Updated at ${time} local time` },
+  {
+    pattern: /^點一下和 (.+) 夥伴打招呼$/u,
+    replace: (name) => `Tap to say hello to ${name}`,
+  },
+  {
+    pattern: /^點一下和 (.+) 打招呼$/u,
+    replace: (name) => `Tap to say hello to ${name}`,
+  },
+  {
+    pattern: /^TokenMonster (.+) 字母角色$/u,
+    replace: (name) => `TokenMonster ${name} letter character`,
+  },
+  {
+    pattern: /^上次更新於本機時間 (.+)$/u,
+    replace: (time) => `Last updated at ${time} local time`,
+  },
+  {
+    pattern: /^保留本機時間 (.+) 的資料$/u,
+    replace: (time) => `Keeping data from ${time} local time`,
+  },
+  {
+    pattern: /^上次成功於本機時間 (.+)$/u,
+    replace: (time) => `Last successful update at ${time} local time`,
+  },
+  {
+    pattern: /^更新於本機時間 (.+)$/u,
+    replace: (time) => `Updated at ${time} local time`,
+  },
   { pattern: /^已嘗試 (.+) 次$/u, replace: (count) => `${count} attempts` },
-  { pattern: /^已遇見 (.+) \/ (.+) 位夥伴$/u, replace: (count, total) => `Met ${count} of ${total} companions` },
-  { pattern: /^下一次相遇進度 (.+)%$/u, replace: (progress) => `Next meeting progress: ${progress}%` },
-  { pattern: /^依近 28 天本機用量，你可能和 (.+) 比較熟；這只是推薦，第一位夥伴仍由你親自選。$/u, replace: (name) => `Based on 28 days of local usage, ${name} may feel familiar. This is only a suggestion; you choose your first companion.` },
-  { pattern: /^(.+) 暫時無法選擇，正在歡迎新夥伴。$/u, replace: (name) => `${name} is unavailable while a new companion is welcomed.` },
-  { pattern: /^(.+) 暫時無法選擇，正在安全檢查角色進度。$/u, replace: (name) => `${name} is unavailable while character progress is checked.` },
-  { pattern: /^(.+) 暫時無法選擇，正在套用角色或服裝。$/u, replace: (name) => `${name} is unavailable while a character or outfit is applied.` },
-  { pattern: /^選擇 (.+) 作為第一位夥伴(.+)$/u, replace: (name, detail) => `Choose ${name} as your first companion${detail.includes("推薦") ? ". Recommended from local usage, but you decide." : ""}` },
+  {
+    pattern: /^已遇見 (.+) \/ (.+) 位夥伴$/u,
+    replace: (count, total) => `Met ${count} of ${total} companions`,
+  },
+  {
+    pattern: /^下一次相遇進度 (.+)%$/u,
+    replace: (progress) => `Next meeting progress: ${progress}%`,
+  },
+  {
+    pattern:
+      /^依近 28 天本機用量，你可能和 (.+) 比較熟；抽卡或自己挑都可以，之後也能隨時換。$/u,
+    replace: (name) =>
+      `Based on 28 days of local usage, ${name} may feel familiar. Draw a card or pick yourself; you can switch anytime.`,
+  },
+  { pattern: /^抽到了 (.+)$/u, replace: (name) => `You drew ${name}` },
+  { pattern: /^(.+) 降生中…$/u, replace: (name) => `${name} is arriving…` },
+  {
+    pattern: /^下一套服裝：(.+)$/u,
+    replace: (condition) => `Next outfit: ${condition}`,
+  },
+  {
+    pattern:
+      /^已累積 (.+) 個本機 (.+) token，再 (.+) 個即可解鎖 (.+) 的 (.+) 主題。$/u,
+    replace: (current, provider, remaining, name, theme) =>
+      `${current} local ${provider} tokens so far; ${remaining} more unlocks ${name}'s ${theme} theme.`,
+  },
+  {
+    pattern:
+      /^本機累積總用量已達 (.+) tokens，再 (.+) tokens 即可解鎖 (.+) 的 (.+) 主題。$/u,
+    replace: (current, remaining, name, theme) =>
+      `${current} total local tokens so far; ${remaining} more unlocks ${name}'s ${theme} theme.`,
+  },
+  {
+    pattern: /^(.+) 暫時無法選擇，正在歡迎新夥伴。$/u,
+    replace: (name) =>
+      `${name} is unavailable while a new companion is welcomed.`,
+  },
+  {
+    pattern: /^(.+) 暫時無法選擇，正在安全檢查角色進度。$/u,
+    replace: (name) =>
+      `${name} is unavailable while character progress is checked.`,
+  },
+  {
+    pattern: /^(.+) 暫時無法選擇，正在套用角色或服裝。$/u,
+    replace: (name) =>
+      `${name} is unavailable while a character or outfit is applied.`,
+  },
+  {
+    pattern: /^選擇 (.+) 作為第一位夥伴(.+)$/u,
+    replace: (name, detail) =>
+      `Choose ${name} as your first companion${detail.includes("推薦") ? ". Recommended from local usage, but you decide." : ""}`,
+  },
   { pattern: /^選擇 (.+)$/u, replace: (name) => `Choose ${name}` },
-  { pattern: /^解鎖了 (\d+) 位夥伴與 (\d+) 件服裝，到衣櫃看看$/u, replace: (characters, themes) => `Unlocked ${characters} companions and ${themes} outfits. Visit the wardrobe.` },
-  { pattern: /^解鎖了 (\d+) 件新服裝，到衣櫃看看$/u, replace: (themes) => `Unlocked ${themes} new outfits. Visit the wardrobe.` },
-  { pattern: /^解鎖了 (\d+) 位新夥伴，到衣櫃看看$/u, replace: (characters) => `Unlocked ${characters} new companions. Visit the wardrobe.` },
+  {
+    pattern: /^解鎖了 (\d+) 位夥伴與 (\d+) 件服裝，到衣櫃看看$/u,
+    replace: (characters, themes) =>
+      `Unlocked ${characters} companions and ${themes} outfits. Visit the wardrobe.`,
+  },
+  {
+    pattern: /^解鎖了 (\d+) 件新服裝，到衣櫃看看$/u,
+    replace: (themes) => `Unlocked ${themes} new outfits. Visit the wardrobe.`,
+  },
+  {
+    pattern: /^解鎖了 (\d+) 位新夥伴，到衣櫃看看$/u,
+    replace: (characters) =>
+      `Unlocked ${characters} new companions. Visit the wardrobe.`,
+  },
   { pattern: /^(.+) 來了！$/u, replace: (name) => `${name} is here!` },
-  { pattern: /^(.+) 的(.+)服裝準備好了！$/u, replace: (name, theme) => `${name}'s ${theme} outfit is ready!` },
+  {
+    pattern: /^(.+) 的(.+)服裝準備好了！$/u,
+    replace: (name, theme) => `${name}'s ${theme} outfit is ready!`,
+  },
   { pattern: /^換上(.+)$/u, replace: (theme) => `Wear ${theme}` },
-  { pattern: /^(.+)暫時停用，角色狀態完成後即可選擇。$/u, replace: (theme) => `${theme} is temporarily unavailable until the character state settles.` },
-  { pattern: /^(.+)尚未解鎖，會隨本機使用里程自然解鎖。$/u, replace: (theme) => `${theme} is locked and unlocks naturally through local usage milestones.` },
-  { pattern: /^(.+)服裝尚未解鎖。(.+)$/u, replace: (theme) => `${theme} outfit is locked. ${theme ? "It unlocks naturally through local milestones." : ""}` },
-  { pattern: /^(.+)・正在更新，先沿用最近側寫$/u, replace: (state) => `${state} · Updating; showing the latest profile` },
-  { pattern: /^(.+)・暫時無法更新，先沿用最近側寫$/u, replace: (state) => `${state} · Temporarily unavailable; showing the latest profile` },
-  { pattern: /^(.+)・超過十五分鐘，正在更新$/u, replace: (state) => `${state} · Over fifteen minutes old; updating` },
-  { pattern: /^(.+)・沿用最近側寫$/u, replace: (state) => `${state} · Showing the latest profile` },
-  { pattern: /^(\d{4}-\d{2}-\d{2}) 至 (\d{4}-\d{2}-\d{2})（UTC）$/u, replace: (from, to) => `${from} to ${to} (UTC)` },
+  {
+    pattern: /^(.+)暫時停用，角色狀態完成後即可選擇。$/u,
+    replace: (theme) =>
+      `${theme} is temporarily unavailable until the character state settles.`,
+  },
+  {
+    pattern: /^(.+)尚未解鎖，會隨本機使用里程自然解鎖。$/u,
+    replace: (theme) =>
+      `${theme} is locked and unlocks naturally through local usage milestones.`,
+  },
+  {
+    pattern: /^(.+)服裝尚未解鎖。(.+)$/u,
+    replace: (theme) =>
+      `${theme} outfit is locked. ${theme ? "It unlocks naturally through local milestones." : ""}`,
+  },
+  {
+    pattern: /^(.+)・正在更新，先沿用最近側寫$/u,
+    replace: (state) => `${state} · Updating; showing the latest profile`,
+  },
+  {
+    pattern: /^(.+)・暫時無法更新，先沿用最近側寫$/u,
+    replace: (state) =>
+      `${state} · Temporarily unavailable; showing the latest profile`,
+  },
+  {
+    pattern: /^(.+)・超過十五分鐘，正在更新$/u,
+    replace: (state) => `${state} · Over fifteen minutes old; updating`,
+  },
+  {
+    pattern: /^(.+)・沿用最近側寫$/u,
+    replace: (state) => `${state} · Showing the latest profile`,
+  },
+  {
+    pattern: /^(\d{4}-\d{2}-\d{2}) 至 (\d{4}-\d{2}-\d{2})（UTC）$/u,
+    replace: (from, to) => `${from} to ${to} (UTC)`,
+  },
   { pattern: /^心情 (.+)$/u, replace: (mood) => `Mood  ${mood}` },
   { pattern: /^特質 (.+)$/u, replace: (trait) => `Trait  ${trait}` },
   { pattern: /^成長 (.+)$/u, replace: (evolution) => `Growth  ${evolution}` },
@@ -828,7 +1010,9 @@ function normalizePhrase(value: string): string {
 
 export function englishUiText(value: string): string {
   const normalized = normalizePhrase(value);
-  const exact = (ENGLISH_UI_COPY as Readonly<Record<string, string>>)[normalized];
+  const exact = (ENGLISH_UI_COPY as Readonly<Record<string, string>>)[
+    normalized
+  ];
   if (exact !== undefined) return exact;
   for (const rule of DYNAMIC_ENGLISH_RULES) {
     const match = rule.pattern.exec(normalized);
@@ -893,7 +1077,10 @@ export function observeLocalizedDocument(
   const observer = new MutationObserver((mutations) => {
     if (activeLocale !== "en") return;
     for (const mutation of mutations) {
-      if (mutation.type === "characterData" && mutation.target instanceof Text) {
+      if (
+        mutation.type === "characterData" &&
+        mutation.target instanceof Text
+      ) {
         localizeTextNode(mutation.target);
       } else if (
         mutation.type === "attributes" &&
