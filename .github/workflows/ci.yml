@@ -276,10 +276,10 @@ jobs:
           npm_config_arch: arm64
         run: |
           set -euo pipefail
-          trap 'node scripts/agent/stop.mjs --json' EXIT
+          trap 'node scripts/agent/status.mjs --json --lines 80 || true; node scripts/agent/stop.mjs --json || true' EXIT
           node scripts/agent/audit.mjs --phase before --write --json
           node scripts/agent/doctor.mjs --json
-          node scripts/agent/launch.mjs --wait --timeout-ms 600000 --json
+          node scripts/agent/launch.mjs --wait --timeout-ms 90000 --json
           node scripts/agent/audit.mjs --phase after --write --json
           node scripts/agent/stop.mjs --json
           trap - EXIT

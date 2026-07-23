@@ -3,10 +3,9 @@ import { readFile } from "node:fs/promises"
 import { describe, expect, it, vi } from "vitest"
 
 import {
-  AGENT_LAUNCH_READY_MESSAGE,
+  AGENT_LAUNCH_READY_FD,
   AGENT_LAUNCH_READY_MARKER,
   createAgentLaunchReadyReporter,
-  type AgentLaunchReadyMessage,
   installAgentParentDisconnectGuard
 } from "../src/main/agent-launch.js"
 
@@ -16,20 +15,28 @@ function reporter(
   packaged = false
 ): Readonly<{
   reportReady(): boolean
-  send: ReturnType<typeof vi.fn<(message: AgentLaunchReadyMessage) => boolean>>
+  writeWindowsPipe: ReturnType<
+    typeof vi.fn<(fd: number, marker: string) => boolean>
+  >
   write: ReturnType<typeof vi.fn<(marker: string) => void>>
 }> {
-  const send = vi.fn<(message: AgentLaunchReadyMessage) => boolean>(() => true)
+  const writeWindowsPipe = vi.fn<(fd: number, marker: string) => boolean>(
+    () => true
+  )
   const write = vi.fn<(marker: string) => void>()
   const ready = createAgentLaunchReadyReporter({
     environment,
     argv,
     packaged,
     platform: "linux",
-    send,
+    writeWindowsPipe,
     write
   })
-  return Object.freeze({ reportReady: ready.reportReady, send, write })
+  return Object.freeze({
+    reportReady: ready.reportReady,
+    writeWindowsPipe,
+    write
+  })
 }
 
 describe("agent source-launch readiness contract", () => {
@@ -131,11 +138,13 @@ describe("agent source-launch readiness contract", () => {
     expect(AGENT_LAUNCH_READY_MARKER).toBe(
       "[TOKENMONSTER_AGENT] READY companion\n"
     )
-    expect(ready.send).not.toHaveBeenCalled()
+    expect(ready.writeWindowsPipe).not.toHaveBeenCalled()
   })
 
-  it("uses one exact IPC message instead of stdout on Windows", () => {
-    const send = vi.fn<(message: AgentLaunchReadyMessage) => boolean>(
+  it("uses one exact inherited pipe write instead of stdout on Windows", () => {
+    const writeWindowsPipe = vi.fn<
+      (fd: number, marker: string) => boolean
+    >(
       () => true
     )
     const write = vi.fn<(marker: string) => void>()
@@ -144,25 +153,24 @@ describe("agent source-launch readiness contract", () => {
       argv: ["electron", ".", "--tokenmonster-agent-launch"],
       packaged: false,
       platform: "win32",
-      send,
+      writeWindowsPipe,
       write
     })
 
     expect(ready.reportReady()).toBe(true)
-    expect(send).toHaveBeenCalledOnce()
-    expect(send).toHaveBeenCalledWith({
-      schemaVersion: 1,
-      type: "tokenmonster_agent_ready"
-    })
-    expect(AGENT_LAUNCH_READY_MESSAGE).toEqual({
-      schemaVersion: 1,
-      type: "tokenmonster_agent_ready"
-    })
+    expect(writeWindowsPipe).toHaveBeenCalledOnce()
+    expect(writeWindowsPipe).toHaveBeenCalledWith(
+      4,
+      "[TOKENMONSTER_AGENT] READY companion\n"
+    )
+    expect(AGENT_LAUNCH_READY_FD).toBe(4)
     expect(write).not.toHaveBeenCalled()
   })
 
-  it("fails closed when the Windows IPC readiness channel is unavailable", () => {
-    const send = vi.fn<(message: AgentLaunchReadyMessage) => boolean>(
+  it("fails closed when the Windows readiness pipe is unavailable", () => {
+    const writeWindowsPipe = vi.fn<
+      (fd: number, marker: string) => boolean
+    >(
       () => false
     )
     const write = vi.fn<(marker: string) => void>()
@@ -171,13 +179,13 @@ describe("agent source-launch readiness contract", () => {
       argv: ["--tokenmonster-agent-launch"],
       packaged: false,
       platform: "win32",
-      send,
+      writeWindowsPipe,
       write
     })
 
     expect(ready.reportReady()).toBe(false)
     expect(ready.reportReady()).toBe(false)
-    expect(send).toHaveBeenCalledTimes(2)
+    expect(writeWindowsPipe).toHaveBeenCalledTimes(2)
     expect(write).not.toHaveBeenCalled()
   })
 
@@ -247,7 +255,7 @@ describe("agent source-launch readiness contract", () => {
     expect(source).toContain("argv: process.argv")
     expect(source).toContain("packaged: app.isPackaged")
     expect(source).toContain("platform: process.platform")
-    expect(source).toContain("process.send(message)")
+    expect(source).toContain("writeSync(fd, marker")
 
     const serviceReady = source.indexOf(
       "const started = await startPetServices(petByokSecretSlot)"

@@ -195,7 +195,7 @@
   },
   "privacy": {
     "localOnly": true,
-    "childOutput": "discarded; on Windows an exact content-blind IPC readiness event is projected to the fixed readiness marker, while other platforms accept only that exact marker",
+    "childOutput": "discarded; on Windows only a fixed marker from the dedicated inherited readiness pipe is accepted, while other platforms accept only that exact marker on stdout",
     "persistentState": "content-blind; no absolute paths, environment values, source filenames or raw child output",
     "logUpload": "never",
     "auditUpload": "never",

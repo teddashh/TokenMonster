@@ -5,9 +5,7 @@ import test from "node:test";
 import { contractVersion, readyMarker } from "../contract.mjs";
 import {
   committedState,
-  isAgentReadyMessage,
   ReadinessLineGate,
-  ReadinessMessageGate,
 } from "../runner.mjs";
 
 test("readiness accepts one exact stdout line only once", () => {
@@ -73,63 +71,26 @@ test("overlong lines recover and closed gates ignore later bytes", () => {
   assert.equal(reports, 1);
 });
 
-test("Windows readiness accepts one exact IPC message only once", () => {
-  let reports = 0;
-  const gate = new ReadinessMessageGate(() => {
-    reports += 1;
-  });
-  const message = {
-    schemaVersion: 1,
-    type: "tokenmonster_agent_ready",
-  };
-  assert.equal(gate.push(message), true);
-  assert.equal(gate.push(message), false);
-  assert.equal(reports, 1);
-});
-
-test("Windows readiness rejects malformed, extra and closed IPC messages", () => {
-  let reports = 0;
-  const invalid = [
-    null,
-    "tokenmonster_agent_ready",
-    { type: "tokenmonster_agent_ready" },
-    { schemaVersion: 2, type: "tokenmonster_agent_ready" },
-    { schemaVersion: 1, type: "TOKENMONSTER_AGENT_READY" },
-    {
-      schemaVersion: 1,
-      type: "tokenmonster_agent_ready",
-      extra: true,
-    },
-  ];
-  for (const message of invalid) {
-    assert.equal(isAgentReadyMessage(message), false);
-  }
-  const gate = new ReadinessMessageGate(() => {
-    reports += 1;
-  });
-  gate.finish();
-  assert.equal(
-    gate.push({
-      schemaVersion: 1,
-      type: "tokenmonster_agent_ready",
-    }),
-    false,
-  );
-  assert.equal(reports, 0);
-});
-
-test("runner uses exact IPC only on Windows and stdout elsewhere", async () => {
+test("runner uses an inherited pipe on Windows and stdout elsewhere", async () => {
   const source = await readFile(
     new URL("../runner.mjs", import.meta.url),
     "utf8",
   );
   expectSource(
     source,
-    /child\.stdout\.on\("data", \(chunk\) => \{\s+if \(process\.platform !== "win32"\) readyLineGate\.push\(chunk\);\s+\}\)/u,
+    /process\.platform === "win32"\s+\? \["ignore", "pipe", "pipe", "ipc", "pipe"\]\s+: \["ignore", "pipe", "pipe", "ipc"\]/u,
   );
   expectSource(
     source,
-    /child\.on\("message", \(message\) => \{\s+if \(process\.platform === "win32"\) \{\s+readyMessageGate\.push\(message\);\s+\}\s+\}\)/u,
+    /child\.stdout\.on\("data", \(chunk\) => \{\s+if \(process\.platform !== "win32"\) readyGate\.push\(chunk\);\s+\}\)/u,
+  );
+  expectSource(
+    source,
+    /if \(process\.platform === "win32"\) \{\s+const windowsReadyPipe = child\.stdio\[4\];\s+if \(\s+windowsReadyPipe === null \|\|\s+windowsReadyPipe === undefined\s+\) \{\s+failReadinessChannel\(\);\s+\} else \{\s+windowsReadyPipe\.on\("data", \(chunk\) => \{\s+readyGate\.push\(chunk\);\s+\}\);\s+windowsReadyPipe\.once\("error", failReadinessChannel\);\s+windowsReadyPipe\.once\("end", failReadinessChannel\);\s+\}\s+\}/u,
+  );
+  expectSource(
+    source,
+    /void terminateProcessTree\(\s+childPid,\s+\(\) =>\s+child\.pid === childPid &&\s+child\.exitCode === null &&\s+child\.signalCode === null,\s+\)/u,
   );
 });
 

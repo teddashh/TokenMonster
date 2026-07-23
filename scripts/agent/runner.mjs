@@ -14,6 +14,7 @@ import {
 } from "./contract.mjs";
 import { resolveElectronRuntime } from "./electron-runtime.mjs";
 import { projectSafeEnvironment } from "./environment.mjs";
+import { terminateProcessTree } from "./process-control.mjs";
 import { validRunnerToken } from "./process-identity.mjs";
 
 const MAX_PENDING_BYTES = 4 * 1024;
@@ -88,41 +89,6 @@ export class ReadinessLineGate {
   }
 }
 
-export function isAgentReadyMessage(value) {
-  return (
-    exactKeys(value, ["schemaVersion", "type"]) &&
-    value.schemaVersion === 1 &&
-    value.type === "tokenmonster_agent_ready"
-  );
-}
-
-export class ReadinessMessageGate {
-  #closed = false;
-  #reported = false;
-  #report;
-
-  constructor(report) {
-    this.#report = report;
-  }
-
-  push(message) {
-    if (
-      this.#closed ||
-      this.#reported ||
-      !isAgentReadyMessage(message)
-    ) {
-      return false;
-    }
-    this.#reported = true;
-    this.#report();
-    return true;
-  }
-
-  finish() {
-    this.#closed = true;
-  }
-}
-
 function safeExitMarker(code, signal) {
   if (
     Number.isInteger(code) &&
@@ -189,17 +155,25 @@ export async function runElectron(
     const outcome = await new Promise((resolvePromise) => {
       let settled = false;
       let spawnFailed = false;
+      let readyReported = false;
+      let readinessCleanupStarted = false;
       let child;
       const reportReady = () => {
-        safeAppendOwned(readyMarker, runnerToken);
+        readyReported = safeAppendOwned(readyMarker, runnerToken);
       };
-      const readyLineGate = new ReadinessLineGate(reportReady);
-      const readyMessageGate = new ReadinessMessageGate(reportReady);
+      const readyGate = new ReadinessLineGate(reportReady);
+      const markSpawnFailed = () => {
+        if (spawnFailed) return;
+        spawnFailed = true;
+        safeAppendOwned(
+          "[TOKENMONSTER_AGENT] ERROR electron_spawn_failed",
+          runnerToken,
+        );
+      };
       const finish = (code, signal) => {
         if (settled) return;
         settled = true;
-        readyLineGate.finish();
-        readyMessageGate.finish();
+        readyGate.finish();
         const marker = spawnFailed
           ? "[TOKENMONSTER_AGENT] EXIT code=1"
           : safeExitMarker(code, signal);
@@ -208,6 +182,29 @@ export async function runElectron(
             !spawnFailed && Number.isInteger(code) && code === 0 ? 0 : 1,
           terminalMarker: marker,
         });
+      };
+      const failReadinessChannel = () => {
+        if (
+          readyReported ||
+          readinessCleanupStarted ||
+          child === undefined
+        ) {
+          return;
+        }
+        readinessCleanupStarted = true;
+        markSpawnFailed();
+        const childPid = child.pid;
+        void terminateProcessTree(
+          childPid,
+          () =>
+            child.pid === childPid &&
+            child.exitCode === null &&
+            child.signalCode === null,
+        )
+          .then((stopped) => {
+            if (stopped) finish(1, null);
+          })
+          .catch(() => undefined);
       };
       try {
         child = spawn(
@@ -219,7 +216,10 @@ export async function runElectron(
               agentLaunch: true,
             }),
             shell: false,
-            stdio: ["ignore", "pipe", "pipe", "ipc"],
+            stdio:
+              process.platform === "win32"
+                ? ["ignore", "pipe", "pipe", "ipc", "pipe"]
+                : ["ignore", "pipe", "pipe", "ipc"],
             windowsHide: false,
           },
         );
@@ -234,25 +234,29 @@ export async function runElectron(
         });
         return;
       }
+      child.once("error", markSpawnFailed);
+      child.once("close", finish);
       child.stdout.on("data", (chunk) => {
-        if (process.platform !== "win32") readyLineGate.push(chunk);
+        if (process.platform !== "win32") readyGate.push(chunk);
       });
       child.stderr.on("data", () => {
         // Drain and discard. stderr is never a readiness channel.
       });
-      child.on("message", (message) => {
-        if (process.platform === "win32") {
-          readyMessageGate.push(message);
+      if (process.platform === "win32") {
+        const windowsReadyPipe = child.stdio[4];
+        if (
+          windowsReadyPipe === null ||
+          windowsReadyPipe === undefined
+        ) {
+          failReadinessChannel();
+        } else {
+          windowsReadyPipe.on("data", (chunk) => {
+            readyGate.push(chunk);
+          });
+          windowsReadyPipe.once("error", failReadinessChannel);
+          windowsReadyPipe.once("end", failReadinessChannel);
         }
-      });
-      child.once("error", () => {
-        spawnFailed = true;
-        safeAppendOwned(
-          "[TOKENMONSTER_AGENT] ERROR electron_spawn_failed",
-          runnerToken,
-        );
-      });
-      child.once("close", finish);
+      }
     });
     terminalMarker = outcome.terminalMarker;
     return outcome.exitCode;

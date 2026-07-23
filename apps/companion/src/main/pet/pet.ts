@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer"
+import { closeSync, writeSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -277,13 +278,19 @@ export async function startPetCompanion(
     argv: process.argv,
     packaged: app.isPackaged,
     platform: process.platform,
-    send: (message) => {
-      if (process.connected !== true || process.send === undefined) return false
+    writeWindowsPipe: (fd, marker) => {
       try {
-        process.send(message)
-        return true
+        return (
+          writeSync(fd, marker, null, "utf8") === Buffer.byteLength(marker)
+        )
       } catch {
         return false
+      } finally {
+        try {
+          closeSync(fd)
+        } catch {
+          // A failed or partial readiness write remains fail-closed.
+        }
       }
     },
     write: (marker) => {
