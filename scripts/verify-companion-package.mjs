@@ -893,10 +893,18 @@ async function verifyPackagePathsAndSnapshots(asarPath) {
     dirname(asarPath),
     ...manifest.sidecar.extraResourceTarget.split("/")
   );
+  // The embedded starter WebP objects are the one sanctioned binary
+  // extraResource; verifyEmbeddedStarterExtraResource pins their exact
+  // inventory, bytes, and digests.
+  const embeddedStarterDirectory = resolve(
+    dirname(asarPath),
+    "embedded-starter-assets"
+  );
   await verifyPackagePermissionTree(packageRoot);
   const files = await walkFiles(packageRoot);
   for (const path of files) {
     if (path.startsWith(`${sidecarDirectory}${sep}`)) continue;
+    if (path.startsWith(`${embeddedStarterDirectory}${sep}`)) continue;
     const relativePath = portablePath(relative(packageRoot, path));
     const lowerPath = relativePath.toLowerCase();
     const extension = extname(lowerPath);
