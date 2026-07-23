@@ -17,6 +17,44 @@ TokenMonster tracks your Claude Code, Codex, Gemini CLI, and Grok CLI token usag
 - **🔒 Local-first privacy** — no account, no telemetry. Prompts, code, filenames, and API keys never leave your device; everything keeps working offline.
 - **🖥️ Cross-platform** — Windows, macOS, Linux. Every release candidate passes CI smoke tests on all three.
 
+## Screenshots
+
+These screenshots come from the Windows desktop build. Characters, usage totals,
+and model rankings are all generated from local data.
+
+<p align="center">
+  <img src="docs/screenshots/windows-dashboard-companion-roster.png" alt="TokenMonster Windows dashboard showing Claude, the daily companion profile, companion roster, and local share card" width="100%">
+  <br>
+  <sub>Full desktop dashboard: character stage, daily profile, unlocked roster, and local share card.</sub>
+</p>
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/windows-pet-claude.png" alt="Claude in the TokenMonster desktop pet window" width="100%">
+      <br>
+      <sub>Claude desktop pet</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/windows-pet-usage-summary.png" alt="Today's, seven-day, and 28-day token usage in the TokenMonster pet window" width="100%">
+      <br>
+      <sub>Today, seven-day, and 28-day usage</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/windows-model-ranking-detail.png" alt="TokenMonster Top 10 model ranking detail" width="100%">
+      <br>
+      <sub>Top 10 model ranking detail</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/windows-pet-model-ranking.png" alt="Top 10 model ranking inside the TokenMonster pet window" width="100%">
+      <br>
+      <sub>Model ranking inside the pet window</sub>
+    </td>
+  </tr>
+</table>
+
 ## Quick start
 
 ### Windows: desktop installer

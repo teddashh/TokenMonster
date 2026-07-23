@@ -17,6 +17,43 @@ TokenMonster 在你的電腦本機追蹤 Claude Code、Codex、Gemini CLI、Grok
 - ** Local-first 隱私** — 沒有帳號、沒有遙測。prompt、程式碼、檔名、API key 從不離開你的裝置;離線也能完整使用。
 - ** 跨平台** — Windows、macOS、Linux。每個 release 候選都通過三平台 CI 冒煙測試。
 
+## 實機畫面
+
+以下畫面擷取自 Windows 桌面版;角色、用量統計與模型排行都由本機資料產生。
+
+<p align="center">
+  <img src="docs/screenshots/windows-dashboard-companion-roster.png" alt="TokenMonster Windows 桌面儀表板，顯示 Claude 角色、今日默契、陪伴名冊與分享卡" width="100%">
+  <br>
+  <sub>完整桌面儀表板:角色舞台、今日默契、已解鎖名冊與本機分享卡。</sub>
+</p>
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/windows-pet-claude.png" alt="TokenMonster 寵物視窗中的 Claude 角色" width="100%">
+      <br>
+      <sub>Claude 桌面寵物</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/windows-pet-usage-summary.png" alt="TokenMonster 寵物視窗中的今日、近 7 日與近 28 日 token 用量" width="100%">
+      <br>
+      <sub>今日、近 7 日與近 28 日用量</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/windows-model-ranking-detail.png" alt="TokenMonster Top 10 模型排行細節" width="100%">
+      <br>
+      <sub>Top 10 模型排行細節</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/windows-pet-model-ranking.png" alt="TokenMonster 寵物視窗中的 Top 10 模型排行" width="100%">
+      <br>
+      <sub>寵物視窗內的模型排行</sub>
+    </td>
+  </tr>
+</table>
+
 ## 快速開始
 
 ### Windows:桌面版安裝檔
