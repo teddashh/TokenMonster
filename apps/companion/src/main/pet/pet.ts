@@ -404,6 +404,7 @@ export async function startPetCompanion(
     await readPetWindowState(statePath),
     screen.getPrimaryDisplay().workArea
   )
+  await agentLaunchReady.reportPhase("state")
   let pinned = restored.pinned
   let services: PetServices | null = null
   let petByokSecretSlot: EncryptedSecretSlot | null = null
@@ -442,6 +443,7 @@ export async function startPetCompanion(
   })
   shellWindow.setAlwaysOnTop(pinned, "floating")
   shellWindow.setMenu(null)
+  await agentLaunchReady.reportPhase("window")
   shellWindow.on("close", (event) => {
     // Alt+F4 / window-manager close would destroy the shell and crash every
     // later tray or activate callback; the pet hides to the tray instead.
@@ -782,6 +784,7 @@ export async function startPetCompanion(
           startupLifecycle.assertRunning()
           petByokSecretSlot ??= candidate
         }
+        await agentLaunchReady.reportPhase("credentials")
         const started = await startPetServices(petByokSecretSlot)
         const adopted = await adoptPetStartupOwner(
           startupLifecycle,
@@ -792,6 +795,7 @@ export async function startPetCompanion(
           closePetServices
         )
         if (!adopted) return
+        await agentLaunchReady.reportPhase("services")
         const view = new WebContentsView({
           webPreferences: {
             allowRunningInsecureContent: false,
@@ -820,15 +824,18 @@ export async function startPetCompanion(
         if (startupLifecycle.shutdownRequested() || services !== started) {
           return
         }
+        await agentLaunchReady.reportPhase("bootstrap")
         // The bootstrap redirect targets `/`, so a second navigation gives the
         // authenticated page its pet layout selector without replaying bootstrap.
         await view.webContents.loadURL(petViewUrl(`${started.origin}/`))
         if (startupLifecycle.shutdownRequested() || services !== started) {
           return
         }
+        await agentLaunchReady.reportPhase("view")
         shellStatus = Object.freeze({ kind: "ready" })
         await loadShell()
         if (startupLifecycle.shutdownRequested() || services !== started) return
+        await agentLaunchReady.reportPhase("ready-shell")
         await agentLaunchReady.reportReady()
         reportSmokeOutcome("ok", stopOwnedRuntime)
 
@@ -1004,7 +1011,9 @@ export async function startPetCompanion(
     beginShutdown()
   })
 
+  await agentLaunchReady.reportPhase("initialized")
   await loadShell()
   showWindow()
+  await agentLaunchReady.reportPhase("shell")
   await startServices()
 }

@@ -5,6 +5,19 @@ export const AGENT_LAUNCH_READY_PIPE_ID_ENV = "TOKENMONSTER_AGENT_READY_PIPE_ID"
 export const AGENT_LAUNCH_READY_CAPABILITY_ENV =
   "TOKENMONSTER_AGENT_READY_CAPABILITY"
 
+export const AGENT_LAUNCH_PHASES = Object.freeze([
+  "state",
+  "window",
+  "initialized",
+  "shell",
+  "credentials",
+  "services",
+  "bootstrap",
+  "view",
+  "ready-shell"
+] as const)
+export type AgentLaunchPhase = (typeof AGENT_LAUNCH_PHASES)[number]
+
 const WINDOWS_READY_PIPE_ID_PATTERN = /^[0-9a-f]{32}$/u
 const WINDOWS_READY_CAPABILITY_PATTERN = /^[0-9a-f]{64}$/u
 const WINDOWS_READY_PIPE_PREFIX = "\\\\.\\pipe\\tokenmonster-agent-ready-"
@@ -17,6 +30,7 @@ export interface AgentLaunchWindowsChannel {
 
 export interface AgentLaunchReadyReporter {
   reportConnected(): Promise<boolean>
+  reportPhase(phase: AgentLaunchPhase): Promise<boolean>
   reportReady(): Promise<boolean>
 }
 
@@ -79,7 +93,19 @@ export function createAgentLaunchReadyReporter(
   let channel: AgentLaunchWindowsChannel | null = null
   let connectAttempted = false
   let connected = false
+  let nextPhaseIndex = 0
+  let phaseInFlight = false
   let readyAttempted = false
+
+  const destroyWindowsChannel = (): void => {
+    try {
+      channel?.destroy()
+    } catch {
+      // A broken transport is already a failed readiness report.
+    } finally {
+      channel = null
+    }
+  }
 
   return Object.freeze({
     async reportConnected(): Promise<boolean> {
@@ -116,18 +142,49 @@ export function createAgentLaunchReadyReporter(
         // The private readiness channel is diagnostic only. Fail closed
         // without taking down the local companion.
       }
-      try {
-        channel.destroy()
-      } catch {
-        // A broken transport is already a failed readiness report.
-      } finally {
-        channel = null
-      }
+      destroyWindowsChannel()
       return false
+    },
+    async reportPhase(phase: AgentLaunchPhase): Promise<boolean> {
+      if (
+        !enabled ||
+        !connected ||
+        readyAttempted ||
+        phaseInFlight ||
+        AGENT_LAUNCH_PHASES[nextPhaseIndex] !== phase
+      ) {
+        return false
+      }
+      phaseInFlight = true
+      try {
+        if (options.platform === "win32") {
+          if (channel === null) return false
+          let sent = false
+          try {
+            sent = await channel.write(
+              `[TOKENMONSTER_AGENT_PRIVATE] PHASE ${phase}\n`
+            )
+          } catch {
+            sent = false
+          }
+          if (!sent) {
+            destroyWindowsChannel()
+            return false
+          }
+        }
+        nextPhaseIndex += 1
+        return true
+      } finally {
+        phaseInFlight = false
+      }
     },
     async reportReady(): Promise<boolean> {
       if (!enabled || readyAttempted) return false
       readyAttempted = true
+      if (nextPhaseIndex !== AGENT_LAUNCH_PHASES.length) {
+        if (options.platform === "win32") destroyWindowsChannel()
+        return false
+      }
       if (options.platform !== "win32") {
         if (!connected) return false
         try {
@@ -145,13 +202,10 @@ export function createAgentLaunchReadyReporter(
         sent = false
       }
       if (!sent) {
-        try {
-          channel.destroy()
-        } catch {
-          // A broken transport is already a failed readiness report.
-        }
+        destroyWindowsChannel()
+      } else {
+        channel = null
       }
-      channel = null
       return sent
     }
   })

@@ -96,18 +96,23 @@ test("the contract fixes the source lane and private lifecycle paths", () => {
 });
 
 test("the Windows readiness connection marker is an exact safe lifecycle value", () => {
-  assert.equal(
-    safeLifecycleMarker(
-      "[TOKENMONSTER_AGENT] STATUS electron_connected",
-    ),
-    true,
-  );
-  assert.equal(
-    safeLifecycleMarker(
-      "[TOKENMONSTER_AGENT] STATUS electron_connected extra",
-    ),
-    false,
-  );
+  const markers = [
+    "electron_connected",
+    "companion_state",
+    "companion_window",
+    "companion_initialized",
+    "companion_shell",
+    "companion_credentials",
+    "companion_services",
+    "companion_bootstrap",
+    "companion_view",
+    "companion_ready_shell",
+  ];
+  for (const marker of markers) {
+    const value = `[TOKENMONSTER_AGENT] STATUS ${marker}`;
+    assert.equal(safeLifecycleMarker(value), true);
+    assert.equal(safeLifecycleMarker(`${value} extra`), false);
+  }
 });
 
 const POLICY_RELAXATIONS = [

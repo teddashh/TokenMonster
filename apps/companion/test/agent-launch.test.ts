@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises"
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  AGENT_LAUNCH_PHASES,
   AGENT_LAUNCH_READY_CAPABILITY_ENV,
   AGENT_LAUNCH_READY_MARKER,
   AGENT_LAUNCH_READY_PIPE_ID_ENV,
@@ -55,6 +56,14 @@ function reporter(
     openWindowsPipe,
     write
   })
+}
+
+async function reportAllPhases(
+  harness: ReturnType<typeof reporter>
+): Promise<void> {
+  for (const phase of AGENT_LAUNCH_PHASES) {
+    await expect(harness.ready.reportPhase(phase)).resolves.toBe(true)
+  }
 }
 
 function windowsEnvironment(
@@ -166,6 +175,7 @@ describe("agent source-launch readiness contract", () => {
     ])
 
     await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    await reportAllPhases(harness)
     await expect(harness.ready.reportReady()).resolves.toBe(true)
     expect(harness.write).toHaveBeenCalledOnce()
     expect(harness.write).toHaveBeenCalledWith(
@@ -175,6 +185,7 @@ describe("agent source-launch readiness contract", () => {
       "[TOKENMONSTER_AGENT] READY companion\n"
     )
     expect(harness.openWindowsPipe).not.toHaveBeenCalled()
+    expect(harness.channelWrite).not.toHaveBeenCalled()
   })
 
   it("fails closed when POSIX readiness is attempted before connection", async () => {
@@ -188,7 +199,7 @@ describe("agent source-launch readiness contract", () => {
     expect(harness.write).not.toHaveBeenCalled()
   })
 
-  it("uses one authenticated Windows pipe for HELLO then READY", async () => {
+  it("uses one authenticated Windows pipe for HELLO, ordered phases, then READY", async () => {
     const harness = reporter(
       windowsEnvironment(),
       ["electron", ".", "--tokenmonster-agent-launch"],
@@ -198,11 +209,14 @@ describe("agent source-launch readiness contract", () => {
     await expect(harness.ready.reportConnected()).resolves.toBe(true)
     expect(harness.openWindowsPipe).toHaveBeenCalledOnce()
     expect(harness.openWindowsPipe).toHaveBeenCalledWith(WINDOWS_PIPE_PATH)
-    expect(harness.channelWrite).toHaveBeenCalledOnce()
-    expect(harness.channelWrite).toHaveBeenCalledWith(
+    await reportAllPhases(harness)
+    expect(harness.channelWrite.mock.calls.map(([marker]) => marker)).toEqual([
       `[TOKENMONSTER_AGENT_PRIVATE] HELLO companion ` +
-        `pid=${WINDOWS_PROCESS_ID} cap=${WINDOWS_CAPABILITY}\n`
-    )
+        `pid=${WINDOWS_PROCESS_ID} cap=${WINDOWS_CAPABILITY}\n`,
+      ...AGENT_LAUNCH_PHASES.map(
+        (phase) => `[TOKENMONSTER_AGENT_PRIVATE] PHASE ${phase}\n`
+      )
+    ])
 
     await expect(harness.ready.reportReady()).resolves.toBe(true)
     expect(harness.channelEnd).toHaveBeenCalledOnce()
@@ -211,6 +225,62 @@ describe("agent source-launch readiness contract", () => {
     )
     expect(harness.channelDestroy).not.toHaveBeenCalled()
     expect(harness.write).not.toHaveBeenCalled()
+  })
+
+  it("ignores duplicate and out-of-order Windows phases without damaging the channel", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
+      ["--tokenmonster-agent-launch"],
+      { platform: "win32" }
+    )
+
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    await expect(harness.ready.reportPhase("state")).resolves.toBe(true)
+    await expect(harness.ready.reportPhase("state")).resolves.toBe(false)
+    await expect(harness.ready.reportPhase("initialized")).resolves.toBe(false)
+    expect(harness.channelWrite).toHaveBeenCalledTimes(2)
+
+    await expect(harness.ready.reportPhase("window")).resolves.toBe(true)
+    for (const phase of AGENT_LAUNCH_PHASES.slice(2)) {
+      await expect(harness.ready.reportPhase(phase)).resolves.toBe(true)
+    }
+    await expect(harness.ready.reportReady()).resolves.toBe(true)
+    expect(harness.channelDestroy).not.toHaveBeenCalled()
+    expect(harness.channelEnd).toHaveBeenCalledOnce()
+  })
+
+  it("fails closed when an ordered Windows phase cannot be written", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
+      ["--tokenmonster-agent-launch"],
+      { platform: "win32" }
+    )
+
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    harness.channelWrite.mockResolvedValueOnce(false)
+    await expect(harness.ready.reportPhase("state")).resolves.toBe(false)
+    await expect(harness.ready.reportPhase("state")).resolves.toBe(false)
+    await expect(harness.ready.reportReady()).resolves.toBe(false)
+    expect(harness.channelWrite).toHaveBeenCalledTimes(2)
+    expect(harness.channelDestroy).toHaveBeenCalledOnce()
+    expect(harness.channelEnd).not.toHaveBeenCalled()
+  })
+
+  it("never sends Windows READY before every phase succeeds", async () => {
+    const harness = reporter(
+      windowsEnvironment(),
+      ["--tokenmonster-agent-launch"],
+      { platform: "win32" }
+    )
+
+    await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    for (const phase of AGENT_LAUNCH_PHASES.slice(0, -1)) {
+      await expect(harness.ready.reportPhase(phase)).resolves.toBe(true)
+    }
+    await expect(harness.ready.reportReady()).resolves.toBe(false)
+    await expect(harness.ready.reportPhase("ready-shell")).resolves.toBe(false)
+    expect(harness.channelEnd).not.toHaveBeenCalled()
+    expect(harness.channelDestroy).toHaveBeenCalledOnce()
   })
 
   it("opens the Windows pipe at most once under concurrent calls", async () => {
@@ -318,6 +388,7 @@ describe("agent source-launch readiness contract", () => {
     harness.channelEnd.mockResolvedValue(false)
 
     await expect(harness.ready.reportConnected()).resolves.toBe(true)
+    await reportAllPhases(harness)
     await expect(harness.ready.reportReady()).resolves.toBe(false)
     expect(harness.channelDestroy).toHaveBeenCalledOnce()
   })
@@ -343,6 +414,7 @@ describe("agent source-launch readiness contract", () => {
 
     await expect(harness.ready.reportConnected()).resolves.toBe(true)
     await expect(harness.ready.reportConnected()).resolves.toBe(false)
+    await reportAllPhases(harness)
     await expect(harness.ready.reportReady()).resolves.toBe(true)
     await expect(harness.ready.reportReady()).resolves.toBe(false)
     expect(harness.write).toHaveBeenCalledOnce()
@@ -421,7 +493,142 @@ describe("agent source-launch readiness contract", () => {
     expect(
       source.match(/agentLaunchReady\.reportConnected\(\)/gu)
     ).toHaveLength(1)
-    expect(source).not.toContain("agentLaunchReady.reportPhase(")
+    expect(source.match(/agentLaunchReady\.reportPhase\("/gu)).toHaveLength(9)
+  })
+
+  it("reports every phase at its fixed startup lifecycle boundary", async () => {
+    const source = await readFile(
+      new URL("../src/main/pet/pet.ts", import.meta.url),
+      "utf8"
+    )
+    const phase = (name: (typeof AGENT_LAUNCH_PHASES)[number]): number =>
+      source.indexOf(`await agentLaunchReady.reportPhase("${name}")`)
+
+    for (const name of AGENT_LAUNCH_PHASES) {
+      expect(source.split(`agentLaunchReady.reportPhase("${name}")`)).toHaveLength(
+        2
+      )
+    }
+
+    const restoredState = source.indexOf(
+      "const restored = placeDefaultPetWindowState("
+    )
+    const statePhase = phase("state")
+    const windowCreated = source.indexOf(
+      "const shellWindow = new BrowserWindow({",
+      statePhase
+    )
+    const windowConfigured = source.indexOf(
+      "shellWindow.setMenu(null)",
+      windowCreated
+    )
+    const windowPhase = phase("window")
+    const windowCloseHandler = source.indexOf(
+      'shellWindow.on("close"',
+      windowPhase
+    )
+
+    const credentialsReady = source.indexOf(
+      "const candidate = await petByokStartup.result"
+    )
+    const credentialsPhase = phase("credentials")
+    const servicesStarted = source.indexOf(
+      "const started = await startPetServices(petByokSecretSlot)",
+      credentialsPhase
+    )
+    const servicesAdopted = source.indexOf(
+      "if (!adopted) return",
+      servicesStarted
+    )
+    const servicesPhase = phase("services")
+    const bootstrapLoaded = source.indexOf(
+      "await view.webContents.loadURL(started.bootstrapUrl)",
+      servicesPhase
+    )
+    const bootstrapPhase = phase("bootstrap")
+    const viewLoaded = source.indexOf(
+      "await view.webContents.loadURL(petViewUrl(`${started.origin}/`))",
+      bootstrapPhase
+    )
+    const viewPhase = phase("view")
+    const finalShellLoaded = source.indexOf("await loadShell()", viewPhase)
+    const finalStartupFence = source.indexOf(
+      "if (startupLifecycle.shutdownRequested() || services !== started) return",
+      finalShellLoaded
+    )
+    const readyShellPhase = phase("ready-shell")
+    const readinessReported = source.indexOf(
+      "await agentLaunchReady.reportReady()",
+      readyShellPhase
+    )
+
+    const beforeQuitHandler = source.indexOf('app.on("before-quit"')
+    const initializedPhase = phase("initialized")
+    const initialShellLoaded = source.indexOf(
+      "await loadShell()",
+      initializedPhase
+    )
+    const initialShellShown = source.indexOf(
+      "showWindow()",
+      initialShellLoaded
+    )
+    const shellPhase = phase("shell")
+    const servicesInvoked = source.indexOf(
+      "await startServices()",
+      shellPhase
+    )
+
+    expect([
+      restoredState,
+      statePhase,
+      windowCreated,
+      windowConfigured,
+      windowPhase,
+      windowCloseHandler,
+      credentialsReady,
+      credentialsPhase,
+      servicesStarted,
+      servicesAdopted,
+      servicesPhase,
+      bootstrapLoaded,
+      bootstrapPhase,
+      viewLoaded,
+      viewPhase,
+      finalShellLoaded,
+      finalStartupFence,
+      readyShellPhase,
+      readinessReported,
+      beforeQuitHandler,
+      initializedPhase,
+      initialShellLoaded,
+      initialShellShown,
+      shellPhase,
+      servicesInvoked
+    ]).not.toContain(-1)
+    expect(restoredState).toBeLessThan(statePhase)
+    expect(statePhase).toBeLessThan(windowCreated)
+    expect(windowCreated).toBeLessThan(windowConfigured)
+    expect(windowConfigured).toBeLessThan(windowPhase)
+    expect(windowPhase).toBeLessThan(windowCloseHandler)
+
+    expect(credentialsReady).toBeLessThan(credentialsPhase)
+    expect(credentialsPhase).toBeLessThan(servicesStarted)
+    expect(servicesStarted).toBeLessThan(servicesAdopted)
+    expect(servicesAdopted).toBeLessThan(servicesPhase)
+    expect(servicesPhase).toBeLessThan(bootstrapLoaded)
+    expect(bootstrapLoaded).toBeLessThan(bootstrapPhase)
+    expect(bootstrapPhase).toBeLessThan(viewLoaded)
+    expect(viewLoaded).toBeLessThan(viewPhase)
+    expect(viewPhase).toBeLessThan(finalShellLoaded)
+    expect(finalShellLoaded).toBeLessThan(finalStartupFence)
+    expect(finalStartupFence).toBeLessThan(readyShellPhase)
+    expect(readyShellPhase).toBeLessThan(readinessReported)
+
+    expect(beforeQuitHandler).toBeLessThan(initializedPhase)
+    expect(initializedPhase).toBeLessThan(initialShellLoaded)
+    expect(initialShellLoaded).toBeLessThan(initialShellShown)
+    expect(initialShellShown).toBeLessThan(shellPhase)
+    expect(shellPhase).toBeLessThan(servicesInvoked)
   })
 
   it("reports only after services, authenticated pet view, and shell are ready", async () => {

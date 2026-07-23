@@ -7,8 +7,10 @@ import {
   committedState,
   createWindowsReadinessConfiguration,
   ReadinessLineGate,
+  WINDOWS_READINESS_PHASES,
   WindowsReadinessStreamGate,
   windowsPrivateHelloMarker,
+  windowsPrivatePhaseMarker,
 } from "../runner.mjs";
 
 test("readiness accepts one exact stdout line only once", () => {
@@ -112,6 +114,28 @@ test("Windows private hello binds an exact pid and capability", () => {
   }
 });
 
+test("Windows private phases are a fixed ordered vocabulary", () => {
+  assert.deepEqual(WINDOWS_READINESS_PHASES, [
+    "state",
+    "window",
+    "initialized",
+    "shell",
+    "credentials",
+    "services",
+    "bootstrap",
+    "view",
+    "ready-shell",
+  ]);
+  assert.equal(
+    windowsPrivatePhaseMarker("services"),
+    "[TOKENMONSTER_AGENT_PRIVATE] PHASE services",
+  );
+  assert.throws(
+    () => windowsPrivatePhaseMarker("unreviewed"),
+    /agent_ready_marker_invalid/u,
+  );
+});
+
 function windowsGate(overrides = {}) {
   const events = [];
   const capability = "01".repeat(32);
@@ -122,37 +146,58 @@ function windowsGate(overrides = {}) {
       return overrides.authenticatedResult ?? true;
     },
     onFatal: () => events.push("fatal"),
+    onPhase: (phase) => {
+      events.push(`phase:${phase}`);
+      return overrides.phaseFailure !== phase;
+    },
     onReady: () => {
       events.push("ready");
       return overrides.readyResult ?? true;
     },
     onRejected: () => events.push("rejected"),
   });
-  return { capability, events, gate, hello };
+  const phases = WINDOWS_READINESS_PHASES.map(
+    (phase) => windowsPrivatePhaseMarker(phase),
+  );
+  const protocol = `${hello}\n${phases.join("\n")}\n${readyMarker}\n`;
+  const successEvents = [
+    "authenticated",
+    ...WINDOWS_READINESS_PHASES.map((phase) => `phase:${phase}`),
+  ];
+  return {
+    capability,
+    events,
+    gate,
+    hello,
+    phases,
+    protocol,
+    successEvents,
+  };
 }
 
-test("Windows readiness accepts fragmented HELLO and READY only at EOF", () => {
-  const { events, gate, hello } = windowsGate();
-  const stream = `${hello}\n${readyMarker}\n`;
+test("Windows readiness accepts fragmented ordered protocol only at EOF", () => {
+  const { events, gate, protocol, successEvents } = windowsGate();
   for (const fragment of [
-    stream.slice(0, 7),
-    stream.slice(7, 91),
-    stream.slice(91),
+    protocol.slice(0, 7),
+    protocol.slice(7, 91),
+    protocol.slice(91, 311),
+    protocol.slice(311),
   ]) {
     gate.push(Buffer.from(fragment));
   }
-  assert.deepEqual(events, ["authenticated"]);
+  assert.deepEqual(events, successEvents);
   gate.finish();
-  assert.deepEqual(events, ["authenticated", "ready"]);
+  assert.deepEqual(events, [...successEvents, "ready"]);
   gate.finish();
-  assert.deepEqual(events, ["authenticated", "ready"]);
+  assert.deepEqual(events, [...successEvents, "ready"]);
 });
 
 test("Windows readiness accepts coalesced exact protocol on one stream", () => {
-  const { events, gate, hello } = windowsGate();
-  gate.push(Buffer.from(`${hello}\n${readyMarker}\n`));
+  const { events, gate, protocol, successEvents } = windowsGate();
+  assert.ok(Buffer.byteLength(protocol) <= 768);
+  gate.push(Buffer.from(protocol));
   gate.finish();
-  assert.deepEqual(events, ["authenticated", "ready"]);
+  assert.deepEqual(events, [...successEvents, "ready"]);
 });
 
 test("Windows readiness rejects malformed or incomplete pre-auth streams", () => {
@@ -162,7 +207,7 @@ test("Windows readiness rejects malformed or incomplete pre-auth streams", () =>
     (hello) => `${hello}\r\n`,
     (hello) => ` ${hello}\n`,
     (hello) => hello,
-    () => "x".repeat(257),
+    () => "x".repeat(769),
   ];
   for (const invalid of cases) {
     const { events, gate, hello } = windowsGate();
@@ -176,6 +221,7 @@ test("Windows readiness fails authenticated protocol violations closed", () => {
   for (const suffix of [
     "",
     "wrong\n",
+    `${readyMarker}\n`,
     `${readyMarker}\r\n`,
     `${readyMarker}\nextra`,
     `${readyMarker}\nextra\n`,
@@ -187,12 +233,34 @@ test("Windows readiness fails authenticated protocol violations closed", () => {
   }
 
   const failedSocket = windowsGate();
-  failedSocket.gate.push(
-    Buffer.from(`${failedSocket.hello}\n${readyMarker}\n`),
-  );
+  failedSocket.gate.push(Buffer.from(failedSocket.protocol));
   failedSocket.gate.fail();
   assert.deepEqual(failedSocket.events, [
+    ...failedSocket.successEvents,
+    "fatal",
+  ]);
+
+  const missingReady = windowsGate();
+  missingReady.gate.push(
+    Buffer.from(
+      `${missingReady.hello}\n${missingReady.phases.join("\n")}\n`,
+    ),
+  );
+  missingReady.gate.finish();
+  assert.deepEqual(missingReady.events, [
+    ...missingReady.successEvents,
+    "fatal",
+  ]);
+
+  const duplicatePhase = windowsGate();
+  duplicatePhase.gate.push(
+    Buffer.from(
+      `${duplicatePhase.hello}\n${duplicatePhase.phases[0]}\n${duplicatePhase.phases[0]}\n`,
+    ),
+  );
+  assert.deepEqual(duplicatePhase.events, [
     "authenticated",
+    "phase:state",
     "fatal",
   ]);
 });
@@ -224,13 +292,21 @@ test("Windows readiness callback rejection is fatal", () => {
   ]);
 
   const readyFailure = windowsGate({ readyResult: false });
-  readyFailure.gate.push(
-    Buffer.from(`${readyFailure.hello}\n${readyMarker}\n`),
-  );
+  readyFailure.gate.push(Buffer.from(readyFailure.protocol));
   readyFailure.gate.finish();
   assert.deepEqual(readyFailure.events, [
-    "authenticated",
+    ...readyFailure.successEvents,
     "ready",
+    "fatal",
+  ]);
+
+  const phaseFailure = windowsGate({ phaseFailure: "services" });
+  phaseFailure.gate.push(Buffer.from(phaseFailure.protocol));
+  assert.deepEqual(phaseFailure.events, [
+    "authenticated",
+    ..."state window initialized shell credentials services"
+      .split(" ")
+      .map((phase) => `phase:${phase}`),
     "fatal",
   ]);
 });
