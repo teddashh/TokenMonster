@@ -1154,7 +1154,13 @@ export const packagingConfiguration = Object.freeze({
     noDelta: true,
     noMsi: true,
     version: RELEASE_VERSION,
-    ...(stagedAppIcon === undefined ? {} : { setupIcon: APP_ICON_ICO_PATH }),
+    // skipUpdateIcon keeps electron-winstaller from rcediting the packaged
+    // Squirrel.exe with the setup icon — the updater inside the nupkg must
+    // stay byte-identical to the reviewed rebuild receipt. Setup.exe itself
+    // still gets the icon from Squirrel's releasify.
+    ...(stagedAppIcon === undefined
+      ? {}
+      : { setupIcon: APP_ICON_ICO_PATH, skipUpdateIcon: true }),
     ...(signedConfiguration.makerWindowsSign === undefined
       ? {}
       : { windowsSign: signedConfiguration.makerWindowsSign }),
