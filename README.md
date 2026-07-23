@@ -16,7 +16,7 @@ TokenMonster 在你的電腦本機追蹤 Claude Code、Codex、Gemini CLI、Grok
 - ** 會長大的陪伴角色** — 從 ChatGPT、Claude、Gemini、Grok 四位姊妹選一位開始;累積用量、連續活躍天數與使用廣度會解鎖 DeepSeek、Qwen、Mistral、Llama、Sakana、Perplexity、GLM 七位朋友,以及每位角色 20 套衣裝與 pose。進度只能用出來,不能買。
 - ** Local-first 隱私** — 沒有帳號、沒有遙測。prompt、程式碼、檔名、API key 從不離開你的裝置;離線也能完整使用。
 - ** 跨平台** — Windows、macOS、Linux。每個 release 候選都通過三平台 CI 冒煙測試。
-￼￼￼￼
+
 ## 快速開始
 
 ### Windows:桌面版安裝檔
