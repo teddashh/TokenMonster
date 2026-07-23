@@ -33,7 +33,7 @@ TokenMonster 在你的電腦本機追蹤 Claude Code、Codex、Gemini CLI、Grok
 2. 安裝並啟動:
 
    ```sh
-   npm install /path/to/tokenmonster-0.1.0-rc.19.tgz
+   npm install /path/to/tokenmonster-0.1.0-rc.20.tgz
    npx tokenmonster
    ```
 

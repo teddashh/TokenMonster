@@ -33,7 +33,7 @@ Requires Node.js `24.15.0` and npm `11.12.1` (the CLI checks the exact versions 
 2. Install and launch:
 
    ```sh
-   npm install /path/to/tokenmonster-0.1.0-rc.19.tgz
+   npm install /path/to/tokenmonster-0.1.0-rc.20.tgz
    npx tokenmonster
    ```
 
