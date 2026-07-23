@@ -12,11 +12,11 @@ TokenMonster 在你的電腦本機追蹤 Claude Code、Codex、Gemini CLI、Grok
 
 ## 它能做什麼
 
-- **📊 一眼看懂你的 AI 用量** — 今日 / 7 日 / 28 日總量與每日趨勢,跨四家工具自動彙整。收集與去重由 exact-pinned 的 [TokenTracker](docs/adr/0005-permanent-tokentracker-sidecar-adapter.md) 引擎在本機完成,一個指令啟動,不用另外裝任何東西。
-- **🐣 會長大的陪伴角色** — 從 ChatGPT、Claude、Gemini、Grok 四位姊妹選一位開始;累積用量、連續活躍天數與使用廣度會解鎖 DeepSeek、Qwen、Mistral、Llama、Sakana、Perplexity、GLM 七位朋友,以及每位角色 20 套衣裝與 pose。進度只能用出來,不能買。
-- **🔒 Local-first 隱私** — 沒有帳號、沒有遙測。prompt、程式碼、檔名、API key 從不離開你的裝置;離線也能完整使用。
-- **🖥️ 跨平台** — Windows、macOS、Linux。每個 release 候選都通過三平台 CI 冒煙測試。
-
+- ** 一眼看懂你的 AI 用量** — 今日 / 7 日 / 28 日總量與每日趨勢,跨四家工具自動彙整。收集與去重由 exact-pinned 的 [TokenTracker](docs/adr/0005-permanent-tokentracker-sidecar-adapter.md) 引擎在本機完成,一個指令啟動,不用另外裝任何東西。
+- ** 會長大的陪伴角色** — 從 ChatGPT、Claude、Gemini、Grok 四位姊妹選一位開始;累積用量、連續活躍天數與使用廣度會解鎖 DeepSeek、Qwen、Mistral、Llama、Sakana、Perplexity、GLM 七位朋友,以及每位角色 20 套衣裝與 pose。進度只能用出來,不能買。
+- ** Local-first 隱私** — 沒有帳號、沒有遙測。prompt、程式碼、檔名、API key 從不離開你的裝置;離線也能完整使用。
+- ** 跨平台** — Windows、macOS、Linux。每個 release 候選都通過三平台 CI 冒煙測試。
+￼￼￼￼
 ## 快速開始
 
 ### Windows:桌面版安裝檔
