@@ -15,6 +15,8 @@ import {
 } from "../src/main/pet/sidecar.js";
 import type { TokenTrackerSpawnOptions } from "@tokenmonster/token-tracker-runtime";
 
+const TEST_GUARD_PATH = "/app/dist/main/main/network-deny.cjs";
+
 class FakeUtility extends EventEmitter {
   public pid: number | undefined = 4321;
   public readonly stdout = new PassThrough();
@@ -39,7 +41,11 @@ function spawnOptions(
   stdio: TokenTrackerSpawnOptions["stdio"]
 ): TokenTrackerSpawnOptions {
   return {
-    env: { KEEP: "present", DROP: undefined },
+    env: {
+      KEEP: "present",
+      DROP: undefined,
+      NODE_OPTIONS: `--require=${JSON.stringify(TEST_GUARD_PATH)}`
+    },
     shell: false,
     detached: false,
     windowsHide: true,
@@ -68,7 +74,7 @@ describe("Electron utility-process facade", () => {
       UTILITY_PROCESS_COMMAND,
       [
         "--require",
-        "/app/dist/main/main/network-deny.cjs",
+        TEST_GUARD_PATH,
         "/sidecar/bin/tracker.js",
         "--version"
       ],
@@ -93,7 +99,7 @@ describe("Electron utility-process facade", () => {
     expect(forkCall).toEqual({
       modulePath: "/app/dist/main/main/sidecar-shim.cjs",
       args: [
-        "/app/dist/main/main/network-deny.cjs",
+        TEST_GUARD_PATH,
         "/sidecar/bin/tracker.js",
         "--version"
       ],
@@ -103,6 +109,34 @@ describe("Electron utility-process facade", () => {
         serviceName: "tokentracker-sidecar"
       }
     });
+  });
+
+  it("rejects missing, drifted, or case-aliased utility preloads", () => {
+    const fork = vi.fn(() => new FakeUtility().asUtilityProcess());
+    const spawn = createUtilityProcessSpawn(
+      fork,
+      () => "/app/dist/main/main/sidecar-shim.cjs"
+    );
+    const arguments_ = [
+      "--require",
+      TEST_GUARD_PATH,
+      "/sidecar/bin/tracker.js",
+      "--version"
+    ];
+    const base = spawnOptions(["ignore", "pipe", "pipe"]);
+    for (const env of [
+      { KEEP: "present" },
+      { NODE_OPTIONS: "--require=/different.cjs" },
+      {
+        NODE_OPTIONS: `--require=${JSON.stringify(TEST_GUARD_PATH)}`,
+        Node_Options: `--require=${JSON.stringify(TEST_GUARD_PATH)}`
+      }
+    ]) {
+      expect(() =>
+        spawn(UTILITY_PROCESS_COMMAND, arguments_, { ...base, env })
+      ).toThrow("guard environment is invalid");
+    }
+    expect(fork).not.toHaveBeenCalled();
   });
 
   it("fails closed when a version probe exits without the verified transport", async () => {
@@ -115,7 +149,7 @@ describe("Electron utility-process facade", () => {
       UTILITY_PROCESS_COMMAND,
       [
         "--require",
-        "/app/dist/main/main/network-deny.cjs",
+        TEST_GUARD_PATH,
         "/sidecar/bin/tracker.js",
         "--version"
       ],
@@ -215,7 +249,7 @@ describe("Electron utility-process facade", () => {
       UTILITY_PROCESS_COMMAND,
       [
         "--require",
-        "/app/dist/main/main/network-deny.cjs",
+        TEST_GUARD_PATH,
         "/sidecar/bin/tracker.js",
         "sync"
       ],
@@ -242,7 +276,7 @@ describe("Electron utility-process facade", () => {
       UTILITY_PROCESS_COMMAND,
       [
         "--require",
-        "/app/dist/main/main/network-deny.cjs",
+        TEST_GUARD_PATH,
         "/sidecar/bin/tracker.js",
         "sync"
       ],

@@ -268,6 +268,25 @@ export function createUtilityProcessSpawn(
       ? "ignore"
       : requestedStdio;
     const environment = definedEnvironment(options.env);
+    // Electron evaluates NODE_OPTIONS while bootstrapping the utility process,
+    // before its `electron/utility` API is available. The generated preload
+    // therefore cannot install its Electron-specific locks at that stage.
+    // The shim requires the same reviewed guard before loading any
+    // TokenTracker module, so consume only that exact generated preload.
+    const nodeOptionsKeys = Object.keys(environment).filter(
+      (key) => key.toUpperCase() === "NODE_OPTIONS"
+    );
+    if (
+      nodeOptionsKeys.length !== 1 ||
+      nodeOptionsKeys[0] !== "NODE_OPTIONS" ||
+      environment["NODE_OPTIONS"] !==
+        `--require=${JSON.stringify(guardPath)}`
+    ) {
+      throw new Error(
+        "TokenTracker utility-process guard environment is invalid."
+      );
+    }
+    delete environment["NODE_OPTIONS"];
     if (SIDECAR_DEBUG) environment["TOKENMONSTER_SIDECAR_DEBUG"] = "1";
     const shimPath = resolveShimPath();
     debugLog(`fork ${shimPath} args=${JSON.stringify(args)} stdio=${JSON.stringify(utilityStdio)}`);
