@@ -28,7 +28,7 @@
     "@tokenmonster/api-domain": "0.1.0",
     "@tokenmonster/cloud-d1": "0.1.0",
     "@tokenmonster/contracts": "0.1.0",
-    "hono": "4.12.30"
+    "hono": "4.12.34"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260715.1"
