@@ -1,30 +1,37 @@
 # TokenMonster
 
-[English](README.en.md) · 繁體中文
+[English](README.en.md) · **繁體中文**
+
+在你自己的電腦上追蹤 Claude Code、Codex、Gemini CLI 與 Grok Build 的 token 用量，11 位陪伴角色隨真實的使用里程碑解鎖。
+
+**專案介紹頁：** https://teddashh.github.io/TokenMonster/?lang=zh-TW
 
 [![CI](https://github.com/teddashh/TokenMonster/actions/workflows/ci.yml/badge.svg)](https://github.com/teddashh/TokenMonster/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/teddashh/TokenMonster?include_prereleases&label=release)](https://github.com/teddashh/TokenMonster/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**你每天用掉多少 token?讓 AI 姊妹們陪你一起看。**
+**你每天用掉多少 token？讓 AI 姊妹們陪你一起看。**
 
-TokenMonster 在你的電腦本機追蹤 Claude Code、Codex、Gemini CLI、Grok CLI 的 token 用量,開一個即時瀏覽器儀表板,並讓 11 位陪伴角色隨著你真實的使用里程碑成長解鎖。所有資料都留在你的裝置上。
+TokenMonster 透過鎖定版本的 [TokenTracker](https://github.com/mm7894215/TokenTracker) sidecar，在本機讀取各家 CLI 留下的用量紀錄，整理成即時儀表板，再讓陪伴角色依你真實的使用里程碑成長、解鎖。不用帳號，沒有遙測，資料都留在你的裝置上。
+
+目前是公開測試版（v0.1.0-rc.22，2026 年 7 月）：Windows 有桌面版安裝檔，CLI 支援 Windows、macOS、Linux。
 
 ## 它能做什麼
 
-- ** 一眼看懂你的 AI 用量** — 今日 / 7 日 / 28 日總量與每日趨勢,跨四家工具自動彙整。收集與去重由 exact-pinned 的 [TokenTracker](docs/adr/0005-permanent-tokentracker-sidecar-adapter.md) 引擎在本機完成,一個指令啟動,不用另外裝任何東西。
-- ** 會長大的陪伴角色** — 從 ChatGPT、Claude、Gemini、Grok 四位姊妹選一位開始;累積用量、連續活躍天數與使用廣度會解鎖 DeepSeek、Qwen、Mistral、Llama、Sakana、Perplexity、GLM 七位朋友,以及每位角色 20 套衣裝與 pose。進度只能用出來,不能買。
-- ** Local-first 隱私** — 沒有帳號、沒有遙測。prompt、程式碼、檔名、API key 從不離開你的裝置;離線也能完整使用。
-- ** 跨平台** — Windows、macOS、Linux。每個 release 候選都通過三平台 CI 冒煙測試。
+- **一眼看懂 AI 用量**：今天、近 7 天、近 28 天的合計，UTC 每日趨勢、各家 provider 分析、Top 10 模型排行，以及依你選的方案估算的剩餘額度（社群估計值，不是官方上限）。收集與去重由鎖定版本的 TokenTracker（`tokentracker-cli@0.80.0`）在本機完成，它會跟著 TokenMonster 一起安裝。
+- **會長大的陪伴角色**：第一位姊妹可以抽卡決定，也可以從 ChatGPT、Claude、Gemini、Grok 自己挑，之後隨時換人，不需要多用 token。DeepSeek、Qwen、Mistral、Llama、Sakana、Perplexity、GLM 七位朋友依各家累積量、總用量、連續活躍天數與用過幾家 provider 解鎖。每位角色有 20 套服裝主題與姿勢圖。進度只能用出來，不能買。
+- **今日默契與夥伴卡**：每天依近 28 天的使用節奏給一段側寫；還在認識你的時候會直接說明，並提醒你不需要刻意多用。角色、今日默契與收藏可以在本機畫成一張 PNG，存檔前可以隱藏 28 天 token 總量。
+- **本機優先**：收集、圖表與角色進度都在你的電腦上完成，離線也能用。只有你主動操作時才會連外，見下方「隱私設計」。
+- **桌面版與 CLI**：Windows 桌面版有系統匣寵物與完整儀表板；CLI 在瀏覽器開啟同一個儀表板。介面有繁體中文與英文。
 
 ## 實機畫面
 
-以下畫面擷取自 Windows 桌面版;角色、用量統計與模型排行都由本機資料產生。
+以下畫面擷取自 Windows 桌面版；角色、用量統計與模型排行都由本機資料產生。
 
 <p align="center">
   <img src="docs/screenshots/windows-dashboard-companion-roster.png" alt="TokenMonster Windows 桌面儀表板，顯示 Claude 角色、今日默契、陪伴名冊與分享卡" width="100%">
   <br>
-  <sub>完整桌面儀表板:角色舞台、今日默契、已解鎖名冊與本機分享卡。</sub>
+  <sub>完整桌面儀表板：角色舞台、今日默契、已解鎖名冊與本機分享卡。</sub>
 </p>
 
 <table>
@@ -56,75 +63,99 @@ TokenMonster 在你的電腦本機追蹤 Claude Code、Codex、Gemini CLI、Grok
 
 ## 快速開始
 
-### Windows:桌面版安裝檔
+### Windows：桌面版安裝檔
 
-1. 從 [Releases](https://github.com/teddashh/TokenMonster/releases) 下載最新的 `TokenMonsterSetup.exe`,雙擊安裝。
-2. 目前是未簽章的公開測試版,SmartScreen 會出現警告 — 按「其他資訊 → 仍要執行」即可;簽章版會在取得程式碼簽章憑證後推出。
-3. 安裝完成後 TokenMonster 會出現在系統匣,之後從開始選單啟動;移除走 設定 → 應用程式 → TokenMonster。
+1. 從 [Releases](https://github.com/teddashh/TokenMonster/releases) 下載最新的 `TokenMonsterSetup.exe`（目前是 v0.1.0-rc.22），雙擊安裝。
+2. 目前是未簽章的公開測試版，SmartScreen 會跳出警告，請按「其他資訊」，再按「仍要執行」。取得程式碼簽章憑證後會改發簽章版。
+3. 安裝完成後 TokenMonster 會出現在系統匣，之後從「開始」功能表啟動；要移除，請到「設定 → 應用程式 → TokenMonster」。
+4. 自動檢查更新預設關閉。2026-09-30 查核時，程式內建的更新來源還沒有內容（回應 404），新版本請到 Releases 手動下載。
 
-### CLI(Windows / macOS / Linux)
+### CLI（Windows / macOS / Linux）
 
-需求:Node.js `24.15.0` 與 npm `11.12.1`(CLI 精確檢查版本,避免未驗證的 runtime 漂移)。
+需求：Node.js `24.15.0` 與 npm `11.12.1`，必須是這組版本。套件用 `engines` 宣告這兩個版本，其他版本不在支援範圍內。
 
-1. 從 [Releases](https://github.com/teddashh/TokenMonster/releases) 下載最新的 `tokenmonster-*.tgz`(可用旁邊的 `SHA256SUMS` 檔驗證)。
-2. 安裝並啟動:
+1. 從 [Releases](https://github.com/teddashh/TokenMonster/releases) 下載 `tokenmonster-0.1.0-rc.22.tgz`，並用同一個 release 的 `TokenMonster-cli-SHA256SUMS.txt` 核對。
+2. 安裝到獨立的資料夾並啟動（Windows 在 PowerShell 執行同樣的指令）：
 
    ```sh
-   npm install /path/to/tokenmonster-0.1.0-rc.20.tgz
+   mkdir tokenmonster-app
+   cd tokenmonster-app
+   npm install /path/to/tokenmonster-0.1.0-rc.22.tgz
    npx tokenmonster
    ```
 
-   Windows 在 PowerShell 執行相同指令即可。
+   請不要用 `npm install -g` 安裝這個 tarball：npm 全域安裝 bundled dependency 時，sidecar 需要的 `@mongodb-js/zstd` 安裝腳本會失敗。安裝時只會從 npm registry 取得 `tokentracker-cli` 與它的相依套件，版本由 release 內附的 shrinkwrap 鎖定。
 
-3. 用瀏覽器開啟畫面印出的儀表板網址。在 SSH / 遠端機器上加 `--no-open`,CLI 會印出對應的 `ssh -L` 通道指令。
+3. CLI 會印出一次性的本機網址並開啟瀏覽器。在 SSH 或遠端機器上請加 `--no-open`，CLI 會印出對應的 `ssh -L` 通道指令；在你自己的電腦執行它，再用印出的網址開啟。加上 `--no-character-downloads` 的話，這次執行不會提供角色素材包的下載選項。
 
-尚未上 npm registry;上架後就是一行 `npx tokenmonster`。
+TokenMonster 還沒有上架 npm registry。
 
-想從原始碼跑:
+### 從原始碼執行
+
+需求同上：根目錄的 `package.json` 以 `engine-strict` 鎖定 Node.js 24.15.0 與 npm 11.12.1，`npm ci` 會拒絕其他版本。
 
 ```sh
-git clone https://github.com/teddashh/TokenMonster.git tokenmonster
-cd tokenmonster
+git clone https://github.com/teddashh/TokenMonster.git
+cd TokenMonster
 npm ci
 npm run build
 npm exec -- tokenmonster
 ```
 
-### 用 Codex / Claude Code 從 repo 啟動桌面版
+在 Windows 上，請不要在根目錄跑完整的 `npm run build`：Electron app 的 vite build 目前在 Windows 會失敗。改用 `node scripts/run-workspaces.mjs build tokenmonster`，只建置 CLI 需要的 workspace。
 
-如果你已安裝並登入 Codex 或 Claude Code,先關閉可能正在執行的已安裝版
-TokenMonster,再把這個 repo 開在 agent 裡並明確呼叫:
+### 用 Codex 或 Claude Code 從 repo 啟動桌面版
 
-- Codex:`$launch-tokenmonster start`
-- Claude Code:`/launch-tokenmonster start`
+如果你已經安裝並登入 Codex 或 Claude Code，可以直接從 clone 下來的 repo 啟動桌面版。先關掉可能正在執行的已安裝版 TokenMonster，再把這個 repo 開在 agent 裡，明確下指令：
 
-兩個入口都會走同一條受審核的 doctor、啟動與前後 audit 流程,不會安裝或修改
-agent CLI、credentials、全域套件或 host tools；若 Electron native executable
-尚未存在，只會以鎖定的 installer/checksums 取得官方、checksum-verified 的
-Electron 43.1.1 artifact。這會啟動與產品相同
-app/runtime、一般本機資料與語音 authority 的 source-development Electron,但不是
-安裝檔:沒有捷徑、「新增/移除程式」或 installed auto-update parity。Status 與
-stop 也由同一個 skill 的 `status` / `stop` 操作提供。完整邊界與指令見
-[Agent-ready source-development launch](docs/AGENT_READY_SOURCE_RELEASE.md)。
+- Codex：`$launch-tokenmonster start`
+- Claude Code：`/launch-tokenmonster start`
+
+兩個入口走同一套流程：啟動前後各做一次 audit、先跑 doctor 檢查，再啟動。同一個 skill 也提供 `status` 與 `stop`。它不會安裝或修改 agent CLI、登入憑證、全域套件或系統工具；如果缺少 Electron 執行檔，只會依鎖定的 checksum 取得官方的 Electron 43.1.1。這樣跑起來的是原始碼開發版：程式、本機資料與語音設定都和正式版相同，但它不是安裝版，沒有捷徑、不會出現在「新增/移除程式」，也沒有自動更新。完整規範見 [Agent-ready source-development launch](docs/AGENT_READY_SOURCE_RELEASE.md)。
 
 ## 陪伴角色
 
-安裝包內建四位姊妹的啟動立繪與 168 條 `zh-TW`/`en` 固定文字台詞,不含音訊,開箱離線可用。完整角色媒體包(11 位角色、891 張圖與 55 條預錄語音,共 946 個項目)只會在程式內明確同意後從 `cdn.ted-h.com` 下載一次,之後完全從本機驗證過的快取運作,隨時可以修復或移除;語音播放預設關閉,移除後回到內建立繪與靜音。
+| 角色 | 類型 | 解鎖條件 |
+| --- | --- | --- |
+| ChatGPT | 姊妹 | Codex 的第一個 token，或第一次相遇時選她 |
+| Claude | 姊妹 | Claude Code 的第一個 token，或第一次相遇時選她 |
+| Gemini | 姊妹 | Gemini CLI 的第一個 token，或第一次相遇時選她 |
+| Grok | 姊妹 | Grok Build 的第一個 token，或第一次相遇時選她 |
+| DeepSeek | 朋友 | DeepSeek 累積 100,000 tokens |
+| Qwen | 朋友 | Qwen 累積 250,000 tokens |
+| Mistral | 朋友 | 連續活躍 3 天 |
+| Llama | 朋友 | 總用量 500,000 tokens |
+| Sakana | 朋友 | 用過 4 家不同的 provider |
+| Perplexity | 朋友 | 連續活躍 7 天 |
+| GLM | 朋友 | 總用量 5,000,000 tokens |
 
-解鎖規則全部來自可解釋的本機里程碑(某家族累積量、總用量、連續活躍日、使用廣度),單向保留、只存在你的電腦。產品不獎勵浪費 token — 沒有轉蛋、沒有內購、沒有 pay-to-win。
+角色解鎖後，20 套服裝主題會隨對應 provider 的累積量逐步開放；GLM 例外，它的服裝依總用量開放（5,000,000 到 30,000,000 tokens），因為 TokenTracker 0.80.0 沒有把 GLM 的用量分開回報。連續活躍天數也會開放勝利姿勢與動作。
+
+安裝包內建四位姊妹的初始立繪（8 張 WebP）與 168 條 `zh-TW`／`en` 固定文字台詞，不含音訊，開箱就能離線使用。完整角色素材包（`ai-sister-media-11-voice55-2026.07.23`：11 位角色、891 張圖與 55 段預錄語音，共 946 個項目，約 73 MB）只會在你於程式內明確同意後，從 `cdn.ted-h.com` 下載一次，逐一比對 SHA-256 後存進本機快取，之後完全離線運作，隨時可以修復或移除。語音播放預設關閉；移除素材包後會回到內建立繪與靜音。
+
+所有解鎖都來自可解釋的本機里程碑，解鎖後不會收回，也只存在你的電腦上。Token 是量測值，不是遊戲貨幣：沒有付費抽卡、沒有內購、沒有 pay-to-win，台詞也不會鼓勵你浪費 token。
+
+角色美術與語音不在 MIT 授權範圍內，授權依據見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 隱私設計
 
-- 收集、圖表、角色進度全部在本機完成,不需要任何雲端服務。
-- TokenMonster 不會保存或傳送 prompt、回應、原始碼、檔名、專案路徑、API key 或 model ID。
-- 預設零對外連線。僅有的例外:你明確同意後下載一次角色圖包,以及桌面寵物的 BYOK 聊天由本機直接連到你選的 provider。
-- 程式碼裡有「匿名貢獻公開計數器」功能,但預設關閉且雲端尚未上線 — 目前版本不會送出任何用量資料。
+- 收集、圖表與角色進度都在本機完成，不需要帳號或雲端服務。TokenTracker sidecar 以 `TOKENTRACKER_NO_TELEMETRY=1` 與 `DO_NOT_TRACK=1` 啟動，只帶白名單內的環境變數，並預載一個模組，擋下對外連線，也不讓它啟動其他程式。
+- TokenMonster 只保存彙總後的數字。原始用量 JSON 只在記憶體中解析，用完就丟掉。prompt、回應、原始碼、檔名、路徑、原始 model ID、API key 與 cookie 都不會進入 log、分享卡、診斷包或任何貢獻資料；模型名稱只會出現在本機儀表板的 Top 10 排行。
+- 預設不對外連線。只有你主動操作時才會連外：
+  - 同意後下載一次角色素材包（`cdn.ted-h.com`）；
+  - 桌面版的 BYOK 聊天：直接從你的電腦送到 OpenAI（`https://api.openai.com/v1/responses`，並設定 `store: false`），中間沒有 TokenMonster 的伺服器；
+  - Windows 桌面版的更新檢查：只有按下手動檢查或自己開啟自動檢查時，才會連到程式內固定的更新來源。
+- 程式碼裡有「匿名貢獻公開計數器」，預設關閉，服務端也還沒部署，目前版本不會送出任何用量資料。
 
-詳細資料生命週期見 [Data inventory](docs/DATA_INVENTORY.md) 與 [Threat model](docs/THREAT_MODEL.md)。
+詳細的資料生命週期見 [Data inventory](docs/DATA_INVENTORY.md) 與 [Threat model](docs/THREAT_MODEL.md)。
 
 ## 桌面寵物
 
-Electron 桌面版:系統匣寵物、拖曳互動,以及 BYOK 聊天(API key 存在 OS 金鑰圈,對話只留在記憶體、直連 provider)。Windows 安裝檔 `TokenMonsterSetup.exe` 已可從 [Releases](https://github.com/teddashh/TokenMonster/releases) 下載(未簽章公開測試版,內嵌的更新元件在同一個 CI run 由原始碼可重現重建並逐位元驗證);macOS / Linux 桌面版與簽章版安裝檔在路線圖上。
+Electron 43.1.1 桌面版（目前只有 Windows）：一個可以拖曳、置頂或收進系統匣的寵物視窗，用量與 Top 10 模型排行收在角色下方；系統匣選單可以開啟完整儀表板。
+
+BYOK 聊天目前只支援 OpenAI（模型 `gpt-5.6-luna`）。API key 用 Electron `safeStorage` 加密保存，也可以選擇只放在記憶體；對話內容只存在記憶體，關閉就清除。
+
+Windows 安裝檔 `TokenMonsterSetup.exe` 由 Squirrel.Windows 打包，可以從 [Releases](https://github.com/teddashh/TokenMonster/releases) 下載。它是未簽章的公開測試版；內嵌的更新元件在同一個 CI run 裡從原始碼重建並逐位元比對。macOS／Linux 桌面版與簽章版安裝檔還在路線圖上。
 
 ## 開發
 
@@ -134,24 +165,47 @@ npm run build
 npm test
 ```
 
-完整的提交前檢查(lint、typecheck、packaging 驗證等)見 [docs/RELEASE.md](docs/RELEASE.md);架構決策見 [docs/adr/](docs/adr/)。資料形狀、收集指令、角色資產或網路目的地的任何變更,都必須同步更新 contracts、隱私回歸測試與 [Data inventory](docs/DATA_INVENTORY.md)。
+`npm test` 會先跑 `npm run agent:verify`，再執行每個 workspace 的測試。Windows 請改用上面「從原始碼執行」提到的建置方式。完整的提交前檢查（lint、typecheck、packaging 驗證等）見 [docs/RELEASE.md](docs/RELEASE.md)；架構決策見 [docs/adr/](docs/adr/)。資料形狀、收集指令、角色資產或網路目的地的任何變更，都必須同步更新 contracts、隱私回歸測試與 [Data inventory](docs/DATA_INVENTORY.md)。
+
+在沒有真實用量的機器上，儀表板會如實顯示沒有資料，角色也都維持鎖定。想試解鎖、服裝與語音，可以在建置完成、第一次啟動之前執行 `node scripts/qa/seed-demo-store.mjs` 寫入示範進度（它不會覆蓋既有資料）；刪除 `~/.tokenmonster` 就能重設。
 
 ## 狀態與路線圖
 
-- ✅ CLI 公開測試版 — 從 [Releases](https://github.com/teddashh/TokenMonster/releases) 安裝,三平台 CI 冒煙
-- ✅ Windows 桌面安裝檔 — 未簽章公開測試版,CI 內完成原生安裝/啟動/移除冒煙
-- 🚧 程式碼簽章(移除 SmartScreen 警告)
-- 🚧 上架 npm registry(之後直接 `npx tokenmonster`)
-- 🚧 公開 opt-in 貢獻計數器(cloud 端已實作、尚未部署)
+已完成：
+
+- CLI 公開測試版（v0.1.0-rc.22）：從 [Releases](https://github.com/teddashh/TokenMonster/releases) 安裝；rc.22 的發行冒煙測試在 Linux、macOS、Windows 都通過。
+- Windows 桌面安裝檔：未簽章公開測試版，CI 會實際安裝、啟動再移除。
+
+尚未完成：
+
+- 程式碼簽章（簽章後 SmartScreen 就不會再警告）
+- 上架 npm registry
+- macOS 與 Linux 桌面版
+- 上線 Windows 自動更新來源
+- 公開的匿名貢獻計數器（服務端已實作，尚未部署）
+
+main 最後一次 CI（`8df862d`，只改了 README 與截圖）在 Windows 的 sidecar compatibility 工作中有 45 個單元測試失敗，多半是預期檔案權限為 `0600`、實際得到 `0666` 的檢查；前一次 commit（`f423801`）與 `v0.1.0-rc.22` tag 的 CI 都通過。
 
 ## 文件
 
-- [Product specification](docs/PRODUCT_SPEC.md) · [Technical specification](docs/TECHNICAL_SPEC.md)
-- [Data inventory](docs/DATA_INVENTORY.md) · [Threat model](docs/THREAT_MODEL.md)
-- [Release notes 與流程](docs/RELEASE.md) · [Deployment runbook](docs/DEPLOYMENT_RUNBOOK.md)
+- [產品規格](docs/PRODUCT_SPEC.md) · [技術規格](docs/TECHNICAL_SPEC.md)
+- [資料清冊](docs/DATA_INVENTORY.md) · [威脅模型](docs/THREAT_MODEL.md)
+- [發行說明與流程](docs/RELEASE.md) · [部署手冊](docs/DEPLOYMENT_RUNBOOK.md)
 - [Agent-ready source-development launch](docs/AGENT_READY_SOURCE_RELEASE.md)
-- [Character wardrobe map](docs/CHARACTER_WARDROBE_MAP.md) · [ADRs](docs/adr/)
+- [角色與服裝對照](docs/CHARACTER_WARDROBE_MAP.md) · [ADRs](docs/adr/)
+
+## 致謝
+
+- [TokenTracker](https://github.com/mm7894215/TokenTracker)（MIT）：TokenMonster 的收集引擎。以 `tokentracker-cli@0.80.0` 精確鎖定版本、作為 sidecar 執行，沒有 fork 也沒有修改，見 [ADR 0005](docs/adr/0005-permanent-tokentracker-sidecar-adapter.md)。
+- [tokscale](https://github.com/junhoyeo/tokscale)（MIT）：早期的收集器，現在只用於舊資料遷移。
+- [Squirrel.Windows](https://github.com/Squirrel/Squirrel.Windows)：Windows 安裝與更新元件。
+- `@mongodb-js/zstd`（Apache-2.0）與 Zstandard（BSD）、`yauzl` 與 `pend`（MIT）。
+- [token-monitor](https://github.com/Javis603/token-monitor) 與 [ai-avatar-bot](https://github.com/YuriCrystal/ai-avatar-bot)：只作為架構與互動設計的參考，沒有引入任何程式碼。
+
+完整清單與授權條款見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+相關專案：[AI-Sister](https://teddashh.github.io/AI-Sister/) 是後來的本機桌面陪伴程式，沿用了 TokenMonster 的寵物視窗做法與同一套角色素材包。
 
 ## License
 
-[MIT](LICENSE)。第三方元件見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+[MIT](LICENSE) © 2026 Ted Huang。角色美術與語音不在 MIT 授權範圍內；第三方元件與角色素材的授權見 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
