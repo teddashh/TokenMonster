@@ -1,6 +1,10 @@
 # TokenMonster
 
-English · [繁體中文](README.md)
+**English** · [繁體中文](README.md)
+
+Tracks Claude Code, Codex, Gemini CLI, and Grok Build token usage on your own machine, and unlocks eleven companion characters from real usage milestones.
+
+**Project page:** https://teddashh.github.io/TokenMonster/
 
 [![CI](https://github.com/teddashh/TokenMonster/actions/workflows/ci.yml/badge.svg)](https://github.com/teddashh/TokenMonster/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/teddashh/TokenMonster?include_prereleases&label=release)](https://github.com/teddashh/TokenMonster/releases)
@@ -8,14 +12,17 @@ English · [繁體中文](README.md)
 
 **How many tokens did you burn today? Watch it together with your AI sisters.**
 
-TokenMonster tracks your Claude Code, Codex, Gemini CLI, and Grok CLI token usage locally on your machine, opens a live browser dashboard, and lets eleven companion characters grow and unlock along your real usage milestones. Everything stays on your device.
+TokenMonster runs an exact-pinned [TokenTracker](https://github.com/mm7894215/TokenTracker) sidecar that reads the usage records your CLIs already keep on your machine, turns them into a live dashboard, and lets companion characters grow and unlock along your real usage milestones. No account, no telemetry, and the data stays on your device.
+
+Current state: public test build (v0.1.0-rc.22, July 2026). Windows has a desktop installer; the CLI runs on Windows, macOS, and Linux.
 
 ## What it does
 
-- **📊 Your AI usage at a glance** — today / 7-day / 28-day totals and a daily trend, aggregated across all four tools. Collection and deduplication run locally through an exact-pinned [TokenTracker](docs/adr/0005-permanent-tokentracker-sidecar-adapter.md) engine; one command starts everything, nothing else to install.
-- **🐣 Companions that grow with you** — start by choosing one of the four sisters (ChatGPT, Claude, Gemini, Grok); lifetime totals, active-day streaks, and provider breadth unlock the seven friends (DeepSeek, Qwen, Mistral, Llama, Sakana, Perplexity, GLM) plus 20 wardrobe themes and pose art per character. Progress is earned by using, never bought.
-- **🔒 Local-first privacy** — no account, no telemetry. Prompts, code, filenames, and API keys never leave your device; everything keeps working offline.
-- **🖥️ Cross-platform** — Windows, macOS, Linux. Every release candidate passes CI smoke tests on all three.
+- **Your AI usage at a glance**: today, 7-day, and 28-day totals, a daily UTC trend, a per-provider breakdown, a Top 10 model list, and a remaining-quota estimate for the plan you pick (community figures, not official limits). Collection and deduplication run locally in the pinned TokenTracker (`tokentracker-cli@0.80.0`), which is installed along with TokenMonster.
+- **Companions that grow with you**: draw a card for your first sister or pick ChatGPT, Claude, Gemini, or Grok yourself, and switch any time without spending tokens. Seven friends (DeepSeek, Qwen, Mistral, Llama, Sakana, Perplexity, GLM) unlock from provider totals, lifetime totals, active-day streaks, and how many providers you use. Every character has 20 outfit themes and pose art. Progress is earned by using, never bought.
+- **Today's connection and the companion card**: a daily read of your usage rhythm over the last 28 days. While it is still learning, it says so and tells you there is no need to use more. Your character, today's connection, and your collection can be drawn locally into a PNG, with the option to hide the 28-day token total.
+- **Local-first**: collection, charts, and character progress all happen on your machine and keep working offline. Nothing leaves it unless you take an action; see Privacy by design below.
+- **Desktop app and CLI**: the Windows desktop app has a tray pet and the full dashboard; the CLI opens the same dashboard in your browser. The interface comes in Traditional Chinese and English.
 
 ## Screenshots
 
@@ -59,76 +66,97 @@ and model rankings are all generated from local data.
 
 ### Windows: desktop installer
 
-1. Download the latest `TokenMonsterSetup.exe` from [Releases](https://github.com/teddashh/TokenMonster/releases) and double-click it.
-2. It is an unsigned public test build for now, so SmartScreen shows a warning — click "More info → Run anyway"; a code-signed build follows once signing credentials exist.
-3. TokenMonster appears in the system tray after install and launches from the Start menu afterwards; uninstall via Settings → Apps → TokenMonster.
+1. Download the latest `TokenMonsterSetup.exe` (currently v0.1.0-rc.22) from [Releases](https://github.com/teddashh/TokenMonster/releases) and double-click it.
+2. It is an unsigned public test build, so SmartScreen shows a warning: click "More info", then "Run anyway". A code-signed build follows once signing credentials exist.
+3. TokenMonster appears in the system tray after install and launches from the Start menu afterwards. Uninstall it from Settings → Apps → TokenMonster.
+4. Automatic update checks are off by default. When checked on 2026-09-30, the built-in update feed had no content yet (it returned 404), so get new versions from Releases.
 
 ### CLI (Windows / macOS / Linux)
 
-Requires Node.js `24.15.0` and npm `11.12.1` (the CLI checks the exact versions to prevent unreviewed runtime drift).
+Requires exactly Node.js `24.15.0` and npm `11.12.1`. The package declares both in `engines`; other versions are unsupported.
 
-1. Download the latest `tokenmonster-*.tgz` from [Releases](https://github.com/teddashh/TokenMonster/releases) (verify it with the `SHA256SUMS` file next to it).
-2. Install and launch:
+1. Download `tokenmonster-0.1.0-rc.22.tgz` from [Releases](https://github.com/teddashh/TokenMonster/releases) and check it against `TokenMonster-cli-SHA256SUMS.txt` from the same release.
+2. Install it into its own folder and launch it (on Windows, run the same commands in PowerShell):
 
    ```sh
-   npm install /path/to/tokenmonster-0.1.0-rc.20.tgz
+   mkdir tokenmonster-app
+   cd tokenmonster-app
+   npm install /path/to/tokenmonster-0.1.0-rc.22.tgz
    npx tokenmonster
    ```
 
-   On Windows, run the same commands in PowerShell.
+   Do not use `npm install -g` on the tarball: npm's global install of bundled dependencies breaks the install script of the sidecar's `@mongodb-js/zstd`. The install fetches only `tokentracker-cli` and its dependencies from the npm registry, pinned by the shrinkwrap embedded in the release.
 
-3. Open the dashboard URL it prints. On SSH / remote machines add `--no-open` and the CLI prints the matching `ssh -L` tunnel command.
+3. The CLI prints a one-time local URL and opens your browser. On SSH or remote machines, add `--no-open` and the CLI prints the matching `ssh -L` tunnel command; run it on your own computer, then open the printed URL. With `--no-character-downloads`, that run does not offer the character media pack download.
 
-Not on the npm registry yet; once published, it becomes a single `npx tokenmonster`.
+TokenMonster is not on the npm registry yet.
 
-To run from source:
+### From source
+
+Same requirements: the root `package.json` pins Node.js 24.15.0 and npm 11.12.1 with `engine-strict`, so `npm ci` rejects other versions.
 
 ```sh
-git clone https://github.com/teddashh/TokenMonster.git tokenmonster
-cd tokenmonster
+git clone https://github.com/teddashh/TokenMonster.git
+cd TokenMonster
 npm ci
 npm run build
 npm exec -- tokenmonster
 ```
 
-### Launch the desktop app from a repo with Codex or Claude Code
+On Windows, do not run the full `npm run build` at the root: the Electron app's vite build currently fails there. Use `node scripts/run-workspaces.mjs build tokenmonster` instead, which builds only the workspaces the CLI needs.
 
-If Codex or Claude Code is already installed and authenticated, first close any
-installed TokenMonster that may be running. Open this repository in the agent
-and invoke the source launch explicitly:
+### Launch the desktop app from a clone with Codex or Claude Code
+
+If Codex or Claude Code is installed and signed in, you can start the desktop app straight from a clone of this repository. Close any installed TokenMonster that may be running, open the repository in the agent, and ask explicitly:
 
 - Codex: `$launch-tokenmonster start`
 - Claude Code: `/launch-tokenmonster start`
 
-Both entries use the same reviewed doctor, launch, and before/after audit
-workflow. They do not install or modify either agent CLI, credentials, global
-packages, or host tools. If the Electron native executable is absent, the
-locked installer/checksums obtain only the official checksum-verified Electron
-43.1.1 artifact. The result is the source-development Electron app with
-the same application/runtime, normal local data, and voice authority as the
-product, but it is not an installer: there is no shortcut, Add/Remove Programs
-entry, or installed auto-update parity. The same skill provides `status` and
-`stop` operations. See the complete
-[agent-ready source-development launch contract](docs/AGENT_READY_SOURCE_RELEASE.md).
+Both run the same workflow: an audit before and after, a doctor check, then the launch. The same skill also provides `status` and `stop`. It does not install or modify the agent CLIs, credentials, global packages, or host tools; if the Electron executable is missing, it fetches only the official Electron 43.1.1 build, checked against locked checksums. What runs is the source-development app, with the same application, local data, and voice settings as the product, but it is not an installation: no shortcut, no Add/Remove Programs entry, and no auto-update. See the full [agent-ready source-development launch contract](docs/AGENT_READY_SOURCE_RELEASE.md).
 
 ## The companions
 
-The install ships with starter art for the four sisters and 168 fixed `zh-TW`/`en` text lines, with no audio, and works offline out of the box. The complete character-media pack (11 characters, 891 images, and 55 prerecorded WAVs; 946 entries total) downloads once from `cdn.ted-h.com` only after explicit in-app consent, then runs entirely from the verified local cache and can be repaired or removed at any time. Voice playback defaults off; removal returns to the built-in starter art and silence.
+| Character | Kind | Unlocks at |
+| --- | --- | --- |
+| ChatGPT | sister | the first Codex token, or picking her at the first meeting |
+| Claude | sister | the first Claude Code token, or picking her at the first meeting |
+| Gemini | sister | the first Gemini CLI token, or picking her at the first meeting |
+| Grok | sister | the first Grok Build token, or picking her at the first meeting |
+| DeepSeek | friend | 100,000 DeepSeek tokens |
+| Qwen | friend | 250,000 Qwen tokens |
+| Mistral | friend | a 3-day active streak |
+| Llama | friend | 500,000 lifetime tokens |
+| Sakana | friend | 4 different providers used |
+| Perplexity | friend | a 7-day active streak |
+| GLM | friend | 5,000,000 lifetime tokens |
 
-Every unlock comes from an explainable local milestone (per-family totals, lifetime total, active-day streak, provider breadth), is kept monotonically, and lives only on your machine. The product never rewards wasteful token use — no gacha, no in-app purchases, no pay-to-win.
+Once a character unlocks, its 20 outfit themes open as that provider's total grows. GLM is the exception: its outfits follow lifetime totals (5,000,000 to 30,000,000 tokens), because TokenTracker 0.80.0 does not report GLM usage separately. Active-day streaks also open victory poses and actions.
+
+The install ships starter art for the four sisters (8 WebP images) and 168 fixed `zh-TW`/`en` text lines, with no audio, and works offline out of the box. The complete character media pack (`ai-sister-media-11-voice55-2026.07.23`: 11 characters, 891 images, and 55 prerecorded voice clips; 946 entries, about 73 MB) downloads once from `cdn.ted-h.com` only after explicit in-app consent. Every file is checked against its SHA-256 digest before it enters the local cache, which then runs fully offline and can be repaired or removed at any time. Voice playback is off by default; removing the pack returns to the built-in starter art and silence.
+
+Every unlock comes from an explainable local milestone, is never taken back, and lives only on your machine. Tokens are measurements, not game currency: no paid draws, no in-app purchases, no pay-to-win, and the lines never encourage wasting tokens.
+
+The character art and voices are not covered by the MIT License; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the terms.
 
 ## Privacy by design
 
-- Collection, charts, and character progression all run locally; no cloud service is required.
-- TokenMonster never stores or transmits prompts, responses, source code, filenames, project paths, API keys, or model IDs.
-- Zero outbound connections by default. The only exceptions: the one-time character-pack download after your explicit consent, and the desktop pet's BYOK chat going directly from your device to the provider you chose.
-- An opt-in "anonymous contribution counter" exists in the code, but it is off by default and its cloud side is not deployed — current builds send no usage data anywhere.
+- Collection, charts, and character progress all run locally, with no account or cloud service. The TokenTracker sidecar starts with `TOKENTRACKER_NO_TELEMETRY=1` and `DO_NOT_TRACK=1`, an allowlisted environment, and a preloaded module that blocks outbound network calls and child processes.
+- TokenMonster keeps only aggregate counts. Raw usage JSON is parsed in memory and discarded. Prompts, responses, source code, file names, paths, raw model IDs, API keys, and cookies are kept out of logs, share cards, diagnostic bundles, and any contribution; model names appear only in the local dashboard's Top 10 list.
+- No outbound connections by default. TokenMonster connects out only when you take an action:
+  - the one-time character pack download after your consent (`cdn.ted-h.com`);
+  - BYOK chat in the desktop app, sent straight from your machine to OpenAI (`https://api.openai.com/v1/responses` with `store: false`), with no TokenMonster server in between;
+  - the Windows update check, which contacts the fixed built-in update feed only when you press the manual check or turn automatic checks on.
+- An opt-in "anonymous contribution counter" exists in the code, but it is off by default and its service is not deployed, so current builds send no usage data anywhere.
 
 See the [data inventory](docs/DATA_INVENTORY.md) and [threat model](docs/THREAT_MODEL.md) for the detailed data lifecycle.
 
 ## Desktop pet
 
-The Electron desktop build: a tray pet with drag interactions and BYOK chat (the API key lives in the OS keychain; conversations stay in memory and go straight to the provider). The Windows installer `TokenMonsterSetup.exe` is downloadable from [Releases](https://github.com/teddashh/TokenMonster/releases) today (unsigned public test build; the embedded updater is reproducibly rebuilt from source and byte-verified in the same CI run); macOS / Linux desktop builds and a code-signed installer are on the roadmap.
+The Electron 43.1.1 desktop build (Windows only for now): a pet window you can drag, pin on top, or hide to the tray, with usage and the Top 10 model list folded out below the character. The tray menu opens the full dashboard.
+
+BYOK chat supports OpenAI only (model `gpt-5.6-luna`). The API key is encrypted with Electron `safeStorage`, or you can keep it in memory only; conversations live only in memory and clear when closed.
+
+The Windows installer `TokenMonsterSetup.exe` is packaged with Squirrel.Windows and available from [Releases](https://github.com/teddashh/TokenMonster/releases). It is an unsigned public test build; the embedded updater is rebuilt from source and byte-verified in the same CI run. macOS and Linux desktop builds and a code-signed installer are on the roadmap.
 
 ## Development
 
@@ -138,15 +166,26 @@ npm run build
 npm test
 ```
 
-The full pre-commit gate (lint, typecheck, packaging verification, and more) is described in [docs/RELEASE.md](docs/RELEASE.md); architecture decisions live in [docs/adr/](docs/adr/). Any change to data shapes, collector commands, character assets, or network destinations must update the contracts, privacy regression tests, and [data inventory](docs/DATA_INVENTORY.md) together.
+`npm test` runs `npm run agent:verify` first, then every workspace's tests. On Windows, build as described in From source above. The full pre-commit gate (lint, typecheck, packaging verification, and more) is described in [docs/RELEASE.md](docs/RELEASE.md); architecture decisions live in [docs/adr/](docs/adr/). Any change to data shapes, collector commands, character assets, or network destinations must update the contracts, privacy regression tests, and [data inventory](docs/DATA_INVENTORY.md) together.
+
+On a machine with no real usage, the dashboard shows an honest empty state and every character stays locked. To try unlocks, outfits, and voice anyway, run `node scripts/qa/seed-demo-store.mjs` after building and before the first launch; it writes a demo progression store and refuses to touch an existing one. Delete `~/.tokenmonster` to reset.
 
 ## Status and roadmap
 
-- ✅ Public CLI test build — install from [Releases](https://github.com/teddashh/TokenMonster/releases), CI-smoked on all three platforms
-- ✅ Windows desktop installer — unsigned public test build with a native install/boot/uninstall smoke in CI
-- 🚧 Code signing (removes the SmartScreen warning)
-- 🚧 npm registry publish (then it is just `npx tokenmonster`)
-- 🚧 Public opt-in contribution counter (cloud side implemented, not yet deployed)
+Done:
+
+- Public CLI test build (v0.1.0-rc.22), installed from [Releases](https://github.com/teddashh/TokenMonster/releases); the rc.22 release smoke test passed on Linux, macOS, and Windows.
+- Windows desktop installer: an unsigned public test build that CI installs, launches, and uninstalls.
+
+Not yet:
+
+- Code signing (removes the SmartScreen warning)
+- Publishing to the npm registry
+- macOS and Linux desktop builds
+- A live Windows update feed
+- The public opt-in contribution counter (service implemented, not deployed)
+
+The last CI run on main (`8df862d`, which only changed the READMEs and screenshots) failed 45 unit tests in the Windows sidecar compatibility job, mostly checks that expect file mode `0600` and got `0666`. The run for the previous commit (`f423801`) and the `v0.1.0-rc.22` tag run both passed.
 
 ## Documentation
 
@@ -156,6 +195,18 @@ The full pre-commit gate (lint, typecheck, packaging verification, and more) is 
 - [Agent-ready source-development launch](docs/AGENT_READY_SOURCE_RELEASE.md)
 - [Character wardrobe map](docs/CHARACTER_WARDROBE_MAP.md) · [ADRs](docs/adr/)
 
+## Credits
+
+- [TokenTracker](https://github.com/mm7894215/TokenTracker) (MIT): the collection engine. TokenMonster pins `tokentracker-cli@0.80.0` exactly and runs it as a sidecar, without forking or modifying it; see [ADR 0005](docs/adr/0005-permanent-tokentracker-sidecar-adapter.md).
+- [tokscale](https://github.com/junhoyeo/tokscale) (MIT): the earlier collector, now used only to migrate legacy data.
+- [Squirrel.Windows](https://github.com/Squirrel/Squirrel.Windows): the Windows installer and updater.
+- `@mongodb-js/zstd` (Apache-2.0) with Zstandard (BSD), and `yauzl` and `pend` (MIT).
+- [token-monitor](https://github.com/Javis603/token-monitor) and [ai-avatar-bot](https://github.com/YuriCrystal/ai-avatar-bot): architecture and interaction references only; no code was imported.
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the full list and license terms.
+
+Related: [AI-Sister](https://teddashh.github.io/AI-Sister/) is a later local-first desktop companion that reuses TokenMonster's pet-window approach and the same character media pack.
+
 ## License
 
-[MIT](LICENSE). Third-party components: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[MIT](LICENSE) © 2026 Ted Huang. The character art and voices are not covered by the MIT License; third-party components and character media terms are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

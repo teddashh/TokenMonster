@@ -1,0 +1,683 @@
+{
+  "repo": "teddashh/TokenMonster",
+  "slug": "TokenMonster",
+  "name": "TokenMonster",
+  "mark": "TM",
+  "palette": "rose",
+  "default_branch": "main",
+  "verified": "2026-09-30",
+  "language": "TypeScript",
+  "license": {
+    "spdx": "MIT",
+    "label": {
+      "en": "MIT License",
+      "zh": "MIT 授權"
+    },
+    "href": "LICENSE"
+  },
+  "title": {
+    "en": "Local AI token usage, with companions",
+    "zh": "本機 AI token 用量，有角色陪你看"
+  },
+  "description": {
+    "en": "TokenMonster tracks Claude Code, Codex, Gemini CLI, and Grok Build token usage on your own machine through a pinned TokenTracker sidecar, and eleven companion characters unlock from real usage milestones. No account, no telemetry.",
+    "zh": "TokenMonster 透過鎖定版本的 TokenTracker sidecar，在你自己的電腦上追蹤 Claude Code、Codex、Gemini CLI 與 Grok Build 的 token 用量，11 位陪伴角色隨真實的使用里程碑解鎖。不用帳號，沒有遙測。"
+  },
+  "hero": {
+    "eyebrow": {
+      "en": "Token usage dashboard · Companion characters",
+      "zh": "Token 用量儀表板 · 陪伴角色"
+    },
+    "headline": {
+      "en": "Check today's tokens with your <em>AI sisters</em>.",
+      "zh": "今天的 token，<em>AI 姊妹</em>陪你看。"
+    },
+    "lede": {
+      "en": "A pinned TokenTracker sidecar reads Claude Code, Codex, Gemini CLI, and Grok Build usage on your own machine. TokenMonster turns it into a local dashboard, and eleven companions unlock from real usage milestones. No account, no telemetry.",
+      "zh": "鎖定版本的 TokenTracker sidecar 在你自己的電腦上讀取 Claude Code、Codex、Gemini CLI 與 Grok Build 的用量，TokenMonster 再把它整理成本機儀表板，11 位陪伴角色隨真實的使用里程碑解鎖。不用帳號，沒有遙測。"
+    },
+    "primary": {
+      "href": "#start",
+      "label": {
+        "en": "Install the test build",
+        "zh": "安裝測試版"
+      }
+    },
+    "secondary": {
+      "href": "https://github.com/teddashh/TokenMonster",
+      "label": {
+        "en": "View source",
+        "zh": "查看原始碼"
+      }
+    },
+    "notes": [
+      "MIT",
+      "TypeScript · Electron 43",
+      {
+        "en": "Local-first, works offline",
+        "zh": "本機優先，離線可用"
+      }
+    ],
+    "visual": {
+      "type": "image",
+      "src": "docs/screenshots/windows-dashboard-companion-roster.png",
+      "alt": {
+        "en": "TokenMonster dashboard on Windows in Traditional Chinese: Claude on the left, today's connection card still learning the user's rhythm, the companion roster with 4 of 11 met, and the companion card panel with a Save PNG button",
+        "zh": "Windows 上的 TokenMonster 儀表板（繁體中文介面）：左邊是 Claude，右邊有還在認識使用節奏的今日默契卡、已遇見 4 / 11 位的陪伴名單，以及可以儲存 PNG 的夥伴卡"
+      },
+      "caption": {
+        "en": "The Windows desktop build. Characters and numbers come from local data.",
+        "zh": "Windows 桌面版實機畫面，角色與數字都來自本機資料。"
+      }
+    }
+  },
+  "stats": [
+    {
+      "value": "rc.22",
+      "label": {
+        "en": "Latest test build, July 2026",
+        "zh": "最新測試版，2026 年 7 月"
+      }
+    },
+    {
+      "value": "11",
+      "label": {
+        "en": "Companion characters",
+        "zh": "陪伴角色"
+      }
+    },
+    {
+      "value": "4",
+      "label": {
+        "en": "CLI tools tracked",
+        "zh": "追蹤的 CLI 工具"
+      }
+    },
+    {
+      "value": "20",
+      "label": {
+        "en": "Outfit themes per character",
+        "zh": "每位角色的服裝主題"
+      }
+    }
+  ],
+  "problem": {
+    "kicker": {
+      "en": "Why it exists",
+      "zh": "為什麼做這個"
+    },
+    "title": {
+      "en": "Usage numbers are easy to collect and easy to ignore.",
+      "zh": "用量數字好收集，也很容易被忽略。"
+    },
+    "body": {
+      "en": "Claude Code, Codex, Gemini CLI, and Grok Build each keep their own usage records on your machine. Adding them up takes a collector; opening the total every day takes a reason. TokenMonster pairs a local collector with characters who react to your day, and keeps both on your machine.",
+      "zh": "Claude Code、Codex、Gemini CLI 與 Grok Build 都會在你的電腦上留下各自的用量紀錄。要加總，需要收集工具；要每天打開來看，需要一點理由。TokenMonster 把本機收集器和會回應你一天狀態的角色放在一起，兩者都只在你的電腦上。"
+    },
+    "quote": {
+      "en": "Tokens are measurements, not game currency.",
+      "zh": "Token 是量測值，不是遊戲貨幣。"
+    }
+  },
+  "flow": {
+    "kicker": {
+      "en": "How it works",
+      "zh": "運作方式"
+    },
+    "title": {
+      "en": "Start, scan, meet, grow.",
+      "zh": "啟動、掃描、相遇、成長。"
+    },
+    "intro": {
+      "en": "Start the desktop app or the CLI. Everything after that happens on your machine.",
+      "zh": "啟動桌面版或 CLI，之後的一切都在你的電腦上進行。"
+    },
+    "steps": [
+      {
+        "title": {
+          "en": "Start it",
+          "zh": "啟動"
+        },
+        "body": {
+          "en": "The desktop app lives in the system tray. The CLI starts a gateway on 127.0.0.1 and opens the dashboard through a one-time link; on a remote machine it can print the SSH tunnel command instead.",
+          "zh": "桌面版待在系統匣。CLI 會在 127.0.0.1 啟動 gateway，用一次性連結開啟儀表板；在遠端機器上，也可以改成印出 SSH 通道指令。"
+        }
+      },
+      {
+        "title": {
+          "en": "Scan local usage",
+          "zh": "掃描本機用量"
+        },
+        "body": {
+          "en": "The TokenTracker sidecar reads the usage records your CLIs already keep. TokenMonster accepts only totals that reconcile, and shows missing days as unavailable instead of zero.",
+          "zh": "TokenTracker sidecar 讀取各家 CLI 本來就留下的用量紀錄。TokenMonster 只接受對得上帳的總量，缺資料的日子會標成無法取得，不會當成零。"
+        }
+      },
+      {
+        "title": {
+          "en": "Meet your first sister",
+          "zh": "遇見第一位姊妹"
+        },
+        "body": {
+          "en": "Draw a card to see whether ChatGPT, Claude, Gemini, or Grok shows up, or pick one yourself. If one provider clearly leads your last 28 days, its sister is suggested. Switching later costs no tokens.",
+          "zh": "抽一張卡，看看 ChatGPT、Claude、Gemini、Grok 誰會來到你身邊，也可以自己挑。近 28 天如果有一家用量明顯最多，會推薦對應的姊妹。之後換人不需要多用 token。"
+        }
+      },
+      {
+        "title": {
+          "en": "Unlock from milestones",
+          "zh": "依里程碑解鎖"
+        },
+        "body": {
+          "en": "Seven friends unlock from provider totals, lifetime totals, active-day streaks, and how many providers you use. Each character also has 20 outfit themes that open as usage grows.",
+          "zh": "七位朋友依各家累積量、總用量、連續活躍天數，以及用過幾家 provider 解鎖。每位角色另有 20 套服裝主題，隨用量成長逐步開放。"
+        }
+      }
+    ]
+  },
+  "capabilities": {
+    "kicker": {
+      "en": "What you get",
+      "zh": "你會得到什麼"
+    },
+    "title": {
+      "en": "Usage, companions, no cloud.",
+      "zh": "用量、角色，都不靠雲端。"
+    },
+    "intro": {
+      "en": "Every view is computed on your machine. TokenMonster keeps aggregate counts only, and the interface comes in Traditional Chinese and English.",
+      "zh": "每個畫面都在你的電腦上算出來。TokenMonster 只保存彙總後的數字，介面有繁體中文與英文。"
+    },
+    "items": [
+      {
+        "title": {
+          "en": "Today, 7 days, 28 days",
+          "zh": "今天、7 天、28 天"
+        },
+        "body": {
+          "en": "Totals across the four tools, a daily UTC trend, a per-provider breakdown, a Top 10 model list, and a remaining-quota estimate for the plan you pick (community figures, not official limits).",
+          "zh": "四套工具的合計用量、UTC 每日趨勢、各家 provider 分析、Top 10 模型排行，以及依你選的方案估算的剩餘額度（社群估計值，不是官方上限）。"
+        },
+        "tag": "packages/companion-ui"
+      },
+      {
+        "title": {
+          "en": "Eleven companions",
+          "zh": "11 位陪伴角色"
+        },
+        "body": {
+          "en": "Four sisters (ChatGPT, Claude, Gemini, Grok) and seven friends (DeepSeek, Qwen, Mistral, Llama, Sakana, Perplexity, GLM). Unlock rules are local and explainable, and an unlock is never taken back.",
+          "zh": "四位姊妹（ChatGPT、Claude、Gemini、Grok）與七位朋友（DeepSeek、Qwen、Mistral、Llama、Sakana、Perplexity、GLM）。解鎖規則在本機計算、說得清楚，解鎖了就不會收回。"
+        },
+        "tag": "packages/characters"
+      },
+      {
+        "title": {
+          "en": "Today's connection",
+          "zh": "今日默契"
+        },
+        "body": {
+          "en": "A daily read of your usage rhythm from the last 28 days. While it is still learning, it says so and tells you there is no need to use more.",
+          "zh": "依近 28 天的使用節奏，每天給一段側寫。還在認識你的時候會直接說明，並提醒你不需要刻意多用。"
+        },
+        "tag": "character-profile.ts"
+      },
+      {
+        "title": {
+          "en": "Companion card",
+          "zh": "夥伴卡"
+        },
+        "body": {
+          "en": "Save a PNG of your character, today's connection, and collection, drawn on your machine. You can hide the 28-day token total before saving.",
+          "zh": "把角色、今日默契與收藏在本機畫成一張 PNG。存檔前可以選擇隱藏 28 日 token 總量。"
+        },
+        "tag": "share-card.ts"
+      },
+      {
+        "title": {
+          "en": "Desktop pet",
+          "zh": "桌面寵物"
+        },
+        "body": {
+          "en": "On Windows, a small pet window you can drag, pin on top, or hide to the tray. Usage and the model ranking fold out below the character.",
+          "zh": "Windows 上有一個小寵物視窗，可以拖曳、置頂或收進系統匣。用量與模型排行就收在角色下方，展開就看得到。"
+        },
+        "tag": "apps/companion"
+      },
+      {
+        "title": {
+          "en": "Optional chat, your key",
+          "zh": "選用聊天，自備 key"
+        },
+        "body": {
+          "en": "Bring your own OpenAI key to talk with the pet. Requests go straight to the OpenAI Responses API with store set to false, and the key is either encrypted with Electron safeStorage or held in memory only.",
+          "zh": "想跟寵物聊天，可以自備 OpenAI API key。請求直接送到 OpenAI Responses API，並設定 store: false；key 用 Electron safeStorage 加密保存，或只放在記憶體。"
+        },
+        "tag": "packages/byok-openai"
+      }
+    ]
+  },
+  "showcase": {
+    "kicker": {
+      "en": "Screens",
+      "zh": "實機畫面"
+    },
+    "title": {
+      "en": "The Windows pet window.",
+      "zh": "Windows 寵物視窗。"
+    },
+    "intro": {
+      "en": "Captured from the Windows desktop build in its Traditional Chinese interface. Usage and rankings come from local data.",
+      "zh": "擷取自 Windows 桌面版的繁體中文介面，用量與排行都來自本機資料。"
+    },
+    "shots": [
+      {
+        "src": "docs/screenshots/windows-pet-claude.png",
+        "alt": {
+          "en": "Claude in the TokenMonster pet window, saying today's UTC usage is ready",
+          "zh": "TokenMonster 寵物視窗裡的 Claude，說今天（UTC）的用量已經整理好了"
+        },
+        "caption": {
+          "en": "Claude in the pet window",
+          "zh": "寵物視窗裡的 Claude"
+        }
+      },
+      {
+        "src": "docs/screenshots/windows-pet-usage-summary.png",
+        "alt": {
+          "en": "Pet window usage panel: today 2,333,207 tokens, last 7 days 21,764,049, last 28 days 26,800,745, all in UTC",
+          "zh": "寵物視窗的用量面板：今天 2,333,207 tokens、近 7 天 21,764,049、近 28 天 26,800,745，皆以 UTC 計算"
+        },
+        "caption": {
+          "en": "Today, 7-day, and 28-day totals (UTC)",
+          "zh": "今天、近 7 天、近 28 天的用量（UTC）"
+        }
+      },
+      {
+        "src": "docs/screenshots/windows-pet-model-ranking.png",
+        "alt": {
+          "en": "Pet window Top 10 models list with total, input, and output tokens per model",
+          "zh": "寵物視窗的 Top 10 模型排行，列出每個模型的總量與輸入、輸出 token"
+        },
+        "caption": {
+          "en": "Top 10 models with input and output",
+          "zh": "Top 10 模型與輸入、輸出量"
+        }
+      }
+    ]
+  },
+  "architecture": {
+    "kicker": {
+      "en": "Architecture",
+      "zh": "系統架構"
+    },
+    "title": {
+      "en": "A gateway, a sidecar, local files.",
+      "zh": "一個 gateway、一個 sidecar，資料都在本機。"
+    },
+    "intro": {
+      "en": "The dashboard talks only to the gateway, and only the gateway asks the sidecar for numbers. The sidecar runs with outbound network blocked.",
+      "zh": "儀表板只跟 gateway 溝通，也只有 gateway 會向 sidecar 要數字。sidecar 執行時，對外連線全部被封鎖。"
+    },
+    "label": {
+      "en": "Dashboard → gateway → sidecar",
+      "zh": "儀表板 → gateway → sidecar"
+    },
+    "nodes": [
+      {
+        "name": {
+          "en": "Dashboard",
+          "zh": "儀表板"
+        },
+        "lines": [
+          {
+            "en": "Browser tab (CLI)",
+            "zh": "瀏覽器（CLI）"
+          },
+          {
+            "en": "Desktop window and pet",
+            "zh": "桌面版與寵物"
+          },
+          {
+            "en": "Opened by one-time link",
+            "zh": "一次性連結開啟"
+          }
+        ]
+      },
+      {
+        "name": "Gateway",
+        "core": true,
+        "lines": [
+          {
+            "en": "127.0.0.1, random port",
+            "zh": "127.0.0.1，隨機連接埠"
+          },
+          {
+            "en": "Usage, characters, chat",
+            "zh": "用量、角色、聊天"
+          },
+          {
+            "en": "Reconciled totals only",
+            "zh": "只收對得上帳的總量"
+          },
+          {
+            "en": "Progress in ~/.tokenmonster",
+            "zh": "進度存在 ~/.tokenmonster"
+          }
+        ]
+      },
+      {
+        "name": "Sidecar",
+        "lines": [
+          "TokenTracker 0.80.0",
+          {
+            "en": "Reads CLI usage records",
+            "zh": "讀取 CLI 用量紀錄"
+          },
+          {
+            "en": "Outbound network blocked",
+            "zh": "封鎖對外連線"
+          }
+        ]
+      }
+    ],
+    "return": "network-deny.cjs · TOKENTRACKER_NO_TELEMETRY=1 · store: false",
+    "principles": {
+      "title": {
+        "en": "Local by construction.",
+        "zh": "從設計上就留在本機。"
+      },
+      "items": [
+        {
+          "en": "Gateway and sidecar listen on 127.0.0.1 only",
+          "zh": "gateway 與 sidecar 只聽 127.0.0.1"
+        },
+        {
+          "en": "The sidecar starts with an allowlisted environment, no usable PATH, and network calls blocked",
+          "zh": "sidecar 啟動時只帶白名單內的環境變數，PATH 無法使用，網路呼叫也被封鎖"
+        },
+        {
+          "en": "Raw usage JSON is parsed in memory and dropped; only aggregates are kept",
+          "zh": "原始用量 JSON 只在記憶體裡解析後就丟掉，只保存彙總數字"
+        },
+        {
+          "en": "Prompts, file names, paths, and raw model IDs stay out of logs, share cards, and diagnostic bundles",
+          "zh": "prompt、檔名、路徑與原始 model ID 不會進入 log、分享卡與診斷包"
+        },
+        {
+          "en": "Leaving your machine always takes an explicit action: the media pack, BYOK chat, or an update check",
+          "zh": "要連到外部，一定是你主動操作：下載素材包、BYOK 聊天或檢查更新"
+        }
+      ]
+    },
+    "nav": false
+  },
+  "decisions": {
+    "kicker": {
+      "en": "Design decisions",
+      "zh": "設計取捨"
+    },
+    "title": {
+      "en": "Why it is built this way.",
+      "zh": "為什麼這樣做。"
+    },
+    "items": [
+      {
+        "title": {
+          "en": "Wrap TokenTracker, do not fork it",
+          "zh": "包住 TokenTracker，不 fork"
+        },
+        "body": {
+          "en": "Finding tools, parsing changing log formats, and deduplicating records is TokenTracker's job. TokenMonster pins one exact version, runs it as a sidecar behind a narrow adapter (ADR 0005), and re-audits the output before moving to a new one.",
+          "zh": "找出工具、解析一直在變的紀錄格式、去除重複，都交給 TokenTracker。TokenMonster 鎖定單一版本，以 sidecar 跑在精簡的 adapter 後面（ADR 0005），要升級前先重新稽核它的輸出。"
+        }
+      },
+      {
+        "title": {
+          "en": "Character media is a separate, consented download",
+          "zh": "角色素材另外下載，要你同意"
+        },
+        "body": {
+          "en": "The install carries starter art for the four sisters and 168 text lines, and works offline. The full pack (891 images and 55 voice clips, about 73 MB) downloads only after you agree, is checked against SHA-256 digests, and can be repaired or removed. Voice is off by default.",
+          "zh": "安裝檔只帶四位姊妹的初始立繪與 168 條文字台詞，離線就能用。完整素材包（891 張圖與 55 段語音，約 73 MB）要你同意後才下載，逐一比對 SHA-256，也可以修復或移除。語音預設關閉。"
+        }
+      },
+      {
+        "title": {
+          "en": "Directory-local install, exact toolchain",
+          "zh": "裝在資料夾裡，版本鎖死"
+        },
+        "body": {
+          "en": "The CLI tarball installs into its own folder and carries a shrinkwrap, so the sidecar's dependencies cannot drift. A global npm install breaks on a bundled-dependency quirk, so it is not supported.",
+          "zh": "CLI 的 tgz 安裝在自己的資料夾裡，附帶 shrinkwrap，sidecar 的相依套件不會漂移。npm 全域安裝會碰到 bundled dependency 的問題，所以不支援。"
+        }
+      }
+    ],
+    "nav": false
+  },
+  "quickstart": {
+    "kicker": {
+      "en": "Start here",
+      "zh": "從這裡開始"
+    },
+    "title": {
+      "en": "Installer or CLI. Pick one.",
+      "zh": "安裝檔或 CLI，選一種就好。"
+    },
+    "intro": {
+      "en": "Both come from GitHub Releases as public test builds. The Windows installer is not code-signed yet. The CLI needs exactly Node.js 24.15.0 and npm 11.12.1, and it is not on the npm registry yet.",
+      "zh": "兩者都是 GitHub Releases 上的公開測試版。Windows 安裝檔還沒有程式碼簽章。CLI 只支援 Node.js 24.15.0 與 npm 11.12.1 這組版本，也還沒上架 npm registry。"
+    },
+    "primary": {
+      "href": "https://github.com/teddashh/TokenMonster/releases/tag/v0.1.0-rc.22",
+      "label": {
+        "en": "Download rc.22",
+        "zh": "下載 rc.22"
+      }
+    },
+    "secondary": {
+      "href": "https://github.com/teddashh/TokenMonster/blob/main/docs/RELEASE.md",
+      "label": {
+        "en": "Release process",
+        "zh": "發行流程"
+      }
+    },
+    "steps": [
+      {
+        "title": {
+          "en": "Windows desktop app",
+          "zh": "Windows 桌面版"
+        },
+        "body": {
+          "en": "Run TokenMonsterSetup.exe. SmartScreen warns about the unsigned build: choose More info, then Run anyway. TokenMonster then sits in the tray and starts from the Start menu.",
+          "zh": "執行 TokenMonsterSetup.exe。因為還沒簽章，SmartScreen 會跳出警告，請按「其他資訊」，再按「仍要執行」。之後 TokenMonster 會待在系統匣，也可以從「開始」功能表啟動。"
+        }
+      },
+      {
+        "title": {
+          "en": "CLI on Windows, macOS, or Linux",
+          "zh": "CLI：Windows、macOS、Linux"
+        },
+        "body": {
+          "en": "Download the .tgz and check it against TokenMonster-cli-SHA256SUMS.txt. Install it into its own folder, not globally.",
+          "zh": "下載 .tgz，並用 TokenMonster-cli-SHA256SUMS.txt 核對。請安裝到獨立的資料夾，不要全域安裝。"
+        },
+        "code": "mkdir tokenmonster-app\ncd tokenmonster-app\nnpm i ../tokenmonster-0.1.0-rc.22.tgz\nnpx tokenmonster"
+      },
+      {
+        "title": {
+          "en": "On a remote machine",
+          "zh": "在遠端機器上"
+        },
+        "body": {
+          "en": "Skip the browser and the CLI prints the matching ssh -L command. Run it on your own computer, then open the printed link.",
+          "zh": "不開瀏覽器時，CLI 會印出對應的 ssh -L 指令。在你自己的電腦上執行它，再打開印出的連結。"
+        },
+        "code": "npx tokenmonster --no-open"
+      }
+    ]
+  },
+  "status": {
+    "kicker": {
+      "en": "Honest status",
+      "zh": "誠實的現況"
+    },
+    "title": {
+      "en": "Where it stands.",
+      "zh": "目前的樣子。"
+    },
+    "intro": {
+      "en": "A public test build. Development started in mid-July 2026, rc.18 through rc.22 were published on July 22 and 23, and main has had no commits since July 23.",
+      "zh": "公開測試版。2026 年 7 月中開始開發，rc.18 到 rc.22 在 7 月 22 日與 23 日陸續發布，7 月 23 日之後，main 分支沒有新的 commit。"
+    },
+    "works": [
+      {
+        "en": "Windows installer with the tray pet and dashboard; CI installs, launches, and uninstalls it",
+        "zh": "Windows 安裝檔，含系統匣寵物與儀表板；CI 會實際安裝、啟動再移除"
+      },
+      {
+        "en": "CLI tarball: the rc.22 release smoke test passed on Linux, macOS, and Windows",
+        "zh": "CLI 的 tgz：rc.22 的發行冒煙測試在 Linux、macOS、Windows 都通過"
+      },
+      {
+        "en": "Usage from Claude Code, Codex, Gemini CLI, and Grok Build through TokenTracker 0.80.0",
+        "zh": "透過 TokenTracker 0.80.0 讀取 Claude Code、Codex、Gemini CLI 與 Grok Build 的用量"
+      },
+      {
+        "en": "Eleven characters, 168 starter lines, and an optional 946-file media pack",
+        "zh": "11 位角色、168 條初始台詞，以及可選的 946 個檔案的素材包"
+      },
+      {
+        "en": "Optional OpenAI chat in the desktop app, with your own key",
+        "zh": "桌面版可選用 OpenAI 聊天，用你自己的 key"
+      },
+      {
+        "en": "Launch skills for Codex and Claude Code that start the desktop app from a clone",
+        "zh": "提供 Codex 與 Claude Code 用的啟動 skill，可以從 clone 下來的原始碼啟動桌面版"
+      }
+    ],
+    "limits": [
+      {
+        "en": "The Windows installer is not code-signed, so SmartScreen warns on first run",
+        "zh": "Windows 安裝檔還沒有程式碼簽章，第一次執行時 SmartScreen 會警告"
+      },
+      {
+        "en": "The desktop app is Windows-only; macOS and Linux get the CLI",
+        "zh": "桌面版只有 Windows；macOS 與 Linux 目前只能用 CLI"
+      },
+      {
+        "en": "The CLI accepts only Node.js 24.15.0 with npm 11.12.1 and is not on the npm registry",
+        "zh": "CLI 只支援 Node.js 24.15.0 搭配 npm 11.12.1，也還沒上架 npm registry"
+      },
+      {
+        "en": "Updates are manual: automatic checks are off by default, and both update feeds returned 404 on 2026-09-30",
+        "zh": "更新要手動下載：自動檢查預設關閉，而且 2026-09-30 查核時，兩個更新來源都回應 404"
+      },
+      {
+        "en": "The opt-in contribution counter is in the code, but its service is not deployed",
+        "zh": "選用的匿名貢獻計數器已經寫在程式裡，但服務端還沒部署"
+      },
+      {
+        "en": "The last CI run on main, after a docs-only commit, failed 45 Windows unit tests, mostly file-permission checks; the run before it passed",
+        "zh": "main 最後一次 CI（那次只改了文件）在 Windows 有 45 個單元測試失敗，多半是檔案權限檢查；前一次 CI 全部通過"
+      }
+    ]
+  },
+  "facts": [
+    {
+      "label": {
+        "en": "Version",
+        "zh": "版本"
+      },
+      "value": "v0.1.0-rc.22"
+    },
+    {
+      "label": {
+        "en": "License",
+        "zh": "授權"
+      },
+      "value": {
+        "en": "MIT; character art has separate terms",
+        "zh": "MIT；角色美術另有授權"
+      }
+    },
+    {
+      "label": {
+        "en": "Stack",
+        "zh": "技術"
+      },
+      "value": "TypeScript · Electron 43 · TokenTracker"
+    },
+    {
+      "label": {
+        "en": "Platform",
+        "zh": "平台"
+      },
+      "value": {
+        "en": "Windows app · CLI on Windows, macOS, Linux",
+        "zh": "Windows 桌面版 · CLI：Windows、macOS、Linux"
+      }
+    },
+    {
+      "label": {
+        "en": "Requires",
+        "zh": "需求"
+      },
+      "value": {
+        "en": "Node.js 24.15.0 + npm 11.12.1 (CLI)",
+        "zh": "CLI 需要 Node.js 24.15.0 + npm 11.12.1"
+      }
+    },
+    {
+      "label": {
+        "en": "Verified",
+        "zh": "查核日期"
+      },
+      "value": "2026-09-30"
+    }
+  ],
+  "links": [
+    {
+      "href": "https://github.com/teddashh/TokenMonster/releases",
+      "label": {
+        "en": "Releases",
+        "zh": "版本"
+      }
+    },
+    {
+      "href": "https://github.com/teddashh/TokenMonster/blob/main/docs/DATA_INVENTORY.md",
+      "label": {
+        "en": "Data inventory",
+        "zh": "資料清冊"
+      }
+    },
+    {
+      "href": "https://github.com/teddashh/TokenMonster/blob/main/docs/THREAT_MODEL.md",
+      "label": {
+        "en": "Threat model",
+        "zh": "威脅模型"
+      }
+    },
+    {
+      "href": "https://github.com/teddashh/TokenMonster/blob/main/README.en.md",
+      "label": {
+        "en": "English README",
+        "zh": "English README"
+      }
+    },
+    {
+      "href": "https://github.com/mm7894215/TokenTracker",
+      "label": {
+        "en": "TokenTracker (upstream)",
+        "zh": "TokenTracker（上游）"
+      }
+    },
+    {
+      "href": "https://teddashh.github.io/AI-Sister/",
+      "label": {
+        "en": "Related: AI-Sister",
+        "zh": "相關專案：AI-Sister"
+      }
+    }
+  ]
+}
