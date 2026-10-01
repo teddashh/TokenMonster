@@ -251,7 +251,7 @@
         },
         "body": {
           "en": "Bring your own OpenAI key to talk with the pet. Requests go straight to the OpenAI Responses API with store set to false, and the key is either encrypted with Electron safeStorage or held in memory only.",
-          "zh": "想跟寵物聊天，可以自備 OpenAI API key。請求直接送到 OpenAI Responses API，並設定 store: false；key 用 Electron safeStorage 加密保存，或只放在記憶體。"
+          "zh": "想跟寵物聊天，可以自備 OpenAI API key。請求直接送到 OpenAI Responses API，並設定 <code>store: false</code>；key 用 Electron safeStorage 加密保存，或只放在記憶體。"
         },
         "tag": "packages/byok-openai"
       }
