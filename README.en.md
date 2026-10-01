@@ -69,7 +69,7 @@ and model rankings are all generated from local data.
 1. Download the latest `TokenMonsterSetup.exe` (currently v0.1.0-rc.22) from [Releases](https://github.com/teddashh/TokenMonster/releases) and double-click it.
 2. It is an unsigned public test build, so SmartScreen shows a warning: click "More info", then "Run anyway". A code-signed build follows once signing credentials exist.
 3. TokenMonster appears in the system tray after install and launches from the Start menu afterwards. Uninstall it from Settings → Apps → TokenMonster.
-4. Automatic update checks are off by default. When checked on 2026-09-30, the built-in update feed had no content yet (it returned 404), so get new versions from Releases.
+4. Automatic update checks are off by default. When checked on 2026-10-01, the built-in update feed had no content yet (it returned 404), so get new versions from Releases.
 
 ### CLI (Windows / macOS / Linux)
 
@@ -185,7 +185,7 @@ Not yet:
 - A live Windows update feed
 - The public opt-in contribution counter (service implemented, not deployed)
 
-The last CI run on main (`8df862d`, which only changed the READMEs and screenshots) failed 45 unit tests in the Windows sidecar compatibility job, mostly checks that expect file mode `0600` and got `0666`. The run for the previous commit (`f423801`) and the `v0.1.0-rc.22` tag run both passed.
+On main (`d357cf7`), every CI job passes except Verify, which stops only at the complete dependency audit step. That audit still reports 5 high findings, all in packaging tools: `extract-zip` through `@electron/packager` 18, and `image-size` through `electron-installer-dmg` and `appdmg`. Clearing them needs a major upgrade of `@electron/packager` and an override or replacement for the DMG tooling, because the latest `appdmg` still depends on a vulnerable `image-size` range. The audit of shipped dependencies (`npm audit --omit=dev`) passes.
 
 ## Documentation
 

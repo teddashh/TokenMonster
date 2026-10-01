@@ -5,7 +5,7 @@
   "mark": "TM",
   "palette": "rose",
   "default_branch": "main",
-  "verified": "2026-09-30",
+  "verified": "2026-10-01",
   "language": "TypeScript",
   "license": {
     "spdx": "MIT",
@@ -527,8 +527,8 @@
       "zh": "目前的樣子。"
     },
     "intro": {
-      "en": "A public test build. Development started in mid-July 2026, rc.18 through rc.22 were published on July 22 and 23, and main has had no commits since July 23.",
-      "zh": "公開測試版。2026 年 7 月中開始開發，rc.18 到 rc.22 在 7 月 22 日與 23 日陸續發布，7 月 23 日之後，main 分支沒有新的 commit。"
+      "en": "A public test build. Development started in mid-July 2026, and rc.18 through rc.22 were published on July 22 and 23. On October 1, 2026, main received documentation, CI and dependency security updates, but no release newer than rc.22 has been published.",
+      "zh": "公開測試版。2026 年 7 月中開始開發，rc.18 到 rc.22 在 7 月 22 日與 23 日陸續發布。2026 年 10 月 1 日，main 收到文件、CI 與相依套件的安全更新，但還沒有發布比 rc.22 更新的版本。"
     },
     "works": [
       {
@@ -570,16 +570,16 @@
         "zh": "CLI 只支援 Node.js 24.15.0 搭配 npm 11.12.1，也還沒上架 npm registry"
       },
       {
-        "en": "Updates are manual: automatic checks are off by default, and both update feeds returned 404 on 2026-09-30",
-        "zh": "更新要手動下載：自動檢查預設關閉，而且 2026-09-30 查核時，兩個更新來源都回應 404"
+        "en": "Updates are manual: automatic checks are off by default, and both update feeds returned 404 on 2026-10-01",
+        "zh": "更新要手動下載：自動檢查預設關閉，而且 2026-10-01 查核時，兩個更新來源都回應 404"
       },
       {
         "en": "The opt-in contribution counter is in the code, but its service is not deployed",
         "zh": "選用的匿名貢獻計數器已經寫在程式裡，但服務端還沒部署"
       },
       {
-        "en": "The last CI run on main, after a docs-only commit, failed 45 Windows unit tests, mostly file-permission checks; the run before it passed",
-        "zh": "main 最後一次 CI（那次只改了文件）在 Windows 有 45 個單元測試失敗，多半是檔案權限檢查；前一次 CI 全部通過"
+        "en": "CI on main passes except the complete dependency audit, which still reports 5 high findings, all in packaging tools (extract-zip through @electron/packager, image-size through the macOS DMG tools); the audit of shipped dependencies passes",
+        "zh": "main 的 CI 只剩完整相依套件稽核沒過：打包工具裡還有 5 個 high（extract-zip 來自 @electron/packager，image-size 來自 macOS 的 DMG 工具）；出貨相依套件的稽核則通過"
       }
     ]
   },
@@ -633,7 +633,7 @@
         "en": "Verified",
         "zh": "查核日期"
       },
-      "value": "2026-09-30"
+      "value": "2026-10-01"
     }
   ],
   "links": [

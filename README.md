@@ -68,7 +68,7 @@ TokenMonster 透過鎖定版本的 [TokenTracker](https://github.com/mm7894215/T
 1. 從 [Releases](https://github.com/teddashh/TokenMonster/releases) 下載最新的 `TokenMonsterSetup.exe`（目前是 v0.1.0-rc.22），雙擊安裝。
 2. 目前是未簽章的公開測試版，SmartScreen 會跳出警告，請按「其他資訊」，再按「仍要執行」。取得程式碼簽章憑證後會改發簽章版。
 3. 安裝完成後 TokenMonster 會出現在系統匣，之後從「開始」功能表啟動；要移除，請到「設定 → 應用程式 → TokenMonster」。
-4. 自動檢查更新預設關閉。2026-09-30 查核時，程式內建的更新來源還沒有內容（回應 404），新版本請到 Releases 手動下載。
+4. 自動檢查更新預設關閉。2026-10-01 查核時，程式內建的更新來源還沒有內容（回應 404），新版本請到 Releases 手動下載。
 
 ### CLI（Windows / macOS / Linux）
 
@@ -184,7 +184,7 @@ npm test
 - 上線 Windows 自動更新來源
 - 公開的匿名貢獻計數器（服務端已實作，尚未部署）
 
-main 最後一次 CI（`8df862d`，只改了 README 與截圖）在 Windows 的 sidecar compatibility 工作中有 45 個單元測試失敗，多半是預期檔案權限為 `0600`、實際得到 `0666` 的檢查；前一次 commit（`f423801`）與 `v0.1.0-rc.22` tag 的 CI 都通過。
+main（`d357cf7`）的 CI 除了 Verify 以外全部通過，而 Verify 只卡在完整相依套件稽核這一步。這項稽核仍回報 5 個 high，全部在打包工具裡：`extract-zip` 來自 `@electron/packager` 18，`image-size` 來自 `electron-installer-dmg` 與 `appdmg`。要清掉它們，得把 `@electron/packager` 升級一個主版本，DMG 工具則要用 override 或換掉，因為最新版的 `appdmg` 仍依賴有漏洞的 `image-size` 版本範圍。出貨相依套件的稽核（`npm audit --omit=dev`）則通過。
 
 ## 文件
 
