@@ -229,7 +229,7 @@
         },
         "body": {
           "en": "Save a PNG of your character, today's connection, and collection, drawn on your machine. You can hide the 28-day token total before saving.",
-          "zh": "把角色、今日默契與收藏在本機畫成一張 PNG。存檔前可以選擇隱藏 28 日 token 總量。"
+          "zh": "把角色、今日默契與收藏在本機畫成一張 PNG。存檔前可以選擇隱藏 28 天 token 總量。"
         },
         "tag": "share-card.ts"
       },
