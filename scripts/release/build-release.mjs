@@ -395,7 +395,7 @@ async function copyPackageFiles(packageDir, destinationFor) {
   try {
     await stat(join(destination, "dist"));
   } catch {
-    throw new Error(`${manifest.name} has no dist/ — build the workspaces first`);
+    throw new Error(`${manifest.name} has no dist/; build the workspaces first`);
   }
   return manifest;
 }

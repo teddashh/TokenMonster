@@ -123,8 +123,9 @@ as a license for the merged runtime components.
 
 ## AI-Sister character work
 
-- Source repository: <https://github.com/teddashh/Multi-Ai-Chatapp>, pinned for
-  review to commit `02c65ae57113fc29c64ab0a8835adc2e300b764f`.
+- Provenance: original character artwork by Ted Huang, the TokenMonster
+  author, created for the AI-Sister project. Review is pinned to AI-Sister
+  source commit `02c65ae57113fc29c64ab0a8835adc2e300b764f`.
 - Current release assets: 891 approved WebPs and 55 canonical WAVs for 11
   characters in combined release `ai-sister-media-11-voice55-2026.07.23`.
   TokenMonster packages only eight starter WebPs and no audio; the complete

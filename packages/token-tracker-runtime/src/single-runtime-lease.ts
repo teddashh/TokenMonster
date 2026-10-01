@@ -453,7 +453,7 @@ async function removeOwnedSocketPath(
 
 /**
  * Acquire the one user-scoped TokenMonster runtime lease shared by the CLI
- * and Electron. The listening IPC object—not a PID file—is the authority.
+ * and Electron. The listening IPC object, not a PID file, is the authority.
  */
 export async function acquireTokenMonsterRuntimeLease(
   options: AcquireTokenMonsterRuntimeLeaseOptions,

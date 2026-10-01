@@ -180,7 +180,7 @@ contract guard 必須遞迴拒絕、logger 必須 allowlist，而不是只 redac
 
 ## 5. Collector 架構
 
-Sections 5.1–5.4 preserve the already-implemented legacy contribution contract
+Sections 5.1 to 5.4 preserve the already-implemented legacy contribution contract
 because `IngestSnapshotV1` still enumerates its historical authority IDs. They
 are migration-only, are not the supported companion collector, and must not
 receive new product features. The permanent runtime is section 5.5 and ADR 0005. A sidecar-to-contribution mapper requires a new reviewed contract/cutover;
@@ -328,7 +328,7 @@ Cloud validator 必須使用 export 的 `IngestSnapshotV1Schema`，其 strict ob
 - `modelFamily` 與 `tool` 必須符合 `[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?`，且來自 versioned mapping/registry；未知值映射 `other`，不傳 raw string。
 - `reasoning <= output`，且五個互斥主欄位以 BigInt 相加恰好等於 `total`。
 - 同一 snapshot 不得出現重複 `(bucketStart, provider, modelFamily, tool)`。
-- contract 接受 2020–2099 的合法 UTC midnight；service 再把超過合理 clock-skew 的 future bucket quarantine。
+- contract 接受 2020 至 2099 的合法 UTC midnight；service 再把超過合理 clock-skew 的 future bucket quarantine。
 - cloud schema 沒有 timezone/hour、localCoverage、event/session count、raw event ID、bucket ID、client hash 或 arbitrary metadata map。
 
 ### 6.4 Normalization pipeline
@@ -677,15 +677,15 @@ deriveMonsterState(
 
 ### 10.2 時間尺度
 
-| 尺度        | Window                                       | 用途                          | 更新規則                                                                        |
-| ----------- | -------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------- |
-| Pulse       | 最近 5 分鐘、只在 RAM                        | blink/glow/typing idle        | 不寫 identity，不上雲                                                           |
-| Mood short  | attested hourly 上游完成後：rolling 6 小時   | 活躍、安靜、探索中的短期表情  | 目前停用；不可拿無來源日桶偽造                                                  |
-| Mood day    | 目前：最近完整 UTC 日；未來：rolling 24 小時 | 與個人基準比較的節律          | 今日 partial 桶不參與比較；不以絕對 burn 評價                                   |
-| Daily       | 使用者 IANA local day                        | 每日 recap、fixed lines、提醒 | DST 用 timezone library，不假設 24 小時                                         |
-| Identity    | trailing 28 天，至少 7 active days           | 1–3 個有充分證據的主 traits   | 每日最多變更一個主 trait；provider 證據不完整時省略該類 trait；顯示 provisional |
-| Development | 7/28 天 rolling                              | 配件、色彩與姿態偏好          | 水平差異、可回復                                                                |
-| Lifetime    | all local history，log/saturating            | 背景光暈/里程碑               | 不形成 strength/rank                                                            |
+| 尺度        | Window                                       | 用途                           | 更新規則                                                                        |
+| ----------- | -------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------- |
+| Pulse       | 最近 5 分鐘、只在 RAM                        | blink/glow/typing idle         | 不寫 identity，不上雲                                                           |
+| Mood short  | attested hourly 上游完成後：rolling 6 小時   | 活躍、安靜、探索中的短期表情   | 目前停用；不可拿無來源日桶偽造                                                  |
+| Mood day    | 目前：最近完整 UTC 日；未來：rolling 24 小時 | 與個人基準比較的節律           | 今日 partial 桶不參與比較；不以絕對 burn 評價                                   |
+| Daily       | 使用者 IANA local day                        | 每日 recap、fixed lines、提醒  | DST 用 timezone library，不假設 24 小時                                         |
+| Identity    | trailing 28 天，至少 7 active days           | 1 至 3 個有充分證據的主 traits | 每日最多變更一個主 trait；provider 證據不完整時省略該類 trait；顯示 provisional |
+| Development | 7/28 天 rolling                              | 配件、色彩與姿態偏好           | 水平差異、可回復                                                                |
+| Lifetime    | all local history，log/saturating            | 背景光暈/里程碑                | 不形成 strength/rank                                                            |
 
 Cloud UTC day 主要服務 aggregate protocol。現行 exact-pin 0.80.0 的 sidecar profile 也只能使用可證明完整的 UTC 日：window 到今天，但 mood 明確以 D-1 對更早可用日比較，缺日不當零；今日 partial 桶只參與 identity aggregate。等 attested hourly/local-time contract 完成後，角色節奏才改用本地 IANA timezone。變更 timezone 時保存 transition event，舊 event 不重標 wall-clock day，避免 DST/旅行重複。
 
@@ -758,7 +758,7 @@ AI-Sister publisher 只可把同時滿足下列條件的 pre-rendered 檔案加�
 通過 rights gate 後，MVP 使用 raster portrait，不假設 rig：
 
 - base portrait + approved accessory/lighting overlays；
-- CSS transform 或 canvas 的 2–4 秒 breathe/idle、偶發 blink、低幅 glow；
+- CSS transform 或 canvas 的 2 至 4 秒 breathe/idle、偶發 blink、低幅 glow；
 - 3 個 mood states（calm/active/curious）以色彩、overlay、對話框與小幅姿勢切換；
 - `prefers-reduced-motion` 時停用位移與閃爍，只換靜態 state；
 - 圖像切換不得拉伸、切掉重要內容或移除 attribution；
@@ -963,7 +963,7 @@ CI 必須有 in-memory/reference adapter contract tests。日後可換 Node/Hono
 
 | Layer                                    | 必測案例                                                                                                                                                                     | Pass gate                                                                   |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Contracts                                | `schemaVersion="1"`、safe decimal、MAX_SAFE 邊界、per-key numeric revision、total formula、reasoning subset、duplicate key、64 KiB/1–30 buckets、strict unknown reject       | property/fuzz tests 無 invariant escape，type mirror 與 `ingest-v1.ts` 一致 |
+| Contracts                                | `schemaVersion="1"`、safe decimal、MAX_SAFE 邊界、per-key numeric revision、total formula、reasoning subset、duplicate key、64 KiB/1 至 30 buckets、strict unknown reject    | property/fuzz tests 無 invariant escape，type mirror 與 `ingest-v1.ts` 一致 |
 | Privacy                                  | recursive forbidden keys、nested `mcpServers`、prompt/path/key/eventCount、logger/diagnostic allowlist                                                                       | 任一 leak 使 CI fail                                                        |
 | Permanent TokenTracker sidecar           | 0.80.0 exact pin/bin resolution、strict route schemas、sanitized child、readiness/data probe、bounded shutdown、no PID/port discovery、daily/model/source privacy projection | compatibility/privacy/lifecycle與one-command smoke全通過                    |
 | Legacy tokscale adapter (migration-only) | v4.5.2 exact version、Codex cached input、reasoning double-count golden、fixed daily/hourly argv、`graph` denied、offline/pricing cache env                                  | 不得成為支援runtime或接收新feature；移除前fixtures保持綠                    |
@@ -1011,11 +1011,11 @@ Server 至少支援目前 companion minor 與前兩個 minor，或自下一版 G
 
 | Phase              | 範圍                                                                             | Exit criteria                                                |
 | ------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| 0 — Legal/security | local fixtures、approved image authority + placeholder、default 無 cloud traffic | asset/OSS review、threat model、privacy tests                |
-| 1 — Internal alpha | exact-pinned TokenTracker sidecar、local dashboard/monster/fixed lines           | 14 天無 double count/data leak；managed-child crash recovery |
-| 2 — Closed beta    | 少量 opt-in contributor、public total 僅 staging/private                         | correction/zero/compaction/delete/restore/load 全通過        |
-| 3 — Public beta    | signed macOS companion、public counter/share、OpenAI BYOK                        | SLO 30 天、support/runbook、rights gate                      |
-| 4 — GA             | 經驗證平台擴大、adapter roster 擴大                                              | error budget、capacity、customer support 成熟                |
+| 0：Legal/security  | local fixtures、approved image authority + placeholder、default 無 cloud traffic | asset/OSS review、threat model、privacy tests                |
+| 1：Internal alpha  | exact-pinned TokenTracker sidecar、local dashboard/monster/fixed lines           | 14 天無 double count/data leak；managed-child crash recovery |
+| 2：Closed beta     | 少量 opt-in contributor、public total 僅 staging/private                         | correction/zero/compaction/delete/restore/load 全通過        |
+| 3：Public beta     | signed macOS companion、public counter/share、OpenAI BYOK                        | SLO 30 天、support/runbook、rights gate                      |
+| 4：GA              | 經驗證平台擴大、adapter roster 擴大                                              | error budget、capacity、customer support 成熟                |
 
 Companion rollout 5% → 25% → 100%，每階段至少觀察一個 collector cycle 與 aggregate rebuild。remote kill switches 只能關閉特定 adapter、cloud ingest、share、BYOK 或 animation；不得遠端開啟 consent/telemetry。kill-switch config 必須簽署、可在 UI 檢視，local dashboard/fixed lines 保持可用。
 

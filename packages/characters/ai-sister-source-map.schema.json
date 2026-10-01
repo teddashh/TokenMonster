@@ -25,9 +25,9 @@
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository", "commit", "externalCandidateLibrary"],
+      "required": ["provenance", "commit", "externalCandidateLibrary"],
       "properties": {
-        "repository": { "type": "string", "format": "uri" },
+        "provenance": { "type": "string", "minLength": 1 },
         "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
         "externalCandidateLibrary": {
           "type": "object",

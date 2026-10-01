@@ -140,7 +140,7 @@ function formatTokenCount(value: string): string {
   try {
     return new Intl.NumberFormat("zh-TW").format(BigInt(value));
   } catch {
-    return "—";
+    return "-";
   }
 }
 

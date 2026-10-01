@@ -361,7 +361,7 @@ export const ENGLISH_UI_COPY = Object.freeze({
   "角色或今日默契已更新，請再儲存一次夥伴卡。":
     "The character or today's connection changed. Save the companion card again.",
   "已存檔；圖片只有角色、今日默契、收藏與彙總用量，不含對話內容。":
-    "Saved. The image contains only the character, today's connection, collection, and aggregate usage—not chat content.",
+    "Saved. The image contains only the character, today's connection, collection, and aggregate usage, not chat content.",
   "已取消儲存；夥伴卡沒有寫入檔案。":
     "Save cancelled. No companion card was written.",
   "同名夥伴卡已存在；請先移動舊檔或換個位置再試。":
@@ -803,8 +803,8 @@ const DYNAMIC_ENGLISH_RULES: readonly DynamicRule[] = Object.freeze([
       `Enabling downloads the complete fixed asset pack once (about ${size}; ${bytes} bytes). The request fetches assets only and sends no usage, selected character, unlock state, or outfit choice. You can remove the downloaded full assets at any time; the built-in basic-outfit art and text for the four original starter characters are unaffected.`,
   },
   {
-    pattern: /^安靜時段 (.+)–(.+)$/u,
-    replace: (start, end) => `Quiet hours ${start}–${end}`,
+    pattern: /^安靜時段 (.+) 至 (.+)$/u,
+    replace: (start, end) => `Quiet hours ${start} to ${end}`,
   },
   {
     pattern: /^每天 (.+) 檢查本機摘要；(.+)。$/u,

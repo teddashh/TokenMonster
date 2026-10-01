@@ -152,7 +152,7 @@ binaries are the exact eight starter WebPs, and no audio binary is embedded.
   seconds;
 - response and descriptor: at most 256 MiB compressed;
 - extracted unique objects: at most 256 MiB;
-- entries: 1–1,024;
+- entries: 1 to 1,024;
 - each object: additionally bounded by the schema-v2 4 MiB object cap;
 - streamed transfer chunks: at most 262,144;
 - streamed chunks per extracted entry: at most 65,536.

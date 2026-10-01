@@ -130,7 +130,7 @@ class UtilityChildProcess extends EventEmitter {
       this.emit("exit", normalized, null);
       this.emitCloseIfReady();
       // Electron's utilityProcess stdout/stderr never signal EOF after the
-      // child exits — no 'end'/'close' on the parent-side streams, and even
+      // child exits: no 'end'/'close' on the parent-side streams, and even
       // destroy() emits nothing (observed on Electron 43/linux). Waiting on
       // those events would leave 'close' unemitted forever. The shim flushes
       // before exiting. Any data not delivered by the exit event is discarded

@@ -86,7 +86,7 @@ describe("release artifact privacy and rights boundary", () => {
       readFileSync(join(PACKAGE_ROOT, "ai-sister-source-map.json"), "utf8"),
     ) as {
       source: {
-        repository: string;
+        provenance: string;
         commit: string;
         externalCandidateLibrary: { logicalRoot: string };
       };
@@ -113,7 +113,7 @@ describe("release artifact privacy and rights boundary", () => {
       "pending-owner-grant",
       "ai-sister-source-map.json",
       "ai-sister-source-map.schema.json",
-      sourceMap.source.repository,
+      sourceMap.source.provenance,
       sourceMap.source.commit,
       sourceMap.source.externalCandidateLibrary.logicalRoot,
       sourceMap.cloudDelivery.objectPrefix,

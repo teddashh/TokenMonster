@@ -100,9 +100,9 @@ describe("companion static assets", () => {
     expect(html).toContain("正在啟動");
     expect(html).toContain("重新掃描");
     expect(html).toContain("data-rescan");
-    expect(html).toContain('data-metric="today">—</span>');
-    expect(html).toContain('data-metric="last7Days">—</span>');
-    expect(html).toContain('data-metric="last28Days">—</span>');
+    expect(html).toContain('data-metric="today">-</span>');
+    expect(html).toContain('data-metric="last7Days">-</span>');
+    expect(html).toContain('data-metric="last28Days">-</span>');
     expect(html).toContain("今天（UTC）");
     expect(html).toContain("近 7 天（UTC）");
     expect(html).toContain("近 28 天（UTC）");

@@ -2,8 +2,8 @@
 // avatars. The desktop packaging wrapper runs this after
 // stageCompanionEmbeddedStarterAssets, so the inputs are the same pinned,
 // reviewed bytes that ship inside the installer; nothing new is drawn and no
-// binary icon lives in the repository. ffmpeg (libwebp) decodes and scales —
-// the same external tool contract the asset pipeline already requires — and
+// binary icon lives in the repository. ffmpeg (libwebp) decodes and scales
+// (the same external tool contract the asset pipeline already requires), and
 // the multi-size .ico container is assembled here from PNG entries.
 
 import { createHash } from "node:crypto";

@@ -175,7 +175,7 @@ describe("Electron reminder control", () => {
         "提醒設定已儲存。",
       ),
     ).toBe(
-      "提醒設定已儲存。 每天 18:00 檢查本機摘要；安靜時段 22:00–08:00。",
+      "提醒設定已儲存。 每天 18:00 檢查本機摘要；安靜時段 22:00 至 08:00。",
     );
     expect(
       reminderStatusText(

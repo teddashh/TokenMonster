@@ -1,12 +1,12 @@
-// TokenMonster sidecar shim — forked inside an Electron utilityProcess.
+// TokenMonster sidecar shim, forked inside an Electron utilityProcess.
 //
 // Electron keeps a utility process's event loop alive even after a
 // run-to-completion script finishes (a bare `console.log` script never
 // exits; verified empirically on Electron 43). tokentracker-cli relies on
 // natural event-loop drain to exit, so forking its bin directly makes
 // `--version` and `sync` invocations hang until the parent's timeout kills
-// them. Instead we call the CLI's exported `run` entrypoint — the exact
-// module its pinned bin/tracker.js requires — and exit explicitly when the
+// them. Instead we call the CLI's exported `run` entrypoint (the exact
+// module its pinned bin/tracker.js requires) and exit explicitly when the
 // returned promise settles. `serve` never settles, which matches the
 // long-lived main child the runtime expects to own and kill.
 //

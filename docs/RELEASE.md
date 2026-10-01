@@ -11,7 +11,7 @@ What it does:
 
 1. Builds every workspace package (`scripts/run-workspaces.mjs build`), unless
    `--skip-build` is passed.
-2. Assembles `dist-release/staging/package/` — the CLI package's `dist/` plus a
+2. Assembles `dist-release/staging/package/`: the CLI package's `dist/` plus a
    physical `node_modules/` containing the shipped `@tokenmonster/*` packages
    and the exact registry closure currently required by them (`zod`, `yauzl`,
    and `pend`). Each package is copied according to its own `files` allowlist;
@@ -112,7 +112,7 @@ local maker run needs any byte-identical copy in that directory. The maker
 verifies the complete `electron-winstaller@5.4.4` vendor inventory, creates a
 disposable overlay, and replaces only `Squirrel.exe`; `node_modules` is never
 mutated. The merged updater contains only the Apache-2.0 `Microsoft.Web.Xdt`
-3.1.0 rebuilt from `dotnet/xdt` source — never the EULA-bound 2.1.1 DLL — and
+3.1.0 rebuilt from `dotnet/xdt` source (never the EULA-bound 2.1.1 DLL), and
 its complete redistribution notice bundle is
 `apps/companion/packaging/squirrel-windows/licenses/MERGED-RUNTIME-NOTICES.md`.
 Public status is `approved-unsigned-public-test-pending-signing`: unsigned
@@ -199,7 +199,7 @@ only through `miniflare`'s exact `sharp@0.34.5` pin behind the two direct
 carries a single reviewed scoped override forcing `miniflare`'s `sharp` to
 `0.35.3`. `scripts/verify-packaging-toolchain.mjs` pins that exact override
 shape and fails on any other override, and CI requires a completely clean
-`npm audit` — every severity, including development dependencies — with the
+`npm audit` (every severity, including development dependencies) with the
 full audit JSON retained in `release-evidence/`. Remove the override once a
 `miniflare` release stops pinning a vulnerable `sharp`.
 
@@ -520,7 +520,7 @@ hoist correctly on every platform.
 
 ## Testing from a repo clone (all platforms, including Windows)
 
-Prerequisite: Node 24.15.0 and npm 11.12.1 exactly — the workspace root pins
+Prerequisite: Node 24.15.0 and npm 11.12.1 exactly. The workspace root pins
 both engines with `engine-strict`, so `npm ci` rejects any other version.
 Adapt path quoting to the current shell; all invoked Node/npm tools are
 cross-platform.
@@ -559,7 +559,7 @@ Notes:
 - On a machine with no real TokenTracker usage the dashboard is an honest
   empty state and every character stays locked. To exercise unlocks, wardrobe,
   and voice anyway, run `node scripts/qa/seed-demo-store.mjs` (after the
-  release build) BEFORE the first launch — it writes a demo progression store
+  release build) BEFORE the first launch. It writes a demo progression store
   and refuses to touch an existing one. Reset by deleting `~/.tokenmonster`.
 - CI builds one immutable tarball artifact named
   `tokenmonster-release-candidate-<commit-sha>`; Linux, macOS, and Windows all

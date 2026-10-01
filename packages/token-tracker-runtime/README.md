@@ -11,8 +11,8 @@ pipe, and macOS uses one deterministic `127.0.0.1` TCP listener whose handshake
 is bound to the opaque scope identifier. Before deriving that identifier, the
 runtime creates and verifies the private state directory and uses its native
 canonical path; symlink spellings therefore converge, and Windows path casing
-is folded. Root, special-file, replaced, and—where the platform exposes a
-numeric UID—foreign-owned scopes fail closed. These authorities are released by
+is folded. Root, special-file, replaced, and (where the platform exposes a
+numeric UID) foreign-owned scopes fail closed. These authorities are released by
 the OS after a crash. An occupied macOS port that does not return the exact
 scoped protocol fails closed instead of selecting a second authority. Callers
 acquire the lease before spawning the sidecar and release it only after the

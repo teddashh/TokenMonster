@@ -498,7 +498,7 @@ html[data-connection="error"] .status-dot {
   animation-delay: 130ms !important;
 }
 
-/* The stand-in stage is AI-Sister branding — never the old letter-bear face.
+/* The stand-in stage is AI-Sister branding, never the old letter-bear face.
    Letter theme variables keep tinting the card so wardrobe themes still
    change its look. */
 .companion-face {
