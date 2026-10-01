@@ -112,7 +112,7 @@ If Codex or Claude Code is installed and signed in, you can start the desktop ap
 - Codex: `$launch-tokenmonster start`
 - Claude Code: `/launch-tokenmonster start`
 
-Both run the same workflow: an audit before and after, a doctor check, then the launch. The same skill also provides `status` and `stop`. It does not install or modify the agent CLIs, credentials, global packages, or host tools; if the Electron executable is missing, it fetches only the official Electron 43.1.1 build, checked against locked checksums. What runs is the source-development app, with the same application, local data, and voice settings as the product, but it is not an installation: no shortcut, no Add/Remove Programs entry, and no auto-update. See the full [agent-ready source-development launch contract](docs/AGENT_READY_SOURCE_RELEASE.md).
+Both run the same workflow: an audit before and after, a doctor check, then the launch. The same skill also provides `status` and `stop`. It does not install or modify the agent CLIs, credentials, global packages, or host tools; if the Electron executable is missing, it fetches only the official Electron 43.7.7 build, checked against locked checksums. What runs is the source-development app, with the same application, local data, and voice settings as the product, but it is not an installation: no shortcut, no Add/Remove Programs entry, and no auto-update. See the full [agent-ready source-development launch contract](docs/AGENT_READY_SOURCE_RELEASE.md).
 
 ## The companions
 
@@ -152,7 +152,7 @@ See the [data inventory](docs/DATA_INVENTORY.md) and [threat model](docs/THREAT_
 
 ## Desktop pet
 
-The Electron 43.1.1 desktop build (Windows only for now): a pet window you can drag, pin on top, or hide to the tray, with usage and the Top 10 model list folded out below the character. The tray menu opens the full dashboard.
+The Electron 43.7.7 desktop build (Windows only for now): a pet window you can drag, pin on top, or hide to the tray, with usage and the Top 10 model list folded out below the character. The tray menu opens the full dashboard.
 
 BYOK chat supports OpenAI only (model `gpt-5.6-luna`). The API key is encrypted with Electron `safeStorage`, or you can keep it in memory only; conversations live only in memory and clear when closed.
 

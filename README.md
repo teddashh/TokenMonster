@@ -111,7 +111,7 @@ npm exec -- tokenmonster
 - Codex：`$launch-tokenmonster start`
 - Claude Code：`/launch-tokenmonster start`
 
-兩個入口走同一套流程：啟動前後各做一次 audit、先跑 doctor 檢查，再啟動。同一個 skill 也提供 `status` 與 `stop`。它不會安裝或修改 agent CLI、登入憑證、全域套件或系統工具；如果缺少 Electron 執行檔，只會依鎖定的 checksum 取得官方的 Electron 43.1.1。這樣跑起來的是原始碼開發版：程式、本機資料與語音設定都和正式版相同，但它不是安裝版，沒有捷徑、不會出現在「新增/移除程式」，也沒有自動更新。完整規範見 [Agent-ready source-development launch](docs/AGENT_READY_SOURCE_RELEASE.md)。
+兩個入口走同一套流程：啟動前後各做一次 audit、先跑 doctor 檢查，再啟動。同一個 skill 也提供 `status` 與 `stop`。它不會安裝或修改 agent CLI、登入憑證、全域套件或系統工具；如果缺少 Electron 執行檔，只會依鎖定的 checksum 取得官方的 Electron 43.7.7。這樣跑起來的是原始碼開發版：程式、本機資料與語音設定都和正式版相同，但它不是安裝版，沒有捷徑、不會出現在「新增/移除程式」，也沒有自動更新。完整規範見 [Agent-ready source-development launch](docs/AGENT_READY_SOURCE_RELEASE.md)。
 
 ## 陪伴角色
 
@@ -151,7 +151,7 @@ npm exec -- tokenmonster
 
 ## 桌面寵物
 
-Electron 43.1.1 桌面版（目前只有 Windows）：一個可以拖曳、置頂或收進系統匣的寵物視窗，用量與 Top 10 模型排行收在角色下方；系統匣選單可以開啟完整儀表板。
+Electron 43.7.7 桌面版（目前只有 Windows）：一個可以拖曳、置頂或收進系統匣的寵物視窗，用量與 Top 10 模型排行收在角色下方；系統匣選單可以開啟完整儀表板。
 
 BYOK 聊天目前只支援 OpenAI（模型 `gpt-5.6-luna`）。API key 用 Electron `safeStorage` 加密保存，也可以選擇只放在記憶體；對話內容只存在記憶體，關閉就清除。
 

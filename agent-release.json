@@ -60,7 +60,7 @@
         "--wait",
         "--timeout-ms"
       ],
-      "sideEffect": "reinstalls exact locked dependencies when either dependency proof is missing or drifted, installs the checksum-verified Electron 43.1.1 native artifact when missing, builds the companion workspace, and starts the native Electron source application"
+      "sideEffect": "reinstalls exact locked dependencies when either dependency proof is missing or drifted, installs the checksum-verified Electron 43.7.7 native artifact when missing, builds the companion workspace, and starts the native Electron source application"
     },
     "status": {
       "argv": [
@@ -106,7 +106,7 @@
       "read repository manifests and fixed build artifacts",
       "check exact Node.js and npm prerequisites",
       "install exact package-lock.json dependencies into this repository when dependency proof is missing or drifted",
-      "download and extract the official Electron 43.1.1 native artifact only after the locked installer package and checksums are byte-verified",
+      "download and extract the official Electron 43.7.7 native artifact only after the locked installer package and checksums are byte-verified",
       "build @tokenmonster/companion and its local workspace dependencies",
       "start the repository's native Electron source application",
       "write content-blind lifecycle state under .agent-runtime",
@@ -153,7 +153,7 @@
     ],
     "userCaches": [
       "npm may populate its existing content-addressed cache",
-      "the locked Electron installer may cache the official checksum-verified Electron 43.1.1 archive"
+      "the locked Electron installer may cache the official checksum-verified Electron 43.7.7 archive"
     ],
     "applicationData": [
       "the running source application uses TokenMonster's normal local application data and secret-store boundaries"

@@ -131,7 +131,7 @@ packages/
 - Repo 同時提供 explicit-only 的 Codex 與 Claude Code source-development
   skill，兩者只呼叫同一組 `scripts/agent` lifecycle。該 lifecycle 依
   root/installed lock digest proof 決定是否執行 repo-local `npm ci`，每次只
-  先逐檔驗證 locked Electron 43.1.1 `package.json`／`install.js`／
+  先逐檔驗證 locked Electron 43.7.7 `package.json`／`install.js`／
   `checksums.json`，缺 native executable 時才從官方來源取得 checksum-verified
   artifact，接著 build `@tokenmonster/companion` dependency closure，再啟動
   native Electron；
