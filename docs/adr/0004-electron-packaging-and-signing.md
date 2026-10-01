@@ -21,7 +21,7 @@ Packager and installer APIs; a framework-owned build lifecycle is unnecessary.
 
 ### Build and package layout
 
-- Keep Electron exactly at `43.1.1`, Vite at `8.1.4`, and the reviewed stable
+- Keep Electron exactly at `43.7.7`, Vite at `8.1.4`, and the reviewed stable
   direct packaging tools exact: `@electron/packager 18.4.4`,
   `@electron/fuses 1.8.0`, `@electron/osx-sign 1.3.3`,
   `@electron/windows-sign 1.2.2`, `cross-zip 4.0.1`,
@@ -31,9 +31,10 @@ Packager and installer APIs; a framework-owned build lifecycle is unnecessary.
   package and the root overrides. Consequently `@electron/rebuild`,
   `external-editor`, and `tmp` are absent from both the exact lock and installed
   tree. The toolchain verifier requires `npm ls --all` to exit successfully,
-  permits only npm's reproducible optional-platform `@emnapi/runtime`/`tslib`
-  extraneous labels, checks every direct version and API shape, and rejects any
-  return of the banned packages.
+  permits only npm's reproducible optional-platform `@emnapi/runtime`,
+  `@img/sharp-wasm32`, and `tslib` extraneous labels at exact versions, checks
+  every direct version and API shape, and rejects any return of the banned
+  packages or of a root override.
 - The fixed `--require-upstream-compatible` verifier mode remains part of the
   public npm job before its first TokenMonster registry-state read or mutation.
   It now validates the same Forge-free closure and passes only after all normal
@@ -228,6 +229,25 @@ mount and inspect the final DMG. DMG verification currently fails closed.
   signing remain separate future decisions because no Windows no-egress process
   sandbox is approved.
 
+## Amendments
+
+### 2026-10-01: Electron 43.1.1 to 43.7.7
+
+Electron moved from `43.1.1` to the `43.7.7` patch release to close four high
+advisories: GHSA-9qh4-3jw8-366w, GHSA-j84w-jfhq-vhvj and GHSA-gr2m-v5gq-v685,
+fixed in 43.4.1, and GHSA-qmv3-fv6v-rmhq, fixed in 43.5.0. The packaging tool
+pins above did not change.
+
+`scripts/agent/electron-runtime.mjs` pins the reviewed digests of the new npm
+package files. Against 43.1.1, `index.js`, `cli.js` and the declared
+dependencies are unchanged; `install.js` now loads its archive extractor
+(`@electron-internal/extract-zip`, as before) only when it has to unpack a
+download, and `checksums.json` lists the 43.7.7 archives.
+
+As the fuse policy requires, the raw wire was reviewed again: the 43.7.7
+binary still carries one version 1 wire of nine fuses with the same defaults,
+and the packaged internal app passed the artifact verifier's nine-state check.
+
 ## References
 
 - [Electron fuses](https://www.electronjs.org/docs/latest/tutorial/fuses)
@@ -240,4 +260,4 @@ mount and inspect the final DMG. DMG verification currently fails closed.
 - [Electron Windows Installer](https://github.com/electron/windows-installer)
 - [cross-zip](https://github.com/feross/cross-zip)
 - [Electron native Node modules](https://www.electronjs.org/docs/latest/tutorial/using-native-node-modules/)
-- [Electron 43.1.1 release](https://releases.electronjs.org/release/v43.1.1)
+- [Electron 43.7.7 release](https://releases.electronjs.org/release/v43.7.7)

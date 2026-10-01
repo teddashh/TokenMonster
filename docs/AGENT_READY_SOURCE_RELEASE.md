@@ -58,7 +58,7 @@ node scripts/agent/audit.mjs --phase after --write --json
    `electron_install` task: it byte-verifies the locked Electron
    `package.json`, `install.js`, and `checksums.json`, strips mirror, proxy,
    platform, architecture, and credential overrides, then obtains only the
-   official checksum-verified Electron 43.1.1 artifact when it is absent.
+   official checksum-verified Electron 43.7.7 artifact when it is absent.
    Every launch then performs the scoped companion build. It never downloads
    or installs an AI CLI, global package, host runtime, or host tool.
 4. Launch owns only the process trees it creates. After dependency/build work

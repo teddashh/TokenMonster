@@ -40,7 +40,7 @@ missing host tool, or improvise another launch path. Confirm the JSON envelope
 uses `schemaVersion: 1` and `contractVersion: "1.0.0"`. Treat
 `[TOKENMONSTER_AGENT] READY companion` as the only readiness marker.
 The reviewed launcher may obtain the official checksum-verified Electron
-43.1.1 native artifact when absent. On Linux, never bypass a failed
+43.7.7 native artifact when absent. On Linux, never bypass a failed
 `electron-sandbox` check with `--no-sandbox`, elevation, permission changes, or
 host policy changes.
 

@@ -94,7 +94,7 @@ no extra distributable executable, installer, GitHub Release asset, npm publicat
 channel, shortcut, or OS registration. The files travel with the repository
 source archive and are excluded from the CLI tarball and desktop package.
 When Electron's native executable is absent, the shared lifecycle separately
-verifies the exact locked Electron 43.1.1 installer package files and checksum
+verifies the exact locked Electron 43.7.7 installer package files and checksum
 authority before obtaining the official native archive; it never delegates
 that step to an agent-generated command or unreviewed mirror.
 
@@ -195,13 +195,15 @@ version such as rc.18 through the normal release path.
 The historical rc.17-era development audit exception is retired. The advisory
 `GHSA-f88m-g3jw-g9cj` (libvips CVEs in `sharp` before 0.35.0) reached the tree
 only through `miniflare`'s exact `sharp@0.34.5` pin behind the two direct
-`apps/web` development tools. No fixed `miniflare` exists, so the root manifest
-carries a single reviewed scoped override forcing `miniflare`'s `sharp` to
-`0.35.3`. `scripts/verify-packaging-toolchain.mjs` pins that exact override
-shape and fails on any other override, and CI requires a completely clean
-`npm audit` (every severity, including development dependencies) with the
-full audit JSON retained in `release-evidence/`. Remove the override once a
-`miniflare` release stops pinning a vulnerable `sharp`.
+`apps/web` development tools, so the root manifest carried a single reviewed
+scoped override forcing `miniflare`'s `sharp` to `0.35.3`. That override was
+removed on 2026-10-01: `wrangler 4.145.0` and `@cloudflare/vite-plugin 1.62.3`
+bring `miniflare 5.20260930.0-alpha`, which pins the patched `sharp@0.35.4`
+itself (0.35.3 is affected by GHSA-rgj7-g3m4-5g8c).
+`scripts/verify-packaging-toolchain.mjs` now fails on any root override, and
+CI requires a completely clean `npm audit` (every severity, including
+development dependencies) with the full audit JSON retained in
+`release-evidence/`.
 
 The signed Windows installer and native macOS release gates run only when the
 `TOKENMONSTER_PUBLIC_RELEASE_APPROVED` repository variable is `true`; an
