@@ -139,7 +139,7 @@ npm exec -- tokenmonster
 
 ## 隱私設計
 
-- 收集、圖表與角色進度都在本機完成，不需要帳號或雲端服務。TokenTracker sidecar 以 `TOKENTRACKER_NO_TELEMETRY=1` 與 `DO_NOT_TRACK=1` 啟動，只帶白名單內的環境變數，並預載一個會封鎖對外網路與子程序的模組。
+- 收集、圖表與角色進度都在本機完成，不需要帳號或雲端服務。TokenTracker sidecar 以 `TOKENTRACKER_NO_TELEMETRY=1` 與 `DO_NOT_TRACK=1` 啟動，只帶白名單內的環境變數，並預載一個模組，擋下對外連線，也不讓它啟動其他程式。
 - TokenMonster 只保存彙總後的數字。原始用量 JSON 只在記憶體中解析，用完就丟掉。prompt、回應、原始碼、檔名、路徑、原始 model ID、API key 與 cookie 都不會進入 log、分享卡、診斷包或任何貢獻資料；模型名稱只會出現在本機儀表板的 Top 10 排行。
 - 預設不對外連線。只有你主動操作時才會連外：
   - 同意後下載一次角色素材包（`cdn.ted-h.com`）；
@@ -167,7 +167,7 @@ npm test
 
 `npm test` 會先跑 `npm run agent:verify`，再執行每個 workspace 的測試。Windows 請改用上面「從原始碼執行」提到的建置方式。完整的提交前檢查（lint、typecheck、packaging 驗證等）見 [docs/RELEASE.md](docs/RELEASE.md)；架構決策見 [docs/adr/](docs/adr/)。資料形狀、收集指令、角色資產或網路目的地的任何變更，都必須同步更新 contracts、隱私回歸測試與 [Data inventory](docs/DATA_INVENTORY.md)。
 
-在沒有真實用量的機器上，儀表板會誠實地顯示空狀態，角色也都維持鎖定。想試解鎖、服裝與語音，可以在建置完成、第一次啟動之前執行 `node scripts/qa/seed-demo-store.mjs` 寫入示範進度（它不會覆蓋既有資料）；刪除 `~/.tokenmonster` 就能重設。
+在沒有真實用量的機器上，儀表板會如實顯示沒有資料，角色也都維持鎖定。想試解鎖、服裝與語音，可以在建置完成、第一次啟動之前執行 `node scripts/qa/seed-demo-store.mjs` 寫入示範進度（它不會覆蓋既有資料）；刪除 `~/.tokenmonster` 就能重設。
 
 ## 狀態與路線圖
 

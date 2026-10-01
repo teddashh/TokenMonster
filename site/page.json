@@ -112,7 +112,7 @@
     },
     "body": {
       "en": "Claude Code, Codex, Gemini CLI, and Grok Build each keep their own usage records on your machine. Adding them up takes a collector; opening the total every day takes a reason. TokenMonster pairs a local collector with characters who react to your day, and keeps both on your machine.",
-      "zh": "Claude Code、Codex、Gemini CLI 與 Grok Build 都會在你的電腦上留下各自的用量紀錄。要加總，需要收集工具；要每天打開來看，需要一點理由。TokenMonster 把本機收集器和會回應你一天狀態的角色放在一起，兩者都只在你的電腦上。"
+      "zh": "Claude Code、Codex、Gemini CLI 與 Grok Build 都會在你的電腦上留下各自的用量紀錄。要加總，需要收集工具；要每天打開來看，需要一點理由。TokenMonster 把本機收集器和角色放在一起：角色會依你當天的用量給反應，而且兩者都只在你的電腦上執行。"
     },
     "quote": {
       "en": "Tokens are measurements, not game currency.",
@@ -317,7 +317,7 @@
     },
     "intro": {
       "en": "The dashboard talks only to the gateway, and only the gateway asks the sidecar for numbers. The sidecar runs with outbound network blocked.",
-      "zh": "儀表板只跟 gateway 溝通，也只有 gateway 會向 sidecar 要數字。sidecar 執行時，對外連線全部被封鎖。"
+      "zh": "儀表板只跟 gateway 溝通，也只有 gateway 會向 sidecar 要數字。sidecar 執行時完全不能對外連線。"
     },
     "label": {
       "en": "Dashboard → gateway → sidecar",
@@ -390,15 +390,15 @@
       "items": [
         {
           "en": "Gateway and sidecar listen on 127.0.0.1 only",
-          "zh": "gateway 與 sidecar 只聽 127.0.0.1"
+          "zh": "gateway 與 sidecar 只監聽 127.0.0.1"
         },
         {
           "en": "The sidecar starts with an allowlisted environment, no usable PATH, and network calls blocked",
-          "zh": "sidecar 啟動時只帶白名單內的環境變數，PATH 無法使用，網路呼叫也被封鎖"
+          "zh": "sidecar 啟動時只帶白名單內的環境變數，沒有可用的 PATH，網路呼叫也會被擋下"
         },
         {
           "en": "Raw usage JSON is parsed in memory and dropped; only aggregates are kept",
-          "zh": "原始用量 JSON 只在記憶體裡解析後就丟掉，只保存彙總數字"
+          "zh": "原始用量 JSON 只在記憶體中解析，用完就丟，只保存彙總數字"
         },
         {
           "en": "Prompts, file names, paths, and raw model IDs stay out of logs, share cards, and diagnostic bundles",
@@ -449,7 +449,7 @@
         },
         "body": {
           "en": "The CLI tarball installs into its own folder and carries a shrinkwrap, so the sidecar's dependencies cannot drift. A global npm install breaks on a bundled-dependency quirk, so it is not supported.",
-          "zh": "CLI 的 tgz 安裝在自己的資料夾裡，附帶 shrinkwrap，sidecar 的相依套件不會漂移。npm 全域安裝會碰到 bundled dependency 的問題，所以不支援。"
+          "zh": "CLI 的 tgz 安裝在自己的資料夾裡，附帶 shrinkwrap，sidecar 的相依套件不會被升到沒審查過的版本。npm 全域安裝會碰到 bundled dependency 的問題，所以不支援。"
         }
       }
     ],
@@ -545,7 +545,7 @@
       },
       {
         "en": "Eleven characters, 168 starter lines, and an optional 946-file media pack",
-        "zh": "11 位角色、168 條初始台詞，以及可選的 946 個檔案的素材包"
+        "zh": "11 位角色、168 條初始台詞，另有可選的素材包（946 個檔案）"
       },
       {
         "en": "Optional OpenAI chat in the desktop app, with your own key",
