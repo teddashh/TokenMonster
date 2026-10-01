@@ -62,7 +62,7 @@ describe("sidecar shim", () => {
     fixtureDirectory = await mkdtemp(join(tmpdir(), "tokenmonster-shim-"));
     // Mirrors the pinned CLI layout the shim resolves against: the entry is
     // <package>/bin/tracker.js and run() lives in <package>/src/cli.js. The
-    // bin file itself never has to exist — it only anchors createRequire.
+    // bin file itself never has to exist; it only anchors createRequire.
     trackerEntry = join(fixtureDirectory, "pkg", "bin", "tracker.js");
     await mkdir(join(fixtureDirectory, "pkg", "src"), { recursive: true });
     await writeFile(

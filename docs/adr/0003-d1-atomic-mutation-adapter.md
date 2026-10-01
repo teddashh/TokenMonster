@@ -18,7 +18,7 @@ stays open across arbitrary Worker `await` calls.
 
 Sources checked on 2026-07-15:
 
-- [D1 Database Worker API — batch and withSession](https://developers.cloudflare.com/d1/worker-api/d1-database/)
+- [D1 Database Worker API: batch and withSession](https://developers.cloudflare.com/d1/worker-api/d1-database/)
 - [D1 prepared statements](https://developers.cloudflare.com/d1/worker-api/prepared-statements/)
 
 ## Decision

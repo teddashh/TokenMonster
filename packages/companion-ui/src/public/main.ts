@@ -159,7 +159,7 @@ const AUTOMATIC_UPDATE_ENABLED_POLL_MS = 5_000;
 const ACTIVE_POLL_MS = 5_000;
 const SETTLED_POLL_MS = 60_000;
 // Ambient chatter cadence: the first line lands soon after the window opens,
-// then repeats every 45–90 seconds while the page stays visible. The floor
+// then repeats every 45 to 90 seconds while the page stays visible. The floor
 // matches the gateway idle cooldown hint. Until the character has spoken once
 // per selection, blocked attempts retry on the short delay so startup gating
 // (repair check, switching, celebration) delays the first line by seconds,
@@ -3373,9 +3373,9 @@ export function startCompanionUi(): void {
   }
 
   function setMetricPlaceholders(): void {
-    metricElements.today.textContent = "—";
-    metricElements.last7Days.textContent = "—";
-    metricElements.last28Days.textContent = "—";
+    metricElements.today.textContent = "-";
+    metricElements.last7Days.textContent = "-";
+    metricElements.last28Days.textContent = "-";
   }
 
   function prepareRescan(label: string, enabled: boolean): void {

@@ -64,7 +64,7 @@ describe("public CLI sidecar shrinkwrap", () => {
       expect.arrayContaining([
         "tokentracker-cli@0.80.0",
         "@mongodb-js/zstd@2.0.1",
-        "undici@8.7.0",
+        "undici@8.10.2",
         "yauzl@3.4.0",
         "prebuild-install@7.1.3",
       ]),
@@ -85,7 +85,7 @@ describe("public CLI sidecar shrinkwrap", () => {
     expect(pins).toMatchObject({
       "@mongodb-js/zstd": "2.0.1",
       "tokentracker-cli": "0.80.0",
-      undici: "8.7.0",
+      undici: "8.10.2",
       yauzl: "3.4.0",
     });
     expect(

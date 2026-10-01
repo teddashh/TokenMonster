@@ -11,7 +11,7 @@ also turns keys missing from that client/tool scope into local zero rows.
 
 Cloud work is a separate post-commit step. It runs only when an injected
 contribution state is active and its consent revision is current. One strict
-`IngestSnapshotV1` of 1–30 buckets and at most 64 KiB may be placed in the local
+`IngestSnapshotV1` of 1 to 30 buckets and at most 64 KiB may be placed in the local
 outbox. Missing accepted mirror keys become higher-revision zero corrections.
 If the mirror plan is truncated or the complete correction set cannot fit one
 V1 batch, no partial cloud batch is queued; the local commit remains valid and

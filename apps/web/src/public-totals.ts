@@ -130,7 +130,7 @@ export async function fetchPublicTotals(
 
 export function formatTokenDecimal(value: string): string {
   if (!DECIMAL_PATTERN.test(value)) {
-    return "—";
+    return "-";
   }
   return value.replace(/\B(?=(\d{3})+(?!\d))/gu, ",");
 }

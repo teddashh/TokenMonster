@@ -666,7 +666,7 @@ if (!rejected || companionCalls.length !== 8) {
 
 // The sidecar shim is forked as its own file inside a utilityProcess.
 // Syntax-check the source (vite copies it into dist verbatim; the package
-// verifier asserts the dist copy ships) without executing — running it
+// verifier asserts the dist copy ships) without executing, since running it
 // would process.exit().
 const shimPath = join(
   rootDirectory,

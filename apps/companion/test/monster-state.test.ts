@@ -12,6 +12,13 @@ import { deriveLocalMonsterSummary } from "../src/main/monster-state.js";
 const NOW = new Date("2026-07-15T18:00:00.000Z");
 const DAY_MS = 86_400_000;
 
+// The store stamps writes and bounds its scan-evidence retention window with
+// its own clock, so it must share the pinned NOW with the summary derivation.
+// Without this the fixture dates age out of the window as wall time advances.
+function openPinnedStore(): Promise<LocalStore> {
+  return openLocalStore({ path: ":memory:", clock: () => new Date(NOW) });
+}
+
 function aggregate(daysAgo: number): ProjectedDailyAggregate {
   const bucketStart = new Date(
     Date.parse("2026-07-15T00:00:00.000Z") - daysAgo * DAY_MS,
@@ -63,7 +70,7 @@ function seedObservedDays(store: LocalStore, days: number): void {
 
 describe("local content-blind monster summary", () => {
   it("keeps an empty or under-covered footprint in learning state", async () => {
-    const empty = await openLocalStore({ path: ":memory:" });
+    const empty = await openPinnedStore();
     const emptySummary = deriveLocalMonsterSummary(empty, "chatgpt", NOW);
     expect(emptySummary).toMatchObject({
       characterId: "chatgpt",
@@ -79,7 +86,7 @@ describe("local content-blind monster summary", () => {
     });
     empty.close();
 
-    const underCovered = await openLocalStore({ path: ":memory:" });
+    const underCovered = await openPinnedStore();
     seedObservedDays(underCovered, 13);
     expect(
       deriveLocalMonsterSummary(underCovered, "chatgpt", NOW),
@@ -88,7 +95,7 @@ describe("local content-blind monster summary", () => {
   });
 
   it("unlocks allowlisted traits at 14 observed and seven active days", async () => {
-    const store = await openLocalStore({ path: ":memory:" });
+    const store = await openPinnedStore();
     seedObservedDays(store, 14);
 
     const result = deriveLocalMonsterSummary(store, "chatgpt", NOW);
@@ -118,7 +125,7 @@ describe("local content-blind monster summary", () => {
   });
 
   it("keeps token rows unavailable until all four client scopes are complete", async () => {
-    const store = await openLocalStore({ path: ":memory:" });
+    const store = await openPinnedStore();
     store.upsertDailyAggregates(
       Array.from({ length: 14 }, (_, index) => aggregate(index)),
     );
@@ -139,7 +146,7 @@ describe("local content-blind monster summary", () => {
   });
 
   it("counts complete empty days as observed without persisting zero usage", async () => {
-    const store = await openLocalStore({ path: ":memory:" });
+    const store = await openPinnedStore();
     store.upsertDailyAggregates(
       Array.from({ length: 7 }, (_, index) => aggregate(index)),
     );
@@ -156,7 +163,7 @@ describe("local content-blind monster summary", () => {
   });
 
   it("keeps analytical traits independent from the chosen letter character", async () => {
-    const store = await openLocalStore({ path: ":memory:" });
+    const store = await openPinnedStore();
     seedObservedDays(store, 14);
 
     const chatgpt = deriveLocalMonsterSummary(store, "chatgpt", NOW);
@@ -170,7 +177,7 @@ describe("local content-blind monster summary", () => {
   });
 
   it("cannot bypass same-window identity continuity by switching characters", async () => {
-    const store = await openLocalStore({ path: ":memory:" });
+    const store = await openPinnedStore();
     expect(deriveLocalMonsterSummary(store, "chatgpt", NOW)).toMatchObject({
       identityStatus: "learning",
       traits: [],

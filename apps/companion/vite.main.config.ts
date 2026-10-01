@@ -28,7 +28,7 @@ const copyCompanionUi = () => ({
     for (const requiredFile of REQUIRED_UI_FILES) {
       if (!fileNames.includes(requiredFile)) {
         throw new Error(
-          `Companion UI asset missing: ${requiredFile} — build @tokenmonster/companion-ui first.`
+          `Companion UI asset missing: ${requiredFile}. Build @tokenmonster/companion-ui first.`
         );
       }
     }

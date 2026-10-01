@@ -3,10 +3,11 @@
 Status: combined schema-v2 release approved and published. All 11 personas have
 approved raster associations and five canonical WAVs each: 891 images plus 55
 voice clips, or 946 entries. TokenMonster release candidates embed a
-zero-request starter base of eight WebPs／415,470 bytes: one avatar and one
+zero-request starter base of eight WebPs (415,470 bytes): one avatar and one
 `tech` outfit for each of ChatGPT, Claude, Gemini, and Grok. Those four also
-have 168 built-in `zh-TW`/`en` text lines, with no embedded audio. The
-letter/silent renderer remains the fallback outside that base.
+have 168 built-in `zh-TW`/`en` text lines, and the seven friends have 42
+built-in tap lines; no audio is embedded. The letter/silent renderer remains
+the fallback outside that base.
 
 This document defines how TokenMonster may reuse the existing AI-Sister
 character work without copying its publishing pipeline or pretending that
@@ -16,7 +17,8 @@ power.
 
 ## Audited source and inventory truth
 
-The source audit used the AI-Sister repository's `origin/main` commit:
+The source audit (recorded 2026-07-23) used the AI-Sister repository's
+`origin/main` commit:
 
 ```text
 77b317b95b6047f1de330d5d41e4edab38de3b44
@@ -25,39 +27,46 @@ The source audit used the AI-Sister repository's `origin/main` commit:
 The active canonical roster at that commit is **four sisters plus seven
 friends**, or eleven personas total:
 
-| Role   | Stable ID    | Display name | Notes                                                                          |
-| ------ | ------------ | ------------ | ------------------------------------------------------------------------------ |
-| sister | `chatgpt`    | ChatGPT      | Visual-generation material also calls her Codex; this is one persona, not two. |
-| sister | `claude`     | Claude       | Default starter candidate.                                                     |
-| sister | `gemini`     | Gemini       | Default starter candidate.                                                     |
-| sister | `grok`       | Grok         | Default starter candidate.                                                     |
-| friend | `deepseek`   | DeepSeek     | Present in the older wardrobe bank.                                            |
-| friend | `qwen`       | Qwen         | Present in the older wardrobe bank.                                            |
-| friend | `mistral`    | Mistral      | Present in the older wardrobe bank.                                            |
-| friend | `venice`     | Llama        | `venice` is the internal ID; Llama is the display identity.                    |
-| friend | `sakana`     | Sakana       | Present in the older wardrobe bank.                                            |
-| friend | `perplexity` | Perplexity   | Present in the older wardrobe bank.                                            |
-| friend | `glm`        | GLM          | Canonical persona, but absent from the older wardrobe matrix.                  |
+| Role   | Stable ID    | Display name | Unlock milestone                                         | Notes                                                                          |
+| ------ | ------------ | ------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| sister | `chatgpt`    | ChatGPT      | Chosen as starter, or first local OpenAI-family token    | Visual-generation material also calls her Codex; this is one persona, not two. |
+| sister | `claude`     | Claude       | Chosen as starter, or first local Anthropic-family token |                                                                                |
+| sister | `gemini`     | Gemini       | Chosen as starter, or first local Google-family token    |                                                                                |
+| sister | `grok`       | Grok         | Chosen as starter, or first local xAI-family token       |                                                                                |
+| friend | `deepseek`   | DeepSeek     | 100,000 local DeepSeek-family tokens                     |                                                                                |
+| friend | `qwen`       | Qwen         | 250,000 local Qwen-family tokens                         |                                                                                |
+| friend | `mistral`    | Mistral      | 3-day active-day streak                                  |                                                                                |
+| friend | `venice`     | Llama        | 500,000 lifetime local tokens                            | `venice` is the internal ID; Llama is the display identity.                    |
+| friend | `sakana`     | Sakana       | 4 distinct active providers                              |                                                                                |
+| friend | `perplexity` | Perplexity   | 7-day active-day streak                                  |                                                                                |
+| friend | `glm`        | GLM          | 5,000,000 lifetime local tokens                          | Canonical persona; absent only from the older ten-persona matrix.              |
 
 There is no eighth friend in the audited canonical type, manifest, avatar set,
 or guest catalog. The intended eighth friend remains unresolved. Do not mint a
-placeholder ID, infer one from an image filename, or reserve published CDN
-paths until the character is explicitly defined and approved.
+roster ID, infer one from an image filename, or reserve published CDN paths
+until the character is explicitly defined and approved. The progression
+engine's internal `reserved` milestone slot (eight distinct active providers)
+is not such an ID: the companion roster exposes only the eleven personas
+above, and the slot has no display identity, art, or CDN path.
 
-The older persona-design matrix contains ten personas: the four sisters plus
-Sakana, DeepSeek, Qwen, Mistral, Llama, and Perplexity. Its contracted geometry
-is:
+The local candidate bank observed by the audit covers all eleven personas,
+including GLM. Its contracted geometry is:
 
-- 10 personas x 20 themes = 200 wardrobe cells;
-- one outfit image per cell = 200 outfit slots;
-- three reaction poses per cell = 600 pose slots;
-- one custom layered set per cell = 200 layered-set slots.
+- 11 personas x 20 themes = 220 wardrobe cells;
+- one outfit image per cell = 220 outfit slots;
+- three reaction poses per cell = 660 pose slots;
+- one custom layered set per cell = 220 layered-set slots.
 
-The historical schema-v1 integrity manifest covers those 200 wardrobe cells,
-their pose objects, and 50 prerecorded WAV refs (five for each of the same ten
-personas). The raw bank and layered files remain outside the audited Git tree
-in AI-Sister's voice-lab workspace. That inventory is not public rights
-approval and is not shipped as runtime authority.
+Those counts are observed local candidates, not release evidence. The raw bank
+and layered files remain outside the audited Git tree in AI-Sister's
+voice-lab workspace and are never copied into TokenMonster.
+
+An older persona-design matrix covered only ten personas: the four sisters
+plus Sakana, DeepSeek, Qwen, Mistral, Llama, and Perplexity, without GLM. The
+historical schema-v1 integrity manifest still reflects that set: 200 wardrobe
+cells, their 600 pose objects, and 50 prerecorded WAV refs (five for each of
+the ten personas). That inventory is not public rights approval and is not
+shipped as runtime authority.
 
 The current schema-v2 release `ai-sister-media-11-voice55-2026.07.23`
 supersedes it with 11 avatars, 220 outfits, 660 poses, and 55 canonical WAVs:
@@ -73,33 +82,36 @@ Themes are cosmetic facets. A facet may change clothing, palette, ambient
 scene, and scripted presentation tone. It must not change a character's
 abilities, collector behavior, usage totals, rewards, or rank.
 
-| Theme slug      | Cosmetic style-facet ID | Optional recommendation trait |
-| --------------- | ----------------------- | ----------------------------- |
-| `tech`          | `builder`               | `cli-focused`                 |
-| `finance`       | `planner`               | `cache-savvy`                 |
-| `politics`      | `civic-strategist`      | `multi-provider`              |
-| `education`     | `mentor`                | `tool-focused`                |
-| `health`        | `caretaker`             | `balanced`                    |
-| `environment`   | `steward`               | `cache-savvy`                 |
-| `law`           | `guardian`              | `provider-focused`            |
-| `relationship`  | `listener`              | `multi-provider`              |
-| `family`        | `nurturer`              | `balanced`                    |
-| `workplace`     | `organizer`             | `cli-focused`                 |
-| `science`       | `researcher`            | `tool-focused`                |
-| `culture`       | `storyteller`           | `multi-tool`                  |
-| `sports`        | `challenger`            | `output-heavy`                |
-| `food`          | `host`                  | `balanced`                    |
-| `travel`        | `explorer`              | `multi-tool`                  |
-| `psychology`    | `reflector`             | `night-oriented`              |
-| `philosophy`    | `thinker`               | `provider-focused`            |
-| `international` | `connector`             | `multi-provider`              |
-| `media`         | `communicator`          | `output-heavy`                |
-| `festival`      | `celebrator`            | `output-heavy`                |
+| Tier | Theme slug      | Cosmetic style-facet ID | Optional recommendation trait | Own-family tokens | GLM lifetime tokens |
+| ---: | --------------- | ----------------------- | ----------------------------- | ----------------: | ------------------: |
+|    1 | `tech`          | `builder`               | `cli-focused`                 |                 1 |           5,000,000 |
+|    2 | `finance`       | `planner`               | `cache-savvy`                 |             5,000 |           5,250,000 |
+|    3 | `politics`      | `civic-strategist`      | `multi-provider`              |            10,000 |           5,500,000 |
+|    4 | `education`     | `mentor`                | `tool-focused`                |            25,000 |           5,750,000 |
+|    5 | `health`        | `caretaker`             | `balanced`                    |            50,000 |           6,000,000 |
+|    6 | `environment`   | `steward`               | `cache-savvy`                 |           100,000 |           6,500,000 |
+|    7 | `law`           | `guardian`              | `provider-focused`            |           175,000 |           7,000,000 |
+|    8 | `relationship`  | `listener`              | `multi-provider`              |           250,000 |           7,500,000 |
+|    9 | `family`        | `nurturer`              | `balanced`                    |           400,000 |           8,000,000 |
+|   10 | `workplace`     | `organizer`             | `cli-focused`                 |           600,000 |           9,000,000 |
+|   11 | `science`       | `researcher`            | `tool-focused`                |           850,000 |          10,000,000 |
+|   12 | `culture`       | `storyteller`           | `multi-tool`                  |         1,200,000 |          11,000,000 |
+|   13 | `sports`        | `challenger`            | `output-heavy`                |         1,700,000 |          12,000,000 |
+|   14 | `food`          | `host`                  | `balanced`                    |         2,300,000 |          13,500,000 |
+|   15 | `travel`        | `explorer`              | `multi-tool`                  |         3,000,000 |          15,000,000 |
+|   16 | `psychology`    | `reflector`             | `night-oriented`              |         4,000,000 |          17,000,000 |
+|   17 | `philosophy`    | `thinker`               | `provider-focused`            |         5,500,000 |          19,000,000 |
+|   18 | `international` | `connector`             | `multi-provider`              |         7,000,000 |          22,000,000 |
+|   19 | `media`         | `communicator`          | `output-heavy`                |         9,000,000 |          25,000,000 |
+|   20 | `festival`      | `celebrator`            | `output-heavy`                |        12,000,000 |          30,000,000 |
 
 The facets above normalize the source slugs for TokenMonster. They are tags,
-not numerical attributes. A matching workflow trait may recommend a look, but
-is never an unlock requirement. In particular, the legacy Chinese forum
-category `生活` normalized to `psychology`; `life` is not a twenty-theme slug.
+not numerical attributes. A matching workflow trait may recommend a look, and
+can move that theme one tier earlier, but is never an unlock requirement. The
+two threshold columns are the local unlock ladders described under
+[Unlock and progression rules](#unlock-and-progression-rules). In particular,
+the legacy Chinese forum category `生活` normalized to `psychology`; `life` is
+not a twenty-theme slug.
 
 ## Source asset vocabulary
 
@@ -123,16 +135,30 @@ runtime path contract for TokenMonster:
   doll_<persona>__<theme>__supported.png
   doll_<persona>__<theme>__challenged.png
   doll_<persona>__<theme>__victory.png
+  doll_<persona>__<theme>__<state>.json
 
 <voice-lab-root>/tachie/parts/
   <persona>__<theme>__v2_parts/
+    parts.json
+    source.json
 ```
 
+The audited path templates also cover per-pose reaction metadata (JSON) and,
+for each layered set, a `parts.json` layer manifest and a `source.json` source
+record.
+
 The `v2_parts` output is a project-specific layered **2.5D** representation. It
-is not a Live2D, Spine, VRM, Rive, GLTF, or other standard rig. TokenMonster
-must not describe it as one, depend on undocumented raw layer filenames, or
-embed the AI-Sister generation scripts. The public bundle format defined below
-is the only integration boundary.
+is not a Live2D, Spine, VRM, Rive, GLTF, or other standard rig, so using it
+would require a TokenMonster renderer port. The audited capabilities are layer
+compositing, idle sway, breathing, blink, viseme lip sync, and static
+reaction-pose swaps. TokenMonster must not describe it as a standard rig,
+depend on undocumented raw layer filenames, or embed the AI-Sister generation
+scripts. The public bundle format defined below is the only integration
+boundary.
+
+The audited action vocabulary has 16 allowlisted actions: `preen`,
+`check_phone`, `tidy_hair`, `sip`, `stretch`, `nod`, `shake`, `laugh`, `smirk`,
+`frown`, `pout`, `arms_crossed`, `lean_in`, `eyeroll`, `applause`, and `tilt`.
 
 ## Semantic state and action map
 
@@ -175,8 +201,16 @@ They only change presentation.
 
 ## Starter selection
 
-The four sisters are the default starter candidate set. Selection happens
-locally from a privacy-safe 28-day aggregate, if that aggregate is available:
+The four sisters are the only starter candidates, and the starter is always an
+explicit player choice; local usage never picks one on the player's behalf. A
+clean install deals one face-down first-meet card. Drawing it picks one of the
+four sisters uniformly at random on the device, while 想自己挑也可以 opens the
+classic four-card picker instead. Either path stores only a local preference,
+and the player can switch companions at any time.
+
+The four-card picker may mark one sister as recommended (依本機用量推薦). That
+recommendation is computed locally from a privacy-safe 28-day aggregate, if
+that aggregate is available:
 
 | Local provider family     | Starter persona |
 | ------------------------- | --------------- |
@@ -185,22 +219,24 @@ locally from a privacy-safe 28-day aggregate, if that aggregate is available:
 | Google or Gemini          | `gemini`        |
 | xAI, Grok, or Grok Build  | `grok`          |
 
-The algorithm is:
+The recommendation algorithm is:
 
 1. Sum each supported provider family's local token usage over the latest 28
    UTC dates, including the current UTC date, using a versioned, content-blind
    aggregate contract.
-2. If exactly one provider has the strictly highest positive total, choose its
-   sister as the suggested starter.
+2. If exactly one provider has the strictly highest positive total, mark its
+   sister as recommended.
 3. If the maximum is tied, all totals are zero, history is absent, or the
-   provider dimension is unavailable, show the four-sister manual picker.
-4. The user may always override the suggestion. Store the choice locally.
+   provider dimension is unavailable, show no recommendation.
+4. A recommendation never selects or persists a starter; only the player's
+   draw or pick does. A starter that an earlier build selected automatically
+   and persisted locally stays active until the player picks another.
 
 The pinned sidecar's fixed model-breakdown route exposes source-level totals.
 The implemented TokenMonster adapter accepts only exact source IDs for these
 four families and never infers a provider from a model name. If that optional
 projection is missing, malformed, or unavailable, totals and charts continue
-to work and TokenMonster uses the manual picker.
+to work and the picker simply shows no recommendation.
 No provider totals, selection rationale, or usage-selected asset key are sent
 to an asset CDN or TokenMonster cloud. Default, no-consent,
 offline-without-cache, failed, and revoked states use the release-embedded base
@@ -213,23 +249,28 @@ persona, theme, unlock, pose, trigger, or any usage-derived state.
 Tokens remain measurements, not spendable game currency. Progression is
 local-only, monotonic, explainable, and never purchasable:
 
-- the uniquely highest positive OpenAI/Anthropic/Google/xAI family selects and
-  unlocks its starter sister; a manual sister choice takes precedence;
+- only the player's explicit draw or pick selects a starter. The chosen sister
+  unlocks at selection, even with zero usage, together with her `tech` base
+  outfit, and a former starter keeps that base outfit after a switch;
 - ChatGPT, Claude, Gemini, and Grok also unlock at the first local token for
-  their corresponding family;
-- DeepSeek and Qwen use their own cumulative family totals; Mistral and
-  Perplexity use active-day streaks; Venice/Llama and GLM use lifetime totals;
-  Sakana uses distinct active-provider breadth;
-- after a character unlocks, its 20 ordered wardrobe themes currently unlock
-  from that character's local provider-family cumulative total. A matching
-  local trait can move a theme ahead by one tier. This implementation cannot
-  advance GLM's wardrobe because pinned sidecar source `zcode` is co-mingled
-  and remains `other`; the fixed pack includes GLM's approved image cells, but
-  the UI must not unlock those wardrobe cells until a reviewed per-character
-  lifetime rule and monotonic migration fixtures replace this target-contract
-  gap;
-- `supported` and `challenged` pose sets are available with character unlock;
-  `victory` and allowlisted actions use active-day-streak milestones;
+  their corresponding family, without becoming the selected starter;
+- friends unlock at the milestones in the roster table: DeepSeek and Qwen use
+  their own cumulative family totals; Mistral and Perplexity use active-day
+  streaks; Venice/Llama and GLM use lifetime totals; Sakana uses distinct
+  active-provider breadth;
+- after a character unlocks, its 20 ordered wardrobe themes unlock from that
+  character's local provider-family cumulative total, using the own-family
+  column of the theme table. A matching local trait moves a theme ahead by one
+  tier;
+- GLM's wardrobe instead follows the GLM lifetime column, from 5,000,000 to
+  30,000,000 lifetime local tokens, because the pinned sidecar keeps raw `glm`
+  and `zcode` sources in `other`, so a GLM family total never accrues. A trait
+  never moves a GLM theme below her 5,000,000-token unlock, and themes
+  persisted before this ladder keep their original timestamps;
+- `supported` and `challenged` pose sets are available with character unlock,
+  and `victory` needs a 3-day active-day streak. Of the 16 allowlisted
+  actions, `laugh` needs a 7-day streak and `applause` a 14-day streak; the
+  other 14 are available with character unlock;
 - persisted unlock timestamps prevent rescans, corrections, or later quiet
   periods from relocking an item.
 
@@ -376,8 +417,9 @@ gate.
   946-entry, 73,261,088-byte fixed pack, then validates and caches its 891
   images and 55 WAVs without access to AI-Sister source or voice-lab paths.
   Failure or revocation returns to the starter base and silence.
-- Tie, no-data, and missing-provider-dimension cases show the manual starter
-  picker.
+- A clean install asks the player to draw a random first sister or pick one
+  of the four; usage never selects a starter, and tie, no-data, and
+  missing-provider-dimension cases show no recommendation.
 - Reduced motion works for every published bundle.
 - A missing theme, action, or unresolved persona degrades to a visual
   fallback without fake data or a collector failure.

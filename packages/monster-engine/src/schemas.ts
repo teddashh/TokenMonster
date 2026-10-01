@@ -341,7 +341,7 @@ export const LocalHourlyRhythmV1Schema = z
         context.addIssue({
           code: "custom",
           path: ["hours", index, "hour"],
-          message: "Hourly rhythm buckets must be canonical and ordered 0–23.",
+          message: "Hourly rhythm buckets must be canonical and ordered 0 to 23.",
         });
       }
     });

@@ -1,4 +1,4 @@
-# Complete merged-runtime notice bundle — reviewed Squirrel updater
+# Complete merged-runtime notice bundle: reviewed Squirrel updater
 
 This document is the complete third-party notice bundle for public
 redistribution of the reviewed Squirrel updater binary

@@ -5,7 +5,7 @@
 > from the permanent sidecar migration sequence in
 > [ADR 0005](adr/0005-permanent-tokentracker-sidecar-adapter.md).
 
-> 狀態：跨 Phase 0–4 的 source vertical slice 已完成；尚未 production deploy
+> 狀態：跨 Phase 0 至 4 的 source vertical slice 已完成；尚未 production deploy
 >
 > 適用範圍：歷史原始計畫；永久 sidecar／adapter／gateway／CLI 路徑以 ADR 0005 為準
 >
@@ -68,16 +68,16 @@
 
 | 階段 | 工程投入估算 | 主要產出 |
 |---|---:|---|
-| Phase 0 — 基線與契約 | 4–6 工程日 | Monorepo、資料契約、威脅模型、CI、權利清單 |
-| Phase 1 — Local data spine + BYOK | 10–15 工程日 | Collector adapter、local store、離線 companion、OpenAI Responses adapter |
-| Phase 2 — Monster 體驗 | 8–12 工程日 | Trait engine、四角色、圖表、提醒、分享卡 |
-| Phase 3 — Opt-in cloud slice | 10–15 工程日 | Enrollment、idempotent ingest、deletion、counter、公開 Web |
-| Phase 4 — Alpha release readiness | 8–12 工程日 | 安裝包、staging、runbook、安全與隱私驗收 |
-| Phase 5 — Private Alpha | 5–10 工程日，另加至少 7 日觀察窗 | 30 人實測、量化判斷、一次收斂迭代 |
-| Phase 6 — Beta / Release Candidate | 8–12 工程日 | 規模、相容、可用性、法務與 RC freeze |
-| GA — 分批正式上線 | 3–5 工程日 | Production rollout、監控與 handoff |
+| Phase 0：基線與契約 | 4 至 6 工程日 | Monorepo、資料契約、威脅模型、CI、權利清單 |
+| Phase 1：Local data spine + BYOK | 10 至 15 工程日 | Collector adapter、local store、離線 companion、OpenAI Responses adapter |
+| Phase 2：Monster 體驗 | 8 至 12 工程日 | Trait engine、四角色、圖表、提醒、分享卡 |
+| Phase 3：Opt-in cloud slice | 10 至 15 工程日 | Enrollment、idempotent ingest、deletion、counter、公開 Web |
+| Phase 4：Alpha release readiness | 8 至 12 工程日 | 安裝包、staging、runbook、安全與隱私驗收 |
+| Phase 5：Private Alpha | 5 至 10 工程日，另加至少 7 日觀察窗 | 30 人實測、量化判斷、一次收斂迭代 |
+| Phase 6：Beta / Release Candidate | 8 至 12 工程日 | 規模、相容、可用性、法務與 RC freeze |
+| GA：分批正式上線 | 3 至 5 工程日 | Production rollout、監控與 handoff |
 
-合計約 56–87 工程日，亦即約 12–18 個單人工程週。這不包含等待網域、hosting credential、Apple／Windows 簽章資格、角色資產權利確認、外部安全審查及 Alpha 受試者招募的時間。
+合計約 56 至 87 工程日，亦即約 12 至 18 個單人工程週。這不包含等待網域、hosting credential、Apple／Windows 簽章資格、角色資產權利確認、外部安全審查及 Alpha 受試者招募的時間。
 
 ## 3. 關鍵依賴順序
 
@@ -134,11 +134,11 @@ companion + share card  public counter + share page
 
 ## 5. 分階段實作計畫
 
-### 5.1 Phase 0 — 基線、資料契約與不可跨越的邊界
+### 5.1 Phase 0：基線、資料契約與不可跨越的邊界
 
 **目標：** 讓後續工程有一致的 repo、資料與安全基線。
 
-**估算：** 4–6 工程日。
+**估算：** 4 至 6 工程日。
 
 **可平行外部工作：** `EXT-01` 資產權利、`EXT-02` 專案授權、`EXT-03` hosting／domain 選擇。
 
@@ -182,11 +182,11 @@ companion + share card  public counter + share page
 - Public copy test 鎖定「由選擇加入的貢獻者分享的 token」語意；不得出現「全世界全部 AI 用量」等聲稱。
 - 未完成資產權利時，build 使用明確的 placeholder；不阻擋純工程開發，但阻擋任何對外 Alpha 包。
 
-### 5.2 Phase 1 — Local data spine、離線 companion 與最低限度 BYOK
+### 5.2 Phase 1：Local data spine、離線 companion 與最低限度 BYOK
 
 **目標：** 在完全沒有 TokenMonster cloud 的情況下完成收集、聚合、圖表與本機 AI 互動的最小垂直切片。
 
-**估算：** 10–15 工程日。
+**估算：** 10 至 15 工程日。
 
 **依賴：** Phase 0 contracts、runtime ADR。
 
@@ -239,11 +239,11 @@ companion + share card  public counter + share page
 - 使用者可以完全跳過 cloud 說明並持續使用所有 Phase 1 功能。
 - Public API 的 access log、database 與 wire capture 中完全沒有 provider key、prompt 或 response；本機持久層亦沒有對話內容。
 
-### 5.3 Phase 2 — 可解釋 Monster engine、四角色與分享卡
+### 5.3 Phase 2：可解釋 Monster engine、四角色與分享卡
 
 **目標：** 證明 TokenMonster 不是 tracker 換皮，而是能把 workflow 轉成使用者看得懂的角色身份。
 
-**估算：** 8–12 工程日。
+**估算：** 8 至 12 工程日。
 
 **依賴：** Phase 1 safe local snapshot；`EXT-01` 在外部 Alpha 前完成。
 
@@ -252,7 +252,7 @@ companion + share card  public counter + share page
 - `packages/monster-engine` 純函式輸入／輸出：
   - 輸入只接受 local aggregate contract；
   - 主要 traits 限定於 provider／model mix、tool diversity、本機 hourly 工作節律、cache／output ratio 與活躍日；來源沒有可信 metadata 時不得宣稱 session 切換或任務類型；
-  - 產出 `characterId`、1–3 個有充分證據的 dominant traits、mood、evolution cadence、explanation keys 與顯示用安全數值；provider 證據不完整時省略該類 trait；
+  - 產出 `characterId`、1 至 3 個有充分證據的 dominant traits、mood、evolution cadence、explanation keys 與顯示用安全數值；provider 證據不完整時省略該類 trait；
   - 相同 snapshot、engine version 與 locale 永遠產生相同核心結果；
   - token 總量只可經 cap／log normalization 影響情緒或材質提示，不能形成戰力、稀有度或更高權限。
 - 第一批 archetypes 至少包含可直接由安全 aggregates 證明的「深夜型」、「CLI 專注型」、「多工具切換型」、「多 provider／tool 類別轉換型」；每個 trait 有清楚的門檻、反例與一句歸因。若來源沒有可信的 task metadata，禁止用 debug、research、test 或特定專案工作等名稱猜測行為。
@@ -284,11 +284,11 @@ companion + share card  public counter + share page
 - 不存在「多燒 token 才能變強／抽更多」的 copy、欄位或 unlock rule。
 - 四張 WebP 的 checksum、來源 commit、attribution、owner public-use grant 與 brand review 結論已進 manifest，且 `releaseStatus` 已由獨立 reviewer 改成 `approved`；任一項缺失就只能用 placeholder，不能進外部 Alpha／GA。
 
-### 5.4 Phase 3 — Opt-in cloud、公開 API 與 counter
+### 5.4 Phase 3：Opt-in cloud、公開 API 與 counter
 
 **目標：** 完成可刪除、可重送、無帳號的匿名 contribution vertical slice。
 
-**估算：** 10–15 工程日。
+**估算：** 10 至 15 工程日。
 
 **依賴：** Phase 0 contract v1、Phase 1 local revision model；`EXT-03` staging hosting／database credential。
 
@@ -307,7 +307,7 @@ closure、atomic source cleanup與projection dirty同批完成。Production仍�
 
 - Cloud bucket 固定為 UTC calendar day；local hourly buckets 只用於圖表、monster traits 與 mood，adapter 在 contribution preview 前先聚合成每日 rows，hour／timezone／session timestamps 永不上傳。
 - Opt-in enrollment 由 server 建立內部 identity 並一次回傳隨機 bearer secret；companion 只保存 secret，request body 不自報 contributor／enrollment ID。不得從 hardware、MAC、hostname、username 或 provider account 推導識別碼。
-- `IngestSnapshotV1` envelope 只允許 `schemaVersion`、`batchId`、`generatedAt`、collector kind／adapterVersion／sourceVersion，以及 1–30 個 buckets；每個 bucket 只允許 UTC `bucketStart`、coarse `provider`／`modelFamily`／`tool`、`valueQuality`、經 contract 限定的 `tokens` 與 monotonic `revision`。Wire 不帶 `bucketId`、client hash、hour、額外行為計數或任何 stable hardware ID。
+- `IngestSnapshotV1` envelope 只允許 `schemaVersion`、`batchId`、`generatedAt`、collector kind／adapterVersion／sourceVersion，以及 1 至 30 個 buckets；每個 bucket 只允許 UTC `bucketStart`、coarse `provider`／`modelFamily`／`tool`、`valueQuality`、經 contract 限定的 `tokens` 與 monotonic `revision`。Wire 不帶 `bucketId`、client hash、hour、額外行為計數或任何 stable hardware ID。
 - Server 從已驗證的 enrollment context 加上 `(day_utc, provider, model_family, tool)` 建立 canonical identity；enrollment identity 從 bearer authentication 推導，不由 request body 自報，也不另建跨安裝 user identity。
 - Server 對 normalize 後的安全 payload 自算 canonical hash，database unique key 為 `(authenticated_enrollment_id, day_utc, provider, model_family, tool)`：
   - 同 revision、server hash 相同：回傳成功但不變更；
@@ -363,13 +363,13 @@ closure、atomic source cleanup與projection dirty同批完成。Production仍�
 - Enrollment deletion、token revoke、current-window counter 扣除、anonymous-history 保持與 share deletion 全部通過 E2E。
 - API 在資料庫或 network 暫時故障時回傳可 retry 狀態；companion 保留 local queue，local 功能不受影響。
 
-### 5.5 Phase 4 — 安裝包、Staging 與 Private Alpha readiness
+### 5.5 Phase 4：安裝包、Staging 與 Private Alpha readiness
 
 **目標：** 把工程 build 變成外部測試者能安全安裝、更新、移除與回報的產品。
 
-**估算：** 8–12 工程日。
+**估算：** 8 至 12 工程日。
 
-**依賴：** Phase 1–3 vertical slices；`EXT-04` code-signing、`EXT-05` Alpha cohort consent。
+**依賴：** Phase 1 至 3 vertical slices；`EXT-04` code-signing、`EXT-05` Alpha cohort consent。
 
 #### 交付物
 
@@ -403,11 +403,11 @@ closure、atomic source cleanup與projection dirty同批完成。Production仍�
 - Alpha dashboard 只呈現經同意的研究 metric，不混入 prompts、paths、credentials 或細粒度 usage。
 - Go／No-Go checklist 由產品、工程、隱私／安全與資產權利 owner 簽核。
 
-### 5.6 Phase 5 — 30 人 Private Alpha 與 Kill Criteria
+### 5.6 Phase 5：30 人 Private Alpha 與 Kill Criteria
 
 **目標：** 驗證「workflow 能轉成可辨識角色」及「匿名分享有足夠意願」，同時證明 collector 與 cloud contract 在真實環境不漏資料、不重複。
 
-**估算：** 至少 7 日觀察窗，加 5–10 工程日處理回饋及最多一次主要規則迭代。
+**估算：** 至少 7 日觀察窗，加 5 至 10 工程日處理回饋及最多一次主要規則迭代。
 
 **依賴：** Phase 4 通過；`EXT-05` 招募至少 30 名重度 AI coding 使用者。
 
@@ -456,11 +456,11 @@ closure、atomic source cleanup與projection dirty同批完成。Production仍�
 - Trait version、contract version 與 cohort 結果已封存，可重跑分析。
 - 產品決策明確為「繼續」、「local-only pivot」或「停止」，不得以模糊平均分跳過 kill rule。
 
-### 5.7 Phase 6 — Public Beta 與 Release Candidate
+### 5.7 Phase 6：Public Beta 與 Release Candidate
 
 **目標：** 在不擴大核心 scope 的前提下完成規模、相容、可用性、法務及維運硬化。
 
-**估算：** 8–12 工程日。
+**估算：** 8 至 12 工程日。
 
 **依賴：** Phase 5 決策為繼續；所有 GA 外部依賴有明確完成證據。
 
@@ -494,11 +494,11 @@ closure、atomic source cleanup與projection dirty同批完成。Production仍�
 - GA dashboard、告警、on-call／incident contact 與 kill switch 均已實際觸發測試。
 - Release notes 清楚說明已支援與尚未支援的 collector tools／OS，不借用上游「全部支援」宣稱未測平台。
 
-### 5.8 GA — 分批正式上線與穩定化
+### 5.8 GA：分批正式上線與穩定化
 
 **目標：** 可撤回、可觀察地把通過 RC 的相同 artifact 推向正式使用者。
 
-**估算：** 3–5 工程日，另保留上線後密集觀察。
+**估算：** 3 至 5 工程日，另保留上線後密集觀察。
 
 **依賴：** Phase 6 RC 全部通過。
 
@@ -618,7 +618,7 @@ closure、atomic source cleanup與projection dirty同批完成。Production仍�
 以下保留為 migration provenance，不是目前實作指令；不得再替 Tokscale authority、
 collector fork 或 Electron-owned collection 新增產品功能。
 
-### Now — 建立安全的 local vertical slice
+### Now：建立安全的 local vertical slice
 
 1. Scaffold monorepo、strict TypeScript、workspace scripts 與 CI。
 2. 完成 contract v1、data inventory、threat model 與 privacy canary fixtures。
@@ -628,7 +628,7 @@ collector fork 或 Electron-owned collection 新增產品功能。
 6. 實作 OpenAI Responses local adapter、OS secret store、`store: false` assertion、mock E2E 與 fallback interaction。
 7. 啟動 `EXT-01` 資產權利／brand review 與 `EXT-04` signing credential；兩者可等待，但不能拖到 Alpha 打包才開始。
 
-### Next — 完成差異化、雲端閉環與 Alpha
+### Next：完成差異化、雲端閉環與 Alpha
 
 1. 實作 deterministic monster-engine、四個 archetypes 以上、explanation keys 與 scaling invariant tests。
 2. 只有 manifest `releaseStatus: "approved"` 時匯入 core-four WebP；否則以 placeholder 完成 character manifests、fallback lines、提醒與 local share card。
@@ -637,7 +637,7 @@ collector fork 或 Electron-owned collection 新增產品功能。
 5. 完成 installer、signing、update／rollback、staging、runbooks、SBOM、restore 與 privacy review。
 6. 執行 30 人／7 日 Alpha，依 metrics 與 kill criteria 做一次明確決策。
 
-### Later — RC、GA 與通過驗證後的擴充
+### Later：RC、GA 與通過驗證後的擴充
 
 1. 完成 Beta compatibility、a11y、load、abuse、legal、RC freeze 與分批 GA。
 2. 擴充 Local BYOK：在既有 OpenAI Responses MVP 之外加入 Anthropic、Gemini、xAI adapters、較完整的本機 multi-turn UX 與 per-provider policy；公開 API 永遠看不到 key。

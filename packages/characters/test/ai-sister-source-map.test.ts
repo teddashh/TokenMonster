@@ -62,7 +62,7 @@ interface AiSisterSourceMap {
   schemaVersion: number;
   auditedAt: string;
   source: {
-    repository: string;
+    provenance: string;
     commit: string;
     externalCandidateLibrary: {
       logicalRoot: string;

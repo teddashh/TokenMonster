@@ -12,9 +12,9 @@
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository", "commit"],
+      "required": ["provenance", "commit"],
       "properties": {
-        "repository": { "type": "string", "format": "uri" },
+        "provenance": { "type": "string", "minLength": 1 },
         "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
       }
     },

@@ -5,7 +5,7 @@
 > permanent target and cutover gates are defined by
 > [ADR 0005](adr/0005-permanent-tokentracker-sidecar-adapter.md).
 
-> 本表是 release evidence index，不是自動授權。**目前結論：STOP** — local
+> 本表是 release evidence index，不是自動授權。**目前結論：STOP**。local
 > companion contribution source slice、cloud mutation/deletion、`day-all-v1` k=20
 > compaction、ordered scheduled maintenance與Companion background sync均已有本機測試，
 > 但background packet capture／wake soak、signing/native smoke、Cloudflare account/D1/domain/secrets與remote rehearsal/staging

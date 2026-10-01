@@ -244,7 +244,7 @@ export function reminderStatusText(
     const quiet =
       status.quietHours.start === status.quietHours.end
         ? "安靜時段已停用"
-        : `安靜時段 ${status.quietHours.start}–${status.quietHours.end}`;
+        : `安靜時段 ${status.quietHours.start} 至 ${status.quietHours.end}`;
     return `每天 ${status.dailySummaryTime} 檢查本機摘要；${quiet}。`;
   })();
   const localizedBase = localizeUiText(base);

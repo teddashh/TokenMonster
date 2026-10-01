@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Seeds a demo progression store so character unlocks can be exercised on a
-// machine without real TokenTracker usage. Local QA only — writes the same
+// machine without real TokenTracker usage. Local QA only: writes the same
 // file the CLI maintains, and refuses to touch an existing store.
 //
 // Works from two places:

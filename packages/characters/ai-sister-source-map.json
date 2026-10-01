@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "auditedAt": "2026-07-23",
   "source": {
-    "repository": "https://github.com/teddashh/Multi-Ai-Chatapp.git",
+    "provenance": "Original character artwork by Ted Huang, the TokenMonster author, created for the AI-Sister project.",
     "commit": "77b317b95b6047f1de330d5d41e4edab38de3b44",
     "externalCandidateLibrary": {
       "logicalRoot": "VOICE_LAB_MVP_DIR/tachie",
