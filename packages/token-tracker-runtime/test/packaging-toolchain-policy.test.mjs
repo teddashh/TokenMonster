@@ -58,7 +58,7 @@ describe("packaging toolchain policy", () => {
   });
 
   it("keeps the stable replacement and strict publication gate explicit", () => {
-    expect(adr).toContain("`@electron/packager 18.4.4`");
+    expect(adr).toContain("`@electron/packager 20.3.0`");
     expect(adr).toContain("`@electron/windows-sign 1.2.2`");
     expect(adr).toContain("Forge-free closure");
     expect(adr).toContain("native-range lock produced 25");

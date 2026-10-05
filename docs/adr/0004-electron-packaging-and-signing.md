@@ -22,7 +22,7 @@ Packager and installer APIs; a framework-owned build lifecycle is unnecessary.
 ### Build and package layout
 
 - Keep Electron exactly at `43.7.7`, Vite at `8.1.4`, and the reviewed stable
-  direct packaging tools exact: `@electron/packager 18.4.4`,
+  direct packaging tools exact: `@electron/packager 20.3.0`,
   `@electron/fuses 1.8.0`, `@electron/osx-sign 1.3.3`,
   `@electron/windows-sign 1.2.2`, `cross-zip 4.0.1`,
   `electron-installer-dmg 5.0.1`, `electron-winstaller 5.4.4`, and verifier
@@ -247,6 +247,45 @@ download, and `checksums.json` lists the 43.7.7 archives.
 As the fuse policy requires, the raw wire was reviewed again: the 43.7.7
 binary still carries one version 1 wire of nine fuses with the same defaults,
 and the packaged internal app passed the artifact verifier's nine-state check.
+
+### 2026-10-05: @electron/packager 18.4.4 to 20.3.0
+
+`@electron/packager` moved from `18.4.4` to exact `20.3.0` so the unpatched
+`extract-zip` package leaves the tree. Packager 20.0.1 replaced it with
+`@electron-internal/extract-zip`. The same upgrade drops `@electron/get` 3
+and `got`, which also removes `http-cache-semantics` 4.2.0. The macOS DMG
+tools stay on their current pins, so `image-size` remains through
+`electron-installer-dmg` and `appdmg`.
+
+Node.js 24.15.0 already satisfies packager 19's requirement of Node.js
+>=22.12.0, and the packaging scripts were already ESM, so the engine pin
+stays.
+
+`extract-zip` also brought `@types/yauzl` 2.10.3 into the root tree. The
+release verifier `scripts/release/verify-installed-companion.mjs` imports the
+hoisted `yauzl` 2.10.0 under `@ts-check`, so the root devDependencies now pin
+`@types/yauzl` at that same `2.10.3`. `packages/characters` keeps its own
+exact `yauzl` 3.4.0 and `@types/yauzl` 3.4.0.
+
+Packager 19 and 20 breaking changes adapted here:
+
+- Hooks take one object and return a promise. `packageAfterCopyHook` follows
+  that shape. `HookFunctionErrorCallback` is gone.
+- `asar: true` now unpacks native `.node` files. The companion passes an empty
+  `asar` options object so the package stays one `app.asar` with no
+  `app.asar.unpacked`.
+- `derefSymlinks` now defaults to true. The companion sets it to false, which
+  was the packager 18 behavior.
+- `sanitizePackageJson` now strips development fields unless replaced. A
+  replacement that returns the copied manifest lets the afterCopy hook rewrite
+  only the release version, which the artifact verifier checks.
+- `asarIntegrityDigest` defaults to true on a macOS host and rewrites the
+  Electron Framework. The companion sets it to false so that binary stays as
+  Electron ships it until the existing fuse and `osx-sign` steps.
+- The `download` option type changed with `@electron/get` 5 (built-in fetch
+  instead of `got`). This repository does not pass `download`.
+- Published `TargetArch` and `TargetPlatform` types were removed. Call sites
+  now use `OfficialArch` and `OfficialPlatform`.
 
 ## References
 
