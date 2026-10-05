@@ -185,7 +185,7 @@ Not yet:
 - A live Windows update feed
 - The public opt-in contribution counter (service implemented, not deployed)
 
-On main (`d357cf7`), every CI job passes except Verify, which stops only at the complete dependency audit step. That audit still reports 5 high findings, all in packaging tools: `extract-zip` through `@electron/packager` 18, and `image-size` through `electron-installer-dmg` and `appdmg`. Clearing them needs a major upgrade of `@electron/packager` and an override or replacement for the DMG tooling, because the latest `appdmg` still depends on a vulnerable `image-size` range. The audit of shipped dependencies (`npm audit --omit=dev`) passes.
+On main, Verify still stops at the complete dependency audit. That audit reports 5 high findings, all in packaging tools: `extract-zip` through `@electron/packager` 18, and `image-size` through `electron-installer-dmg` and `appdmg`. Clearing them needs a major upgrade of `@electron/packager` and an override or replacement for the DMG tooling, because the latest `appdmg` still depends on a vulnerable `image-size` range. The audit of shipped dependencies (`npm audit --omit=dev`) passes. The Windows sidecar test step also fails. Several unit tests require Unix mode 0600 for a private file and 0700 for its directory, and Node on Windows reports those files as 0666 and those directories as 0777. Those checks stay strict: treating 0666 as private would accept every writable Windows file, including one written as 0644.
 
 ## Documentation
 

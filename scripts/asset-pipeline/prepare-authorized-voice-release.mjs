@@ -10,7 +10,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { buildCharactersPackage } from "./build-characters-package.mjs";
@@ -184,8 +184,12 @@ function assertExactSet(label, expected, actual) {
   }
 }
 
-function isInside(parent, candidate) {
-  return candidate.startsWith(`${parent}/`);
+function isInside(root, candidate) {
+  const path = relative(root, candidate);
+  return (
+    path === "" ||
+    (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path))
+  );
 }
 
 async function readJsonFile(path, label) {
@@ -226,8 +230,11 @@ async function verifyRegularFileInside(root, path, label) {
   if (stats.isSymbolicLink() || !stats.isFile()) {
     throw new Error(`${label} must be a regular, non-symlink file`);
   }
-  const resolved = await realpath(path);
-  if (!isInside(root, resolved)) {
+  const [resolvedRoot, resolved] = await Promise.all([
+    realpath(root),
+    realpath(path),
+  ]);
+  if (!isInside(resolvedRoot, resolved)) {
     throw new Error(`${label} escaped its declared directory`);
   }
   return { path: resolved, stats };

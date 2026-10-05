@@ -462,9 +462,12 @@ const EMPTY_CHARACTER_OPTIONS = Object.freeze({
     characters: [],
     voice: [],
   },
-  cacheDirectory: "/tmp/tokenmonster-gateway-unused-assets",
+  cacheDirectory: join(tmpdir(), "tokenmonster-gateway-unused-assets"),
   cdnBaseUrl: null,
-  progressionStorePath: "/tmp/tokenmonster-gateway-unused-progression.json",
+  progressionStorePath: join(
+    tmpdir(),
+    "tokenmonster-gateway-unused-progression.json",
+  ),
 });
 
 const READY_COLLECTOR_STATUS: CompanionCollectorStatus = Object.freeze({
