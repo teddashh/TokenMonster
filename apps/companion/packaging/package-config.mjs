@@ -45,10 +45,9 @@ import { markSquirrelAwareExecutable } from "./squirrel-awareness.mjs";
 import { requireReviewedSquirrelReleaseMode } from "./squirrel-updater.mjs";
 
 /** @typedef {import("node:crypto").BinaryLike} BinaryLike */
-/** @typedef {import("@electron/packager").HookFunctionErrorCallback} HookFunctionErrorCallback */
 /** @typedef {import("@electron/packager").Options} PackagerOptions */
-/** @typedef {import("@electron/packager").TargetArch} TargetArch */
-/** @typedef {import("@electron/packager").TargetPlatform} TargetPlatform */
+/** @typedef {import("@electron/packager").OfficialArch | string} TargetArch */
+/** @typedef {import("@electron/packager").OfficialPlatform | string} TargetPlatform */
 /** @typedef {import("electron-winstaller").SquirrelWindowsOptions} SquirrelWindowsOptions */
 /** @typedef {import("./release-policy.mjs").WindowsSignOptions} ReleaseWindowsSignOptions */
 /**
@@ -1018,26 +1017,27 @@ export async function preparePackagedApplication(
   await writeReleasePackageJson(resourcesAppPath);
 }
 
-export function packageAfterCopyHook(
-  /** @type {string} */
-  resourcesAppPath,
-  /** @type {string} */
-  electronVersion,
-  /** @type {TargetPlatform} */
-  platform,
-  /** @type {TargetArch} */
-  arch,
-  /** @type {HookFunctionErrorCallback} */
-  done,
-) {
-  preparePackagedApplication(
-    resourcesAppPath,
-    electronVersion,
-    platform,
-    arch,
-  ).then(
-    () => done(),
-    (error) => done(error),
+/**
+ * Packager 20 strips development fields from the copied package.json unless
+ * this list replaces that default. The artifact verifier still requires the
+ * copied manifest with only the release version rewritten.
+ * @param {Record<string, unknown>} packageJson
+ * @returns {Record<string, unknown>}
+ */
+function preserveCopiedPackageJson(packageJson) {
+  return packageJson;
+}
+
+/**
+ * Packager 19 calls each hook with one object and expects a promise.
+ * @param {import("@electron/packager").HookFunctionArgs} hookArguments
+ */
+export async function packageAfterCopyHook(hookArguments) {
+  await preparePackagedApplication(
+    hookArguments.buildPath,
+    hookArguments.electronVersion,
+    hookArguments.platform,
+    hookArguments.arch,
   );
 }
 
@@ -1111,7 +1111,15 @@ export const packagerConfig = Object.freeze({
   appBundleId: APP_BUNDLE_ID,
   appCategoryType: "public.app-category.utilities",
   appVersion: RELEASE_VERSION,
-  asar: true,
+  // Packager 20 embeds an asar integrity digest into the macOS Electron
+  // Framework and ad-hoc re-signs it. Leave that binary as Electron ships
+  // it; the internal macOS path signs after the fuse flip.
+  asarIntegrityDigest: false,
+  // `asar: true` in packager 19 unpacks native .node files into
+  // app.asar.unpacked. An empty options object keeps a single app.asar.
+  asar: {},
+  // Packager 19 changed this default from false to true.
+  derefSymlinks: false,
   executableName: "TokenMonster",
   ignore: ignoreOutsideRuntime,
   // The Squirrel package id derives from this name; the user-facing
@@ -1120,6 +1128,7 @@ export const packagerConfig = Object.freeze({
   name: "TokenMonster",
   overwrite: true,
   prune: false,
+  sanitizePackageJson: [preserveCopiedPackageJson],
   win32metadata: Object.freeze({
     CompanyName: APP_AUTHOR,
     ProductName: "Token Monster (AI-Sister)",

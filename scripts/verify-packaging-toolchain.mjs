@@ -24,7 +24,7 @@ const expectedCompanionToolchainPins = Object.freeze({
   "@electron/asar": "4.2.0",
   "@electron/fuses": "1.8.0",
   "@electron/osx-sign": "1.3.3",
-  "@electron/packager": "18.4.4",
+  "@electron/packager": "20.3.0",
   "@electron/windows-sign": "1.2.2",
   "cross-zip": "4.0.1",
   "electron-installer-dmg": "5.0.1",

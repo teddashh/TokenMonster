@@ -25,8 +25,10 @@ import {
 
 /** @typedef {"make" | "package"} PackagingCommand */
 /** @typedef {import("@electron/packager").Options} PackagerOptions */
-/** @typedef {import("@electron/packager").TargetArch} TargetArch */
-/** @typedef {import("@electron/packager").TargetPlatform} TargetPlatform */
+/** @typedef {import("@electron/packager").OfficialArch} OfficialArch */
+/** @typedef {import("@electron/packager").OfficialPlatform} OfficialPlatform */
+/** @typedef {OfficialArch | string} TargetArch */
+/** @typedef {OfficialPlatform | string} TargetPlatform */
 /** @typedef {import("electron-winstaller").SquirrelWindowsOptions} SquirrelWindowsOptions */
 /** @typedef {typeof packagingConfiguration} PackagingConfiguration */
 
@@ -46,6 +48,42 @@ function requireCommand(command) {
     throw new Error("Usage: package-runner.mjs make|package");
   }
   return command;
+}
+
+/**
+ * Packager 19 narrowed arch to the official Electron set.
+ * @param {string} arch
+ * @returns {OfficialArch}
+ */
+function requireOfficialArch(arch) {
+  if (
+    arch !== "ia32" &&
+    arch !== "x64" &&
+    arch !== "armv7l" &&
+    arch !== "arm64" &&
+    arch !== "mips64el" &&
+    arch !== "universal"
+  ) {
+    throw new Error(`Unsupported Electron packager architecture: ${arch}.`);
+  }
+  return arch;
+}
+
+/**
+ * Packager 19 narrowed platform to the official Electron set.
+ * @param {string} platform
+ * @returns {OfficialPlatform}
+ */
+function requireOfficialPlatform(platform) {
+  if (
+    platform !== "linux" &&
+    platform !== "win32" &&
+    platform !== "darwin" &&
+    platform !== "mas"
+  ) {
+    throw new Error(`Unsupported Electron packager platform: ${platform}.`);
+  }
+  return platform;
 }
 
 export function expectedPackagePath(
@@ -224,11 +262,11 @@ export async function runCompanionPackaging(
   const packagePaths = await packager(
     /** @type {PackagerOptions} */ ({
       ...configuration.packagerConfig,
-      arch,
+      arch: requireOfficialArch(arch),
       dir: companionDirectory,
       electronVersion: configuration.electronVersion,
       out: outDirectory,
-      platform,
+      platform: requireOfficialPlatform(platform),
     }),
   );
   const expected = expectedPackagePath(platform, arch, configuration);

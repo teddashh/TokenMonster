@@ -185,7 +185,7 @@ Not yet:
 - A live Windows update feed
 - The public opt-in contribution counter (service implemented, not deployed)
 
-On main (`d357cf7`), every CI job passes except Verify, which stops only at the complete dependency audit step. That audit still reports 5 high findings, all in packaging tools: `extract-zip` through `@electron/packager` 18, and `image-size` through `electron-installer-dmg` and `appdmg`. Clearing them needs a major upgrade of `@electron/packager` and an override or replacement for the DMG tooling, because the latest `appdmg` still depends on a vulnerable `image-size` range. The audit of shipped dependencies (`npm audit --omit=dev`) passes.
+Every CI job passes except Verify, which stops only at the complete dependency audit step. Measured on 2026-10-05, that audit reports 3 high findings: `image-size`, `appdmg`, and `electron-installer-dmg`. All three are the `image-size` advisory reached through the macOS DMG tools. `@electron/packager` is pinned at exact `20.3.0`, so the public `extract-zip` package is gone, and `http-cache-semantics` 4.2.0 left with packager 18's `got`. The DMG tools stay on their current pins. The audit of shipped dependencies (`npm audit --omit=dev`) reports no findings.
 
 ## Documentation
 

@@ -184,7 +184,7 @@ npm test
 - 上線 Windows 自動更新來源
 - 公開的匿名貢獻計數器（服務端已實作，尚未部署）
 
-main（`d357cf7`）的 CI 除了 Verify 以外全部通過，而 Verify 只卡在完整相依套件稽核這一步。這項稽核仍回報 5 個 high，全部在打包工具裡：`extract-zip` 來自 `@electron/packager` 18，`image-size` 來自 `electron-installer-dmg` 與 `appdmg`。要清掉它們，得把 `@electron/packager` 升級一個主版本，DMG 工具則要用 override 或換掉，因為最新版的 `appdmg` 仍依賴有漏洞的 `image-size` 版本範圍。出貨相依套件的稽核（`npm audit --omit=dev`）則通過。
+CI 除了 Verify 以外全部通過，而 Verify 只卡在完整相依套件稽核這一步。2026-10-05 實測，這項稽核回報 3 個 high：`image-size`、`appdmg` 與 `electron-installer-dmg`。這三筆都是 `image-size` 的同一則漏洞，經由 macOS 的 DMG 工具進來。`@electron/packager` 精確鎖定在 `20.3.0`，公開的 `extract-zip` 已經不在相依套件裡，packager 18 透過 `got` 帶進來的 `http-cache-semantics` 4.2.0 也跟著不在了。DMG 工具維持目前的版本。出貨相依套件的稽核（`npm audit --omit=dev`）沒有發現。
 
 ## 文件
 
