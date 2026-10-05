@@ -13,6 +13,8 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { expectUnixMode } from "../../../scripts/expect-unix-mode.js";
+
 import {
   UiLocalePreferenceError,
   loadUiLocalePreference,
@@ -85,9 +87,7 @@ describe("UI locale preference store", () => {
     expect(await readFile(path, "utf8")).toBe(
       '{"schemaVersion":1,"revision":1,"locale":"en"}\n',
     );
-    if (process.platform !== "win32") {
-      expect((await stat(path)).mode & 0o777).toBe(0o600);
-    }
+    expectUnixMode((await stat(path)).mode, 0o600);
   });
 
   it("preserves noncanonical or corrupt bytes and fails closed", async () => {

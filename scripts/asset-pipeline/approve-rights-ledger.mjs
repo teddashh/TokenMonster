@@ -269,7 +269,15 @@ async function readPrivateGrantReceipt(path) {
   if (stats.isSymbolicLink() || !stats.isFile()) {
     throw new Error("--grant-receipt must be a regular, non-symlink file");
   }
-  if ((stats.mode & 0o777) !== 0o600 || stats.nlink !== 1) {
+  if (stats.nlink !== 1) {
+    throw new Error(
+      "--grant-receipt must be owner-private mode 0600 with one link",
+    );
+  }
+  // Windows has no POSIX modes. Node reports 0666 for a 0600 file and 0777
+  // for a directory, so these checks would reject every receipt. The receipt
+  // must stay in a folder that is private to the user.
+  if (process.platform !== "win32" && (stats.mode & 0o777) !== 0o600) {
     throw new Error(
       "--grant-receipt must be owner-private mode 0600 with one link",
     );
@@ -281,7 +289,7 @@ async function readPrivateGrantReceipt(path) {
   if (
     parentStats.isSymbolicLink() ||
     !parentStats.isDirectory() ||
-    (parentStats.mode & 0o077) !== 0
+    (process.platform !== "win32" && (parentStats.mode & 0o077) !== 0)
   ) {
     throw new Error(
       "--grant-receipt parent must be a private non-symlink directory",

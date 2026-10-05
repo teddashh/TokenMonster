@@ -35,6 +35,8 @@ import {
 } from "@tokenmonster/characters";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { expectUnixMode } from "../../../scripts/expect-unix-mode.js";
+
 import {
   parseCharacterAssetPackStatus,
   parseCharacterInteractionResponse,
@@ -3006,7 +3008,7 @@ describe("companion gateway", () => {
     const fresh = await characterProfileRequest(address, cookie);
     expect(fresh.status).toBe(200);
     await expect(fresh.json()).resolves.toMatchObject({ freshness: "fresh" });
-    expect((await stat(profilePath)).mode & 0o777).toBe(0o600);
+    expectUnixMode((await stat(profilePath)).mode, 0o600);
     const stored = JSON.parse(await readFile(profilePath, "utf8")) as object;
     expect(Object.keys(stored)).toEqual([
       "schemaVersion",
@@ -4216,7 +4218,7 @@ describe("companion gateway", () => {
     expect(serialized).not.toContain("lineId");
     expect(serialized).not.toContain("text");
     expect(serialized).not.toContain("source");
-    expect((await stat(interactionStorePath)).mode & 0o777).toBe(0o600);
+    expectUnixMode((await stat(interactionStorePath)).mode, 0o600);
 
     expect(adapter.getDaily).not.toHaveBeenCalled();
     expect(adapter.getProviderTotals).not.toHaveBeenCalled();
@@ -4802,7 +4804,7 @@ describe("companion gateway", () => {
       dailyCount: 1,
       nextSeed: 1,
     });
-    expect((await stat(interactionStorePath)).mode & 0o777).toBe(0o600);
+    expectUnixMode((await stat(interactionStorePath)).mode, 0o600);
   });
 
   it("backfills progression once and persists unlocked selection and wardrobe", async () => {

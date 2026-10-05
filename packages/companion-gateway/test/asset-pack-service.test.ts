@@ -20,6 +20,8 @@ import {
 import { recoverFixedAssetPackCache } from "@tokenmonster/characters/asset-pack";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { expectUnixMode } from "../../../scripts/expect-unix-mode.js";
+
 import {
   ASSET_PACK_CONSENT_FILE,
   createAssetPackService,
@@ -302,9 +304,10 @@ describe("player-controlled fixed asset pack service", () => {
       releaseId: "glm-2026.07.18",
       consented: false,
     });
-    expect(
-      (await stat(join(local.directory, ASSET_PACK_CONSENT_FILE))).mode & 0o777,
-    ).toBe(0o600);
+    expectUnixMode(
+      (await stat(join(local.directory, ASSET_PACK_CONSENT_FILE))).mode,
+      0o600,
+    );
   });
 
   it("verifies a consented cache at startup but never retries the network", async () => {

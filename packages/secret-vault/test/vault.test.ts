@@ -14,6 +14,7 @@ import { dirname, join, sep } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { expectUnixMode } from "../../../scripts/expect-unix-mode.js";
 import {
   SecretVaultError,
   createEncryptedSecretSlot,
@@ -202,8 +203,8 @@ describe("OS-backed encrypted secret slot", () => {
         `cipher:${[...SECRET_CANARY].reverse().join("")}`
       ).toString("base64")
     });
-    expect((await lstat(filePath)).mode & 0o777).toBe(0o600);
-    expect((await lstat(join(filePath, ".."))).mode & 0o777).toBe(0o700);
+    expectUnixMode((await lstat(filePath)).mode, 0o600);
+    expectUnixMode((await lstat(join(filePath, ".."))).mode, 0o700);
   });
 
   it("reopens a persisted value without exposing it in status", async () => {
@@ -1008,8 +1009,8 @@ describe("corruption and leakage resistance", () => {
     await chmod(filePath, 0o666);
     await chmod(join(filePath, ".."), 0o777);
     await slot.set("second-secret");
-    expect((await lstat(filePath)).mode & 0o777).toBe(0o600);
-    expect((await lstat(join(filePath, ".."))).mode & 0o777).toBe(0o700);
+    expectUnixMode((await lstat(filePath)).mode, 0o600);
+    expectUnixMode((await lstat(join(filePath, ".."))).mode, 0o700);
   });
 
   it("does not commit an encrypted replacement after its signal aborts", async () => {
