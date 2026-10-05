@@ -152,7 +152,16 @@ async function abortOnFirstDirectorySync(
     .spyOn(prototype, "sync")
     .mockImplementation(async function (this: FileHandle): Promise<void> {
       const isDirectory = fstatSync(this.fd).isDirectory();
-      await Reflect.apply(originalSync, this, []);
+      try {
+        await Reflect.apply(originalSync, this, []);
+      } catch (error: unknown) {
+        const code = (error as NodeJS.ErrnoException).code;
+        const windowsDirectorySyncUnsupported =
+          isDirectory &&
+          process.platform === "win32" &&
+          (code === "EISDIR" || code === "EPERM");
+        if (!windowsDirectorySyncUnsupported) throw error;
+      }
       if (isDirectory) {
         directorySyncCount += 1;
         if (directorySyncCount === 1) controller.abort();

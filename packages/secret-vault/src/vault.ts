@@ -291,8 +291,10 @@ function directorySyncUnsupported(
   ) {
     return true;
   }
+  // A Windows host cannot fsync a directory. EISDIR and EPERM are that
+  // case even when the slot is exercising another keychain policy.
   return (
-    platform === "win32" &&
+    (platform === "win32" || process.platform === "win32") &&
     (code === "EISDIR" || code === "EPERM")
   );
 }

@@ -578,8 +578,8 @@
         "zh": "選用的匿名貢獻計數器已經寫在程式裡，但服務端還沒部署"
       },
       {
-        "en": "CI passes except the complete dependency audit, which reports 3 high findings, all from image-size through electron-installer-dmg and appdmg; @electron/packager 20.3.0 removed public extract-zip, and the shipped-dependency audit passes",
-        "zh": "CI 只剩完整相依套件稽核沒過：3 個 high 都來自 image-size（經由 electron-installer-dmg 與 appdmg）。@electron/packager 20.3.0 已不再帶入公開的 extract-zip；出貨相依套件的稽核則通過"
+        "en": "CI fails in two places. The complete dependency audit reports 3 high findings, all from image-size through electron-installer-dmg and appdmg; @electron/packager 20.3.0 removed public extract-zip, and the shipped-dependency audit passes. The Windows sidecar tests also fail Unix mode 0600 and 0700 checks, because Node on Windows reports those paths as 0666 and 0777. Those checks stay strict.",
+        "zh": "CI 有兩處失敗。完整相依套件稽核回報 3 個 high，都來自 image-size（經由 electron-installer-dmg 與 appdmg）。@electron/packager 20.3.0 已不再帶入公開的 extract-zip；出貨相依套件的稽核則通過。Windows sidecar 測試也會因為 Unix 模式 0600 與 0700 失敗：Node 在 Windows 上把這些路徑回報成 0666 與 0777。這些檢查維持嚴格。"
       }
     ]
   },

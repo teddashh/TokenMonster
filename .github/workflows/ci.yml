@@ -166,8 +166,12 @@ jobs:
         run: npm ci
 
       # Build dependency-first so workspace package exports exist in a fresh checkout.
+      # pwsh on every OS: the Windows default shell only fails the step on the last native command.
       - name: Build sidecar path
+        shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           npm run build --workspace @tokenmonster/byok-openai
           npm run build --workspace @tokenmonster/contracts
           npm run build --workspace @tokenmonster/secret-vault
@@ -182,7 +186,10 @@ jobs:
           npm run build --workspace tokenmonster
 
       - name: Type-check sidecar path
+        shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           npm run typecheck --workspace @tokenmonster/byok-openai
           npm run typecheck --workspace @tokenmonster/contracts
           npm run typecheck --workspace @tokenmonster/secret-vault
@@ -197,7 +204,10 @@ jobs:
           npm run typecheck --workspace tokenmonster
 
       - name: Test sidecar path without collection
+        shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
           npm test --workspace @tokenmonster/byok-openai
           npm test --workspace @tokenmonster/contracts
           npm test --workspace @tokenmonster/secret-vault

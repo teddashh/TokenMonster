@@ -184,7 +184,7 @@ npm test
 - 上線 Windows 自動更新來源
 - 公開的匿名貢獻計數器（服務端已實作，尚未部署）
 
-CI 除了 Verify 以外全部通過，而 Verify 只卡在完整相依套件稽核這一步。2026-10-05 實測，這項稽核回報 3 個 high：`image-size`、`appdmg` 與 `electron-installer-dmg`。這三筆都是 `image-size` 的同一則漏洞，經由 macOS 的 DMG 工具進來。`@electron/packager` 精確鎖定在 `20.3.0`，公開的 `extract-zip` 已經不在相依套件裡，packager 18 透過 `got` 帶進來的 `http-cache-semantics` 4.2.0 也跟著不在了。DMG 工具維持目前的版本。出貨相依套件的稽核（`npm audit --omit=dev`）沒有發現。
+Verify 停在完整相依套件稽核。2026-10-05 實測，這項稽核回報 3 個 high：`image-size`、`appdmg` 與 `electron-installer-dmg`。這三筆都是 `image-size` 的同一則漏洞，經由 macOS 的 DMG 工具進來。`@electron/packager` 精確鎖定在 `20.3.0`，公開的 `extract-zip` 已經不在相依套件裡，packager 18 透過 `got` 帶進來的 `http-cache-semantics` 4.2.0 也跟著不在了。DMG 工具維持目前的版本。出貨相依套件的稽核（`npm audit --omit=dev`）沒有發現。Windows 的 sidecar 測試步驟也會失敗。有些單元測試要求私密檔案是 Unix 模式 0600、目錄是 0700，但 Node 在 Windows 上會把這些檔案回報成 0666、目錄回報成 0777。這些檢查維持嚴格：若把 0666 當成私密，就等於接受每一個可寫的 Windows 檔案，包含以 0644 寫出的檔案。
 
 ## 文件
 
