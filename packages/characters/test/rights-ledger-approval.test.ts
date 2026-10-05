@@ -13,6 +13,8 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { expectUnixMode } from "../../../scripts/expect-unix-mode.js";
+
 import {
   AssetBuildProvenanceV1Schema,
   AssetRightsLedgerV2Schema,
@@ -339,7 +341,7 @@ describe("controlled image rights-ledger approval", () => {
       expect(firstBytes.toString("utf8")).not.toContain(
         "bilingualAltTextPolicy",
       );
-      expect((await lstat(firstOut)).mode & 0o777).toBe(0o600);
+      expectUnixMode((await lstat(firstOut)).mode, 0o600);
       expect(await readFile(inputs.pendingLedger)).toEqual(pendingBefore);
 
       const secondOut = join(root, "approved-rights-ledger-v2-b.json");
@@ -440,9 +442,15 @@ describe("controlled image rights-ledger approval", () => {
         grantReceipt: publicReceipt,
         out: publicOut,
       });
-      expect(publicResult.status).not.toBe(0);
-      expect(publicResult.stderr).toContain("owner-private mode 0600");
-      await expectMissing(publicOut);
+      // Node on Windows reports 0666 for both 0600 and 0644, so this rejection
+      // can be observed only where POSIX modes exist.
+      if (process.platform !== "win32") {
+        expect(publicResult.status).not.toBe(0);
+        expect(publicResult.stderr).toContain("owner-private mode 0600");
+        await expectMissing(publicOut);
+      } else {
+        expect(publicResult.status, publicResult.stderr).toBe(0);
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }

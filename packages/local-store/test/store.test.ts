@@ -12,6 +12,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { expectUnixMode } from "../../../scripts/expect-unix-mode.js";
 import {
   COMPLETE_SCAN_CLIENTS,
   LocalStoreError,
@@ -76,7 +77,7 @@ describe("opening, migrations, and lifecycle", () => {
       configConfigured: false,
       collectorAuthority: { configured: false },
     });
-    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expectUnixMode(statSync(path).mode, 0o600);
 
     store.close();
     const database = new DatabaseSync(path, { readBigInts: true });
@@ -126,7 +127,7 @@ describe("opening, migrations, and lifecycle", () => {
     );
     expect(backups).toHaveLength(1);
     const backupPath = join(directory, backups[0] ?? "missing");
-    expect(statSync(backupPath).mode & 0o777).toBe(0o600);
+    expectUnixMode(statSync(backupPath).mode, 0o600);
     const backupDatabase = new DatabaseSync(backupPath, { readBigInts: true });
     expect(backupDatabase.prepare("PRAGMA user_version").get()).toEqual({
       user_version: 1n,

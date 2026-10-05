@@ -15,6 +15,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { expectUnixMode } from "../../../scripts/expect-unix-mode.js";
+
 import {
   AssetBuildProvenanceV1Schema,
   AssetSourceEvidenceBundleV1Schema,
@@ -262,9 +264,10 @@ describe("controlled source evidence preparation", () => {
           /(?:prompt|instruction|https?:\/\/|file:\/\/|\/home\/|[A-Z]:\\)/iu,
         );
         expect(evidenceBytes.toString("utf8")).not.toContain(fixture.root);
-        expect((await stat(out)).mode & 0o777).toBe(0o600);
-        expect((await stat(receiptRoot)).mode & 0o777).toBe(0o700);
-        expect((await stat(join(receiptRoot, "receipts"))).mode & 0o777).toBe(
+        expectUnixMode((await stat(out)).mode, 0o600);
+        expectUnixMode((await stat(receiptRoot)).mode, 0o700);
+        expectUnixMode(
+          (await stat(join(receiptRoot, "receipts"))).mode,
           0o700,
         );
 
@@ -275,7 +278,7 @@ describe("controlled source evidence preparation", () => {
             ...step.receipt.path.split("/"),
           );
           const receiptBytes = await readFile(receiptPath);
-          expect((await stat(receiptPath)).mode & 0o777).toBe(0o600);
+          expectUnixMode((await stat(receiptPath)).mode, 0o600);
           expect(sha256(receiptBytes)).toBe(step.receipt.sha256);
           expect(
             JSON.parse(receiptBytes.toString("utf8")) as unknown,

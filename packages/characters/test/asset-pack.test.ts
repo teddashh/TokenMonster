@@ -15,6 +15,8 @@ import { basename, join } from "node:path";
 import { Readable } from "node:stream";
 
 import { afterEach, describe, expect, it } from "vitest";
+
+import { expectUnixMode } from "../../../scripts/expect-unix-mode.js";
 import { ZipFile as YazlZipFile } from "yazl";
 
 import {
@@ -465,9 +467,9 @@ describe("privacy-safe fixed asset pack", () => {
       const expected = bytesByPath.get(entryPath)!;
       const cachePath = join(cacheDirectory, basename(entryPath));
       expect(await readFile(cachePath)).toEqual(expected);
-      expect((await lstat(cachePath)).mode & 0o777).toBe(0o600);
+      expectUnixMode((await lstat(cachePath)).mode, 0o600);
     }
-    expect((await lstat(cacheDirectory)).mode & 0o777).toBe(0o700);
+    expectUnixMode((await lstat(cacheDirectory)).mode, 0o700);
     expect(await stagingResidue(cacheDirectory)).toEqual([]);
   });
 
@@ -1546,7 +1548,7 @@ describe("privacy-safe fixed asset pack", () => {
       fetch: async (url) => responseFor(url, archive),
     });
     expect(await readFile(cachePath)).toEqual(object.bytes);
-    expect((await lstat(cachePath)).mode & 0o777).toBe(0o600);
+    expectUnixMode((await lstat(cachePath)).mode, 0o600);
     expect(await stagingResidue(cacheDirectory)).toEqual([]);
   });
 });

@@ -23,7 +23,9 @@ validation and idempotent clear contract without disk I/O.
 
 Encrypted documents are strict, bounded JSON containing only a schema version
 and base64 ciphertext. Writes use a `0600` temporary file, fsync, atomic rename,
-and a `0700` containing directory. The parent directory is fsynced after rename
+and a `0700` containing directory. Windows has no POSIX modes, so those bits
+are not applied there and the caller's directory permissions are the
+protection. The parent directory is fsynced after rename
 and deletion where the host supports directory fsync. A real directory-fsync
 failure restores the prior bounded ciphertext before reporting failure.
 `EINVAL`, `ENOTSUP`/`EOPNOTSUPP`, and `ENOSYS` are treated as an unavailable
