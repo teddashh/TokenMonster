@@ -683,15 +683,15 @@
   "flows": [
     {
       "id": "usage-path",
-      "after": "architecture",
       "heading": {
-        "en": "How usage reaches the dashboard",
-        "zh": "用量怎麼到儀表板"
+        "en": "The page never reads logs",
+        "zh": "頁面不直接讀紀錄"
       },
       "intro": {
-        "en": "The dashboard never reads CLI logs itself. It asks the gateway, and only the gateway asks the pinned sidecar.",
-        "zh": "儀表板不直接讀 CLI 紀錄。它只問 gateway，也只有 gateway 會問鎖定版本的 sidecar。"
+        "en": "The dashboard asks the gateway. Only the gateway talks to the pinned sidecar.",
+        "zh": "儀表板只問 gateway。問 sidecar 的，也只有 gateway。"
       },
+      "after": "architecture",
       "spec": {
         "columns": [
           [
@@ -707,10 +707,7 @@
             3
           ]
         ],
-        "core": 2,
-        "sinks": [
-          4
-        ]
+        "core": 2
       },
       "steps": [
         {
@@ -719,8 +716,8 @@
             "zh": "CLI 紀錄"
           },
           "note": {
-            "en": "Claude Code, Codex, Gemini CLI, and Grok Build already keep usage on this machine.",
-            "zh": "Claude Code、Codex、Gemini CLI 與 Grok Build 本來就把用量留在這台電腦上。"
+            "en": "Claude Code, Codex, Gemini CLI, and Grok Build already keep usage on this computer.",
+            "zh": "Claude Code、Codex、Gemini CLI 和 Grok Build，用量本來就在這台電腦上。"
           },
           "tone": "neutral",
           "icon": "doc"
@@ -728,11 +725,11 @@
         {
           "title": {
             "en": "Sidecar",
-            "zh": "用量側車"
+            "zh": "sidecar"
           },
           "note": {
-            "en": "TokenTracker 0.80.0 is spawned on loopback with network calls blocked and telemetry off.",
-            "zh": "TokenTracker 0.80.0 在本機回環上啟動，網路呼叫被擋住，遙測也關閉。"
+            "en": "TokenTracker 0.80.0 listens on loopback, with outbound calls blocked and telemetry off.",
+            "zh": "TokenTracker 0.80.0 只聽本機，對外連線被擋下，遙測也關掉。"
           },
           "tone": "info",
           "icon": "terminal"
@@ -740,11 +737,11 @@
         {
           "title": {
             "en": "Gateway",
-            "zh": "閘道"
+            "zh": "gateway"
           },
           "note": {
-            "en": "A missing or zero day is unavailable, and an observed day must reconcile with its model breakdown.",
-            "zh": "缺資料或總量為 0 的日子標成無法取得，有用量的日子必須和模型明細對得上。"
+            "en": "A missing day, or a day whose total is 0, is unavailable. Any other day has to match its model breakdown.",
+            "zh": "少了某一天，或那天總量是 0，就當成沒有資料。其他日子要對得上模型明細。"
           },
           "tone": "accent",
           "icon": "hub"
@@ -755,55 +752,43 @@
             "zh": "儀表板"
           },
           "note": {
-            "en": "The browser tab or the desktop window opens through a one-shot local link.",
-            "zh": "瀏覽器分頁或桌面視窗，都透過一次性的本機連結打開。"
+            "en": "The browser tab or the desktop window opens from a one-shot local link.",
+            "zh": "瀏覽器分頁或桌面視窗，都從一次性的本機連結打開。"
           },
           "tone": "neutral",
           "icon": "window"
-        },
-        {
-          "title": {
-            "en": "Aggregates",
-            "zh": "彙總數字"
-          },
-          "note": {
-            "en": "Raw usage JSON is parsed in memory and dropped, and only aggregates are kept.",
-            "zh": "原始用量 JSON 只在記憶體裡解析，用完就丟，只留彙總數字。"
-          },
-          "tone": "neutral",
-          "icon": "database"
         }
       ],
       "ticks": [
         {
           "en": "sidecar stays on loopback",
-          "zh": "側車只留在本機"
+          "zh": "sidecar 只聽本機"
         },
         {
-          "en": "totals must reconcile",
-          "zh": "總量必須對得上"
+          "en": "a zero day stays blank",
+          "zh": "總量是 0 就不顯示"
         },
         {
-          "en": "raw usage is dropped",
-          "zh": "原始用量會丟掉"
+          "en": "the page asks only the gateway",
+          "zh": "頁面只問 gateway"
         }
       ],
       "caption": {
-        "en": "CLI usage stays on the machine. The pinned TokenTracker 0.80.0 sidecar reads it with outbound calls blocked and TOKENTRACKER_NO_TELEMETRY set. The gateway accepts an observed UTC day only when the daily total reconciles with the model breakdown. A missing row, or a row whose total is 0, is marked unavailable. Raw JSON is not stored.",
-        "zh": "CLI 的用量留在這台電腦上。鎖定的 TokenTracker 0.80.0 sidecar 負責讀取，對外呼叫被擋住，並設定 TOKENTRACKER_NO_TELEMETRY。gateway 只接受和模型明細對得上的 UTC 日總量。沒有該日資料，或總量是 0，都標成無法取得。原始 JSON 不會存下來。"
+        "en": "Raw usage JSON is read in memory and then dropped. What remains are the aggregates.",
+        "zh": "原始用量 JSON 只在記憶體裡看過就丟。留下來的是彙總數字。"
       }
     },
     {
       "id": "local-boundary",
-      "after": "decisions",
       "heading": {
-        "en": "What can leave this machine",
-        "zh": "什麼會離開這台電腦"
+        "en": "You choose what leaves",
+        "zh": "要出去，得你點頭"
       },
       "intro": {
-        "en": "Scans stay on loopback. Leaving the machine takes an explicit action.",
-        "zh": "掃描留在本機回環。要離開這台電腦，一定是你明確的操作。"
+        "en": "Scans stay on this computer. Each way out waits for you.",
+        "zh": "掃描留在本機。往外的每條路，都等你自己打開。"
       },
+      "after": "decisions",
       "spec": {
         "columns": [
           [
@@ -821,18 +806,6 @@
         "core": 1,
         "boundaryAfter": 1
       },
-      "zones": {
-        "en": [
-          "Your machine",
-          "You choose",
-          "Outside"
-        ],
-        "zh": [
-          "你的電腦",
-          "你決定",
-          "外面"
-        ]
-      },
       "steps": [
         {
           "title": {
@@ -840,8 +813,8 @@
             "zh": "本機畫面"
           },
           "note": {
-            "en": "Totals, charts, and characters are computed on this machine.",
-            "zh": "總量、圖表與角色都在這台電腦上計算。"
+            "en": "Totals, charts, and characters are computed on this computer.",
+            "zh": "總量、圖表和角色，都在這台電腦上算。"
           },
           "tone": "neutral",
           "icon": "window"
@@ -852,8 +825,8 @@
             "zh": "只留本機"
           },
           "note": {
-            "en": "The gateway and sidecar listen on loopback, and the sidecar starts with network calls blocked.",
-            "zh": "gateway 與 sidecar 只聽本機回環，sidecar 啟動時網路呼叫會被擋下。"
+            "en": "The gateway and the sidecar listen only on this computer. The sidecar starts with network calls blocked.",
+            "zh": "gateway 和 sidecar 只聽本機。sidecar 啟動時，對外連線會被擋下。"
           },
           "tone": "accent",
           "icon": "lock"
@@ -864,8 +837,8 @@
             "zh": "素材包"
           },
           "note": {
-            "en": "The full image and voice pack downloads only after you agree, and it is checked by SHA-256.",
-            "zh": "完整的圖片與語音包要你同意後才下載，並以 SHA-256 核對。"
+            "en": "The full image and voice pack downloads only after you agree, then the bytes are checked with SHA-256.",
+            "zh": "完整的圖和語音，要你同意才下載，再用 SHA-256 對一次。"
           },
           "tone": "info",
           "icon": "download"
@@ -876,8 +849,8 @@
             "zh": "自備金鑰"
           },
           "note": {
-            "en": "Pet chat calls the OpenAI Responses API with store set to false, and the key stays in safeStorage or in memory.",
-            "zh": "寵物聊天打到 OpenAI Responses API，store 設為 false，金鑰放在 safeStorage 或只留在記憶體。"
+            "en": "The key stays on this computer, and chats ask the provider not to keep them.",
+            "zh": "金鑰留在這台電腦。聊天會請 provider 不要把內容留下來。"
           },
           "tone": "warn",
           "icon": "key"
@@ -888,8 +861,8 @@
             "zh": "檢查更新"
           },
           "note": {
-            "en": "Automatic update checks stay off unless you turn them on in the desktop app.",
-            "zh": "桌面版的自動檢查更新保持關閉，除非你自己打開。"
+            "en": "Automatic checks start off. The desktop app looks for an update only after you turn that on.",
+            "zh": "自動檢查一開始是關的。桌面版要等你打開，才會去看有沒有更新。"
           },
           "tone": "neutral",
           "icon": "cloud"
@@ -897,34 +870,46 @@
       ],
       "ticks": [
         {
-          "en": "scans stay on loopback",
-          "zh": "掃描留在本機"
+          "en": "scans stay here",
+          "zh": "掃描不出這台電腦"
         },
         {
-          "en": "media pack needs consent",
-          "zh": "素材包要你同意"
+          "en": "the pack waits for a yes",
+          "zh": "素材包等你同意"
         },
         {
-          "en": "chat sets store false",
-          "zh": "聊天設定 store false"
+          "en": "chats ask not to be kept",
+          "zh": "聊天請對方不要留"
         }
       ],
       "caption": {
-        "en": "The dashboard, gateway, and TokenTracker sidecar stay on loopback, and the sidecar is started with network calls blocked. Three exits exist only when you choose them: the media pack after consent, pet chat with your own key and store set to false, and an update check you enable. The contribution counter is in the code, but its service is not deployed.",
-        "zh": "儀表板、gateway 與 TokenTracker sidecar 都留在本機回環，sidecar 啟動時網路呼叫會被擋下。只有你自己選擇時，才有三條對外的路：同意後的素材包、自備金鑰且 store 設為 false 的寵物聊天，以及你打開的檢查更新。選用的貢獻計數器已經寫在程式裡，但服務端還沒部署。"
+        "en": "The contribution counter is in the code and off by default. Its service is not deployed, so this build sends no usage out.",
+        "zh": "貢獻計數器寫在程式裡，預設關掉，服務也還沒部署。現在這個版本不會把用量送出去。"
+      },
+      "zones": {
+        "en": [
+          "This machine",
+          "Your choice",
+          "Outside"
+        ],
+        "zh": [
+          "這台電腦",
+          "你點頭",
+          "外面"
+        ]
       }
     },
     {
       "id": "four-sources",
-      "after": "features",
       "heading": {
-        "en": "How the four CLIs are recognized",
-        "zh": "四套 CLI 怎麼對上"
+        "en": "Ids, not model names",
+        "zh": "認 id，不認模型名"
       },
       "intro": {
-        "en": "The adapter maps exact source ids. It does not guess a provider from a model name.",
-        "zh": "adapter 只對照明確的來源 id，不會從模型名稱猜 provider。"
+        "en": "Each CLI has one source id. The adapter will not swap in a model name.",
+        "zh": "四套 CLI 各有一個來源 id。adapter 不會拿模型名稱來代替。"
       },
+      "after": "features",
       "spec": {
         "columns": [
           [
@@ -946,8 +931,8 @@
             "zh": "Claude"
           },
           "note": {
-            "en": "Claude Code usage is accepted as the anthropic source id.",
-            "zh": "Claude Code 的用量以 anthropic 這個來源 id 收下。"
+            "en": "Claude Code usage is filed under anthropic.",
+            "zh": "Claude Code 的用量，記在 anthropic 底下。"
           },
           "tone": "neutral",
           "icon": "terminal"
@@ -958,8 +943,8 @@
             "zh": "Codex"
           },
           "note": {
-            "en": "Codex usage is accepted as the openai source id.",
-            "zh": "Codex 的用量以 openai 這個來源 id 收下。"
+            "en": "Codex usage is filed under openai.",
+            "zh": "Codex 的用量，記在 openai 底下。"
           },
           "tone": "neutral",
           "icon": "terminal"
@@ -970,8 +955,8 @@
             "zh": "Gemini"
           },
           "note": {
-            "en": "Gemini CLI usage is accepted as the google source id.",
-            "zh": "Gemini CLI 的用量以 google 這個來源 id 收下。"
+            "en": "Gemini CLI usage is filed under google.",
+            "zh": "Gemini CLI 的用量，記在 google 底下。"
           },
           "tone": "neutral",
           "icon": "terminal"
@@ -982,8 +967,8 @@
             "zh": "Grok"
           },
           "note": {
-            "en": "Grok Build usage is accepted as the xai source id.",
-            "zh": "Grok Build 的用量以 xai 這個來源 id 收下。"
+            "en": "Grok Build usage is filed under xai.",
+            "zh": "Grok Build 的用量，記在 xai 底下。"
           },
           "tone": "neutral",
           "icon": "terminal"
@@ -994,8 +979,8 @@
             "zh": "來源對照"
           },
           "note": {
-            "en": "A model name never becomes a provider, and unknown source ids stay in other.",
-            "zh": "模型名稱不會被當成 provider，不認識的來源 id 會歸到 other。"
+            "en": "An id the map does not name is rolled into other. A model name never becomes the provider.",
+            "zh": "對照表沒有的 id 算進 other。模型名稱不會變成 provider。"
           },
           "tone": "accent",
           "icon": "route"
@@ -1003,34 +988,34 @@
       ],
       "ticks": [
         {
-          "en": "four CLIs, exact source ids",
-          "zh": "四套 CLI 對上來源 id"
+          "en": "four CLIs, four ids",
+          "zh": "四套 CLI，四個 id"
         },
         {
           "en": "no guess from a model name",
-          "zh": "不從模型名稱猜測"
+          "zh": "不從模型名稱猜"
         },
         {
-          "en": "unknown ids stay other",
-          "zh": "不認識的 id 歸 other"
+          "en": "unknown ids go to other",
+          "zh": "不認識的放進 other"
         }
       ],
       "caption": {
-        "en": "TokenMonster's adapter accepts Claude Code as anthropic, Codex as openai, Gemini CLI as google, and Grok Build as xai. Those ids come from the pinned TokenTracker response. A model name is never used to infer a provider, and an unknown source id is aggregated as other.",
-        "zh": "TokenMonster 的 adapter 把 Claude Code 收成 anthropic、Codex 收成 openai、Gemini CLI 收成 google、Grok Build 收成 xai。這些 id 來自鎖定版本的 TokenTracker 回應。模型名稱不會用來推測 provider，不認識的來源 id 會彙總成 other。"
+        "en": "Those ids are the ones the pinned TokenTracker response already uses.",
+        "zh": "這四個 id，就是鎖定的 TokenTracker 回應裡本來用的名字。"
       }
     },
     {
       "id": "unlock-rules",
-      "after": "how",
       "heading": {
-        "en": "What actually unlocks a character",
-        "zh": "角色實際怎麼解鎖"
+        "en": "Unlocks aren't a purchase",
+        "zh": "解鎖不是買來的"
       },
       "intro": {
-        "en": "Unlocks are local measurements. They are not a currency you spend.",
-        "zh": "解鎖看的是本機量測值，不是可以花掉的貨幣。"
+        "en": "The thresholds are local measurements. A later rescan does not lock anyone again.",
+        "zh": "門檻看的是本機量到的數字。之後重掃，不會把人鎖回去。"
       },
+      "after": "how",
       "spec": {
         "columns": [
           [
@@ -1051,20 +1036,20 @@
             "zh": "各家用量"
           },
           "note": {
-            "en": "Sisters unlock at the first family token, DeepSeek at 100,000, and Qwen at 250,000.",
-            "zh": "姊妹在該家第一個 token 解鎖，DeepSeek 要 100,000，Qwen 要 250,000。"
+            "en": "Each sister unlocks at 1 token. DeepSeek needs 100,000, and Qwen needs 250,000.",
+            "zh": "姊妹用到第 1 個 token 就解鎖。DeepSeek 要 10 萬，Qwen 要 25 萬。"
           },
           "tone": "neutral",
           "icon": "ledger"
         },
         {
           "title": {
-            "en": "Streak or life",
+            "en": "Streak or total",
             "zh": "連續或總量"
           },
           "note": {
-            "en": "Mistral unlocks at a 3-day streak, Perplexity at 7, Llama at 500,000 lifetime tokens, and GLM at 5,000,000.",
-            "zh": "Mistral 連續 3 天、Perplexity 連續 7 天解鎖，Llama 要終身 500,000，GLM 要 5,000,000。"
+            "en": "Mistral needs 3 active days in a row. Llama needs 500,000 lifetime tokens.",
+            "zh": "Mistral 要連續 3 天。Llama 要終身 50 萬 token。"
           },
           "tone": "info",
           "icon": "clock"
@@ -1075,8 +1060,8 @@
             "zh": "用過幾家"
           },
           "note": {
-            "en": "Sakana unlocks when four provider families have local usage.",
-            "zh": "Sakana 在四家 provider 都有本機用量時解鎖。"
+            "en": "Sakana unlocks once four providers have local usage.",
+            "zh": "Sakana 要四家 provider 都有本機用量，才解鎖。"
           },
           "tone": "neutral",
           "icon": "people"
@@ -1087,8 +1072,8 @@
             "zh": "本機解鎖"
           },
           "note": {
-            "en": "Your draw or pick selects the starter even at zero usage, and a later rescan does not lock anyone again.",
-            "zh": "抽卡或自己選會決定起始姊妹，就算用量是零也解鎖，之後重掃不會把人鎖回去。"
+            "en": "A draw or your own pick selects the first sister, even when usage is still zero.",
+            "zh": "抽卡或自己選，就算用量還是 0，也會決定第一位姊妹。"
           },
           "tone": "accent",
           "icon": "spark"
@@ -1096,34 +1081,34 @@
       ],
       "ticks": [
         {
-          "en": "sisters unlock at 1 token",
-          "zh": "姊妹 1 token 就解鎖"
+          "en": "sisters open at 1 token",
+          "zh": "姊妹 1 token 就開"
         },
         {
-          "en": "friends use local milestones",
-          "zh": "朋友看本機里程碑"
+          "en": "friends wait on milestones",
+          "zh": "朋友要看里程碑"
         },
         {
-          "en": "unlocks are not purchases",
-          "zh": "解鎖不能用錢買"
+          "en": "a rescan does not lock",
+          "zh": "重掃不會鎖回去"
         }
       ],
       "caption": {
-        "en": "ChatGPT, Claude, Gemini, and Grok unlock when you pick them, and also at the first local token for that family. Friends unlock from local milestones: DeepSeek at 100,000, Qwen at 250,000, Mistral after 3 active days, Perplexity after 7, Llama at 500,000 lifetime tokens, GLM at 5,000,000, and Sakana at four active providers. Saved unlock times are not reversed by a rescan. Each unlocked character then opens 20 wardrobe themes from local usage. GLM's themes use lifetime tokens, because the sidecar keeps that source in other.",
-        "zh": "ChatGPT、Claude、Gemini 與 Grok 在你選中時解鎖，該家出現第一個本機 token 時也會解鎖。朋友看本機里程碑：DeepSeek 100,000、Qwen 250,000、Mistral 連續 3 天、Perplexity 連續 7 天、Llama 終身 500,000、GLM 終身 5,000,000、Sakana 四家 provider 有用量。存下來的解鎖時間不會因為重掃而倒退。角色解鎖後，還會依本機用量開放 20 套服裝主題。GLM 的服裝看的是終身 token，因為 sidecar 把這個來源放在 other。"
+        "en": "A 28-day leader is only a hint. You still draw or pick.",
+        "zh": "近 28 天領先的那一家只是提示。第一位還是你抽，或你挑。"
       }
     },
     {
       "id": "quota-estimate",
-      "after": "features",
       "heading": {
-        "en": "How the remaining bar is estimated",
-        "zh": "剩餘額度怎麼估算"
+        "en": "This bar is a guess",
+        "zh": "這條是估的"
       },
       "intro": {
-        "en": "The bar is a community estimate for the plan you pick. It is not an official provider cap.",
-        "zh": "這條長條是你所選方案的社群估計，不是 provider 的官方上限。"
+        "en": "You pick the plan. The percent is not that provider's official cap.",
+        "zh": "方案是你選的。這個百分比不是那家 provider 的官方上限。"
       },
+      "after": "features",
       "spec": {
         "columns": [
           [
@@ -1146,8 +1131,8 @@
             "zh": "自選方案"
           },
           "note": {
-            "en": "You choose a plan for Anthropic, OpenAI, Google, or xAI, and nothing is selected for you.",
-            "zh": "Anthropic、OpenAI、Google 或 xAI 的方案由你自己選，程式不會替你決定。"
+            "en": "The rows are Anthropic, OpenAI, Google, and xAI. Nothing is selected for you.",
+            "zh": "列出來的是 Anthropic、OpenAI、Google、xAI。程式不會幫你選。"
           },
           "tone": "neutral",
           "icon": "user"
@@ -1158,8 +1143,8 @@
             "zh": "估算額度"
           },
           "note": {
-            "en": "The remaining percent uses that plan's community token budget, not the provider's official limit.",
-            "zh": "剩餘百分比用的是該方案的社群 token 預算，不是 provider 的官方上限。"
+            "en": "The bar compares used tokens with that plan's community budget.",
+            "zh": "長條比的是已用 token，和那個方案的社群預算。"
           },
           "tone": "warn",
           "icon": "wallet"
@@ -1170,8 +1155,8 @@
             "zh": "已用 token"
           },
           "note": {
-            "en": "Used tokens come from the local reconciled totals for that plan's window.",
-            "zh": "已用 token 來自該方案時間窗裡、本機對過帳的總量。"
+            "en": "The used number is the local total that already reconciled, inside that plan's window.",
+            "zh": "已用的數字，是這個方案時間窗裡，本機已經對過帳的總量。"
           },
           "tone": "info",
           "icon": "ledger"
@@ -1180,33 +1165,33 @@
       "ticks": [
         {
           "en": "you pick the plan",
-          "zh": "方案是你選的"
+          "zh": "方案你自己選"
         },
         {
-          "en": "budget is a community estimate",
-          "zh": "預算是社群估計"
+          "en": "budget is a community figure",
+          "zh": "預算是社群數字"
         },
         {
-          "en": "not an official provider cap",
+          "en": "not an official cap",
           "zh": "不是官方上限"
         }
       ],
       "caption": {
-        "en": "Quota rows exist for Anthropic, OpenAI, Google, and xAI. You pick the plan. The remaining percent is used tokens divided into that plan's community budget from the local catalog. The catalog comments mark every budget as an estimate, not a contractual allowance. If you pick no plan, the row stays unconfigured.",
-        "zh": "額度列有 Anthropic、OpenAI、Google 與 xAI。方案由你選。剩餘百分比是已用 token 除以本地目錄裡該方案的社群預算。目錄裡的每一筆預算都註明是估計值，不是合約上的額度。沒選方案時，那一列保持未設定。"
+        "en": "Every budget in the local catalog is marked as an estimate, not a contractual allowance.",
+        "zh": "本機目錄裡的每一筆預算都標明是估計，不是合約上的額度。"
       }
     },
     {
       "id": "first-open",
-      "after": "start",
       "heading": {
-        "en": "From the test build to the first sister",
-        "zh": "從測試版到第一位姊妹"
+        "en": "Install, then you pick",
+        "zh": "裝好，再自己挑"
       },
       "intro": {
-        "en": "Install a public test build, start the sidecar, then draw or pick a sister yourself.",
-        "zh": "裝一個公開測試版，啟動 sidecar，再自己抽或選一位姊妹。"
+        "en": "rc.22 is a public test build. The Windows installer is unsigned.",
+        "zh": "rc.22 是公開測試版。Windows 安裝檔還沒有簽章。"
       },
+      "after": "start",
       "spec": {
         "columns": [
           [
@@ -1231,8 +1216,8 @@
             "zh": "取得建置"
           },
           "note": {
-            "en": "The Windows setup and the CLI tarball come from GitHub Releases, and the CLI is not on the npm registry.",
-            "zh": "Windows 安裝檔與 CLI tarball 來自 GitHub Releases，CLI 還沒上架 npm。"
+            "en": "The setup and the CLI tarball are on GitHub Releases. TokenMonster itself is not on npm yet.",
+            "zh": "安裝檔和 tarball 在 GitHub Releases。TokenMonster 本身還沒上 npm。"
           },
           "tone": "neutral",
           "icon": "download"
@@ -1240,11 +1225,11 @@
         {
           "title": {
             "en": "Start sidecar",
-            "zh": "啟動側車"
+            "zh": "sidecar"
           },
           "note": {
-            "en": "The desktop app or the CLI starts TokenTracker 0.80.0 and waits until that sidecar is ready.",
-            "zh": "桌面版或 CLI 會啟動 TokenTracker 0.80.0，並等到 sidecar 就緒。"
+            "en": "The desktop app or the CLI starts TokenTracker 0.80.0 and waits until it is ready.",
+            "zh": "桌面版或 CLI 會拉起 TokenTracker 0.80.0，等到它就緒才繼續。"
           },
           "tone": "accent",
           "icon": "terminal"
@@ -1255,8 +1240,8 @@
             "zh": "打開頁面"
           },
           "note": {
-            "en": "A one-shot bootstrap link opens the dashboard, and the session cookie takes over after that.",
-            "zh": "一次性的 bootstrap 連結打開儀表板，之後改由 session cookie 接手。"
+            "en": "The one-shot bootstrap link sets a session cookie. Later requests use that cookie.",
+            "zh": "一次性的 bootstrap 連結會設好 session cookie，之後的請求都靠它。"
           },
           "tone": "info",
           "icon": "window"
@@ -1267,8 +1252,8 @@
             "zh": "挑選姊妹"
           },
           "note": {
-            "en": "You draw or pick ChatGPT, Claude, Gemini, or Grok, and a recommendation never selects one.",
-            "zh": "你抽卡或自己選 ChatGPT、Claude、Gemini、Grok，推薦不會替你決定。"
+            "en": "You draw or pick ChatGPT, Claude, Gemini, or Grok.",
+            "zh": "你抽一張，或自己點 ChatGPT、Claude、Gemini、Grok。"
           },
           "tone": "neutral",
           "icon": "user"
@@ -1281,16 +1266,16 @@
         },
         {
           "en": "sidecar must be ready",
-          "zh": "側車要先就緒"
+          "zh": "sidecar 要先就緒"
         },
         {
-          "en": "you pick the sister",
-          "zh": "姊妹由你挑選"
+          "en": "you choose the sister",
+          "zh": "姊妹由你來選"
         }
       ],
       "caption": {
-        "en": "rc.22 is a public test build. The Windows installer is not code-signed. The CLI accepts only Node.js 24.15.0 with npm 11.12.1, installs from the tarball into its own folder, and starts TokenTracker 0.80.0. The dashboard opens through a one-shot bootstrap link. With --no-open, the CLI prints an ssh tunnel command instead. A 28-day leader can be suggested, but only your draw or pick selects the starter.",
-        "zh": "rc.22 是公開測試版。Windows 安裝檔還沒有程式碼簽章。CLI 只接受 Node.js 24.15.0 搭配 npm 11.12.1，從 tarball 裝到自己的資料夾，並啟動 TokenTracker 0.80.0。儀表板用一次性的 bootstrap 連結打開。加上 --no-open 時，CLI 改印 ssh 通道指令。近 28 天領先的那一家可以被推薦，但只有你抽卡或自己選，才會決定起始姊妹。"
+        "en": "With --no-open it prints an ssh tunnel command instead of opening the browser.",
+        "zh": "加上 --no-open 就不開瀏覽器，改印一條 ssh 通道指令。"
       }
     }
   ]
