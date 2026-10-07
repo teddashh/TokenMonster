@@ -27,11 +27,12 @@ const expectedCompanionToolchainPins = Object.freeze({
   "@electron/packager": "20.3.0",
   "@electron/windows-sign": "1.2.2",
   "cross-zip": "4.0.1",
-  "electron-installer-dmg": "5.0.1",
   "electron-winstaller": "5.4.4",
 });
 const bannedPackageNames = Object.freeze([
   "@electron/rebuild",
+  "appdmg",
+  "electron-installer-dmg",
   "external-editor",
   "tmp",
 ]);
@@ -269,7 +270,7 @@ for (const bannedName of bannedPackageNames) {
   }
 }
 
-const [asar, fuses, osxSign, packager, windowsSign, crossZip, dmg, squirrel] =
+const [asar, fuses, osxSign, packager, windowsSign, crossZip, squirrel] =
   await Promise.all([
     import("@electron/asar"),
     import("@electron/fuses"),
@@ -277,7 +278,6 @@ const [asar, fuses, osxSign, packager, windowsSign, crossZip, dmg, squirrel] =
     import("@electron/packager"),
     import("@electron/windows-sign"),
     import("cross-zip"),
-    import("electron-installer-dmg"),
     import("electron-winstaller"),
   ]);
 if (
@@ -316,11 +316,6 @@ if (
 }
 if (typeof crossZip.zip !== "function") {
   throw new Error("cross-zip does not expose the reviewed ZIP API.");
-}
-if (typeof dmg.createDMG !== "function") {
-  throw new Error(
-    "electron-installer-dmg does not expose the reviewed DMG API.",
-  );
 }
 if (
   typeof squirrel.createWindowsInstaller !== "function" ||
