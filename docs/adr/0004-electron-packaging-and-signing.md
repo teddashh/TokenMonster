@@ -34,7 +34,9 @@ Packager and installer APIs; a framework-owned build lifecycle is unnecessary.
   permits only npm's reproducible optional-platform `@emnapi/runtime`,
   `@img/sharp-wasm32`, and `tslib` extraneous labels at exact versions, checks
   every direct version and API shape, and rejects any return of the banned
-  packages or of a root override.
+  packages. The one root override it permits is the reviewed miniflare sharp
+  security override from the 2026-10-07 amendment, together with the one
+  `invalid: sharp` line that override makes `npm ls` print.
 - The fixed `--require-upstream-compatible` verifier mode remains part of the
   public npm job before its first TokenMonster registry-state read or mutation.
   It now validates the same Forge-free closure and passes only after all normal
@@ -286,6 +288,38 @@ Packager 19 and 20 breaking changes adapted here:
   instead of `got`). This repository does not pass `download`.
 - Published `TargetArch` and `TargetPlatform` types were removed. Call sites
   now use `OfficialArch` and `OfficialPlatform`.
+
+### 2026-10-07: sharp 0.35.5 override and source-map-js 1.2.2
+
+Two high advisories reached the development tree: GHSA-wq5f-xc86-pv6w in
+`sharp` 0.35.4, fixed in 0.35.5, and GHSA-68fv-2mgg-jv7q in `source-map-js`
+1.2.1, fixed in 1.2.2. Both are development dependencies only, and
+`npm audit --omit=dev` was already clean.
+
+`source-map-js` moved to 1.2.2 inside its existing ranges.
+
+`sharp` comes only from `miniflare` 5.20260930.0-alpha, which pins it to
+exactly 0.35.4, through `wrangler` 4.145.0 and `@cloudflare/vite-plugin`
+1.62.3. Even `wrangler` 4.148.0 still brings a `miniflare` that pins 0.35.4,
+so the reviewed root override returns as `{"miniflare": {"sharp": "0.35.5"}}`,
+the same shape that d357cf7 retired. The toolchain verifier again permits
+exactly that override and the one `invalid: sharp@0.35.5` line it makes
+`npm ls` print, and its optional `@img/sharp-wasm32` entry moves to 0.35.5.
+The override goes away the same way as in d357cf7 once `miniflare` pins a
+patched `sharp` itself.
+
+npm 11.12.1 does not carry root overrides into workspace packages when it
+starts from an existing lock, so `npm install` alone left `sharp` at 0.35.4.
+The `sharp` and `@img/sharp-*` lock entries therefore come from a clean
+resolve with the override in place (the `@img/sharp-libvips-*` packages move
+to 1.3.4 with it), and every other lock entry is unchanged. `npm ci` installs
+that lock, and a second `npm install --package-lock-only` leaves it as it is.
+
+`image-size` remains through `electron-installer-dmg` and `appdmg` (3 high
+findings) and needs a separate packaging decision. `electron-installer-dmg`
+always passes its default `background.png` to `appdmg`, so `appdmg` calls the
+old `sizeOf(path, callback)` API of `image-size`, which the only patched line,
+`image-size` 2.x, no longer has.
 
 ## References
 
