@@ -25,8 +25,8 @@ Packager and installer APIs; a framework-owned build lifecycle is unnecessary.
   direct packaging tools exact: `@electron/packager 20.3.0`,
   `@electron/fuses 1.8.0`, `@electron/osx-sign 1.3.3`,
   `@electron/windows-sign 1.2.2`, `cross-zip 4.0.1`,
-  `electron-installer-dmg 5.0.1`, `electron-winstaller 5.4.4`, and verifier
-  `@electron/asar 4.2.0`.
+  `electron-winstaller 5.4.4`, and verifier `@electron/asar 4.2.0`. The macOS
+  DMG comes from the system `hdiutil`, so no npm DMG tool is pinned.
 - The 2026-07-20 reviewed stable replacement removes every Electron Forge
   package and the root overrides. Consequently `@electron/rebuild`,
   `external-editor`, and `tmp` are absent from both the exact lock and installed
@@ -321,6 +321,25 @@ always passes its default `background.png` to `appdmg`, so `appdmg` calls the
 old `sizeOf(path, callback)` API of `image-size`, which the only patched line,
 `image-size` 2.x, no longer has.
 
+### 2026-10-07: macOS DMG through hdiutil
+
+That separate packaging decision: `electron-installer-dmg` 5.0.1 and `appdmg`
+0.6.6 leave the tree, and with them the last 3 high findings of the full
+development audit, all one `image-size` advisory.
+
+`makeDmgArtifact` now copies `TokenMonster.app` with `ditto` into a temporary
+folder next to a link to `/Applications`, then runs `hdiutil create` with the
+volume name `TokenMonster`, that folder as `-srcfolder`, `-fs HFS+` and the
+configured `ULFO` format. The image shows the same two items as before. It no
+longer has the background picture or the fixed window layout that `appdmg`
+wrote. The DMG stays an internal artifact: the public desktop asset is Windows
+only, and DMG release verification is still closed.
+
+The lock drops `electron-installer-dmg`, `appdmg`, `image-size` and 44 other
+entries that only they used. The toolchain verifier no longer pins or imports
+a DMG tool and bans `electron-installer-dmg` and `appdmg` together with the
+other retired packages. The full development audit reports 0 findings.
+
 ## References
 
 - [Electron fuses](https://www.electronjs.org/docs/latest/tutorial/fuses)
@@ -329,7 +348,6 @@ old `sizeOf(path, callback)` API of `image-size`, which the only patched line,
 - [Electron Packager options](https://electron.github.io/packager/main/interfaces/Options.html)
 - [Electron Packager](https://github.com/electron/packager)
 - [Electron macOS signing](https://github.com/electron/osx-sign)
-- [Electron Installer DMG](https://github.com/electron-userland/electron-installer-dmg)
 - [Electron Windows Installer](https://github.com/electron/windows-installer)
 - [cross-zip](https://github.com/feross/cross-zip)
 - [Electron native Node modules](https://www.electronjs.org/docs/latest/tutorial/using-native-node-modules/)

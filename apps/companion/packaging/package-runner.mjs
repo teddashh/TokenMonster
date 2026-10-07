@@ -1,6 +1,7 @@
 // @ts-check
 
-import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { cp, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -8,7 +9,6 @@ import { promisify } from "node:util";
 
 import { packager } from "@electron/packager";
 import crossZip from "cross-zip";
-import { createDMG } from "electron-installer-dmg";
 import { convertVersion, createWindowsInstaller } from "electron-winstaller";
 
 import packagingConfiguration, {
@@ -38,6 +38,7 @@ const companionDirectory = resolve(
 const outDirectory = join(companionDirectory, "out");
 const makeDirectory = join(outDirectory, "make");
 const zip = promisify(crossZip.zip);
+const runFile = promisify(execFile);
 
 /**
  * @param {unknown} command
@@ -153,13 +154,32 @@ export async function makeDmgArtifact(
   }
   await mkdir(makeDirectory, { recursive: true });
   const artifactPath = join(makeDirectory, `${configuration.dmg.name}.dmg`);
-  await createDMG({
-    appPath: join(packagePath, `${configuration.appName}.app`),
-    format: configuration.dmg.format,
-    name: configuration.dmg.name,
-    out: makeDirectory,
-    overwrite: true,
-  });
+  const appName = `${configuration.appName}.app`;
+  // hdiutil copies a whole folder into the image, so stage one that holds
+  // only the app and the usual link to /Applications.
+  const sourceDirectory = await mkdtemp(join(tmpdir(), "tokenmonster-dmg-"));
+  try {
+    await runFile("ditto", [
+      join(packagePath, appName),
+      join(sourceDirectory, appName),
+    ]);
+    await symlink("/Applications", join(sourceDirectory, "Applications"));
+    await rm(artifactPath, { force: true });
+    await runFile("hdiutil", [
+      "create",
+      "-volname",
+      configuration.dmg.name,
+      "-srcfolder",
+      sourceDirectory,
+      "-fs",
+      "HFS+",
+      "-format",
+      configuration.dmg.format,
+      artifactPath,
+    ]);
+  } finally {
+    await rm(sourceDirectory, { recursive: true, force: true });
+  }
   return artifactPath;
 }
 
