@@ -38,12 +38,16 @@ const bannedPackageNames = Object.freeze([
 const permittedOptionalExtraneousProblems = Object.freeze([
   /^extraneous: @emnapi\/runtime@1\.11\.1 .+[\\/]node_modules[\\/]@emnapi[\\/]runtime$/u,
   /^extraneous: @emnapi\/runtime@1\.11\.3 .+[\\/]node_modules[\\/]@img[\\/]sharp-wasm32[\\/]node_modules[\\/]@emnapi[\\/]runtime$/u,
-  /^extraneous: @img\/sharp-wasm32@0\.35\.4 .+[\\/]node_modules[\\/]@img[\\/]sharp-wasm32$/u,
+  /^extraneous: @img\/sharp-wasm32@0\.35\.5 .+[\\/]node_modules[\\/]@img[\\/]sharp-wasm32$/u,
   /^extraneous: tslib@2\.8\.1 .+[\\/]node_modules[\\/]tslib$/u,
+  // npm ls does not model root overrides, so the reviewed miniflare sharp
+  // security override reports the forced sharp version as invalid even though
+  // npm ci resolves and installs it.
+  /^invalid: sharp@0\.35\.5 .+[\\/]node_modules[\\/]sharp$/u,
 ]);
 const expectedOptionalExtraneousLockEntries = Object.freeze({
   "node_modules/@emnapi/runtime": "1.11.1",
-  "node_modules/@img/sharp-wasm32": "0.35.4",
+  "node_modules/@img/sharp-wasm32": "0.35.5",
   "node_modules/@img/sharp-wasm32/node_modules/@emnapi/runtime": "1.11.3",
   "node_modules/tslib": "2.8.1",
 });
@@ -110,8 +114,8 @@ async function runCleanNpmList() {
     });
     child.once("error", reject);
     child.once("close", (code, signal) => {
-      // npm ls may exit 1 when it reports tree problems; the exact bounded
-      // problem set is validated below.
+      // npm ls exits 1 when it reports the override-induced invalid sharp
+      // edge; that exact bounded problem set is validated below.
       if (signal !== null || (code !== 0 && code !== 1)) {
         reject(
           new Error(
@@ -179,12 +183,16 @@ const companionManifest = await readJson(
 );
 const packageLock = await readJson(join(rootDirectory, "package-lock.json"));
 
-// The reviewed miniflare sharp override was retired once miniflare itself
-// pinned the patched sharp 0.35.4, so no root override is permitted.
-if (Object.hasOwn(rootManifest, "overrides")) {
+const permittedRootOverrides = JSON.stringify({
+  miniflare: { sharp: "0.35.5" },
+});
+if (
+  Object.hasOwn(rootManifest, "overrides") &&
+  JSON.stringify(rootManifest.overrides) !== permittedRootOverrides
+) {
   throw new Error(
-    "Root overrides must stay absent: miniflare now pins the patched sharp " +
-      "0.35.4 itself.",
+    "Root overrides must remain exactly the reviewed miniflare sharp " +
+      "security override until miniflare pins a patched sharp.",
   );
 }
 for (const [name, version] of Object.entries(expectedCompanionToolchainPins)) {
